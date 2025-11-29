@@ -1,0 +1,2822 @@
+import axios from "axios";
+ 
+const api = axios.create({
+  baseURL: "http://localhost:8088/api",  // your backend base URL
+  headers: {
+    "Content-Type": "application/json",
+  },
+  timeout: 10000, // 10 second timeout
+});
+ 
+// Automatically attach JWT token if present
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      config.headers["Authorization"] = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Add response interceptor for better error handling
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+      console.error('🔴 BACKEND NOT REACHABLE!');
+      console.error('Make sure Spring Boot backend is running on http://localhost:8080');
+      error.message = 'Backend server is not running. Please start Spring Boot application.';
+    }
+    return Promise.reject(error);
+  }
+);
+ 
+export default api;
+
+
+import React from 'react';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../services/AuthService';
+
+const Header = ({ showAuthNav }) => {
+  const { isLoggedIn, logout } = useAuth();
+
+  return (
+    <header className="header">
+      <nav className="nav">
+        <Link to="/" className="nav-link">Products</Link>
+        <Link to="/about" className="nav-link">About</Link>
+        {!isLoggedIn || showAuthNav ? (
+          <>
+            <Link to="/signin" className="nav-link">Sign In</Link>
+            <Link to="/register" className="nav-link">Register</Link>
+          </>
+        ) : (
+          <button onClick={logout} className="logout-btn">Logout</button>
+        )}
+      </nav>
+    </header>
+  );
+};
+
+export default Header;
+
+
+import React, { useState, useEffect, useContext } from "react";
+import { AppBar, Toolbar, Typography, IconButton, Menu, MenuItem, Box, Divider } from "@mui/material";
+import { Logout, AccountCircle, Settings as SettingsIcon } from "@mui/icons-material";
+import { useNavigate } from "react-router-dom";
+import { AuthContext } from "../Context/AuthContext";
+import API from "../api/axios";
+ 
+const Navbar = () => {
+  const [anchorEl, setAnchorEl] = useState(null);
+  const { user } = useContext(AuthContext);
+  const navigate = useNavigate();
+  const open = Boolean(anchorEl);
+
+  const [userProfile, setUserProfile] = useState({ name: "Loading...", email: "" });
+
+  useEffect(() => {
+    loadProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const loadProfile = () => {
+    // First check localStorage
+    const saved = localStorage.getItem("userProfile");
+    console.log("=== NAVBAR DEBUG ===");
+    console.log("1. localStorage userProfile:", saved);
+    
+    if (saved && saved !== "undefined") {
+      try {
+        const parsed = JSON.parse(saved);
+        console.log("2. Parsed profile:", parsed);
+        if (parsed && parsed.email) {
+          setUserProfile(parsed);
+          console.log("3. Profile set from localStorage");
+          return;
+        }
+      } catch (e) {
+        console.error("Error parsing saved profile:", e);
+      }
+    }
+    
+    // If localStorage empty, check AuthContext
+    console.log("4. AuthContext user:", user);
+    if (user && user.email) {
+      const profile = {
+        name: `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email,
+        email: user.email
+      };
+      console.log("5. Profile set from AuthContext:", profile);
+      setUserProfile(profile);
+      localStorage.setItem("userProfile", JSON.stringify(profile));
+      return;
+    }
+    
+    // Last resort: try to fetch from API
+    console.log("6. Attempting to fetch from API...");
+    fetchUserProfile();
+  };
+
+  const fetchUserProfile = async () => {
+    try {
+      const res = await API.get("/auth/profile");
+      console.log("7. API response:", res.data);
+      
+      const profile = {
+        name: `${res.data.firstName || ""} ${res.data.lastName || ""}`.trim() || res.data.email || "User",
+        email: res.data.email || ""
+      };
+      console.log("8. Setting profile from API:", profile);
+      setUserProfile(profile);
+      localStorage.setItem("userProfile", JSON.stringify(profile));
+    } catch (error) {
+      console.error("9. API Error:", error.response?.status, error.response?.data);
+      // Keep showing whatever we have or default
+      setUserProfile({ name: "User", email: "" });
+    }
+  };
+
+  const handleMenuOpen = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("userProfile");
+    window.location.href = "/login";
+  };
+
+  const handleSettings = () => {
+    handleMenuClose();
+    navigate("/settings");
+  };
+ 
+  return (
+    <AppBar 
+      position="sticky" 
+      elevation={0}
+      sx={{ 
+        background: (theme) => theme.palette.mode === 'dark' 
+          ? 'linear-gradient(135deg, #1a2027 0%, #2d3748 100%)'
+          : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        backdropFilter: 'blur(10px)',
+        borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+      }}
+    >
+      <Toolbar sx={{ justifyContent: "space-between", py: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box
+            sx={{
+              width: 40,
+              height: 40,
+              borderRadius: '12px',
+              background: 'rgba(255,255,255,0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 'bold',
+              fontSize: '1.2rem',
+            }}
+          >
+            📦
+          </Box>
+          <Typography 
+            variant="h6" 
+            sx={{ 
+              fontWeight: 700,
+              letterSpacing: '-0.5px',
+              background: 'linear-gradient(45deg, #fff 30%, rgba(255,255,255,0.8) 90%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}
+          >
+            Inventory Manager
+          </Typography>
+        </Box>
+        <div>
+          <IconButton 
+            color="inherit" 
+            onClick={handleMenuOpen}
+            aria-controls={open ? 'profile-menu' : undefined}
+            aria-haspopup="true"
+            aria-expanded={open ? 'true' : undefined}
+            sx={{
+              border: '2px solid rgba(255,255,255,0.2)',
+              '&:hover': {
+                background: 'rgba(255,255,255,0.1)',
+                transform: 'scale(1.05)',
+                transition: 'all 0.3s ease',
+              },
+            }}
+          >
+            <AccountCircle sx={{ fontSize: 28 }} />
+          </IconButton>
+          <Menu
+            id="profile-menu"
+            anchorEl={anchorEl}
+            open={open}
+            onClose={handleMenuClose}
+            transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+            anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+            PaperProps={{
+              elevation: 8,
+              sx: { 
+                minWidth: 280, 
+                mt: 1.5,
+                borderRadius: 3,
+                overflow: 'hidden',
+              }
+            }}
+          >
+            <Box 
+              sx={{ 
+                px: 3, 
+                py: 2.5,
+                background: (theme) => theme.palette.mode === 'dark'
+                  ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                  : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              }}
+            >
+              <Typography variant="subtitle1" fontWeight="bold" sx={{ color: 'white' }}>
+                {userProfile.name || "Guest"}
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.9)', mt: 0.5 }}>
+                {userProfile.email || "No email set"}
+              </Typography>
+            </Box>
+            <MenuItem 
+              onClick={handleSettings}
+              sx={{
+                py: 1.5,
+                px: 3,
+                '&:hover': {
+                  background: (theme) => theme.palette.mode === 'dark' 
+                    ? 'rgba(144, 202, 249, 0.1)' 
+                    : 'rgba(102, 126, 234, 0.1)',
+                },
+              }}
+            >
+              <SettingsIcon sx={{ mr: 2, color: 'primary.main' }} />
+              <Typography>Settings</Typography>
+            </MenuItem>
+            <Divider sx={{ my: 0.5 }} />
+            <MenuItem 
+              onClick={handleLogout}
+              sx={{
+                py: 1.5,
+                px: 3,
+                color: 'error.main',
+                '&:hover': {
+                  background: (theme) => theme.palette.mode === 'dark' 
+                    ? 'rgba(244, 67, 54, 0.1)' 
+                    : 'rgba(211, 47, 47, 0.1)',
+                },
+              }}
+            >
+              <Logout sx={{ mr: 2 }} />
+              <Typography>Logout</Typography>
+            </MenuItem>
+          </Menu>
+        </div>
+      </Toolbar>
+    </AppBar>
+  );
+};
+ 
+export default Navbar;
+
+
+import React, { useContext } from "react";
+import { Navigate } from "react-router-dom";
+import { AuthContext } from "../Context/AuthContext";
+ 
+const ProtectedRoute = ({ children }) => {
+  const { token } = useContext(AuthContext);
+ 
+  // If no token in context or localStorage → redirect to login
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+ 
+  // Otherwise render the child route
+  return children;
+};
+ 
+export default ProtectedRoute;
+
+
+import React from "react";
+import { Drawer, List, ListItemButton, ListItemIcon, ListItemText, Box, Typography } from "@mui/material";
+import { Dashboard, Inventory, People, BarChart, Settings } from "@mui/icons-material";
+import { Link, useLocation } from "react-router-dom";
+ 
+const Sidebar = () => {
+  const location = useLocation();
+  
+  const menuItems = [
+    { text: "Dashboard", icon: <Dashboard />, path: "/dashboard" },
+    { text: "Products", icon: <Inventory />, path: "/products" },
+    { text: "Users", icon: <People />, path: "/users" },
+    { text: "Reports", icon: <BarChart />, path: "/reports" },
+    { text: "Settings", icon: <Settings />, path: "/settings" },
+  ];
+ 
+  return (
+    <Drawer 
+      variant="permanent" 
+      sx={{ 
+        width: 260, 
+        flexShrink: 0,
+        "& .MuiDrawer-paper": { 
+          width: 260, 
+          boxSizing: "border-box",
+          background: (theme) => theme.palette.mode === 'dark'
+            ? 'linear-gradient(180deg, #1a2027 0%, #13191f 100%)'
+            : 'linear-gradient(180deg, #ffffff 0%, #f5f7fa 100%)',
+          borderRight: (theme) => `1px solid ${theme.palette.divider}`,
+          pt: 2,
+        } 
+      }}
+    >
+      <Box sx={{ px: 3, mb: 3 }}>
+        <Typography 
+          variant="h6" 
+          sx={{ 
+            fontWeight: 700,
+            color: 'text.primary',
+            mb: 0.5,
+          }}
+        >
+          Navigation
+        </Typography>
+        <Typography 
+          variant="caption" 
+          sx={{ color: 'text.secondary' }}
+        >
+          Manage your inventory
+        </Typography>
+      </Box>
+      
+      <List sx={{ px: 2 }}>
+        {menuItems.map((item) => {
+          const isActive = location.pathname === item.path;
+          return (
+            <ListItemButton 
+              key={item.text} 
+              component={Link} 
+              to={item.path}
+              sx={{
+                mb: 1,
+                borderRadius: 2,
+                py: 1.5,
+                background: isActive 
+                  ? (theme) => theme.palette.mode === 'dark'
+                    ? 'linear-gradient(135deg, rgba(144, 202, 249, 0.15) 0%, rgba(102, 126, 234, 0.15) 100%)'
+                    : 'linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)'
+                  : 'transparent',
+                border: isActive 
+                  ? (theme) => `1px solid ${theme.palette.primary.main}`
+                  : '1px solid transparent',
+                '&:hover': {
+                  background: (theme) => theme.palette.mode === 'dark'
+                    ? 'rgba(144, 202, 249, 0.08)'
+                    : 'rgba(102, 126, 234, 0.05)',
+                  transform: 'translateX(4px)',
+                  transition: 'all 0.3s ease',
+                },
+                transition: 'all 0.3s ease',
+              }}
+            >
+              <ListItemIcon 
+                sx={{ 
+                  color: isActive ? 'primary.main' : 'text.secondary',
+                  minWidth: 40,
+                }}
+              >
+                {item.icon}
+              </ListItemIcon>
+              <ListItemText 
+                primary={item.text}
+                primaryTypographyProps={{
+                  fontWeight: isActive ? 600 : 400,
+                  color: isActive ? 'primary.main' : 'text.primary',
+                }}
+              />
+            </ListItemButton>
+          );
+        })}
+      </List>
+      
+      <Box 
+        sx={{ 
+          position: 'absolute',
+          bottom: 20,
+          left: 20,
+          right: 20,
+          p: 2,
+          borderRadius: 2,
+          background: (theme) => theme.palette.mode === 'dark'
+            ? 'rgba(144, 202, 249, 0.05)'
+            : 'rgba(102, 126, 234, 0.05)',
+          border: (theme) => `1px solid ${theme.palette.divider}`,
+        }}
+      >
+        <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+          Version 1.0.0
+        </Typography>
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+          © 2025 Inventory Manager
+        </Typography>
+      </Box>
+    </Drawer>
+  );
+};
+ 
+export default Sidebar;
+
+
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../services/AuthService';
+import ProductService from '../services/ProductService';
+import ProductList from '../components/ProductList';
+
+const Welcome = () => {
+  const [products, setProducts] = useState([]);
+  const [search, setSearch] = useState('');
+  const { isLoggedIn, logout } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    ProductService.getAllProducts()
+      .then(data => setProducts(data))
+      .catch(() => {}); // Ignore errors pre-login
+  }, []);
+
+  const filteredProducts = products.filter(p => 
+    p.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleAction = (action, id) => {
+    if (!isLoggedIn) {
+      navigate('/signin');
+    } else {
+      if (action === 'add') navigate('/add-product');
+      if (action === 'view') navigate(`/product/${id}`);
+      if (action === 'edit') navigate(`/update-product/${id}`);
+      if (action === 'delete') {
+        if (window.confirm('Delete product?')) {
+          ProductService.deleteProduct(id);
+          setProducts(products.filter(p => p.id !== id));
+        }
+      }
+    }
+  };
+
+  return (
+    <div className="welcome">
+      <h2>Product List</h2>
+      <input 
+        type="text" 
+        placeholder="Search..." 
+        value={search} 
+        onChange={(e) => setSearch(e.target.value)} 
+        className="search-bar" 
+      />
+      <ProductList 
+        products={filteredProducts} 
+        onAction={handleAction} 
+        isLoggedIn={isLoggedIn} 
+      />
+      <button 
+        onClick={() => handleAction('add')} 
+        className="add-btn"
+      >
+        Add Product
+      </button>
+      {isLoggedIn && (
+        <button onClick={logout} className="logout-btn">
+          Logout
+        </button>
+      )}
+    </div>
+  );
+};
+
+export default Welcome;
+
+
+import { createContext, useState, useEffect } from "react";
+ 
+export const AuthContext = createContext();
+ 
+export const AuthProvider = ({ children }) => {
+  const [token, setToken] = useState(localStorage.getItem("token"));
+  const [user, setUser] = useState(JSON.parse(localStorage.getItem("user")));
+ 
+  // 👉 ADD THIS useEffect (Fixes warning & loads token on refresh)
+  useEffect(() => {
+    setToken(localStorage.getItem("token"));
+    const savedUser = localStorage.getItem("user");
+    setUser(savedUser ? JSON.parse(savedUser) : null);
+  }, []);
+ 
+  const login = (token, user) => {
+    localStorage.setItem("token", token);
+    localStorage.setItem("user", JSON.stringify(user));
+    setToken(token);
+    setUser(user);
+  };
+ 
+  const logout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    setToken(null);
+    setUser(null);
+  };
+ 
+  return (
+    <AuthContext.Provider value={{ token, user, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+
+import { useContext } from "react";
+import { AuthContext } from "../Context/AuthContext";
+ 
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+ 
+  // If no provider found → throw error
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+ 
+  const { token, user, login, logout } = context;
+ 
+  return {
+    isLoggedIn: !!token,  // convert token to true/false
+    token,
+    user,
+    login,
+    logout,
+  };
+};
+
+
+import React, { useState, useContext } from "react";
+import API from "../../api/axios";
+import { useNavigate } from "react-router-dom";
+import { AuthContext } from "../../Context/AuthContext";
+import {
+  Box,
+  Paper,
+  TextField,
+  Button,
+  Typography,
+  Alert
+} from "@mui/material";
+ 
+export default function Login() {
+  const [form, setForm] = useState({ email: "", password: "" });
+  const [message, setMessage] = useState("");
+  const navigate = useNavigate();
+  const { login } = useContext(AuthContext);
+ 
+  const handleChange = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
+ 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await API.post("/auth/login", form);
+      console.log("Login response:", res.data); // Debug log
+      
+      // Store token first
+      login(res.data.token, { 
+        email: res.data.email || form.email,
+        firstName: res.data.firstName,
+        lastName: res.data.lastName 
+      });
+      
+      // Store user profile for navbar
+      const fullName = `${res.data.firstName || ""} ${res.data.lastName || ""}`.trim();
+      const profileData = {
+        name: fullName || res.data.email || form.email,
+        email: res.data.email || form.email
+      };
+      
+      console.log("Saving profile to localStorage:", profileData); // Debug log
+      localStorage.setItem("userProfile", JSON.stringify(profileData));
+      
+      navigate("/dashboard");
+    } catch (err) {
+      console.error("Login error:", err.response?.data || err.message);
+      setMessage(err.response?.data?.message || "Login failed!");
+    }
+  };
+ 
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        minHeight: "100vh",
+        background: (theme) => theme.palette.mode === 'dark'
+          ? 'linear-gradient(135deg, #0a1929 0%, #1a2027 100%)'
+          : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
+      <Paper
+        elevation={24}
+        sx={{
+          p: 5,
+          maxWidth: 450,
+          width: "100%",
+          mx: 2,
+          borderRadius: 4,
+          background: (theme) => theme.palette.mode === 'dark'
+            ? 'rgba(26, 32, 39, 0.95)'
+            : 'rgba(255, 255, 255, 0.95)',
+          backdropFilter: 'blur(20px)',
+          border: (theme) => `1px solid ${theme.palette.divider}`,
+        }}
+      >
+        <Box sx={{ textAlign: 'center', mb: 4 }}>
+          <Box
+            sx={{
+              width: 70,
+              height: 70,
+              borderRadius: '20px',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 20px',
+              fontSize: '2rem',
+              boxShadow: '0 8px 24px rgba(102, 126, 234, 0.4)',
+            }}
+          >
+            📦
+          </Box>
+          <Typography 
+            variant="h4" 
+            component="h1" 
+            gutterBottom 
+            sx={{ 
+              fontWeight: 700,
+              background: (theme) => theme.palette.mode === 'dark'
+                ? 'linear-gradient(135deg, #90caf9 0%, #f48fb1 100%)'
+                : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}
+          >
+            Welcome Back
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Sign in to your inventory account
+          </Typography>
+        </Box>
+        
+        <Box component="form" onSubmit={handleSubmit}>
+          <TextField
+            fullWidth
+            label="Email Address"
+            name="email"
+            type="email"
+            value={form.email}
+            onChange={handleChange}
+            margin="normal"
+            required
+            autoComplete="email"
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+          />
+          
+          <TextField
+            fullWidth
+            label="Password"
+            name="password"
+            type="password"
+            value={form.password}
+            onChange={handleChange}
+            margin="normal"
+            required
+            autoComplete="current-password"
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+          />
+          
+          <Button
+            type="submit"
+            fullWidth
+            variant="contained"
+            size="large"
+            sx={{ 
+              mt: 4, 
+              mb: 2,
+              py: 1.5,
+              borderRadius: 2,
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              boxShadow: '0 4px 20px rgba(102, 126, 234, 0.4)',
+              '&:hover': {
+                background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
+                transform: 'translateY(-2px)',
+              },
+            }}
+          >
+            Sign In
+          </Button>
+          
+          {message && (
+            <Alert severity={message.includes("failed") ? "error" : "success"} sx={{ mt: 2, borderRadius: 2 }}>
+              {message}
+            </Alert>
+          )}
+        </Box>
+      </Paper>
+    </Box>
+  );
+}
+
+
+import React, { useState } from "react";
+import API from "../../api/axios";
+ 
+export default function Register() {
+  const [form, setForm] = useState({
+    email: "",
+    password: "",
+    firstName: "",
+    lastName: "",
+  });
+  const [message, setMessage] = useState("");
+ 
+  const handleChange = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
+ 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await API.post("/auth/signup", form);
+      setMessage(res.data.message || "Registration successful!");
+    } catch (err) {
+      console.error("Registration error:", err.response?.data || err.message);
+      setMessage(err.response?.data?.message || "Registration failed!");
+    }
+  };
+ 
+  return (
+    <div style={{ margin: "2rem" }}>
+      <h2>Register</h2>
+      <form onSubmit={handleSubmit}>
+        <input name="firstName" placeholder="First Name" onChange={handleChange} />
+        <input name="lastName" placeholder="Last Name" onChange={handleChange} />
+        <input name="email" placeholder="Email" onChange={handleChange} />
+        <input type="password" name="password" placeholder="Password" onChange={handleChange} />
+        <button type="submit">Sign Up</button>
+      </form>
+      <p>{message}</p>
+    </div>
+  );
+}
+
+
+import React, { useEffect, useState } from "react";
+import { Box, Grid, Card, CardContent, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField } from "@mui/material";
+import { motion } from "framer-motion";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { Edit, Delete, Add } from "@mui/icons-material";
+import { useNavigate } from "react-router-dom";
+import API from "../../api/axios";
+import { toast } from "react-toastify";
+
+const Dashboard = () => {
+  const [stats, setStats] = useState({
+    totalProducts: 0,
+    lowStockItems: 0,
+    totalUsers: 0,
+    revenue: 0
+  });
+  const [products, setProducts] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [chartData, setChartData] = useState([]);
+  const [editingSales, setEditingSales] = useState(null);
+  const [editForm, setEditForm] = useState({ name: "", sales: "", revenue: "" });
+  const [addSalesForm, setAddSalesForm] = useState({ name: "", sales: "", revenue: "" });
+  const [showAddSales, setShowAddSales] = useState(false);
+  const [addUserDialogOpen, setAddUserDialogOpen] = useState(false);
+  const [addUserForm, setAddUserForm] = useState({ firstName: "", lastName: "", email: "", password: "" });
+  const [editUserDialogOpen, setEditUserDialogOpen] = useState(false);
+  const [editUserForm, setEditUserForm] = useState({ id: null, firstName: "", lastName: "", email: "" });
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      // Fetch products
+      const productRes = await API.get("/products");
+      const productData = productRes.data;
+      setProducts(productData);
+
+      // Fetch users
+      let userData = [];
+      try {
+        const userRes = await API.get("/auth/users");
+        userData = userRes.data;
+        setUsers(userData);
+      } catch (userErr) {
+        console.log("Users endpoint not available");
+      }
+
+      // Calculate stats
+      const lowStock = productData.filter(p => p.quantity < 10).length;
+      const calculatedRevenue = productData.reduce((sum, p) => sum + (p.price * p.quantity), 0);
+
+      // Fetch or save revenue to database
+      try {
+        // Try to get existing revenue record
+        const revenueRes = await API.get("/revenue/current");
+        setStats({
+          totalProducts: productData.length,
+          lowStockItems: lowStock,
+          totalUsers: userData.length,
+          revenue: revenueRes.data.amount
+        });
+      } catch (revenueErr) {
+        // If no revenue record exists, create one with calculated value
+        try {
+          await API.post("/revenue", { amount: calculatedRevenue });
+        } catch (postErr) {
+          console.log("Could not save revenue");
+        }
+        setStats({
+          totalProducts: productData.length,
+          lowStockItems: lowStock,
+          totalUsers: userData.length,
+          revenue: calculatedRevenue
+        });
+      }
+
+      // Fetch sales trend data from API
+      try {
+        const salesRes = await API.get("/sales");
+        setChartData(salesRes.data);
+      } catch (salesErr) {
+        console.log("Sales endpoint not available, using defaults");
+        // If no data in backend, initialize with default data
+        const defaultData = [
+          { name: "Jan", sales: 120 },
+          { name: "Feb", sales: 90 },
+          { name: "Mar", sales: 140 },
+          { name: "Apr", sales: 180 },
+        ];
+        setChartData(defaultData);
+      }
+
+
+
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+      toast.error("Failed to load dashboard data");
+    }
+  };
+
+  const handleEdit = (id) => {
+    navigate(`/products/edit/${id}`);
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this product?")) return;
+
+    try {
+      await API.delete(`/products/${id}`);
+      toast.success("Product deleted successfully!");
+      fetchDashboardData(); // Refresh data
+    } catch (error) {
+      console.error("Error deleting product:", error);
+      toast.error("Failed to delete product");
+    }
+  };
+
+  const handleDeleteUser = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this user?")) return;
+
+    try {
+      await API.delete(`/auth/users/${id}`);
+      toast.success("User deleted successfully!");
+      fetchDashboardData(); // Refresh data
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      toast.error("Failed to delete user: " + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleEditSales = (item) => {
+    setEditingSales(item.id);
+    setEditForm({ name: item.name, sales: item.sales, revenue: item.revenue || "" });
+  };
+
+  const handleSaveSales = async (id) => {
+    try {
+      await API.put(`/sales/${id}`, { 
+        name: editForm.name, 
+        sales: parseInt(editForm.sales),
+        revenue: editForm.revenue ? parseFloat(editForm.revenue) : null
+      });
+      setEditingSales(null);
+      toast.success("Sales data updated successfully!");
+      fetchDashboardData(); // Refresh all data
+    } catch (error) {
+      console.error("Error updating sales:", error);
+      toast.error("Failed to update sales data: " + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleDeleteSales = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this sales entry?")) return;
+
+    try {
+      await API.delete(`/sales/${id}`);
+      toast.success("Sales data deleted successfully!");
+      fetchDashboardData(); // Refresh all data
+    } catch (error) {
+      console.error("Error deleting sales:", error);
+      toast.error("Failed to delete sales data: " + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingSales(null);
+    setEditForm({ name: "", sales: "", revenue: "" });
+  };
+
+  const handleAddSales = async () => {
+    try {
+      await API.post("/sales", {
+        name: addSalesForm.name,
+        sales: parseInt(addSalesForm.sales),
+        revenue: addSalesForm.revenue ? parseFloat(addSalesForm.revenue) : null
+      });
+      toast.success("Sales data added successfully!");
+      setShowAddSales(false);
+      setAddSalesForm({ name: "", sales: "", revenue: "" });
+      fetchDashboardData();
+    } catch (error) {
+      console.error("Error adding sales:", error);
+      toast.error("Failed to add sales data: " + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleCancelAdd = () => {
+    setShowAddSales(false);
+    setAddSalesForm({ name: "", sales: "", revenue: "" });
+  };
+
+  const handleAddUserClick = () => {
+    setAddUserDialogOpen(true);
+  };
+
+  const handleAddUserClose = () => {
+    setAddUserDialogOpen(false);
+    setAddUserForm({ firstName: "", lastName: "", email: "", password: "" });
+  };
+
+  const handleAddUserSubmit = async () => {
+    try {
+      console.log("Adding user from dashboard:", addUserForm);
+      await API.post("/auth/users", addUserForm);
+      toast.success("User added successfully!");
+      handleAddUserClose();
+      fetchDashboardData(); // Refresh dashboard data
+    } catch (error) {
+      console.error("Error adding user:", error);
+      toast.error("Failed to add user: " + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleEditUserClick = (user) => {
+    setEditUserForm({ id: user.id, firstName: user.firstName || "", lastName: user.lastName || "", email: user.email || "" });
+    setEditUserDialogOpen(true);
+  };
+
+  const handleEditUserClose = () => {
+    setEditUserDialogOpen(false);
+    setEditUserForm({ id: null, firstName: "", lastName: "", email: "" });
+  };
+
+  const handleEditUserSubmit = async () => {
+    try {
+      console.log("Updating user:", editUserForm);
+      await API.put(`/auth/users/${editUserForm.id}`, {
+        firstName: editUserForm.firstName,
+        lastName: editUserForm.lastName,
+        email: editUserForm.email
+      });
+      toast.success("User updated successfully!");
+      handleEditUserClose();
+      fetchDashboardData(); // Refresh dashboard data
+    } catch (error) {
+      console.error("Error updating user:", error);
+      toast.error("Failed to update user: " + (error.response?.data?.message || error.message));
+    }
+  };
+
+  return (
+    <Box p={4}>
+      <Typography variant="h5" mb={2}>📈 Dashboard Overview</Typography>
+
+      <Grid container spacing={3}>
+        {[
+          { title: "Total Products", value: stats.totalProducts },
+          { title: "Low Stock Items", value: stats.lowStockItems },
+          { title: "Users", value: stats.totalUsers },
+          { title: "Revenue (₹)", value: `₹${stats.revenue.toLocaleString()}` },
+        ].map((item, index) => (
+          <Grid item xs={12} sm={6} md={3} key={index}>
+            <motion.div whileHover={{ scale: 1.05 }}>
+              <Card sx={{ textAlign: "center" }}>
+                <CardContent>
+                  <Typography variant="h6" color="text.primary">{item.title}</Typography>
+                  <Typography variant="h4" color="primary">{item.value}</Typography>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </Grid>
+        ))}
+      </Grid>
+
+      <Box mt={5}>
+        <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+          <Typography variant="h6">Sales Trend</Typography>
+          <IconButton 
+            color="primary" 
+            onClick={() => setShowAddSales(true)}
+            sx={{ 
+              backgroundColor: "#1976d2", 
+              color: "white",
+              "&:hover": { backgroundColor: "#1565c0" },
+              width: "40px",
+              height: "40px"
+            }}
+          >
+            <span style={{ fontSize: "28px", fontWeight: "bold" }}>+</span>
+          </IconButton>
+        </Box>
+        <ResponsiveContainer width="100%" height={300}>
+          <BarChart data={chartData}>
+            <XAxis dataKey="name" />
+            <YAxis />
+            <Tooltip />
+            <Bar dataKey="sales" fill="#1976d2" />
+          </BarChart>
+        </ResponsiveContainer>
+
+        {/* Sales Data Table */}
+        <TableContainer component={Paper} sx={{ mt: 3 }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ backgroundColor: "#1976d2" }}>
+                <TableCell sx={{ color: "white" }}>Month</TableCell>
+                <TableCell sx={{ color: "white" }}>Sales</TableCell>
+                <TableCell sx={{ color: "white" }}>Revenue (₹)</TableCell>
+                <TableCell sx={{ color: "white" }} align="center">Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {chartData.map((item) => (
+                <TableRow key={item.id} hover>
+                  <TableCell>
+                    {editingSales === item.id ? (
+                      <input
+                        type="text"
+                        value={editForm.name}
+                        onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                        style={{ width: "100%", padding: "8px", fontSize: "14px" }}
+                      />
+                    ) : (
+                      item.name
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {editingSales === item.id ? (
+                      <input
+                        type="number"
+                        value={editForm.sales}
+                        onChange={(e) => setEditForm({ ...editForm, sales: e.target.value })}
+                        style={{ width: "100%", padding: "8px", fontSize: "14px" }}
+                      />
+                    ) : (
+                      item.sales
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {editingSales === item.id ? (
+                      <input
+                        type="number"
+                        placeholder="Revenue"
+                        value={editForm.revenue}
+                        onChange={(e) => setEditForm({ ...editForm, revenue: e.target.value })}
+                        style={{ width: "100%", padding: "8px", fontSize: "14px" }}
+                      />
+                    ) : (
+                      item.revenue ? `₹${item.revenue.toLocaleString()}` : "N/A"
+                    )}
+                  </TableCell>
+                  <TableCell align="center">
+                    {editingSales === item.id ? (
+                      <>
+                        <IconButton color="success" size="small" onClick={() => handleSaveSales(item.id)}>
+                          ✓
+                        </IconButton>
+                        <IconButton color="error" size="small" onClick={handleCancelEdit}>
+                          ✕
+                        </IconButton>
+                      </>
+                    ) : (
+                      <>
+                        <IconButton color="primary" size="small" onClick={() => handleEditSales(item)}>
+                          <Edit />
+                        </IconButton>
+                        <IconButton color="error" size="small" onClick={() => handleDeleteSales(item.id)}>
+                          <Delete />
+                        </IconButton>
+                      </>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {/* Add New Sales Row */}
+              {showAddSales && (
+                <TableRow sx={{ backgroundColor: "#f0f0f0" }}>
+                  <TableCell>
+                    <input
+                      type="text"
+                      placeholder="Month"
+                      value={addSalesForm.name}
+                      onChange={(e) => setAddSalesForm({ ...addSalesForm, name: e.target.value })}
+                      style={{ width: "100%", padding: "8px", fontSize: "14px" }}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <input
+                      type="number"
+                      placeholder="Sales"
+                      value={addSalesForm.sales}
+                      onChange={(e) => setAddSalesForm({ ...addSalesForm, sales: e.target.value })}
+                      style={{ width: "100%", padding: "8px", fontSize: "14px" }}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <input
+                      type="number"
+                      placeholder="Revenue"
+                      value={addSalesForm.revenue}
+                      onChange={(e) => setAddSalesForm({ ...addSalesForm, revenue: e.target.value })}
+                      style={{ width: "100%", padding: "8px", fontSize: "14px" }}
+                    />
+                  </TableCell>
+                  <TableCell align="center">
+                    <IconButton color="success" size="small" onClick={handleAddSales}>
+                      ✓
+                    </IconButton>
+                    <IconButton color="error" size="small" onClick={handleCancelAdd}>
+                      ✕
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Box>
+
+      <Grid container spacing={3} mt={3}>
+        <Grid item xs={12} md={6}>
+          <Typography variant="h6" mb={2}>Recent Products</Typography>
+          <TableContainer component={Paper}>
+            <Table>
+              <TableHead>
+                <TableRow sx={{ backgroundColor: "#1976d2" }}>
+                  <TableCell sx={{ color: "white" }}>ID</TableCell>
+                  <TableCell sx={{ color: "white" }}>Name</TableCell>
+                  <TableCell sx={{ color: "white" }}>Quantity</TableCell>
+                  <TableCell sx={{ color: "white" }}>Price</TableCell>
+                  <TableCell sx={{ color: "white" }} align="center">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {products.slice(0, 5).map((product) => (
+                  <TableRow key={product.id} hover>
+                    <TableCell>{product.id}</TableCell>
+                    <TableCell>{product.name}</TableCell>
+                    <TableCell>{product.quantity}</TableCell>
+                    <TableCell>₹{product.price}</TableCell>
+                    <TableCell align="center">
+                      <IconButton color="primary" size="small" onClick={() => handleEdit(product.id)}>
+                        <Edit />
+                      </IconButton>
+                      <IconButton color="error" size="small" onClick={() => handleDelete(product.id)}>
+                        <Delete />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {products.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} align="center" sx={{ py: 3, color: "text.secondary" }}>
+                      No products found
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+            <Typography variant="h6">Recent Users</Typography>
+            <Button 
+              variant="contained" 
+              color="primary" 
+              startIcon={<Add />}
+              onClick={handleAddUserClick}
+              size="small"
+            >
+              Add User
+            </Button>
+          </Box>
+          <TableContainer component={Paper}>
+            <Table>
+              <TableHead>
+                <TableRow sx={{ backgroundColor: "#1976d2" }}>
+                  <TableCell sx={{ color: "white" }}>ID</TableCell>
+                  <TableCell sx={{ color: "white" }}>Name</TableCell>
+                  <TableCell sx={{ color: "white" }}>Email</TableCell>
+                  <TableCell sx={{ color: "white" }} align="center">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {users.slice(0, 5).map((user) => (
+                  <TableRow key={user.id} hover>
+                    <TableCell>{user.id}</TableCell>
+                    <TableCell>{`${user.firstName || ''} ${user.lastName || ''}`.trim() || 'N/A'}</TableCell>
+                    <TableCell>{user.email}</TableCell>
+                    <TableCell align="center">
+                      <IconButton color="primary" size="small" onClick={() => handleEditUserClick(user)}>
+                        <Edit />
+                      </IconButton>
+                      <IconButton color="error" size="small" onClick={() => handleDeleteUser(user.id)}>
+                        <Delete />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {users.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} align="center" sx={{ py: 3, color: "text.secondary" }}>
+                      No users found
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Grid>
+      </Grid>
+
+      {/* Add User Dialog */}
+      <Dialog open={addUserDialogOpen} onClose={handleAddUserClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Add New User</DialogTitle>
+        <DialogContent>
+          <TextField
+            label="First Name"
+            fullWidth
+            margin="normal"
+            value={addUserForm.firstName}
+            onChange={(e) => setAddUserForm({ ...addUserForm, firstName: e.target.value })}
+          />
+          <TextField
+            label="Last Name"
+            fullWidth
+            margin="normal"
+            value={addUserForm.lastName}
+            onChange={(e) => setAddUserForm({ ...addUserForm, lastName: e.target.value })}
+          />
+          <TextField
+            label="Email"
+            fullWidth
+            margin="normal"
+            type="email"
+            value={addUserForm.email}
+            onChange={(e) => setAddUserForm({ ...addUserForm, email: e.target.value })}
+          />
+          <TextField
+            label="Password"
+            fullWidth
+            margin="normal"
+            type="password"
+            value={addUserForm.password}
+            onChange={(e) => setAddUserForm({ ...addUserForm, password: e.target.value })}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleAddUserClose}>Cancel</Button>
+          <Button onClick={handleAddUserSubmit} variant="contained" color="primary">
+            Add User
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit User Dialog */}
+      <Dialog open={editUserDialogOpen} onClose={handleEditUserClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit User</DialogTitle>
+        <DialogContent>
+          <TextField
+            label="First Name"
+            fullWidth
+            margin="normal"
+            value={editUserForm.firstName}
+            onChange={(e) => setEditUserForm({ ...editUserForm, firstName: e.target.value })}
+          />
+          <TextField
+            label="Last Name"
+            fullWidth
+            margin="normal"
+            value={editUserForm.lastName}
+            onChange={(e) => setEditUserForm({ ...editUserForm, lastName: e.target.value })}
+          />
+          <TextField
+            label="Email"
+            fullWidth
+            margin="normal"
+            type="email"
+            value={editUserForm.email}
+            onChange={(e) => setEditUserForm({ ...editUserForm, email: e.target.value })}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleEditUserClose}>Cancel</Button>
+          <Button onClick={handleEditUserSubmit} variant="contained" color="primary">
+            Update User
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+};
+
+export default Dashboard;
+
+
+
+import React from "react";
+import { Button, TextField, Box } from "@mui/material";
+import { Formik, Form } from "formik";
+import * as Yup from "yup";
+import API from "../../api/axios";
+import { toast } from "react-toastify";
+import { useNavigate } from "react-router-dom";
+ 
+const schema = Yup.object({
+  name: Yup.string().required("Name is required"),
+  description: Yup.string(),
+  manufacturer: Yup.string(),
+  quantity: Yup.number().min(1, "Minimum 1").required("Quantity is required"),
+  price: Yup.number().positive("Must be positive").required("Price is required"),
+});
+ 
+export default function AddProduct() {
+  const navigate = useNavigate();
+ 
+  return (
+    <Formik
+      initialValues={{ name: "", description: "", manufacturer: "", quantity: "", price: "" }}
+      validationSchema={schema}
+      onSubmit={async (values, { resetForm }) => {
+        try {
+          console.log("Adding product with data:", values);
+          const response = await API.post("/products", values);
+          console.log("Product added successfully:", response.data);
+          toast.success("Product added successfully!");
+          resetForm();
+          navigate("/products");
+        } catch (err) {
+          console.error("Error adding product:");
+          console.error("Status:", err.response?.status);
+          console.error("Data:", err.response?.data);
+          console.error("Message:", err.message);
+          toast.error("Error adding product: " + (err.response?.data?.message || err.message));
+        }
+      }}
+    >
+      {({ values, errors, touched, handleChange, handleSubmit }) => (
+        <Form onSubmit={handleSubmit}>
+          <Box display="flex" flexDirection="column" gap={2} mt={2}>
+            <TextField
+              label="Product Name"
+              name="name"
+              value={values.name}
+              onChange={handleChange}
+              error={touched.name && Boolean(errors.name)}
+              helperText={touched.name && errors.name}
+              fullWidth
+            />
+ 
+            <TextField
+              label="Description"
+              name="description"
+              value={values.description}
+              onChange={handleChange}
+              error={touched.description && Boolean(errors.description)}
+              helperText={touched.description && errors.description}
+              fullWidth
+              multiline
+              rows={3}
+            />
+ 
+            <TextField
+              label="Manufacturer"
+              name="manufacturer"
+              value={values.manufacturer}
+              onChange={handleChange}
+              error={touched.manufacturer && Boolean(errors.manufacturer)}
+              helperText={touched.manufacturer && errors.manufacturer}
+              fullWidth
+            />
+ 
+            <TextField
+              label="Quantity"
+              name="quantity"
+              type="number"
+              value={values.quantity}
+              onChange={handleChange}
+              error={touched.quantity && Boolean(errors.quantity)}
+              helperText={touched.quantity && errors.quantity}
+              fullWidth
+            />
+ 
+            <TextField
+              label="Price"
+              name="price"
+              type="number"
+              value={values.price}
+              onChange={handleChange}
+              error={touched.price && Boolean(errors.price)}
+              helperText={touched.price && errors.price}
+              fullWidth
+            />
+ 
+            <Box display="flex" justifyContent="flex-end" gap={1}>
+              <Button onClick={() => navigate("/products")}>Cancel</Button>
+              <Button type="submit" variant="contained">
+                Save
+              </Button>
+            </Box>
+          </Box>
+        </Form>
+      )}
+    </Formik>
+  );
+}
+
+
+import React, { useEffect, useState, useCallback } from "react";
+import { Button, TextField, Box } from "@mui/material";
+import { Formik, Form } from "formik";
+import * as Yup from "yup";
+import API from "../../api/axios";
+import { toast } from "react-toastify";
+import { useParams, useNavigate } from "react-router-dom";
+ 
+// Validation schema
+const schema = Yup.object({
+  name: Yup.string().required("Name is required"),
+  description: Yup.string(),
+  manufacturer: Yup.string(),
+  quantity: Yup.number().min(1, "At least 1 item").required(),
+  price: Yup.number().positive("Must be positive").required(),
+});
+ 
+export default function EditProduct({ onSuccess, onClose }) {
+  const { id } = useParams(); // Get product ID from URL
+  const navigate = useNavigate();
+  const [product, setProduct] = useState(null);
+ 
+  // Load product function
+  const loadProduct = useCallback(async () => {
+    try {
+      const res = await API.get(`/products/${id}`);
+      setProduct(res.data);
+    } catch (err) {
+      toast.error("Failed to load product!");
+    }
+  }, [id]);
+ 
+  // Run once when page opens
+  useEffect(() => {
+    loadProduct();
+  }, [loadProduct]);
+ 
+  if (!product) return <p>Loading product...</p>;
+ 
+  return (
+    <Formik
+      initialValues={{
+        name: product.name,
+        description: product.description || "",
+        manufacturer: product.manufacturer || "",
+        quantity: product.quantity,
+        price: product.price,
+      }}
+      validationSchema={schema}
+      onSubmit={async (values) => {
+        try {
+          await API.put(`/products/${id}`, values);
+          toast.success("Product updated successfully!");
+          if (onClose) onClose();
+          if (onSuccess) onSuccess();
+          navigate("/products");
+        } catch (err) {
+          toast.error("Error updating product!");
+        }
+      }}
+    >
+      {({ values, errors, touched, handleChange, handleSubmit }) => (
+        <Form onSubmit={handleSubmit}>
+          <Box display="flex" flexDirection="column" gap={2} mt={2}>
+            <TextField
+              label="Product Name"
+              name="name"
+              value={values.name}
+              onChange={handleChange}
+              error={touched.name && Boolean(errors.name)}
+              helperText={touched.name && errors.name}
+            />
+ 
+            <TextField
+              label="Description"
+              name="description"
+              value={values.description}
+              onChange={handleChange}
+              error={touched.description && Boolean(errors.description)}
+              helperText={touched.description && errors.description}
+              multiline
+              rows={3}
+            />
+ 
+            <TextField
+              label="Manufacturer"
+              name="manufacturer"
+              value={values.manufacturer}
+              onChange={handleChange}
+              error={touched.manufacturer && Boolean(errors.manufacturer)}
+              helperText={touched.manufacturer && errors.manufacturer}
+            />
+ 
+            <TextField
+              label="Quantity"
+              name="quantity"
+              type="number"
+              value={values.quantity}
+              onChange={handleChange}
+              error={touched.quantity && Boolean(errors.quantity)}
+              helperText={touched.quantity && errors.quantity}
+            />
+ 
+            <TextField
+              label="Price"
+              name="price"
+              type="number"
+              value={values.price}
+              onChange={handleChange}
+              error={touched.price && Boolean(errors.price)}
+              helperText={touched.price && errors.price}
+            />
+ 
+            <Box display="flex" justifyContent="flex-end" gap={1}>
+              <Button onClick={onClose}>Cancel</Button>
+              <Button type="submit" variant="contained">
+                Update
+              </Button>
+            </Box>
+          </Box>
+        </Form>
+      )}
+    </Formik>
+  );
+}
+
+
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import api from "../../api/axios";
+import {
+  Paper,
+  Table,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+  TableContainer,
+  TextField,
+  Button,
+} from "@mui/material";
+import { Add, Delete, Edit } from "@mui/icons-material";
+import { toast } from "react-toastify";
+ 
+const ProductList = () => {
+  const [products, setProducts] = useState([]);
+  const [search, setSearch] = useState("");
+  const navigate = useNavigate();
+ 
+  // ✅ Fetch all products on page load
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        console.log("Fetching products from /products...");
+        console.log("Token:", localStorage.getItem("token") ? "Present" : "Missing");
+        const response = await api.get("/products");
+        console.log("Products loaded successfully:", response.data);
+        console.log("Number of products:", response.data.length);
+        setProducts(response.data);
+        if (response.data.length === 0) {
+          toast.info("No products found. Add your first product!");
+        }
+      } catch (error) {
+        console.error("❌ Error fetching products:");
+        console.error("Status:", error.response?.status);
+        console.error("Data:", error.response?.data);
+        console.error("Message:", error.message);
+        if (error.response && error.response.status === 401) {
+          toast.error("Session expired! Please log in again.");
+          navigate("/login");
+        } else if (error.response && error.response.status === 403) {
+          toast.error("Access denied to products endpoint");
+        } else {
+          toast.error("Failed to load products: " + (error.response?.data?.message || error.message));
+        }
+      }
+    };
+    fetchProducts();
+  }, [navigate]);
+ 
+  // ✅ Delete product
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this product?")) return;
+ 
+    try {
+      await api.delete(`/products/${id}`);
+      setProducts(products.filter((p) => p.id !== id));
+      toast.success("Product deleted successfully!");
+    } catch (error) {
+      console.error("Error deleting product:", error);
+      toast.error("Failed to delete product.");
+    }
+  };
+ 
+  // ✅ Filter products based on search
+  const filteredProducts = products.filter((p) =>
+    p.name?.toLowerCase().includes(search.toLowerCase())
+  );
+ 
+  return (
+    <Paper sx={{ padding: 3, margin: 3 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          marginBottom: "20px",
+        }}
+      >
+        <TextField
+          label="Search Products"
+          variant="outlined"
+          size="small"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <Button
+          variant="contained"
+          color="success"
+          startIcon={<Add />}
+          onClick={() => navigate("/products/add")}
+        >
+          Add Product
+        </Button>
+      </div>
+ 
+      <TableContainer>
+        <Table>
+          <TableHead>
+            <TableRow sx={{ backgroundColor: "#1976d2" }}>
+              <TableCell sx={{ color: "white" }}>ID</TableCell>
+              <TableCell sx={{ color: "white" }}>Product Name</TableCell>
+              <TableCell sx={{ color: "white" }}>Description</TableCell>
+              <TableCell sx={{ color: "white" }}>Manufacturer</TableCell>
+              <TableCell sx={{ color: "white" }}>Quantity</TableCell>
+              <TableCell sx={{ color: "white" }}>Price (₹)</TableCell>
+              <TableCell align="center" sx={{ color: "white" }}>
+                Actions
+              </TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {filteredProducts.length > 0 ? (
+              filteredProducts.map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell>{p.id}</TableCell>
+                  <TableCell>{p.name}</TableCell>
+                  <TableCell>{p.description}</TableCell>
+                  <TableCell>{p.manufacturer}</TableCell>
+                  <TableCell>{p.quantity}</TableCell>
+                  <TableCell>{p.price}</TableCell>
+                  <TableCell align="center">
+                    <Button
+                      variant="outlined"
+                      color="info"
+                      size="small"
+                      startIcon={<Edit />}
+                      onClick={() => navigate(`/products/edit/${p.id}`)}
+                      sx={{ marginRight: 1 }}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      size="small"
+                      startIcon={<Delete />}
+                      onClick={() => handleDelete(p.id)}
+                    >
+                      Delete
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={7} align="center" sx={{ color: "gray" }}>
+                  No products found.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Paper>
+  );
+};
+ 
+export default ProductList;
+
+
+import React, { useEffect, useState } from "react";
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  PieChart, Pie, Cell, ResponsiveContainer
+} from "recharts";
+import { Grid, Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, IconButton } from "@mui/material";
+import { Edit, Delete } from "@mui/icons-material";
+import { useNavigate } from "react-router-dom";
+import API from "../../api/axios";
+import { toast } from "react-toastify";
+
+export default function Reports() {
+  const [salesData, setSalesData] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [stockData, setStockData] = useState([]);
+  const navigate = useNavigate();
+
+  const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8"];
+
+  useEffect(() => {
+    fetchReportData();
+  }, []);
+
+  const fetchReportData = async () => {
+    try {
+      // Fetch products
+      const res = await API.get("/products");
+      const productData = res.data;
+      setProducts(productData);
+
+      // Fetch sales data
+      const salesRes = await API.get("/sales");
+      const salesApiData = salesRes.data;
+      setSalesData(salesApiData);
+
+      // Group products by manufacturer for stock categories
+      const categoryMap = {};
+      productData.forEach(p => {
+        const category = p.manufacturer || "Other";
+        categoryMap[category] = (categoryMap[category] || 0) + p.quantity;
+      });
+
+      const categoryData = Object.keys(categoryMap).map(key => ({
+        name: key,
+        value: categoryMap[key]
+      }));
+      setStockData(categoryData);
+
+    } catch (error) {
+      console.error("Error fetching report data:", error);
+      toast.error("Failed to load report data");
+    }
+  };
+
+  const handleEdit = (id) => {
+    navigate(`/products/edit/${id}`);
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this product?")) return;
+
+    try {
+      await API.delete(`/products/${id}`);
+      toast.success("Product deleted successfully!");
+      fetchReportData();
+    } catch (error) {
+      console.error("Error deleting product:", error);
+      toast.error("Failed to delete product");
+    }
+  };
+
+  return (
+    <div style={{ padding: "20px" }}>
+      <Typography variant="h5" gutterBottom>Reports & Analytics</Typography>
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6">Monthly Sales</Typography>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={salesData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Line type="monotone" dataKey="sales" stroke="#8884d8" name="Sales" />
+              </LineChart>
+            </ResponsiveContainer>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6">Stock by Manufacturer</Typography>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={stockData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  outerRadius={100}
+                  fill="#8884d8"
+                  dataKey="value"
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                >
+                  {stockData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" mb={2}>Product Inventory Report</Typography>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow sx={{ backgroundColor: "#1976d2" }}>
+                    <TableCell sx={{ color: "white" }}>ID</TableCell>
+                    <TableCell sx={{ color: "white" }}>Name</TableCell>
+                    <TableCell sx={{ color: "white" }}>Manufacturer</TableCell>
+                    <TableCell sx={{ color: "white" }}>Quantity</TableCell>
+                    <TableCell sx={{ color: "white" }}>Price (₹)</TableCell>
+                    <TableCell sx={{ color: "white" }}>Total Value (₹)</TableCell>
+                    <TableCell sx={{ color: "white" }} align="center">Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {products.map((product) => (
+                    <TableRow key={product.id}>
+                      <TableCell>{product.id}</TableCell>
+                      <TableCell>{product.name}</TableCell>
+                      <TableCell>{product.manufacturer || "N/A"}</TableCell>
+                      <TableCell>{product.quantity}</TableCell>
+                      <TableCell>₹{product.price}</TableCell>
+                      <TableCell>₹{(product.price * product.quantity).toLocaleString()}</TableCell>
+                      <TableCell align="center">
+                        <IconButton color="primary" size="small" onClick={() => handleEdit(product.id)}>
+                          <Edit />
+                        </IconButton>
+                        <IconButton color="error" size="small" onClick={() => handleDelete(product.id)}>
+                          <Delete />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Paper>
+        </Grid>
+      </Grid>
+    </div>
+  );
+} 
+
+
+
+import React, { useState, useContext, useEffect } from "react";
+import {
+  Typography, Switch, FormControlLabel, TextField,
+  Button, Box, Paper, CircularProgress
+} from "@mui/material";
+import { toast } from "react-toastify";
+import { ThemeContext } from "../../App";
+import { AuthContext } from "../../Context/AuthContext";
+import API from "../../api/axios";
+
+export default function Settings() {
+  const { darkMode, toggleDarkMode } = useContext(ThemeContext);
+  const { user } = useContext(AuthContext);
+  const [profile, setProfile] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchUserProfile();
+  }, []);
+
+  const fetchUserProfile = async () => {
+    try {
+      // Fetch current user's profile from backend
+      const res = await API.get("/auth/profile");
+      setProfile({
+        firstName: res.data.firstName || "",
+        lastName: res.data.lastName || "",
+        email: res.data.email || "",
+      });
+      setLoading(false);
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+      // Fallback to user from context
+      if (user) {
+        setProfile({
+          firstName: user.firstName || "",
+          lastName: user.lastName || "",
+          email: user.email || "",
+        });
+      }
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      await API.put("/auth/profile", profile);
+      // Update localStorage for navbar
+      localStorage.setItem("userProfile", JSON.stringify({
+        name: `${profile.firstName} ${profile.lastName}`.trim(),
+        email: profile.email
+      }));
+      toast.success("Profile updated successfully!");
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      toast.error("Failed to update profile");
+    }
+  };
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  return (
+    <Paper sx={{ p: 4, mt: 3 }}>
+      <Typography variant="h5" gutterBottom>Settings</Typography>
+
+      <FormControlLabel
+        control={
+          <Switch
+            checked={darkMode}
+            onChange={toggleDarkMode}
+            color="primary"
+          />
+        }
+        label="Enable Dark Mode"
+      />
+
+      <Box sx={{ mt: 3 }}>
+        <Typography variant="h6">Profile Information</Typography>
+        <TextField
+          label="First Name"
+          fullWidth
+          margin="normal"
+          value={profile.firstName}
+          onChange={(e) => setProfile({ ...profile, firstName: e.target.value })}
+        />
+        <TextField
+          label="Last Name"
+          fullWidth
+          margin="normal"
+          value={profile.lastName}
+          onChange={(e) => setProfile({ ...profile, lastName: e.target.value })}
+        />
+        <TextField
+          label="Email"
+          fullWidth
+          margin="normal"
+          value={profile.email}
+          onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+          disabled
+        />
+        <Button variant="contained" sx={{ mt: 2 }} onClick={handleSave}>
+          Save Changes
+        </Button>
+      </Box>
+    </Paper>
+  );
+}
+
+
+
+import React, { useEffect, useState } from "react";
+import API from "../../api/axios";
+import {
+  Table, TableHead, TableRow, TableCell,
+  TableBody, Typography, Paper, TableContainer, IconButton,
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  TextField, Button, Box
+} from "@mui/material";
+import { Edit, Delete } from "@mui/icons-material";
+import { toast } from "react-toastify";
+ 
+export default function UserList() {
+  const [users, setUsers] = useState([]);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [editForm, setEditForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: ""
+  });
+  const [addForm, setAddForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    password: ""
+  });
+ 
+  const fetchUsers = async () => {
+    try {
+      console.log("Fetching users from /auth/users...");
+      console.log("Token:", localStorage.getItem("token") ? "Present" : "Missing");
+      const res = await API.get("/auth/users");
+      console.log("Users loaded successfully:", res.data);
+      console.log("Number of users:", res.data.length);
+      setUsers(res.data);
+      if (res.data.length === 0) {
+        toast.info("No users found in database");
+      }
+    } catch (err) {
+      console.error("Error fetching users:");
+      console.error("Status:", err.response?.status);
+      console.error("Data:", err.response?.data);
+      console.error("Message:", err.message);
+      if (err.response?.status === 403) {
+        toast.error("Access denied. Admin privileges required.");
+      } else if (err.response?.status === 401) {
+        toast.error("Session expired. Please login again.");
+      } else {
+        toast.error("Failed to load users: " + (err.response?.data?.message || err.message));
+      }
+    }
+  };
+ 
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const handleEditClick = (user) => {
+    setSelectedUser(user);
+    setEditForm({
+      firstName: user.firstName || "",
+      lastName: user.lastName || "",
+      email: user.email || ""
+    });
+    setEditDialogOpen(true);
+  };
+
+  const handleEditClose = () => {
+    setEditDialogOpen(false);
+    setSelectedUser(null);
+    setEditForm({ firstName: "", lastName: "", email: "" });
+  };
+
+  const handleEditSubmit = async () => {
+    try {
+      await API.put(`/auth/users/${selectedUser.id}`, editForm);
+      toast.success("User updated successfully!");
+      handleEditClose();
+      fetchUsers();
+    } catch (err) {
+      console.error("Error updating user:", err);
+      toast.error("Failed to update user: " + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this user?")) return;
+
+    try {
+      await API.delete(`/auth/users/${id}`);
+      toast.success("User deleted successfully!");
+      fetchUsers();
+    } catch (err) {
+      console.error("Error deleting user:", err);
+      toast.error("Failed to delete user: " + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const handleAddClick = () => {
+    setAddDialogOpen(true);
+  };
+
+  const handleAddClose = () => {
+    setAddDialogOpen(false);
+    setAddForm({ firstName: "", lastName: "", email: "", password: "" });
+  };
+
+  const handleAddSubmit = async () => {
+    try {
+      console.log("Adding user with data:", addForm);
+      const response = await API.post("/auth/users", addForm);
+      console.log("User added successfully:", response.data);
+      toast.success("User added successfully!");
+      handleAddClose();
+      fetchUsers();
+    } catch (err) {
+      console.error("Error adding user:", err);
+      console.error("Error response:", err.response?.data);
+      console.error("Error status:", err.response?.status);
+      toast.error("Failed to add user: " + (err.response?.data?.message || err.message));
+    }
+  };
+ 
+  return (
+    <>
+      <Paper sx={{ p: 3, mt: 2 }}>
+        <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+          <Typography variant="h5">Registered Users</Typography>
+          <Button variant="contained" color="primary" onClick={handleAddClick}>
+            Add User
+          </Button>
+        </Box>
+        <TableContainer>
+          <Table>
+            <TableHead>
+              <TableRow sx={{ backgroundColor: "#1976d2" }}>
+                <TableCell sx={{ color: "white", fontWeight: "bold" }}>ID</TableCell>
+                <TableCell sx={{ color: "white", fontWeight: "bold" }}>First Name</TableCell>
+                <TableCell sx={{ color: "white", fontWeight: "bold" }}>Last Name</TableCell>
+                <TableCell sx={{ color: "white", fontWeight: "bold" }}>Email</TableCell>
+                <TableCell sx={{ color: "white", fontWeight: "bold" }}>Role</TableCell>
+                <TableCell sx={{ color: "white", fontWeight: "bold" }} align="center">Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {users.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} align="center" sx={{ py: 3, color: "text.secondary" }}>
+                    No users found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                users.map((u) => (
+                  <TableRow key={u.id} hover>
+                    <TableCell>{u.id}</TableCell>
+                    <TableCell>{u.firstName || "N/A"}</TableCell>
+                    <TableCell>{u.lastName || "N/A"}</TableCell>
+                    <TableCell>{u.email}</TableCell>
+                    <TableCell>{u.role || "USER"}</TableCell>
+                    <TableCell align="center">
+                      <IconButton color="primary" size="small" onClick={() => handleEditClick(u)}>
+                        <Edit />
+                      </IconButton>
+                      <IconButton color="error" size="small" onClick={() => handleDelete(u.id)}>
+                        <Delete />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Paper>
+
+      {/* Edit User Dialog */}
+      <Dialog open={editDialogOpen} onClose={handleEditClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit User</DialogTitle>
+        <DialogContent>
+          <TextField
+            label="First Name"
+            fullWidth
+            margin="normal"
+            value={editForm.firstName}
+            onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
+          />
+          <TextField
+            label="Last Name"
+            fullWidth
+            margin="normal"
+            value={editForm.lastName}
+            onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+          />
+          <TextField
+            label="Email"
+            fullWidth
+            margin="normal"
+            type="email"
+            value={editForm.email}
+            onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleEditClose}>Cancel</Button>
+          <Button onClick={handleEditSubmit} variant="contained" color="primary">
+            Save Changes
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Add User Dialog */}
+      <Dialog open={addDialogOpen} onClose={handleAddClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Add New User</DialogTitle>
+        <DialogContent>
+          <TextField
+            label="First Name"
+            fullWidth
+            margin="normal"
+            value={addForm.firstName}
+            onChange={(e) => setAddForm({ ...addForm, firstName: e.target.value })}
+          />
+          <TextField
+            label="Last Name"
+            fullWidth
+            margin="normal"
+            value={addForm.lastName}
+            onChange={(e) => setAddForm({ ...addForm, lastName: e.target.value })}
+          />
+          <TextField
+            label="Email"
+            fullWidth
+            margin="normal"
+            type="email"
+            value={addForm.email}
+            onChange={(e) => setAddForm({ ...addForm, email: e.target.value })}
+          />
+          <TextField
+            label="Password"
+            fullWidth
+            margin="normal"
+            type="password"
+            value={addForm.password}
+            onChange={(e) => setAddForm({ ...addForm, password: e.target.value })}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleAddClose}>Cancel</Button>
+          <Button onClick={handleAddSubmit} variant="contained" color="primary">
+            Add User
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+}
+
+
+import { Routes, Route, Navigate } from "react-router-dom";
+import Dashboard from "../Pages/Dashboard/Dashboard";
+import ProductList from "../Pages/Product/ProductList";
+import UserList from "../Pages/Users/UserList";
+import Reports from "../Pages/Reports/Reports";
+import Settings from "../Pages/Settings/Settings";
+import Login from "../Pages/Auth/Login";
+import Register from "../Pages/Auth/Register";
+import Navbar from "../components/Navbar";
+import Sidebar from "../components/Sidebar";
+import ProtectedRoute from "../components/ProtectedRoute";
+import AddProduct from "../Pages/Product/AddProduct";
+import EditProduct from "../Pages/Product/EditProduct";
+export default function AppRoutes() {
+  return (
+    <div style={{ display: "flex", height: "100vh" }}>
+      {/* Sidebar */}
+      <Sidebar />
+ 
+      {/* Main Content */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+        <Navbar />
+        <div style={{ padding: "20px", flex: 1, overflowY: "auto" }}>
+          <Routes>
+            {/* Default Redirect */}
+            <Route path="/" element={<Navigate to="/dashboard" />} />
+ 
+            {/* Protected Routes */}
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/products"
+              element={
+                <ProtectedRoute>
+                  <ProductList />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/users"
+              element={
+                <ProtectedRoute>
+                  <UserList />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/reports"
+              element={
+                <ProtectedRoute>
+                  <Reports />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <Settings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+  path="/products/add"
+  element={
+    <ProtectedRoute>
+      <AddProduct />
+    </ProtectedRoute>
+  }
+/>
+ 
+<Route
+  path="/products/edit/:id"
+  element={
+    <ProtectedRoute>
+      <EditProduct />
+    </ProtectedRoute>
+  }
+/>
+ 
+            {/* Public Routes */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Register />} />
+          </Routes>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
+import axios from "axios";
+ 
+const API_BASE = "http://localhost:8088/api";
+ 
+const getToken = () => localStorage.getItem("token");
+ 
+const api = axios.create({
+  baseURL: API_BASE,
+});
+ 
+api.interceptors.request.use((config) => {
+  const token = getToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+ 
+export default {
+  getAllProducts: () => api.get("/products").then((res) => res.data),
+  getProduct: (id) => api.get(`/products/${id}`).then((res) => res.data),
+  addProduct: (product) => api.post("/products", product).then((res) => res.data),
+  updateProduct: (id, product) =>
+    api.put(`/products/${id}`, product).then((res) => res.data),
+  deleteProduct: (id) => api.delete(`/products/${id}`),
+ 
+  register: (user) => api.post("/auth/signup", user).then((res) => res.data),
+  login: (credentials) =>
+    api.post("/auth/login", credentials).then((res) => res.data),
+};
+
+
+import axios from 'axios';
+
+const API_BASE = 'http://localhost:8088/api';
+
+const getToken = () => localStorage.getItem('token');
+
+const api = axios.create({
+  baseURL: API_BASE,
+});
+
+api.interceptors.request.use(config => {
+  const token = getToken();
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+export default {
+  getAllProducts: () => api.get('/products').then(res => res.data),
+  getProduct: (id) => api.get(`/products/${id}`).then(res => res.data),
+  addProduct: (product) => api.post('/products', product).then(res => res.data),
+  updateProduct: (id, product) => api.put(`/products/${id}`, product).then(res => res.data),
+  deleteProduct: (id) => api.delete(`/products/${id}`),
+  register: (user) => api.post('/auth/signup', user).then(res => res.data),
+  login: (credentials) => api.post('/auth/login', credentials).then(res => res.data),
+};
+
+
+import React, { useState, useEffect, createContext } from "react";
+import AppRoutes from "./Routes/AppRoutes";
+import { ThemeProvider, createTheme, CssBaseline } from "@mui/material";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+
+// Create Theme Context
+export const ThemeContext = createContext();
+
+function App() {
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem("darkMode");
+    return saved ? JSON.parse(saved) : false;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("darkMode", JSON.stringify(darkMode));
+  }, [darkMode]);
+
+  const theme = createTheme({
+    palette: {
+      mode: darkMode ? "dark" : "light",
+      primary: {
+        main: darkMode ? "#90caf9" : "#1976d2",
+        light: darkMode ? "#e3f2fd" : "#42a5f5",
+        dark: darkMode ? "#42a5f5" : "#1565c0",
+      },
+      secondary: {
+        main: darkMode ? "#f48fb1" : "#dc004e",
+        light: darkMode ? "#fce4ec" : "#e91e63",
+        dark: darkMode ? "#c2185b" : "#c51162",
+      },
+      success: {
+        main: darkMode ? "#66bb6a" : "#2e7d32",
+      },
+      warning: {
+        main: darkMode ? "#ffa726" : "#ed6c02",
+      },
+      error: {
+        main: darkMode ? "#f44336" : "#d32f2f",
+      },
+      background: {
+        default: darkMode ? "#0a1929" : "#f5f7fa",
+        paper: darkMode ? "#1a2027" : "#ffffff",
+      },
+      text: {
+        primary: darkMode ? "#ffffff" : "#1a2027",
+        secondary: darkMode ? "#b2bac2" : "#5f6c7b",
+      },
+    },
+    typography: {
+      fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+      h4: {
+        fontWeight: 700,
+        fontSize: "2rem",
+      },
+      h5: {
+        fontWeight: 600,
+        fontSize: "1.5rem",
+      },
+      h6: {
+        fontWeight: 600,
+        fontSize: "1.25rem",
+      },
+      button: {
+        textTransform: "none",
+        fontWeight: 600,
+      },
+    },
+    shape: {
+      borderRadius: 12,
+    },
+    shadows: [
+      'none',
+      darkMode ? '0px 2px 4px rgba(0,0,0,0.5)' : '0px 2px 4px rgba(0,0,0,0.1)',
+      darkMode ? '0px 4px 8px rgba(0,0,0,0.5)' : '0px 4px 8px rgba(0,0,0,0.1)',
+      darkMode ? '0px 8px 16px rgba(0,0,0,0.5)' : '0px 8px 16px rgba(0,0,0,0.1)',
+      darkMode ? '0px 12px 24px rgba(0,0,0,0.5)' : '0px 12px 24px rgba(0,0,0,0.1)',
+      ...Array(20).fill(darkMode ? '0px 16px 32px rgba(0,0,0,0.5)' : '0px 16px 32px rgba(0,0,0,0.1)'),
+    ],
+    components: {
+      MuiButton: {
+        styleOverrides: {
+          root: {
+            borderRadius: 8,
+            padding: '10px 24px',
+            boxShadow: 'none',
+            '&:hover': {
+              boxShadow: darkMode ? '0 4px 12px rgba(144, 202, 249, 0.3)' : '0 4px 12px rgba(25, 118, 210, 0.2)',
+              transform: 'translateY(-2px)',
+              transition: 'all 0.3s ease',
+            },
+          },
+        },
+      },
+      MuiPaper: {
+        styleOverrides: {
+          root: {
+            backgroundImage: 'none',
+          },
+        },
+      },
+      MuiCard: {
+        styleOverrides: {
+          root: {
+            borderRadius: 16,
+            boxShadow: darkMode ? '0 4px 20px rgba(0,0,0,0.5)' : '0 4px 20px rgba(0,0,0,0.08)',
+          },
+        },
+      },
+    },
+  });
+
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
+  };
+
+  return (
+    <ThemeContext.Provider value={{ darkMode, toggleDarkMode }}>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <AppRoutes />
+        <ToastContainer position="top-right" autoClose={2000} theme={darkMode ? "dark" : "light"} />
+      </ThemeProvider>
+    </ThemeContext.Provider>
+  );
+}
+
+export default App;
+
+
+.App {
+  text-align: center;
+}
+
+.App-logo {
+  height: 40vmin;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .App-logo {
+    animation: App-logo-spin infinite 20s linear;
+  }
+}
+
+.App-header {
+  background-color: #282c34;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+@keyframes App-logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+
+import React from "react";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import Register from "../Pages/Auth/Register";
+import Login from "../Pages/Auth/Login";
+import ProductList from "../Pages/Product/ProductList";
+ 
+export default function AppRoutes() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Login />} />
+        <Route path="/signup" element={<Register />} />
+        <Route path="/products" element={<ProductList />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+
+-- ============================================
+-- ADD TEST DATA TO DATABASE
+-- ============================================
+
+-- This script adds sample data for testing
+-- Run this in your MySQL/PostgreSQL database
+
+-- ============================================
+-- 1. ADD ROLES (if not exists)
+-- ============================================
+
+INSERT INTO roles (id, name) 
+VALUES (1, 'ROLE_USER')
+ON DUPLICATE KEY UPDATE name = 'ROLE_USER';
+
+INSERT INTO roles (id, name) 
+VALUES (2, 'ROLE_ADMIN')
+ON DUPLICATE KEY UPDATE name = 'ROLE_ADMIN';
+
+-- ============================================
+-- 2. ADD TEST USERS (if not exists)
+-- ============================================
+
+-- Password: "password123" (BCrypt hashed)
+INSERT INTO users (email, password, first_name, last_name)
+VALUES ('test@test.com', '$2a$10$dXJ3SW6G7P50lGmMkkmwe.20cQQubK3.HZWzG3YB1tlRy.fqvM/BG', 'Test', 'User')
+ON DUPLICATE KEY UPDATE email = 'test@test.com';
+
+-- Password: "admin123" (BCrypt hashed)
+INSERT INTO users (email, password, first_name, last_name)
+VALUES ('admin@test.com', '$2a$10$5iyM7LJeJBBqJrN5p8z1zeOGhfJvHXYjEXuJZnBJl9wZ5qL3Q8cFW', 'Admin', 'User')
+ON DUPLICATE KEY UPDATE email = 'admin@test.com';
+
+-- ============================================
+-- 3. LINK USERS TO ROLES
+-- ============================================
+
+-- Link test@test.com to ROLE_USER
+INSERT INTO user_roles (user_id, role_id)
+SELECT u.id, r.id 
+FROM users u, roles r
+WHERE u.email = 'test@test.com' AND r.name = 'ROLE_USER'
+ON DUPLICATE KEY UPDATE user_id = user_id;
+
+-- Link admin@test.com to ROLE_ADMIN
+INSERT INTO user_roles (user_id, role_id)
+SELECT u.id, r.id 
+FROM users u, roles r
+WHERE u.email = 'admin@test.com' AND r.name = 'ROLE_ADMIN'
+ON DUPLICATE KEY UPDATE user_id = user_id;
+
+-- ============================================
+-- 4. ADD TEST PRODUCTS
+-- ============================================
+
+INSERT INTO products (name, description, manufacturer, quantity, price)
+VALUES 
+  ('Laptop', 'High performance laptop with 16GB RAM', 'Dell', 15, 55000),
+  ('Mouse', 'Wireless optical mouse', 'Logitech', 50, 500),
+  ('Keyboard', 'Mechanical RGB keyboard', 'Corsair', 30, 3500),
+  ('Monitor', '27 inch 4K display', 'Samsung', 20, 25000),
+  ('Headphones', 'Noise cancelling headphones', 'Sony', 40, 8000);
+
+-- ============================================
+-- 5. ADD TEST SALES DATA
+-- ============================================
+
+INSERT INTO sales (name, sales, revenue)
+VALUES 
+  ('January', 120, 150000),
+  ('February', 90, 110000),
+  ('March', 140, 180000),
+  ('April', 180, 220000),
+  ('May', 160, 200000);
+
+-- ============================================
+-- VERIFICATION QUERIES
+-- ============================================
+
+-- Check roles
+SELECT * FROM roles;
+
+-- Check users (without passwords)
+SELECT id, email, first_name, last_name FROM users;
+
+-- Check user roles
+SELECT u.email, r.name as role
+FROM users u
+JOIN user_roles ur ON u.id = ur.user_id
+JOIN roles r ON ur.role_id = r.id;
+
+-- Check products
+SELECT * FROM products;
+
+-- Check sales
+SELECT * FROM sales;
+
+-- ============================================
+-- LOGIN CREDENTIALS FOR TESTING
+-- ============================================
+
+-- User Account:
+-- Email: test@test.com
+-- Password: password123
+
+-- Admin Account:
+-- Email: admin@test.com
+-- Password: admin123
+
+-- ============================================
+-- IF TABLES DON'T EXIST
+-- ============================================
+
+-- If you get "table doesn't exist" errors,
+-- your Spring Boot application needs to create tables first.
+
+-- Make sure application.properties has:
+-- spring.jpa.hibernate.ddl-auto=update
+-- OR
+-- spring.jpa.hibernate.ddl-auto=create
+
+-- Then:
+-- 1. Start Spring Boot application
+-- 2. It will create tables automatically
+-- 3. Stop Spring Boot
+-- 4. Run this SQL script
+-- 5. Start Spring Boot again
+
+-- ============================================
+-- FOR POSTGRESQL (if using PostgreSQL)
+-- ============================================
+
+-- Replace "ON DUPLICATE KEY UPDATE" with:
+-- ON CONFLICT (email) DO UPDATE SET ...
+
+-- Example for users:
+-- INSERT INTO users (email, password, first_name, last_name)
+-- VALUES ('test@test.com', '$2a$10$dXJ3SW6...', 'Test', 'User')
+-- ON CONFLICT (email) DO NOTHING;
+
+-- ============================================
