@@ -1,0 +1,4361 @@
+# Go Chi Framework - Comprehensive Guide
+
+## Table of Contents
+1. [Introduction to Chi](#introduction)
+2. [Installation](#installation)
+3. [Basic Setup](#basic-setup)
+4. [Routing](#routing)
+5. [Middleware](#middleware)
+6. [URL Parameters](#url-parameters)
+7. [Query Parameters](#query-parameters)
+8. [Request/Response Handling](#request-response-handling)
+9. [JSON API Example](#json-api-example)
+10. [Authentication & Authorization](#authentication-authorization)
+11. [Error Handling](#error-handling)
+12. [Database Integration](#database-integration)
+13. [Testing](#testing)
+14. [Project Structure](#project-structure)
+15. [Complete CRUD API Example](#complete-crud-api)
+
+---
+
+## Introduction
+
+**Chi** is a lightweight, idiomatic, and composable router for building Go HTTP services.
+
+### Understanding HTTP Routers
+
+**Theory:**
+An HTTP router matches incoming HTTP requests to handler functions based on:
+- **Method**: GET, POST, PUT, DELETE, etc.
+- **Path**: /users, /api/products, etc.
+- **Parameters**: /users/{id}, /posts/{slug}
+
+**Traditional net/http:**
+```go
+http.HandleFunc("/users", usersHandler)
+// Problem: Can't distinguish GET from POST
+// Problem: No URL parameters built-in
+// Problem: Middleware is manual
+```
+
+**Why Use a Router (Chi)?**
+1. **Method-based routing**: Different handlers for GET vs POST
+2. **URL parameters**: Extract values from path
+3. **Middleware**: Composable request processing
+4. **Sub-routing**: Group related routes
+5. **Performance**: Fast route matching
+
+### Key Features:
+
+**1. Lightweight**
+- Minimal dependencies
+- Small memory footprint
+- Fast route matching using radix tree
+
+**2. net/http Compatible**
+- Uses standard `http.Handler` interface
+- Works with any net/http middleware
+- Can integrate with existing code
+
+**3. Context-based**
+- Uses `context.Context` for request-scoped values
+- Safe for concurrent access
+- Standard Go idiom
+
+**4. Middleware Support**
+- Composable middleware stack
+- Apply globally or per-route
+- Rich ecosystem of middleware
+
+**5. Sub-routing**
+- Group related routes
+- Apply middleware to groups
+- Mount routers onto routers
+
+### Why Chi?
+
+**Compared to Other Routers:**
+
+**Chi vs Gorilla Mux:**
+- Chi is faster (radix tree vs regex)
+- Chi uses contexts (more idiomatic)
+- Chi has better middleware composition
+
+**Chi vs Gin:**
+- Chi is net/http compatible
+- Gin has its own context (not standard)
+- Chi is more idiomatic Go
+
+**Chi vs Standard Library:**
+- Chi adds method routing
+- Chi adds URL parameters
+- Chi adds middleware composition
+- Chi adds sub-routing
+
+**When to Use Chi:**
+- Building RESTful APIs
+- Need standard library compatibility
+- Want simple, idiomatic code
+- Need flexible middleware
+- Building microservices
+
+---
+
+## Installation
+
+```bash
+# Initialize Go module
+go mod init myproject
+
+# Install Chi router
+go get -u github.com/go-chi/chi/v5
+
+# Optional: Install Chi middleware
+go get -u github.com/go-chi/chi/v5/middleware
+
+# Optional: Install CORS middleware
+go get -u github.com/go-chi/cors
+```
+
+---
+
+## Basic Setup
+
+### Minimal Example
+
+```go
+package main
+
+import (
+    "fmt"
+    "net/http"
+    
+    "github.com/go-chi/chi/v5"
+    "github.com/go-chi/chi/v5/middleware"
+)
+
+func main() {
+    // Create a new Chi router
+    r := chi.NewRouter()
+    
+    // Add middleware
+    r.Use(middleware.Logger)
+    
+    // Define a route
+    r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+        w.Write([]byte("Hello, Chi!"))
+    })
+    
+    // Start the server
+    fmt.Println("Server starting on :3000")
+    http.ListenAndServe(":3000", r)
+}
+```
+
+**Run the application:**
+```bash
+go run main.go
+```
+
+**Test it:**
+```bash
+curl http://localhost:3000/
+```
+
+---
+
+## Routing
+
+### Understanding HTTP Routing
+
+**Theory:**
+Routing is the process of matching an HTTP request to a handler function.
+
+**HTTP Request Components:**
+```
+GET /api/users/123?page=1 HTTP/1.1
+│   │   │       │  └───── Query string
+│   │   │       └─────── Path parameter
+│   │   └────────────── Path
+│   └────────────────── Base path
+└───────────────────── HTTP Method
+```
+
+**RESTful Design:**
+REST (Representational State Transfer) uses HTTP methods semantically:
+
+- **GET**: Retrieve resource (read-only, safe, idempotent)
+- **POST**: Create resource (not idempotent)
+- **PUT**: Update/replace resource (idempotent)
+- **PATCH**: Partial update (not necessarily idempotent)
+- **DELETE**: Remove resource (idempotent)
+- **OPTIONS**: Describe communication options
+- **HEAD**: Like GET but no body (metadata only)
+
+**Idempotent:** Multiple identical requests have same effect as single request
+
+**RESTful Resource Design:**
+```
+GET    /users           # List all users
+POST   /users           # Create new user
+GET    /users/123       # Get user 123
+PUT    /users/123       # Update user 123 (full replacement)
+PATCH  /users/123       # Update user 123 (partial)
+DELETE /users/123       # Delete user 123
+```
+
+**Chi's Routing Strategy:**
+
+**1. Radix Tree:**
+Chi uses radix tree for fast route matching:
+```
+                /
+               /|\
+              / | \
+           api user admin
+            |    |     |
+          /v1  /{id} /panel
+```
+- O(log n) lookup time
+- Efficient memory usage
+- Supports wildcards and parameters
+
+**2. Route Priority:**
+1. Static paths: `/users/active`
+2. Parameters: `/users/{id}`
+3. Wildcards: `/files/*`
+
+**3. Route Groups:**
+Logical organization of related routes:
+```go
+r.Route("/api/v1", func(r chi.Router) {
+    // All routes here are under /api/v1
+})
+```
+
+Chi supports all HTTP methods and provides clean routing syntax.
+
+```go
+package main
+
+import (
+    "net/http"
+    "github.com/go-chi/chi/v5"
+    "github.com/go-chi/chi/v5/middleware"
+)
+
+func main() {
+    r := chi.NewRouter()
+    r.Use(middleware.Logger)
+    
+    // HTTP Methods
+    r.Get("/users", getUsers)           // GET
+    r.Post("/users", createUser)        // POST
+    r.Put("/users/{id}", updateUser)    // PUT
+    r.Patch("/users/{id}", patchUser)   // PATCH
+    r.Delete("/users/{id}", deleteUser) // DELETE
+    
+    // Multiple methods for same path
+    r.Route("/articles", func(r chi.Router) {
+        r.Get("/", listArticles)
+        r.Post("/", createArticle)
+        
+        // Nested routes with URL parameters
+        r.Route("/{articleID}", func(r chi.Router) {
+            r.Get("/", getArticle)
+            r.Put("/", updateArticle)
+            r.Delete("/", deleteArticle)
+        })
+    })
+    
+    // Mount another router
+    r.Mount("/api", apiRouter())
+    
+    http.ListenAndServe(":3000", r)
+}
+
+func getUsers(w http.ResponseWriter, r *http.Request) {
+    w.Write([]byte("GET users"))
+}
+
+func createUser(w http.ResponseWriter, r *http.Request) {
+    w.Write([]byte("POST user"))
+}
+
+func updateUser(w http.ResponseWriter, r *http.Request) {
+    w.Write([]byte("PUT user"))
+}
+
+func patchUser(w http.ResponseWriter, r *http.Request) {
+    w.Write([]byte("PATCH user"))
+}
+
+func deleteUser(w http.ResponseWriter, r *http.Request) {
+    w.Write([]byte("DELETE user"))
+}
+
+func listArticles(w http.ResponseWriter, r *http.Request) {
+    w.Write([]byte("List articles"))
+}
+
+func createArticle(w http.ResponseWriter, r *http.Request) {
+    w.Write([]byte("Create article"))
+}
+
+func getArticle(w http.ResponseWriter, r *http.Request) {
+    w.Write([]byte("Get article"))
+}
+
+func updateArticle(w http.ResponseWriter, r *http.Request) {
+    w.Write([]byte("Update article"))
+}
+
+func deleteArticle(w http.ResponseWriter, r *http.Request) {
+    w.Write([]byte("Delete article"))
+}
+
+func apiRouter() chi.Router {
+    r := chi.NewRouter()
+    r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+        w.Write([]byte("API is healthy"))
+    })
+    return r
+}
+```
+
+### Route Groups
+
+```go
+func main() {
+    r := chi.NewRouter()
+    
+    // Public routes
+    r.Group(func(r chi.Router) {
+        r.Get("/", homePage)
+        r.Get("/login", loginPage)
+    })
+    
+    // Protected routes (with authentication middleware)
+    r.Group(func(r chi.Router) {
+        r.Use(AuthMiddleware)
+        r.Get("/dashboard", dashboard)
+        r.Get("/profile", profile)
+    })
+    
+    // Admin routes
+    r.Group(func(r chi.Router) {
+        r.Use(AuthMiddleware)
+        r.Use(AdminMiddleware)
+        r.Get("/admin", adminPanel)
+    })
+    
+    http.ListenAndServe(":3000", r)
+}
+```
+
+---
+
+## Middleware
+
+### Understanding Middleware
+
+**Theory:**
+Middleware is code that runs before/after your handler, wrapping the request/response cycle.
+
+**Middleware Pattern:**
+```
+Request → Middleware 1 → Middleware 2 → Handler → Middleware 2 → Middleware 1 → Response
+           │                │                        │                │
+           └─ Before --------┘                        └─ After ----------┘
+```
+
+**Middleware Function Signature:**
+```go
+func(next http.Handler) http.Handler
+```
+- Takes next handler in chain
+- Returns wrapped handler
+- Can run code before calling next
+- Can run code after calling next
+- Can short-circuit (not call next)
+
+**Why Middleware?**
+
+1. **Cross-cutting Concerns:**
+   - Logging (every request)
+   - Authentication (multiple routes)
+   - Error recovery (all handlers)
+   - CORS (all endpoints)
+
+2. **Code Reuse:**
+   - Write once, apply everywhere
+   - Don't repeat in every handler
+
+3. **Separation of Concerns:**
+   - Handlers focus on business logic
+   - Middleware handles infrastructure
+
+4. **Composability:**
+   - Chain multiple middleware
+   - Apply selectively
+   - Order matters
+
+**Middleware Order Matters:**
+```go
+r.Use(Logger)      // 1. Log request
+r.Use(Recoverer)   // 2. Catch panics
+r.Use(Auth)        // 3. Check authentication
+
+// Request flow:
+Request → Logger → Recoverer → Auth → Handler
+
+// If panic in Handler:
+Handler (panic) → Recoverer catches → Logger logs error
+```
+
+**Common Middleware Use Cases:**
+
+1. **Logging**: Record request details
+2. **Recovery**: Catch panics, return 500
+3. **Authentication**: Verify user identity
+4. **Authorization**: Check permissions
+5. **CORS**: Handle cross-origin requests
+6. **Rate Limiting**: Prevent abuse
+7. **Compression**: Reduce response size
+8. **Request ID**: Track requests
+9. **Timeout**: Prevent long-running requests
+10. **Metrics**: Collect performance data
+
+**Middleware Scope:**
+
+**Global Middleware:**
+```go
+r.Use(Logger)  // Applies to all routes
+```
+
+**Group Middleware:**
+```go
+r.Group(func(r chi.Router) {
+    r.Use(Auth)  // Only for routes in this group
+    r.Get("/protected", handler)
+})
+```
+
+**Route-specific Middleware:**
+```go
+r.With(RateLimit).Get("/api", handler)
+```
+
+Chi has excellent built-in middleware and supports custom middleware.
+
+### Built-in Middleware
+
+```go
+package main
+
+import (
+    "net/http"
+    "time"
+    
+    "github.com/go-chi/chi/v5"
+    "github.com/go-chi/chi/v5/middleware"
+)
+
+func main() {
+    r := chi.NewRouter()
+    
+    // Logger - logs HTTP requests
+    r.Use(middleware.Logger)
+    
+    // Recoverer - recovers from panics
+    r.Use(middleware.Recoverer)
+    
+    // Request ID - injects request ID
+    r.Use(middleware.RequestID)
+    
+    // Real IP - extracts real IP from proxy headers
+    r.Use(middleware.RealIP)
+    
+    // Timeout - sets timeout for requests
+    r.Use(middleware.Timeout(60 * time.Second))
+    
+    // Compress - compresses responses
+    r.Use(middleware.Compress(5))
+    
+    // Throttle - limits concurrent requests
+    r.Use(middleware.Throttle(100))
+    
+    // StripSlashes - removes trailing slashes
+    r.Use(middleware.StripSlashes)
+    
+    // Heartbeat - adds health check endpoint
+    r.Use(middleware.Heartbeat("/ping"))
+    
+    r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+        w.Write([]byte("Hello with middleware!"))
+    })
+    
+    http.ListenAndServe(":3000", r)
+}
+```
+
+### Custom Middleware
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "net/http"
+    "time"
+    
+    "github.com/go-chi/chi/v5"
+    "github.com/go-chi/chi/v5/middleware"
+)
+
+// Simple logging middleware
+func LoggingMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        start := time.Now()
+        log.Printf("Started %s %s", r.Method, r.URL.Path)
+        
+        next.ServeHTTP(w, r)
+        
+        log.Printf("Completed in %v", time.Since(start))
+    })
+}
+
+// Authentication middleware
+func AuthMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        token := r.Header.Get("Authorization")
+        
+        if token == "" {
+            http.Error(w, "Unauthorized", http.StatusUnauthorized)
+            return
+        }
+        
+        // Validate token (simplified)
+        if token != "Bearer valid-token" {
+            http.Error(w, "Invalid token", http.StatusUnauthorized)
+            return
+        }
+        
+        // Add user info to context
+        ctx := context.WithValue(r.Context(), "user", "john@example.com")
+        next.ServeHTTP(w, r.WithContext(ctx))
+    })
+}
+
+// CORS middleware
+func CORSMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Access-Control-Allow-Origin", "*")
+        w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+        w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        
+        if r.Method == "OPTIONS" {
+            w.WriteHeader(http.StatusOK)
+            return
+        }
+        
+        next.ServeHTTP(w, r)
+    })
+}
+
+// Rate limiting middleware
+func RateLimitMiddleware(next http.Handler) http.Handler {
+    // In production, use Redis or similar
+    limiter := make(map[string]time.Time)
+    
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        ip := r.RemoteAddr
+        
+        if lastRequest, exists := limiter[ip]; exists {
+            if time.Since(lastRequest) < time.Second {
+                http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+                return
+            }
+        }
+        
+        limiter[ip] = time.Now()
+        next.ServeHTTP(w, r)
+    })
+}
+
+func main() {
+    r := chi.NewRouter()
+    
+    // Apply global middleware
+    r.Use(middleware.Logger)
+    r.Use(middleware.Recoverer)
+    r.Use(LoggingMiddleware)
+    r.Use(CORSMiddleware)
+    
+    // Public routes
+    r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+        w.Write([]byte("Public endpoint"))
+    })
+    
+    // Protected routes
+    r.Group(func(r chi.Router) {
+        r.Use(AuthMiddleware)
+        r.Use(RateLimitMiddleware)
+        
+        r.Get("/protected", func(w http.ResponseWriter, r *http.Request) {
+            user := r.Context().Value("user").(string)
+            w.Write([]byte(fmt.Sprintf("Hello, %s!", user)))
+        })
+    })
+    
+    http.ListenAndServe(":3000", r)
+}
+```
+
+### CORS with go-chi/cors
+
+```go
+package main
+
+import (
+    "net/http"
+    
+    "github.com/go-chi/chi/v5"
+    "github.com/go-chi/cors"
+)
+
+func main() {
+    r := chi.NewRouter()
+    
+    // CORS configuration
+    r.Use(cors.Handler(cors.Options{
+        AllowedOrigins:   []string{"https://*", "http://*"},
+        AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+        AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+        ExposedHeaders:   []string{"Link"},
+        AllowCredentials: true,
+        MaxAge:           300,
+    }))
+    
+    r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+        w.Write([]byte("CORS enabled!"))
+    })
+    
+    http.ListenAndServe(":3000", r)
+}
+```
+
+---
+
+## URL Parameters
+
+### Understanding URL Parameters
+
+**Theory:**
+URL parameters (path parameters) are variable parts of the URL path.
+
+**Why URL Parameters?**
+
+**Bad Approach (Query Strings for IDs):**
+```
+GET /user?id=123
+```
+- Not RESTful
+- Looks like filtering, not identification
+- Harder to reason about
+
+**Good Approach (URL Parameters):**
+```
+GET /users/123
+```
+- RESTful: URL identifies resource
+- Clean, readable URLs
+- Clear intent
+
+**Parameter vs Query String:**
+
+**Parameters** (part of path):
+- Identify resource: `/users/123`
+- Required for the resource
+- Part of resource hierarchy
+
+**Query Strings** (after `?`):
+- Filter/modify: `/users?role=admin&page=2`
+- Optional parameters
+- Don't change resource identity
+
+**Chi Parameter Syntax:**
+
+1. **Basic Parameter:**
+   ```go
+   r.Get("/users/{id}", handler)
+   // Matches: /users/123, /users/abc
+   ```
+
+2. **Regex Constraint:**
+   ```go
+   r.Get("/users/{id:[0-9]+}", handler)
+   // Matches: /users/123
+   // Doesn't match: /users/abc
+   ```
+
+3. **Multiple Parameters:**
+   ```go
+   r.Get("/users/{userID}/posts/{postID}", handler)
+   // /users/123/posts/456
+   ```
+
+4. **Catch-all (Wildcard):**
+   ```go
+   r.Get("/files/*", handler)
+   // Matches: /files/a, /files/a/b/c
+   ```
+
+**Route Matching Order:**
+```go
+r.Get("/users/admin", handler1)      // 1. Exact match (highest priority)
+r.Get("/users/{id:[0-9]+}", handler2) // 2. Constrained parameter
+r.Get("/users/{id}", handler3)        // 3. Unconstrained parameter
+r.Get("/users/*", handler4)           // 4. Wildcard (lowest priority)
+```
+
+**Extracting Parameters:**
+Chi stores parameters in request context:
+```go
+id := chi.URLParam(r, "id")
+// Context-based: safe for concurrent access
+// Type: always string (you must convert)
+```
+
+**Best Practices:**
+1. Use parameters for resource identification
+2. Use query strings for filtering/pagination
+3. Add regex constraints when possible (security)
+4. Validate parameters in handler
+5. Return 404 for invalid parameters
+
+Chi makes it easy to extract URL parameters.
+
+```go
+package main
+
+import (
+    "fmt"
+    "net/http"
+    
+    "github.com/go-chi/chi/v5"
+    "github.com/go-chi/chi/v5/middleware"
+)
+
+func main() {
+    r := chi.NewRouter()
+    r.Use(middleware.Logger)
+    
+    // Single parameter
+    r.Get("/users/{userID}", func(w http.ResponseWriter, r *http.Request) {
+        userID := chi.URLParam(r, "userID")
+        w.Write([]byte(fmt.Sprintf("User ID: %s", userID)))
+    })
+    
+    // Multiple parameters
+    r.Get("/users/{userID}/posts/{postID}", func(w http.ResponseWriter, r *http.Request) {
+        userID := chi.URLParam(r, "userID")
+        postID := chi.URLParam(r, "postID")
+        w.Write([]byte(fmt.Sprintf("User: %s, Post: %s", userID, postID)))
+    })
+    
+    // Regex constraint
+    r.Get("/articles/{articleSlug:[a-z-]+}", func(w http.ResponseWriter, r *http.Request) {
+        slug := chi.URLParam(r, "articleSlug")
+        w.Write([]byte(fmt.Sprintf("Article slug: %s", slug)))
+    })
+    
+    // Catch-all parameter
+    r.Get("/files/*", func(w http.ResponseWriter, r *http.Request) {
+        path := chi.URLParam(r, "*")
+        w.Write([]byte(fmt.Sprintf("File path: %s", path)))
+    })
+    
+    http.ListenAndServe(":3000", r)
+}
+```
+
+**Test URLs:**
+```bash
+curl http://localhost:3000/users/123
+curl http://localhost:3000/users/123/posts/456
+curl http://localhost:3000/articles/my-article-slug
+curl http://localhost:3000/files/documents/report.pdf
+```
+
+---
+
+## Query Parameters
+
+Extracting query string parameters from URLs.
+
+```go
+package main
+
+import (
+    "fmt"
+    "net/http"
+    "strconv"
+    
+    "github.com/go-chi/chi/v5"
+)
+
+func main() {
+    r := chi.NewRouter()
+    
+    r.Get("/search", func(w http.ResponseWriter, r *http.Request) {
+        // Get query parameters
+        query := r.URL.Query().Get("q")
+        page := r.URL.Query().Get("page")
+        limit := r.URL.Query().Get("limit")
+        
+        // Set defaults
+        if page == "" {
+            page = "1"
+        }
+        if limit == "" {
+            limit = "10"
+        }
+        
+        // Convert to int
+        pageNum, _ := strconv.Atoi(page)
+        limitNum, _ := strconv.Atoi(limit)
+        
+        response := fmt.Sprintf("Search: %s, Page: %d, Limit: %d", query, pageNum, limitNum)
+        w.Write([]byte(response))
+    })
+    
+    // Multiple values for same parameter
+    r.Get("/filter", func(w http.ResponseWriter, r *http.Request) {
+        tags := r.URL.Query()["tag"]  // Returns []string
+        
+        response := fmt.Sprintf("Tags: %v", tags)
+        w.Write([]byte(response))
+    })
+    
+    http.ListenAndServe(":3000", r)
+}
+```
+
+**Test URLs:**
+```bash
+curl "http://localhost:3000/search?q=golang&page=2&limit=20"
+curl "http://localhost:3000/filter?tag=go&tag=chi&tag=api"
+```
+
+---
+
+## Request/Response Handling
+
+### Reading Request Body
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "io"
+    "net/http"
+    
+    "github.com/go-chi/chi/v5"
+    "github.com/go-chi/chi/v5/middleware"
+)
+
+type CreateUserRequest struct {
+    Name  string `json:"name"`
+    Email string `json:"email"`
+    Age   int    `json:"age"`
+}
+
+func main() {
+    r := chi.NewRouter()
+    r.Use(middleware.Logger)
+    
+    // Read raw body
+    r.Post("/raw", func(w http.ResponseWriter, r *http.Request) {
+        body, err := io.ReadAll(r.Body)
+        if err != nil {
+            http.Error(w, "Error reading body", http.StatusBadRequest)
+            return
+        }
+        defer r.Body.Close()
+        
+        w.Write([]byte(fmt.Sprintf("Received: %s", body)))
+    })
+    
+    // Parse JSON
+    r.Post("/users", func(w http.ResponseWriter, r *http.Request) {
+        var req CreateUserRequest
+        
+        err := json.NewDecoder(r.Body).Decode(&req)
+        if err != nil {
+            http.Error(w, "Invalid JSON", http.StatusBadRequest)
+            return
+        }
+        
+        // Validate
+        if req.Name == "" || req.Email == "" {
+            http.Error(w, "Name and email are required", http.StatusBadRequest)
+            return
+        }
+        
+        response := fmt.Sprintf("Created user: %s (%s), Age: %d", req.Name, req.Email, req.Age)
+        w.Write([]byte(response))
+    })
+    
+    // Form data
+    r.Post("/form", func(w http.ResponseWriter, r *http.Request) {
+        err := r.ParseForm()
+        if err != nil {
+            http.Error(w, "Error parsing form", http.StatusBadRequest)
+            return
+        }
+        
+        name := r.FormValue("name")
+        email := r.FormValue("email")
+        
+        response := fmt.Sprintf("Name: %s, Email: %s", name, email)
+        w.Write([]byte(response))
+    })
+    
+    http.ListenAndServe(":3000", r)
+}
+```
+
+### Sending Responses
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "net/http"
+    
+    "github.com/go-chi/chi/v5"
+    "github.com/go-chi/render"
+)
+
+type User struct {
+    ID    int    `json:"id"`
+    Name  string `json:"name"`
+    Email string `json:"email"`
+}
+
+type APIResponse struct {
+    Success bool        `json:"success"`
+    Data    interface{} `json:"data,omitempty"`
+    Error   string      `json:"error,omitempty"`
+}
+
+func main() {
+    r := chi.NewRouter()
+    
+    // Plain text response
+    r.Get("/text", func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "text/plain")
+        w.WriteHeader(http.StatusOK)
+        w.Write([]byte("Plain text response"))
+    })
+    
+    // JSON response (manual)
+    r.Get("/json", func(w http.ResponseWriter, r *http.Request) {
+        user := User{ID: 1, Name: "John Doe", Email: "john@example.com"}
+        
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusOK)
+        json.NewEncoder(w).Encode(user)
+    })
+    
+    // JSON response (with render package)
+    r.Get("/user", func(w http.ResponseWriter, r *http.Request) {
+        user := User{ID: 1, Name: "Jane Smith", Email: "jane@example.com"}
+        render.JSON(w, r, user)
+    })
+    
+    // Success response
+    r.Get("/success", func(w http.ResponseWriter, r *http.Request) {
+        response := APIResponse{
+            Success: true,
+            Data:    map[string]string{"message": "Operation completed"},
+        }
+        render.JSON(w, r, response)
+    })
+    
+    // Error response
+    r.Get("/error", func(w http.ResponseWriter, r *http.Request) {
+        response := APIResponse{
+            Success: false,
+            Error:   "Something went wrong",
+        }
+        render.Status(r, http.StatusInternalServerError)
+        render.JSON(w, r, response)
+    })
+    
+    // Custom status code
+    r.Get("/created", func(w http.ResponseWriter, r *http.Request) {
+        user := User{ID: 2, Name: "New User", Email: "new@example.com"}
+        render.Status(r, http.StatusCreated)
+        render.JSON(w, r, user)
+    })
+    
+    http.ListenAndServe(":3000", r)
+}
+```
+
+---
+
+## JSON API Example
+
+### Understanding JSON APIs
+
+**Theory:**
+JSON (JavaScript Object Notation) is the standard format for web APIs.
+
+**Why JSON?**
+1. **Human-readable**: Easy to read and debug
+2. **Language-agnostic**: Every language has JSON support
+3. **Lightweight**: Less verbose than XML
+4. **Native to JavaScript**: Perfect for web clients
+5. **Structured**: Supports objects, arrays, nested data
+
+**HTTP Status Codes:**
+
+**Success Codes:**
+- `200 OK`: Request succeeded (GET, PUT, PATCH)
+- `201 Created`: Resource created (POST)
+- `204 No Content`: Success but no body (DELETE)
+
+**Client Error Codes:**
+- `400 Bad Request`: Invalid data sent
+- `401 Unauthorized`: Authentication required
+- `403 Forbidden`: Authenticated but not allowed
+- `404 Not Found`: Resource doesn't exist
+- `409 Conflict`: Conflict with current state
+- `422 Unprocessable Entity`: Validation failed
+
+**Server Error Codes:**
+- `500 Internal Server Error`: Server-side error
+- `503 Service Unavailable`: Temporary unavailability
+
+**API Response Structure:**
+
+**Success Response:**
+```json
+{
+  "success": true,
+  "data": { /* resource data */ }
+}
+```
+
+**Error Response:**
+```json
+{
+  "success": false,
+  "error": "Error message",
+  "code": "ERROR_CODE"
+}
+```
+
+**List Response:**
+```json
+{
+  "success": true,
+  "data": [ /* array of items */ ],
+  "pagination": {
+    "page": 1,
+    "per_page": 10,
+    "total": 100
+  }
+}
+```
+
+**RESTful CRUD Operations:**
+
+| Operation | HTTP Method | URL | Request Body | Response |
+|-----------|------------|-----|--------------|----------|
+| Create | POST | /users | User data | 201, created user |
+| Read (list) | GET | /users | None | 200, array of users |
+| Read (one) | GET | /users/123 | None | 200, user object |
+| Update | PUT | /users/123 | Full user | 200, updated user |
+| Partial Update | PATCH | /users/123 | Partial data | 200, updated user |
+| Delete | DELETE | /users/123 | None | 204, no content |
+
+**API Best Practices:**
+
+1. **Consistent Naming:**
+   - Use plural nouns: `/users` not `/user`
+   - Use kebab-case: `/user-profiles`
+   - Version your API: `/api/v1/users`
+
+2. **Proper Status Codes:**
+   - Match semantic meaning
+   - Clients depend on codes
+
+3. **Error Messages:**
+   - Be descriptive
+   - Include error code
+   - Don't expose internal details
+
+4. **Validation:**
+   - Validate all inputs
+   - Return 400 with details
+   - Sanitize data
+
+5. **Idempotency:**
+   - GET, PUT, DELETE should be idempotent
+   - Use idempotency keys for POST if needed
+
+Complete example of a JSON API with proper structure:
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "net/http"
+    "strconv"
+    "sync"
+    
+    "github.com/go-chi/chi/v5"
+    "github.com/go-chi/chi/v5/middleware"
+    "github.com/go-chi/render"
+)
+
+// Models
+type User struct {
+    ID    int    `json:"id"`
+    Name  string `json:"name"`
+    Email string `json:"email"`
+}
+
+type APIResponse struct {
+    Success bool        `json:"success"`
+    Data    interface{} `json:"data,omitempty"`
+    Error   string      `json:"error,omitempty"`
+}
+
+// In-memory storage (use database in production)
+var (
+    users   = make(map[int]User)
+    nextID  = 1
+    usersMu sync.RWMutex
+)
+
+// Handlers
+func getUsers(w http.ResponseWriter, r *http.Request) {
+    usersMu.RLock()
+    defer usersMu.RUnlock()
+    
+    userList := make([]User, 0, len(users))
+    for _, user := range users {
+        userList = append(userList, user)
+    }
+    
+    render.JSON(w, r, APIResponse{
+        Success: true,
+        Data:    userList,
+    })
+}
+
+func getUser(w http.ResponseWriter, r *http.Request) {
+    idParam := chi.URLParam(r, "id")
+    id, err := strconv.Atoi(idParam)
+    if err != nil {
+        render.Status(r, http.StatusBadRequest)
+        render.JSON(w, r, APIResponse{
+            Success: false,
+            Error:   "Invalid user ID",
+        })
+        return
+    }
+    
+    usersMu.RLock()
+    user, exists := users[id]
+    usersMu.RUnlock()
+    
+    if !exists {
+        render.Status(r, http.StatusNotFound)
+        render.JSON(w, r, APIResponse{
+            Success: false,
+            Error:   "User not found",
+        })
+        return
+    }
+    
+    render.JSON(w, r, APIResponse{
+        Success: true,
+        Data:    user,
+    })
+}
+
+func createUser(w http.ResponseWriter, r *http.Request) {
+    var req User
+    err := json.NewDecoder(r.Body).Decode(&req)
+    if err != nil {
+        render.Status(r, http.StatusBadRequest)
+        render.JSON(w, r, APIResponse{
+            Success: false,
+            Error:   "Invalid request body",
+        })
+        return
+    }
+    
+    // Validation
+    if req.Name == "" || req.Email == "" {
+        render.Status(r, http.StatusBadRequest)
+        render.JSON(w, r, APIResponse{
+            Success: false,
+            Error:   "Name and email are required",
+        })
+        return
+    }
+    
+    usersMu.Lock()
+    req.ID = nextID
+    nextID++
+    users[req.ID] = req
+    usersMu.Unlock()
+    
+    render.Status(r, http.StatusCreated)
+    render.JSON(w, r, APIResponse{
+        Success: true,
+        Data:    req,
+    })
+}
+
+func updateUser(w http.ResponseWriter, r *http.Request) {
+    idParam := chi.URLParam(r, "id")
+    id, err := strconv.Atoi(idParam)
+    if err != nil {
+        render.Status(r, http.StatusBadRequest)
+        render.JSON(w, r, APIResponse{
+            Success: false,
+            Error:   "Invalid user ID",
+        })
+        return
+    }
+    
+    var req User
+    err = json.NewDecoder(r.Body).Decode(&req)
+    if err != nil {
+        render.Status(r, http.StatusBadRequest)
+        render.JSON(w, r, APIResponse{
+            Success: false,
+            Error:   "Invalid request body",
+        })
+        return
+    }
+    
+    usersMu.Lock()
+    _, exists := users[id]
+    if !exists {
+        usersMu.Unlock()
+        render.Status(r, http.StatusNotFound)
+        render.JSON(w, r, APIResponse{
+            Success: false,
+            Error:   "User not found",
+        })
+        return
+    }
+    
+    req.ID = id
+    users[id] = req
+    usersMu.Unlock()
+    
+    render.JSON(w, r, APIResponse{
+        Success: true,
+        Data:    req,
+    })
+}
+
+func deleteUser(w http.ResponseWriter, r *http.Request) {
+    idParam := chi.URLParam(r, "id")
+    id, err := strconv.Atoi(idParam)
+    if err != nil {
+        render.Status(r, http.StatusBadRequest)
+        render.JSON(w, r, APIResponse{
+            Success: false,
+            Error:   "Invalid user ID",
+        })
+        return
+    }
+    
+    usersMu.Lock()
+    _, exists := users[id]
+    if !exists {
+        usersMu.Unlock()
+        render.Status(r, http.StatusNotFound)
+        render.JSON(w, r, APIResponse{
+            Success: false,
+            Error:   "User not found",
+        })
+        return
+    }
+    
+    delete(users, id)
+    usersMu.Unlock()
+    
+    render.Status(r, http.StatusNoContent)
+}
+
+func main() {
+    r := chi.NewRouter()
+    
+    // Middleware
+    r.Use(middleware.Logger)
+    r.Use(middleware.Recoverer)
+    r.Use(middleware.RequestID)
+    r.Use(middleware.RealIP)
+    
+    // Routes
+    r.Route("/api/v1", func(r chi.Router) {
+        r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+            render.JSON(w, r, map[string]string{
+                "message": "Welcome to the API",
+                "version": "1.0.0",
+            })
+        })
+        
+        r.Route("/users", func(r chi.Router) {
+            r.Get("/", getUsers)
+            r.Post("/", createUser)
+            
+            r.Route("/{id}", func(r chi.Router) {
+                r.Get("/", getUser)
+                r.Put("/", updateUser)
+                r.Delete("/", deleteUser)
+            })
+        })
+    })
+    
+    fmt.Println("Server starting on :3000")
+    http.ListenAndServe(":3000", r)
+}
+```
+
+**Test with curl:**
+```bash
+# Create user
+curl -X POST http://localhost:3000/api/v1/users \
+  -H "Content-Type: application/json" \
+  -d '{"name":"John Doe","email":"john@example.com"}'
+
+# Get all users
+curl http://localhost:3000/api/v1/users
+
+# Get specific user
+curl http://localhost:3000/api/v1/users/1
+
+# Update user
+curl -X PUT http://localhost:3000/api/v1/users/1 \
+  -H "Content-Type: application/json" \
+  -d '{"name":"John Smith","email":"john.smith@example.com"}'
+
+# Delete user
+curl -X DELETE http://localhost:3000/api/v1/users/1
+```
+
+---
+
+## Authentication & Authorization
+
+### Understanding Auth Concepts
+
+**Theory:**
+
+**Authentication vs Authorization:**
+- **Authentication**: "Who are you?" (Identity verification)
+- **Authorization**: "What can you do?" (Permission checking)
+
+**Example:**
+- Authentication: Login with username/password → proves you're John
+- Authorization: John can edit his posts, but not delete others' posts
+
+**Authentication Methods:**
+
+**1. Session-based (Traditional):**
+```
+Client → Login → Server creates session → Returns session ID in cookie
+Client → Request with cookie → Server validates session
+```
+**Pros:**
+- Server controls sessions (can revoke)
+- Familiar pattern
+
+**Cons:**
+- Server must store sessions (memory/database)
+- Doesn't scale well (load balancing issues)
+- CSRF vulnerable
+
+**2. Token-based (Modern):**
+```
+Client → Login → Server generates token → Returns token
+Client → Request with token in header → Server validates token
+```
+**Pros:**
+- Stateless (no server storage)
+- Scales easily
+- Works with mobile/SPA
+- No CSRF issues
+
+**Cons:**
+- Can't easily revoke
+- Token size (sent with every request)
+
+**JWT (JSON Web Token):**
+
+**Structure:**
+```
+header.payload.signature
+```
+
+**Header:**
+```json
+{
+  "alg": "HS256",  // Algorithm
+  "typ": "JWT"     // Type
+}
+```
+
+**Payload (Claims):**
+```json
+{
+  "sub": "user123",      // Subject (user ID)
+  "email": "user@example.com",
+  "role": "admin",
+  "exp": 1640000000     // Expiration timestamp
+}
+```
+
+**Signature:**
+```
+HMACSHA256(
+  base64UrlEncode(header) + "." + base64UrlEncode(payload),
+  secret
+)
+```
+
+**How JWT Works:**
+1. Server signs token with secret key
+2. Client stores token (localStorage/memory)
+3. Client sends token in `Authorization: Bearer <token>` header
+4. Server verifies signature and expiration
+5. Server extracts claims (user info)
+
+**JWT Security:**
+- **Never** store sensitive data in payload (it's not encrypted!)
+- Use HTTPS (prevent token theft)
+- Short expiration time (15 min - 1 hour)
+- Refresh tokens for long sessions
+- Validate signature on every request
+
+**Authorization Patterns:**
+
+**1. Role-based (RBAC):**
+```go
+user.role = "admin"
+if user.role == "admin" {
+    // Allow
+}
+```
+
+**2. Permission-based:**
+```go
+user.permissions = ["read:posts", "write:posts"]
+if hasPermission(user, "delete:posts") {
+    // Allow
+}
+```
+
+**3. Resource-based:**
+```go
+if post.authorID == user.id {
+    // User can edit their own posts
+}
+```
+
+**Middleware Pattern:**
+```
+Request → Auth Middleware (verify token) → Context (store user) → Handler (use user)
+```
+
+**Context for User Data:**
+Store authenticated user in request context:
+```go
+ctx := context.WithValue(r.Context(), "user", user)
+r = r.WithContext(ctx)
+```
+Why? Thread-safe, request-scoped, standard pattern
+
+Implementing JWT-based authentication:
+
+```go
+package main
+
+import (
+    "context"
+    "encoding/json"
+    "fmt"
+    "net/http"
+    "strings"
+    "time"
+    
+    "github.com/go-chi/chi/v5"
+    "github.com/go-chi/chi/v5/middleware"
+    "github.com/go-chi/render"
+)
+
+// Simple JWT simulation (use proper JWT library in production)
+type Claims struct {
+    UserID int    `json:"user_id"`
+    Email  string `json:"email"`
+    Role   string `json:"role"`
+}
+
+type LoginRequest struct {
+    Email    string `json:"email"`
+    Password string `json:"password"`
+}
+
+type LoginResponse struct {
+    Token string `json:"token"`
+    User  User   `json:"user"`
+}
+
+type User struct {
+    ID    int    `json:"id"`
+    Email string `json:"email"`
+    Role  string `json:"role"`
+}
+
+// Simulate token generation
+func generateToken(user User) string {
+    return fmt.Sprintf("token-%d-%s-%d", user.ID, user.Role, time.Now().Unix())
+}
+
+// Simulate token validation
+func validateToken(token string) (*Claims, error) {
+    // In production, use proper JWT validation
+    parts := strings.Split(token, "-")
+    if len(parts) < 2 {
+        return nil, fmt.Errorf("invalid token")
+    }
+    
+    return &Claims{
+        UserID: 1,
+        Email:  "user@example.com",
+        Role:   parts[1],
+    }, nil
+}
+
+// Authentication middleware
+func AuthMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        authHeader := r.Header.Get("Authorization")
+        if authHeader == "" {
+            render.Status(r, http.StatusUnauthorized)
+            render.JSON(w, r, map[string]string{"error": "Missing authorization header"})
+            return
+        }
+        
+        // Extract token
+        token := strings.TrimPrefix(authHeader, "Bearer ")
+        if token == authHeader {
+            render.Status(r, http.StatusUnauthorized)
+            render.JSON(w, r, map[string]string{"error": "Invalid authorization format"})
+            return
+        }
+        
+        // Validate token
+        claims, err := validateToken(token)
+        if err != nil {
+            render.Status(r, http.StatusUnauthorized)
+            render.JSON(w, r, map[string]string{"error": "Invalid token"})
+            return
+        }
+        
+        // Add claims to context
+        ctx := context.WithValue(r.Context(), "claims", claims)
+        next.ServeHTTP(w, r.WithContext(ctx))
+    })
+}
+
+// Admin authorization middleware
+func AdminMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        claims := r.Context().Value("claims").(*Claims)
+        
+        if claims.Role != "admin" {
+            render.Status(r, http.StatusForbidden)
+            render.JSON(w, r, map[string]string{"error": "Admin access required"})
+            return
+        }
+        
+        next.ServeHTTP(w, r)
+    })
+}
+
+func main() {
+    r := chi.NewRouter()
+    r.Use(middleware.Logger)
+    r.Use(middleware.Recoverer)
+    
+    // Public routes
+    r.Post("/login", func(w http.ResponseWriter, r *http.Request) {
+        var req LoginRequest
+        json.NewDecoder(r.Body).Decode(&req)
+        
+        // Validate credentials (simplified)
+        if req.Email == "user@example.com" && req.Password == "password" {
+            user := User{ID: 1, Email: req.Email, Role: "user"}
+            token := generateToken(user)
+            
+            render.JSON(w, r, LoginResponse{
+                Token: token,
+                User:  user,
+            })
+            return
+        }
+        
+        if req.Email == "admin@example.com" && req.Password == "admin" {
+            user := User{ID: 2, Email: req.Email, Role: "admin"}
+            token := generateToken(user)
+            
+            render.JSON(w, r, LoginResponse{
+                Token: token,
+                User:  user,
+            })
+            return
+        }
+        
+        render.Status(r, http.StatusUnauthorized)
+        render.JSON(w, r, map[string]string{"error": "Invalid credentials"})
+    })
+    
+    // Protected routes
+    r.Group(func(r chi.Router) {
+        r.Use(AuthMiddleware)
+        
+        r.Get("/profile", func(w http.ResponseWriter, r *http.Request) {
+            claims := r.Context().Value("claims").(*Claims)
+            render.JSON(w, r, map[string]interface{}{
+                "user_id": claims.UserID,
+                "email":   claims.Email,
+                "role":    claims.Role,
+            })
+        })
+        
+        r.Get("/dashboard", func(w http.ResponseWriter, r *http.Request) {
+            render.JSON(w, r, map[string]string{"message": "Welcome to dashboard"})
+        })
+    })
+    
+    // Admin routes
+    r.Group(func(r chi.Router) {
+        r.Use(AuthMiddleware)
+        r.Use(AdminMiddleware)
+        
+        r.Get("/admin", func(w http.ResponseWriter, r *http.Request) {
+            render.JSON(w, r, map[string]string{"message": "Admin panel"})
+        })
+        
+        r.Get("/admin/users", func(w http.ResponseWriter, r *http.Request) {
+            render.JSON(w, r, map[string]string{"message": "User management"})
+        })
+    })
+    
+    fmt.Println("Server starting on :3000")
+    http.ListenAndServe(":3000", r)
+}
+```
+
+**Test authentication:**
+```bash
+# Login as user
+curl -X POST http://localhost:3000/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"password"}'
+
+# Login as admin
+curl -X POST http://localhost:3000/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"admin"}'
+
+# Access protected route
+curl http://localhost:3000/profile \
+  -H "Authorization: Bearer token-1-user-1638360000"
+
+# Access admin route
+curl http://localhost:3000/admin \
+  -H "Authorization: Bearer token-2-admin-1638360000"
+```
+
+---
+
+## Error Handling
+
+### Understanding API Error Handling
+
+**Theory:**
+
+**Why Structured Error Handling?**
+
+**Bad Practice:**
+```go
+http.Error(w, "Error", 500)
+// Problems:
+// - Not machine-readable
+// - No error code
+// - Inconsistent format
+// - Hard to debug
+```
+
+**Good Practice:**
+```go
+{
+  "success": false,
+  "error": {
+    "code": "USER_NOT_FOUND",
+    "message": "User with ID 123 not found",
+    "details": { /* optional */ }
+  }
+}
+```
+
+**Benefits:**
+1. **Consistent**: Same format across API
+2. **Machine-readable**: Clients can handle by code
+3. **Debuggable**: Clear error messages
+4. **Localization**: Error codes can be translated
+
+**Error Categories:**
+
+**1. Client Errors (4xx):**
+- Bad input format
+- Missing required fields
+- Invalid values
+- Authentication failures
+- Permission denials
+
+**2. Server Errors (5xx):**
+- Database connection failures
+- Third-party API failures
+- Unexpected exceptions
+- Timeouts
+
+**Error Response Design:**
+
+**Minimal:**
+```json
+{
+  "error": "User not found"
+}
+```
+
+**Standard:**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "USER_NOT_FOUND",
+    "message": "User not found"
+  }
+}
+```
+
+**Detailed:**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Validation failed",
+    "details": [
+      {"field": "email", "message": "Invalid format"},
+      {"field": "age", "message": "Must be positive"}
+    ]
+  },
+  "request_id": "abc123"
+}
+```
+
+**Error Handling Layers:**
+
+**1. Input Validation:**
+```go
+if req.Email == "" {
+    return BadRequestError("Email required")
+}
+```
+
+**2. Business Logic:**
+```go
+user, err := userRepo.FindByID(id)
+if err == sql.ErrNoRows {
+    return NotFoundError("User not found")
+}
+if err != nil {
+    return InternalError(err)  // Log error, return generic message
+}
+```
+
+**3. Recovery Middleware:**
+```go
+defer func() {
+    if r := recover(); r != nil {
+        log.Error(r)
+        return InternalServerError()
+    }
+}()
+```
+
+**Security Considerations:**
+
+**1. Don't Leak Internal Details:**
+```go
+// BAD: Exposes database structure
+{"error": "pq: column 'usre' does not exist"}
+
+// GOOD: Generic message
+{"error": "Failed to process request"}
+```
+
+**2. Log vs Return:**
+- **Log**: Full error with stack trace (server-side)
+- **Return**: User-friendly message (client-side)
+
+**3. Error Codes:**
+- Use consistent naming
+- Document all codes
+- Don't expose system internals
+
+**Panic Recovery:**
+
+Panics should be caught and converted to 500 errors:
+```go
+defer func() {
+    if err := recover(); err != nil {
+        // Log with stack trace
+        log.Error(err, debug.Stack())
+        // Return 500 to client
+        http.Error(w, "Internal error", 500)
+    }
+}()
+```
+
+**Best Practices:**
+
+1. **Consistent Format**: Same structure for all errors
+2. **Appropriate Status**: Match HTTP semantics
+3. **Error Codes**: Machine-readable identifiers
+4. **Don't Expose Internals**: Security risk
+5. **Log Everything**: Server-side logging for debugging
+6. **Request IDs**: Track requests across services
+7. **Validation Early**: Fail fast on bad input
+
+Centralized error handling:
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "log"
+    "net/http"
+    
+    "github.com/go-chi/chi/v5"
+    "github.com/go-chi/chi/v5/middleware"
+    "github.com/go-chi/render"
+)
+
+// Error types
+type APIError struct {
+    StatusCode int    `json:"-"`
+    Code       string `json:"code"`
+    Message    string `json:"message"`
+}
+
+func (e *APIError) Error() string {
+    return e.Message
+}
+
+// Predefined errors
+var (
+    ErrBadRequest          = &APIError{StatusCode: 400, Code: "BAD_REQUEST", Message: "Bad request"}
+    ErrUnauthorized        = &APIError{StatusCode: 401, Code: "UNAUTHORIZED", Message: "Unauthorized"}
+    ErrForbidden           = &APIError{StatusCode: 403, Code: "FORBIDDEN", Message: "Forbidden"}
+    ErrNotFound            = &APIError{StatusCode: 404, Code: "NOT_FOUND", Message: "Resource not found"}
+    ErrInternalServer      = &APIError{StatusCode: 500, Code: "INTERNAL_ERROR", Message: "Internal server error"}
+    ErrServiceUnavailable  = &APIError{StatusCode: 503, Code: "SERVICE_UNAVAILABLE", Message: "Service unavailable"}
+)
+
+// Custom error constructor
+func NewAPIError(statusCode int, code, message string) *APIError {
+    return &APIError{
+        StatusCode: statusCode,
+        Code:       code,
+        Message:    message,
+    }
+}
+
+// Error response
+type ErrorResponse struct {
+    Success bool     `json:"success"`
+    Error   APIError `json:"error"`
+}
+
+// Error handler middleware
+func ErrorHandlerMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        defer func() {
+            if err := recover(); err != nil {
+                log.Printf("Panic: %v", err)
+                render.Status(r, http.StatusInternalServerError)
+                render.JSON(w, r, ErrorResponse{
+                    Success: false,
+                    Error:   *ErrInternalServer,
+                })
+            }
+        }()
+        
+        next.ServeHTTP(w, r)
+    })
+}
+
+// Helper function to send error response
+func SendError(w http.ResponseWriter, r *http.Request, err *APIError) {
+    render.Status(r, err.StatusCode)
+    render.JSON(w, r, ErrorResponse{
+        Success: false,
+        Error:   *err,
+    })
+}
+
+// Validation helper
+func validateUserInput(name, email string) *APIError {
+    if name == "" {
+        return NewAPIError(400, "MISSING_NAME", "Name is required")
+    }
+    if email == "" {
+        return NewAPIError(400, "MISSING_EMAIL", "Email is required")
+    }
+    if len(name) < 3 {
+        return NewAPIError(400, "INVALID_NAME", "Name must be at least 3 characters")
+    }
+    return nil
+}
+
+func main() {
+    r := chi.NewRouter()
+    r.Use(middleware.Logger)
+    r.Use(middleware.Recoverer)
+    r.Use(ErrorHandlerMiddleware)
+    
+    // Example routes with error handling
+    r.Post("/users", func(w http.ResponseWriter, r *http.Request) {
+        var req struct {
+            Name  string `json:"name"`
+            Email string `json:"email"`
+        }
+        
+        // Parse JSON
+        if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+            SendError(w, r, NewAPIError(400, "INVALID_JSON", "Invalid JSON format"))
+            return
+        }
+        
+        // Validate input
+        if err := validateUserInput(req.Name, req.Email); err != nil {
+            SendError(w, r, err)
+            return
+        }
+        
+        // Success response
+        render.Status(r, http.StatusCreated)
+        render.JSON(w, r, map[string]interface{}{
+            "success": true,
+            "data": map[string]string{
+                "name":  req.Name,
+                "email": req.Email,
+            },
+        })
+    })
+    
+    r.Get("/users/{id}", func(w http.ResponseWriter, r *http.Request) {
+        id := chi.URLParam(r, "id")
+        
+        // Simulate not found
+        if id == "999" {
+            SendError(w, r, ErrNotFound)
+            return
+        }
+        
+        render.JSON(w, r, map[string]interface{}{
+            "success": true,
+            "data": map[string]string{
+                "id":   id,
+                "name": "John Doe",
+            },
+        })
+    })
+    
+    r.Get("/error", func(w http.ResponseWriter, r *http.Request) {
+        // Simulate server error
+        SendError(w, r, ErrInternalServer)
+    })
+    
+    r.Get("/panic", func(w http.ResponseWriter, r *http.Request) {
+        // Test panic recovery
+        panic("Something went wrong!")
+    })
+    
+    fmt.Println("Server starting on :3000")
+    http.ListenAndServe(":3000", r)
+}
+```
+
+---
+
+## Database Integration
+
+### Understanding Database Integration
+
+**Theory:**
+
+**Layered Architecture:**
+```
+HTTP Request
+    ↓
+Handler Layer (HTTP concerns)
+    ↓
+Service Layer (Business logic)
+    ↓  
+Repository Layer (Database operations)
+    ↓
+Database
+```
+
+**Why Layers?**
+
+**1. Separation of Concerns:**
+- Handler: HTTP, validation, serialization
+- Service: Business rules, coordination
+- Repository: Database queries
+
+**2. Testability:**
+- Mock database in service tests
+- Mock service in handler tests
+
+**3. Reusability:**
+- Same service from multiple handlers
+- Same repository from multiple services
+
+**4. Maintainability:**
+- Change database without changing business logic
+- Change API without changing database
+
+**Database/SQL Package:**
+
+Go's `database/sql` provides:
+- Connection pooling
+- Prepared statements
+- Transaction management
+- Driver abstraction
+
+**Connection Pool:**
+```go
+db, _ := sql.Open("postgres", connStr)
+db.SetMaxOpenConns(25)      // Max connections
+db.SetMaxIdleConns(5)       // Idle connections kept
+db.SetConnMaxLifetime(5*time.Minute)  // Connection lifetime
+```
+
+**Why Pool?**
+- Creating connections is expensive
+- Reuse connections across requests
+- Limit database load
+
+**Repository Pattern:**
+
+**Purpose:**
+Abstract database operations behind interface.
+
+**Benefits:**
+1. **Testability**: Mock repository for testing
+2. **Flexibility**: Swap database implementations
+3. **Clarity**: Clear data access API
+
+**Example:**
+```go
+type UserRepository interface {
+    FindByID(id int) (*User, error)
+    Create(user *User) error
+    // etc.
+}
+
+type PostgresUserRepository struct {
+    db *sql.DB
+}
+
+func (r *PostgresUserRepository) FindByID(id int) (*User, error) {
+    // Implementation
+}
+```
+
+**Query Types:**
+
+**1. Query (SELECT, returns rows):**
+```go
+rows, err := db.Query("SELECT * FROM users")
+defer rows.Close()
+
+for rows.Next() {
+    var user User
+    rows.Scan(&user.ID, &user.Name)
+}
+```
+
+**2. QueryRow (SELECT single row):**
+```go
+var user User
+err := db.QueryRow("SELECT * FROM users WHERE id = $1", id).
+    Scan(&user.ID, &user.Name)
+```
+
+**3. Exec (INSERT, UPDATE, DELETE):**
+```go
+result, err := db.Exec("INSERT INTO users (name) VALUES ($1)", name)
+rowsAffected, _ := result.RowsAffected()
+lastID, _ := result.LastInsertId()
+```
+
+**Prepared Statements:**
+
+**Why?**
+- **Security**: Prevent SQL injection
+- **Performance**: Query parsed once, executed many times
+
+**Automatic with Placeholders:**
+```go
+db.Query("SELECT * FROM users WHERE name = $1", name)
+// $1, $2, $3 for PostgreSQL
+// ? for MySQL/SQLite
+```
+
+**SQL Injection Prevention:**
+
+**NEVER:**
+```go
+query := fmt.Sprintf("SELECT * FROM users WHERE name = '%s'", name)
+db.Query(query)  // VULNERABLE!
+```
+
+**ALWAYS:**
+```go
+db.Query("SELECT * FROM users WHERE name = $1", name)  // Safe
+```
+
+**Transactions:**
+
+**When to Use:**
+- Multiple related operations
+- All must succeed or all fail (atomicity)
+- Example: Transfer money (debit + credit)
+
+**Pattern:**
+```go
+tx, _ := db.Begin()
+defer tx.Rollback()  // Rollback if not committed
+
+tx.Exec("UPDATE accounts SET balance = balance - 100 WHERE id = 1")
+tx.Exec("UPDATE accounts SET balance = balance + 100 WHERE id = 2")
+
+tx.Commit()  // Commit if all succeeded
+```
+
+**ACID Properties:**
+- **Atomicity**: All or nothing
+- **Consistency**: Database remains valid
+- **Isolation**: Concurrent transactions don't interfere
+- **Durability**: Committed data persists
+
+**Error Handling:**
+
+```go
+err := db.QueryRow("...").Scan(&user)
+
+if err == sql.ErrNoRows {
+    // Not found (expected)
+    return nil, ErrNotFound
+}
+
+if err != nil {
+    // Unexpected error
+    log.Error(err)
+    return nil, err
+}
+```
+
+**Connection Management:**
+
+**Best Practices:**
+1. **Single db instance**: Share across app (it's safe)
+2. **Don't close db**: Keep for app lifetime
+3. **Close rows**: Always `defer rows.Close()`
+4. **Context**: Use context for cancellation
+
+**Context Usage:**
+```go
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+
+db.QueryContext(ctx, "SELECT ...")  // Cancelled if timeout
+```
+
+Example with PostgreSQL:
+
+```go
+package main
+
+import (
+    "database/sql"
+    "encoding/json"
+    "fmt"
+    "log"
+    "net/http"
+    "strconv"
+    
+    "github.com/go-chi/chi/v5"
+    "github.com/go-chi/chi/v5/middleware"
+    "github.com/go-chi/render"
+    _ "github.com/lib/pq"
+)
+
+// Models
+type User struct {
+    ID    int    `json:"id"`
+    Name  string `json:"name"`
+    Email string `json:"email"`
+}
+
+// Database connection
+var db *sql.DB
+
+func initDB() error {
+    var err error
+    connStr := "host=localhost port=5432 user=postgres password=postgres dbname=myapp sslmode=disable"
+    db, err = sql.Open("postgres", connStr)
+    if err != nil {
+        return err
+    }
+    
+    if err = db.Ping(); err != nil {
+        return err
+    }
+    
+    // Create table
+    _, err = db.Exec(`
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            email VARCHAR(100) UNIQUE NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `)
+    
+    return err
+}
+
+// Repository layer
+type UserRepository struct {
+    db *sql.DB
+}
+
+func NewUserRepository(db *sql.DB) *UserRepository {
+    return &UserRepository{db: db}
+}
+
+func (r *UserRepository) GetAll() ([]User, error) {
+    rows, err := r.db.Query("SELECT id, name, email FROM users")
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
+    
+    users := []User{}
+    for rows.Next() {
+        var user User
+        if err := rows.Scan(&user.ID, &user.Name, &user.Email); err != nil {
+            return nil, err
+        }
+        users = append(users, user)
+    }
+    
+    return users, nil
+}
+
+func (r *UserRepository) GetByID(id int) (*User, error) {
+    var user User
+    err := r.db.QueryRow("SELECT id, name, email FROM users WHERE id = $1", id).
+        Scan(&user.ID, &user.Name, &user.Email)
+    
+    if err == sql.ErrNoRows {
+        return nil, nil
+    }
+    if err != nil {
+        return nil, err
+    }
+    
+    return &user, nil
+}
+
+func (r *UserRepository) Create(user *User) error {
+    err := r.db.QueryRow(
+        "INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id",
+        user.Name, user.Email,
+    ).Scan(&user.ID)
+    
+    return err
+}
+
+func (r *UserRepository) Update(user *User) error {
+    _, err := r.db.Exec(
+        "UPDATE users SET name = $1, email = $2 WHERE id = $3",
+        user.Name, user.Email, user.ID,
+    )
+    return err
+}
+
+func (r *UserRepository) Delete(id int) error {
+    _, err := r.db.Exec("DELETE FROM users WHERE id = $1", id)
+    return err
+}
+
+// Handlers
+type UserHandler struct {
+    repo *UserRepository
+}
+
+func NewUserHandler(repo *UserRepository) *UserHandler {
+    return &UserHandler{repo: repo}
+}
+
+func (h *UserHandler) List(w http.ResponseWriter, r *http.Request) {
+    users, err := h.repo.GetAll()
+    if err != nil {
+        log.Printf("Error getting users: %v", err)
+        render.Status(r, http.StatusInternalServerError)
+        render.JSON(w, r, map[string]string{"error": "Failed to get users"})
+        return
+    }
+    
+    render.JSON(w, r, map[string]interface{}{
+        "success": true,
+        "data":    users,
+    })
+}
+
+func (h *UserHandler) Get(w http.ResponseWriter, r *http.Request) {
+    idParam := chi.URLParam(r, "id")
+    id, err := strconv.Atoi(idParam)
+    if err != nil {
+        render.Status(r, http.StatusBadRequest)
+        render.JSON(w, r, map[string]string{"error": "Invalid user ID"})
+        return
+    }
+    
+    user, err := h.repo.GetByID(id)
+    if err != nil {
+        log.Printf("Error getting user: %v", err)
+        render.Status(r, http.StatusInternalServerError)
+        render.JSON(w, r, map[string]string{"error": "Failed to get user"})
+        return
+    }
+    
+    if user == nil {
+        render.Status(r, http.StatusNotFound)
+        render.JSON(w, r, map[string]string{"error": "User not found"})
+        return
+    }
+    
+    render.JSON(w, r, map[string]interface{}{
+        "success": true,
+        "data":    user,
+    })
+}
+
+func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
+    var user User
+    if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+        render.Status(r, http.StatusBadRequest)
+        render.JSON(w, r, map[string]string{"error": "Invalid request body"})
+        return
+    }
+    
+    if err := h.repo.Create(&user); err != nil {
+        log.Printf("Error creating user: %v", err)
+        render.Status(r, http.StatusInternalServerError)
+        render.JSON(w, r, map[string]string{"error": "Failed to create user"})
+        return
+    }
+    
+    render.Status(r, http.StatusCreated)
+    render.JSON(w, r, map[string]interface{}{
+        "success": true,
+        "data":    user,
+    })
+}
+
+func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
+    idParam := chi.URLParam(r, "id")
+    id, err := strconv.Atoi(idParam)
+    if err != nil {
+        render.Status(r, http.StatusBadRequest)
+        render.JSON(w, r, map[string]string{"error": "Invalid user ID"})
+        return
+    }
+    
+    var user User
+    if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+        render.Status(r, http.StatusBadRequest)
+        render.JSON(w, r, map[string]string{"error": "Invalid request body"})
+        return
+    }
+    
+    user.ID = id
+    if err := h.repo.Update(&user); err != nil {
+        log.Printf("Error updating user: %v", err)
+        render.Status(r, http.StatusInternalServerError)
+        render.JSON(w, r, map[string]string{"error": "Failed to update user"})
+        return
+    }
+    
+    render.JSON(w, r, map[string]interface{}{
+        "success": true,
+        "data":    user,
+    })
+}
+
+func (h *UserHandler) Delete(w http.ResponseWriter, r *http.Request) {
+    idParam := chi.URLParam(r, "id")
+    id, err := strconv.Atoi(idParam)
+    if err != nil {
+        render.Status(r, http.StatusBadRequest)
+        render.JSON(w, r, map[string]string{"error": "Invalid user ID"})
+        return
+    }
+    
+    if err := h.repo.Delete(id); err != nil {
+        log.Printf("Error deleting user: %v", err)
+        render.Status(r, http.StatusInternalServerError)
+        render.JSON(w, r, map[string]string{"error": "Failed to delete user"})
+        return
+    }
+    
+    render.Status(r, http.StatusNoContent)
+}
+
+func main() {
+    // Initialize database
+    if err := initDB(); err != nil {
+        log.Fatal("Failed to connect to database:", err)
+    }
+    defer db.Close()
+    
+    // Setup repository and handler
+    repo := NewUserRepository(db)
+    handler := NewUserHandler(repo)
+    
+    // Setup router
+    r := chi.NewRouter()
+    r.Use(middleware.Logger)
+    r.Use(middleware.Recoverer)
+    
+    // Routes
+    r.Route("/api/users", func(r chi.Router) {
+        r.Get("/", handler.List)
+        r.Post("/", handler.Create)
+        r.Get("/{id}", handler.Get)
+        r.Put("/{id}", handler.Update)
+        r.Delete("/{id}", handler.Delete)
+    })
+    
+    fmt.Println("Server starting on :3000")
+    log.Fatal(http.ListenAndServe(":3000", r))
+}
+```
+
+---
+
+## Testing
+
+### Understanding HTTP Testing
+
+**Theory:**
+
+**Why Test HTTP Handlers?**
+1. **Correctness**: Ensure handlers work as expected
+2. **Regression**: Catch bugs when refactoring
+3. **Documentation**: Tests show how API works
+4. **Confidence**: Safe to deploy
+
+**Testing Pyramid:**
+```
+        /\
+       /  \        Unit Tests (most)
+      /____\       - Test individual functions
+     /      \      
+    /________\     Integration Tests (some)
+   /          \    - Test handler + dependencies
+  /____________\   End-to-End Tests (few)
+                   - Test full application
+```
+
+**HTTP Testing in Go:**
+
+**httptest Package:**
+Go's standard library provides `httptest` for testing HTTP handlers:
+
+1. **httptest.NewRecorder()**: Captures response
+2. **httptest.NewRequest()**: Creates test request
+3. **httptest.NewServer()**: Creates test server (for client testing)
+
+**Testing Flow:**
+```
+1. Create test request (httptest.NewRequest)
+2. Create response recorder (httptest.NewRecorder)  
+3. Call handler directly (handler.ServeHTTP)
+4. Assert response (status, body, headers)
+```
+
+**What to Test:**
+
+**1. Status Codes:**
+- Success returns 200/201/204
+- Not found returns 404
+- Bad input returns 400
+- Server error returns 500
+
+**2. Response Body:**
+- Correct JSON structure
+- Correct values
+- Error messages
+
+**3. Headers:**
+- Content-Type: application/json
+- CORS headers
+- Custom headers
+
+**4. Edge Cases:**
+- Missing parameters
+- Invalid IDs
+- Empty body
+- Large payloads
+
+**5. Middleware:**
+- Authentication works
+- Logging happens
+- CORS headers added
+
+**Test Patterns:**
+
+**1. Table-Driven Tests:**
+```go
+tests := []struct{
+    name       string
+    input      Request
+    wantStatus int
+    wantBody   string
+}{\n    {\"success\", validReq, 200, expectedJSON},\n    {\"invalid\", invalidReq, 400, errorJSON},\n}\n\nfor _, tt := range tests {\n    t.Run(tt.name, func(t *testing.T) {\n        // Test logic\n    })\n}\n```
+
+**Benefits:**
+- Test multiple cases easily
+- Clear test intent
+- Easy to add new cases
+
+**2. Mocking:**
+Mock dependencies (database, external APIs):
+```go
+type MockUserRepo struct {}\n\nfunc (m *MockUserRepo) FindByID(id int) (*User, error) {\n    // Return test data\n    return &User{ID: id, Name: \"Test\"}, nil\n}\n```
+
+**Why Mock?**
+- Test without database
+- Test error scenarios
+- Fast tests
+- Isolated tests
+
+**3. Test Fixtures:**
+Reusable test data:
+```go
+var testUser = User{\n    ID:   1,\n    Name: \"Test User\",\n}\n```
+
+**Assertions:**
+
+**Manual:**
+```go
+if got != want {\n    t.Errorf(\"got %v, want %v\", got, want)\n}\n```
+
+**With testify:**
+```go
+assert.Equal(t, expected, actual)\nassert.NoError(t, err)\nassert.Len(t, slice, 5)\n```
+
+**Testing Chi Routes:**
+
+Chi routes are just `http.Handler`, so standard testing works:
+```go
+r := chi.NewRouter()\nr.Get(\"/users/{id}\", getUserHandler)\n\nreq := httptest.NewRequest(\"GET\", \"/users/123\", nil)\nw := httptest.NewRecorder()\n\nr.ServeHTTP(w, req)  // Test entire router\n\nassert.Equal(t, 200, w.Code)\n```
+
+**Testing Middleware:**
+
+Test middleware in isolation:
+```go
+handler := AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {\n    w.Write([]byte(\"protected\"))\n}))\n\n// Test without token -> 401\n// Test with valid token -> 200\n```
+
+**Best Practices:**
+
+1. **Test Behavior, Not Implementation:**
+   - Test API contract
+   - Don't test internal details
+
+2. **Use Table-Driven Tests:**
+   - Cover multiple scenarios
+   - Easy to maintain
+
+3. **Mock External Dependencies:**
+   - Databases, APIs
+   - Keep tests fast
+
+4. **Test Edge Cases:**
+   - Invalid input
+   - Missing data
+   - Large payloads
+
+5. **Test Error Paths:**
+   - Database errors
+   - Validation failures
+   - Panics
+
+6. **Keep Tests Independent:**
+   - No shared state
+   - Can run in any order
+
+Testing Chi routes and handlers:
+
+```go
+// File: handlers_test.go
+package main
+
+import (
+    "bytes"
+    "encoding/json"
+    "net/http"
+    "net/http/httptest"
+    "testing"
+    
+    "github.com/go-chi/chi/v5"
+    "github.com/stretchr/testify/assert"
+)
+
+func TestGetUser(t *testing.T) {
+    // Setup
+    r := chi.NewRouter()
+    r.Get("/users/{id}", func(w http.ResponseWriter, r *http.Request) {
+        id := chi.URLParam(r, "id")
+        json.NewEncoder(w).Encode(map[string]string{
+            "id":   id,
+            "name": "John Doe",
+        })
+    })
+    
+    // Test
+    req := httptest.NewRequest("GET", "/users/123", nil)
+    w := httptest.NewRecorder()
+    r.ServeHTTP(w, req)
+    
+    // Assert
+    assert.Equal(t, http.StatusOK, w.Code)
+    
+    var response map[string]string
+    json.NewDecoder(w.Body).Decode(&response)
+    assert.Equal(t, "123", response["id"])
+    assert.Equal(t, "John Doe", response["name"])
+}
+
+func TestCreateUser(t *testing.T) {
+    // Setup
+    r := chi.NewRouter()
+    r.Post("/users", func(w http.ResponseWriter, r *http.Request) {
+        var req map[string]string
+        json.NewDecoder(r.Body).Decode(&req)
+        
+        w.WriteHeader(http.StatusCreated)
+        json.NewEncoder(w).Encode(map[string]interface{}{
+            "id":    1,
+            "name":  req["name"],
+            "email": req["email"],
+        })
+    })
+    
+    // Test
+    body := map[string]string{"name": "Jane Doe", "email": "jane@example.com"}
+    jsonBody, _ := json.Marshal(body)
+    req := httptest.NewRequest("POST", "/users", bytes.NewBuffer(jsonBody))
+    req.Header.Set("Content-Type", "application/json")
+    w := httptest.NewRecorder()
+    r.ServeHTTP(w, req)
+    
+    // Assert
+    assert.Equal(t, http.StatusCreated, w.Code)
+    
+    var response map[string]interface{}
+    json.NewDecoder(w.Body).Decode(&response)
+    assert.Equal(t, "Jane Doe", response["name"])
+    assert.Equal(t, "jane@example.com", response["email"])
+}
+
+func TestMiddleware(t *testing.T) {
+    // Custom middleware
+    authMiddleware := func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            token := r.Header.Get("Authorization")
+            if token != "Bearer valid-token" {
+                w.WriteHeader(http.StatusUnauthorized)
+                return
+            }
+            next.ServeHTTP(w, r)
+        })
+    }
+    
+    // Setup
+    r := chi.NewRouter()
+    r.Use(authMiddleware)
+    r.Get("/protected", func(w http.ResponseWriter, r *http.Request) {
+        w.Write([]byte("Protected resource"))
+    })
+    
+    // Test without token
+    req := httptest.NewRequest("GET", "/protected", nil)
+    w := httptest.NewRecorder()
+    r.ServeHTTP(w, req)
+    assert.Equal(t, http.StatusUnauthorized, w.Code)
+    
+    // Test with token
+    req = httptest.NewRequest("GET", "/protected", nil)
+    req.Header.Set("Authorization", "Bearer valid-token")
+    w = httptest.NewRecorder()
+    r.ServeHTTP(w, req)
+    assert.Equal(t, http.StatusOK, w.Code)
+    assert.Equal(t, "Protected resource", w.Body.String())
+}
+```
+
+**Run tests:**
+```bash
+go test -v
+go test -cover
+```
+
+---
+
+## Project Structure
+
+### Understanding Project Organization
+
+**Theory:**
+
+**Why Structure Matters:**
+1. **Maintainability**: Easy to find code
+2. **Scalability**: Supports growth
+3. **Collaboration**: Team understands layout
+4. **Testability**: Clear dependencies
+
+**Common Go Project Layouts:**
+
+**1. Flat Structure (Small Projects):**
+```
+myapp/
+├── main.go
+├── handlers.go
+├── models.go
+└── db.go
+```
+**When:** <1000 lines, single developer
+
+**2. Grouped by Type (Medium Projects):**
+```
+myapp/
+├── cmd/main.go
+├── handlers/
+├── models/
+├── services/
+└── repository/
+```
+**When:** Multiple packages, clear boundaries
+
+**3. Domain-Driven (Large Projects):**
+```
+myapp/
+├── cmd/
+├── user/          # User domain
+│   ├── handler.go
+│   ├── service.go
+│   └── repository.go
+├── product/       # Product domain
+└── order/         # Order domain
+```
+**When:** Multiple domains, microservices
+
+**Standard Layout Directories:**
+
+**cmd/**: Application entry points
+- Each subdirectory = one binary
+- `cmd/api/main.go` for API server
+- `cmd/worker/main.go` for background worker
+- Minimal code, just initialization
+
+**internal/**: Private application code
+- Cannot be imported by external projects
+- Protected by Go compiler
+- Your application logic goes here
+
+**pkg/**: Public library code
+- Can be imported by external projects
+- Reusable utilities
+- Use sparingly (most code in internal/)
+
+**api/**: API definitions
+- OpenAPI/Swagger specs
+- Protocol buffer definitions
+- API documentation
+
+**web/**: Web assets
+- Static files (CSS, JS, images)
+- Templates
+- Frontend code
+
+**configs/**: Configuration files
+- Default configs
+- Example configs
+- Environment-specific configs
+
+**scripts/**: Build and utility scripts
+- Database migrations
+- Build scripts
+- Deployment scripts
+
+**test/**: Additional test data
+- Integration tests
+- Test fixtures
+- Mock data
+
+**Layered Architecture:**
+
+**Handler Layer (HTTP):**
+- Parse requests
+- Validate input
+- Call service layer
+- Format responses
+- HTTP concerns only
+
+**Service Layer (Business Logic):**
+- Business rules
+- Orchestrate operations
+- Transaction management
+- Independent of HTTP
+
+**Repository Layer (Data Access):**
+- Database queries
+- External API calls
+- Data mapping
+- Persistence concerns
+
+**Model Layer (Domain):**
+- Data structures
+- Domain logic
+- Validation rules
+- Pure Go structs
+
+**Dependency Flow:**
+```
+Handler → Service → Repository → Database
+   ↓         ↓          ↓
+Models    Models    Models
+```
+
+**Rules:**
+- Handler depends on Service
+- Service depends on Repository
+- Repository depends on Database
+- Lower layers don't know about upper layers
+
+**Configuration Management:**
+
+**Environment Variables:**
+```go
+port := os.Getenv("PORT")
+if port == "" {
+    port = "3000"  // Default
+}
+```
+
+**.env File:**
+```
+DATABASE_URL=postgres://...
+PORT=3000
+JWT_SECRET=secret123
+```
+
+**Config Struct:**
+```go
+type Config struct {
+    ServerAddress string
+    DatabaseURL   string
+    JWTSecret     string
+}
+
+func Load() *Config {
+    return &Config{
+        ServerAddress: getEnv("PORT", "3000"),
+        DatabaseURL:   getEnv("DATABASE_URL", ""),
+        JWTSecret:     getEnv("JWT_SECRET", ""),
+    }
+}
+```
+
+**Dependency Injection:**
+
+**Why?**
+- Testability (inject mocks)
+- Flexibility (swap implementations)
+- Clarity (explicit dependencies)
+
+**Constructor Pattern:**
+```go
+type UserHandler struct {
+    service *UserService
+}
+
+func NewUserHandler(service *UserService) *UserHandler {
+    return &UserHandler{service: service}
+}
+```
+
+**Wire Up in main():**
+```go
+func main() {
+    db := connectDB()
+    userRepo := repository.NewUserRepository(db)
+    userService := service.NewUserService(userRepo)
+    userHandler := handler.NewUserHandler(userService)
+    
+    router := setupRouter(userHandler)
+    http.ListenAndServe(":3000", router)
+}
+```
+
+**Package Naming:**
+
+**Good Names:**
+- `user` not `userpackage`
+- `http` not `httputils`
+- `auth` not `authentication`
+
+**Rules:**
+- Short, concise
+- Lowercase, no underscores
+- Singular (not plural)
+- Avoid generic names (util, common, base)
+
+**File Naming:**
+
+**Conventions:**
+- `user.go`: User model
+- `user_handler.go`: HTTP handlers
+- `user_service.go`: Business logic
+- `user_repository.go`: Database
+- `user_test.go`: Tests
+
+Recommended project structure for Chi applications:
+
+```
+myapp/
+├── cmd/
+│   └── api/
+│       └── main.go              # Application entry point
+├── internal/
+│   ├── config/
+│   │   └── config.go            # Configuration management
+│   ├── database/
+│   │   └── database.go          # Database connection
+│   ├── handlers/
+│   │   ├── user_handler.go      # User HTTP handlers
+│   │   └── product_handler.go   # Product HTTP handlers
+│   ├── middleware/
+│   │   ├── auth.go              # Authentication middleware
+│   │   └── logger.go            # Logging middleware
+│   ├── models/
+│   │   ├── user.go              # User model
+│   │   └── product.go           # Product model
+│   ├── repository/
+│   │   ├── user_repo.go         # User database operations
+│   │   └── product_repo.go      # Product database operations
+│   ├── service/
+│   │   ├── user_service.go      # User business logic
+│   │   └── product_service.go   # Product business logic
+│   └── router/
+│       └── router.go            # Route definitions
+├── pkg/
+│   └── utils/
+│       └── helpers.go           # Utility functions
+├── migrations/
+│   ├── 001_create_users.sql
+│   └── 002_create_products.sql
+├── .env                         # Environment variables
+├── go.mod
+├── go.sum
+└── README.md
+```
+
+Example `cmd/api/main.go`:
+```go
+package main
+
+import (
+    "log"
+    "myapp/internal/config"
+    "myapp/internal/database"
+    "myapp/internal/router"
+    "net/http"
+)
+
+func main() {
+    // Load configuration
+    cfg := config.Load()
+    
+    // Connect to database
+    db, err := database.Connect(cfg.DatabaseURL)
+    if err != nil {
+        log.Fatal("Failed to connect to database:", err)
+    }
+    defer db.Close()
+    
+    // Setup router
+    r := router.New(db)
+    
+    // Start server
+    log.Printf("Server starting on %s", cfg.ServerAddress)
+    log.Fatal(http.ListenAndServe(cfg.ServerAddress, r))
+}
+```
+
+---
+
+## Complete CRUD API Example
+
+Full example with all best practices:
+
+See the JSON API example earlier in this document, which includes:
+- CRUD operations (Create, Read, Update, Delete)
+- Proper HTTP status codes
+- JSON request/response handling
+- Input validation
+- Error handling
+- Thread-safe in-memory storage
+
+For production, replace in-memory storage with a database like PostgreSQL or MySQL using the database integration pattern shown above.
+
+---
+
+## Additional Resources
+
+### Official Documentation
+- Chi Router: https://github.com/go-chi/chi
+- Go Documentation: https://golang.org/doc/
+
+### Popular Chi Middleware
+```bash
+# CORS
+go get github.com/go-chi/cors
+
+# JWT Authentication
+go get github.com/go-chi/jwtauth/v5
+
+# Rate limiting
+go get github.com/go-chi/httprate
+
+# Render (JSON/XML responses)
+go get github.com/go-chi/render
+```
+
+### Best Practices
+1. Use meaningful HTTP status codes
+2. Implement proper error handling
+3. Use middleware for cross-cutting concerns
+4. Structure your project logically
+5. Write tests for handlers
+6. Use dependency injection
+7. Validate input data
+8. Handle CORS properly for web apps
+9. Implement authentication/authorization
+10. Log important events
+
+---
+
+## Chi Framework Interview Questions & Answers
+
+### Conceptual Questions
+
+#### 1. What is Chi and why would you use it over the standard library?
+
+**Answer:**
+
+**Chi** is a lightweight, idiomatic HTTP router for Go.
+
+**Why Chi over net/http:**
+
+**Standard Library Limitations:**
+```go
+http.HandleFunc("/users", handler)
+// Problems:
+// - Can't distinguish GET from POST
+// - No URL parameters (/users/{id})
+// - Manual middleware composition
+// - No route grouping
+```
+
+**Chi Benefits:**
+```go
+r := chi.NewRouter()
+r.Get("/users/{id}", getUser)     // Method-specific routing
+r.Post("/users", createUser)      // Different handler for POST
+r.Use(middleware.Logger)          // Easy middleware
+r.Route("/api", func(r chi.Router) { }) // Route grouping
+```
+
+**Key Advantages:**
+1. **Method-based routing**: GET, POST, PUT, DELETE
+2. **URL parameters**: Extract from path easily
+3. **Middleware composition**: Clean, chainable
+4. **Sub-routing**: Organize related routes
+5. **100% net/http compatible**: Drop-in replacement
+6. **Fast**: Radix tree routing algorithm
+
+**When to use:**
+- Building RESTful APIs
+- Need route organization
+- Want middleware support
+- Building microservices
+
+---
+
+#### 2. How does Chi routing work internally?
+
+**Answer:**
+
+Chi uses a **radix tree** (compressed trie) for fast route matching.
+
+**Radix Tree Structure:**
+```
+                    /
+                   /|\
+                  / | \
+               api user admin
+                |    |     |
+              /v1  /{id} /panel
+               |
+            /users
+```
+
+**Advantages:**
+- **O(k) lookup**: k = length of path (not number of routes)
+- **Memory efficient**: Common prefixes shared
+- **Pattern matching**: Supports parameters and wildcards
+
+**Route Priority:**
+1. Static routes: `/users/active` (exact match)
+2. Regexp routes: `/users/{id:[0-9]+}` (pattern)
+3. Parameter routes: `/users/{id}` (any value)
+4. Wildcard routes: `/files/*` (catch-all)
+
+**Example:**
+```go
+r.Get("/users/123", handler)     // Matches exact
+r.Get("/users/abc", handler)     // Matches parameter
+r.Get("/users/active", handler)  // Static takes priority
+```
+
+**Context-based Parameters:**
+Chi stores URL parameters in request context:
+```go
+id := chi.URLParam(r, "id")
+// Thread-safe, request-scoped
+```
+
+---
+
+#### 3. Explain middleware in Chi. How does the middleware chain work?
+
+**Answer:**
+
+**Middleware** is a function that wraps HTTP handlers to add functionality.
+
+**Signature:**
+```go
+func(http.Handler) http.Handler
+```
+
+**How it works:**
+```
+Request → MW1 → MW2 → MW3 → Handler → MW3 → MW2 → MW1 → Response
+          |      |      |                |      |      |
+          Before ----→                   ←---- After
+```
+
+**Example:**
+```go
+func LoggerMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        start := time.Now()
+        fmt.Println("Before handler")
+        
+        next.ServeHTTP(w, r)  // Call next in chain
+        
+        fmt.Println("After handler, took:", time.Since(start))
+    })
+}
+```
+
+**Applying Middleware:**
+
+**Global (all routes):**
+```go
+r.Use(middleware.Logger)
+r.Use(middleware.Recoverer)
+```
+
+**Group (specific routes):**
+```go
+r.Group(func(r chi.Router) {
+    r.Use(AuthMiddleware)  // Only for this group
+    r.Get("/protected", handler)
+})
+```
+
+**Route-specific:**
+```go
+r.With(RateLimit).Get("/api", handler)
+```
+
+**Order Matters:**
+```go
+r.Use(Logger)      // 1. Log request
+r.Use(Recoverer)   // 2. Catch panics
+r.Use(Auth)        // 3. Authenticate
+
+// If panic in Auth:
+Request → Logger → Recoverer → Auth (panic) → Recoverer catches → Response
+```
+
+**Best Practices:**
+1. Recoverer early (catch panics)
+2. Logger early (log everything)
+3. Auth after logging
+4. Business logic last
+
+---
+
+#### 4. How do you handle errors in Chi applications?
+
+**Answer:**
+
+**Structured Error Handling Pattern:**
+
+**1. Define Error Types:**
+```go
+type APIError struct {
+    StatusCode int    `json:"-"`
+    Code       string `json:"code"`
+    Message    string `json:"message"`
+}
+
+func (e *APIError) Error() string {
+    return e.Message
+}
+
+var (
+    ErrNotFound    = &APIError{404, "NOT_FOUND", "Resource not found"}
+    ErrBadRequest  = &APIError{400, "BAD_REQUEST", "Invalid request"}
+    ErrUnauthorized = &APIError{401, "UNAUTHORIZED", "Authentication required"}
+)
+```
+
+**2. Error Response Helper:**
+```go
+func sendError(w http.ResponseWriter, r *http.Request, err *APIError) {
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(err.StatusCode)
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "success": false,
+        "error": map[string]string{
+            "code":    err.Code,
+            "message": err.Message,
+        },
+    })
+}
+```
+
+**3. Error Handling in Handlers:**
+```go
+func getUser(w http.ResponseWriter, r *http.Request) {
+    id := chi.URLParam(r, "id")
+    
+    user, err := userRepo.FindByID(id)
+    if err == sql.ErrNoRows {
+        sendError(w, r, ErrNotFound)
+        return
+    }
+    if err != nil {
+        log.Error(err) // Log internal error
+        sendError(w, r, &APIError{500, "INTERNAL_ERROR", "Internal server error"})
+        return
+    }
+    
+    json.NewEncoder(w).Encode(user)
+}
+```
+
+**4. Recovery Middleware:**
+```go
+func RecoveryMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        defer func() {
+            if err := recover(); err != nil {
+                log.Error("Panic:", err)
+                sendError(w, r, &APIError{500, "INTERNAL_ERROR", "Internal server error"})
+            }
+        }()
+        next.ServeHTTP(w, r)
+    })
+}
+```
+
+**Best Practices:**
+- Don't expose internal errors to clients
+- Log detailed errors server-side
+- Use consistent error format
+- Return appropriate HTTP status codes
+- Include error codes for client handling
+
+---
+
+#### 5. How would you implement authentication in Chi?
+
+**Answer:**
+
+**JWT Authentication Pattern:**
+
+**1. JWT Token Structure:**
+```go
+type Claims struct {
+    UserID int    `json:"user_id"`
+    Email  string `json:"email"`
+    Role   string `json:"role"`
+    jwt.StandardClaims
+}
+
+func generateToken(userID int, email, role string) (string, error) {
+    claims := Claims{
+        UserID: userID,
+        Email:  email,
+        Role:   role,
+        StandardClaims: jwt.StandardClaims{
+            ExpiresAt: time.Now().Add(24 * time.Hour).Unix(),
+            IssuedAt:  time.Now().Unix(),
+        },
+    }
+    
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    return token.SignedString([]byte("secret-key"))
+}
+```
+
+**2. Authentication Middleware:**
+```go
+func AuthMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        // Extract token from header
+        authHeader := r.Header.Get("Authorization")
+        if authHeader == "" {
+            http.Error(w, "Missing authorization", 401)
+            return
+        }
+        
+        tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+        
+        // Parse and validate token
+        token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+            return []byte("secret-key"), nil
+        })
+        
+        if err != nil || !token.Valid {
+            http.Error(w, "Invalid token", 401)
+            return
+        }
+        
+        // Extract claims
+        claims := token.Claims.(*Claims)
+        
+        // Add to context
+        ctx := context.WithValue(r.Context(), "user", claims)
+        next.ServeHTTP(w, r.WithContext(ctx))
+    })
+}
+```
+
+**3. Authorization Middleware:**
+```go
+func RequireRole(role string) func(http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            user := r.Context().Value("user").(*Claims)
+            
+            if user.Role != role {
+                http.Error(w, "Forbidden", 403)
+                return
+            }
+            
+            next.ServeHTTP(w, r)
+        })
+    }
+}
+```
+
+**4. Route Setup:**
+```go
+func setupRoutes() chi.Router {
+    r := chi.NewRouter()
+    
+    // Public routes
+    r.Post("/login", loginHandler)
+    r.Post("/register", registerHandler)
+    
+    // Protected routes
+    r.Group(func(r chi.Router) {
+        r.Use(AuthMiddleware)
+        r.Get("/profile", profileHandler)
+        r.Put("/profile", updateProfileHandler)
+    })
+    
+    // Admin routes
+    r.Group(func(r chi.Router) {
+        r.Use(AuthMiddleware)
+        r.Use(RequireRole("admin"))
+        r.Get("/admin/users", listUsersHandler)
+        r.Delete("/admin/users/{id}", deleteUserHandler)
+    })
+    
+    return r
+}
+```
+
+---
+
+#### 6. How do you handle CORS in Chi?
+
+**Answer:**
+
+**Using go-chi/cors package:**
+
+```go
+import (
+    "github.com/go-chi/chi/v5"
+    "github.com/go-chi/cors"
+)
+
+func main() {
+    r := chi.NewRouter()
+    
+    // CORS configuration
+    r.Use(cors.Handler(cors.Options{
+        AllowedOrigins:   []string{"https://myapp.com", "http://localhost:3000"},
+        AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+        AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+        ExposedHeaders:   []string{"Link"},
+        AllowCredentials: true,
+        MaxAge:           300, // Cache preflight for 5 minutes
+    }))
+    
+    r.Get("/api/data", handler)
+}
+```
+
+**Custom CORS Middleware:**
+
+```go
+func CORSMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        // Set CORS headers
+        w.Header().Set("Access-Control-Allow-Origin", "*")
+        w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+        w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        w.Header().Set("Access-Control-Max-Age", "3600")
+        
+        // Handle preflight
+        if r.Method == "OPTIONS" {
+            w.WriteHeader(http.StatusOK)
+            return
+        }
+        
+        next.ServeHTTP(w, r)
+    })
+}
+```
+
+**CORS Explained:**
+
+**Preflight Request:**
+Browser sends OPTIONS request before actual request:
+```
+OPTIONS /api/users
+Origin: http://localhost:3000
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: content-type
+```
+
+**Server Response:**
+```
+Access-Control-Allow-Origin: http://localhost:3000
+Access-Control-Allow-Methods: POST
+Access-Control-Allow-Headers: content-type
+```
+
+**Why CORS?**
+- Browser security feature
+- Prevents unauthorized cross-origin requests
+- Protects users from malicious sites
+
+---
+
+### Coding Questions
+
+#### Question 1: Build a RESTful CRUD API with Chi
+
+**Problem:**
+Create a complete CRUD API for managing books with proper error handling.
+
+**Solution:**
+```go
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "net/http"
+    "strconv"
+    "sync"
+    
+    "github.com/go-chi/chi/v5"
+    "github.com/go-chi/chi/v5/middleware"
+)
+
+// Models
+type Book struct {
+    ID     int    `json:"id"`
+    Title  string `json:"title"`
+    Author string `json:"author"`
+    Year   int    `json:"year"`
+}
+
+type APIResponse struct {
+    Success bool        `json:"success"`
+    Data    interface{} `json:"data,omitempty"`
+    Error   string      `json:"error,omitempty"`
+}
+
+// In-memory storage
+type BookStore struct {
+    mu    sync.RWMutex
+    books map[int]Book
+    nextID int
+}
+
+func NewBookStore() *BookStore {
+    return &BookStore{
+        books: make(map[int]Book),
+        nextID: 1,
+    }
+}
+
+func (s *BookStore) GetAll() []Book {
+    s.mu.RLock()
+    defer s.mu.RUnlock()
+    
+    books := make([]Book, 0, len(s.books))
+    for _, book := range s.books {
+        books = append(books, book)
+    }
+    return books
+}
+
+func (s *BookStore) GetByID(id int) (Book, bool) {
+    s.mu.RLock()
+    defer s.mu.RUnlock()
+    
+    book, exists := s.books[id]
+    return book, exists
+}
+
+func (s *BookStore) Create(book Book) Book {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    
+    book.ID = s.nextID
+    s.nextID++
+    s.books[book.ID] = book
+    return book
+}
+
+func (s *BookStore) Update(id int, book Book) bool {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    
+    if _, exists := s.books[id]; !exists {
+        return false
+    }
+    
+    book.ID = id
+    s.books[id] = book
+    return true
+}
+
+func (s *BookStore) Delete(id int) bool {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    
+    if _, exists := s.books[id]; !exists {
+        return false
+    }
+    
+    delete(s.books, id)
+    return true
+}
+
+// Handlers
+type BookHandler struct {
+    store *BookStore
+}
+
+func NewBookHandler(store *BookStore) *BookHandler {
+    return &BookHandler{store: store}
+}
+
+func (h *BookHandler) ListBooks(w http.ResponseWriter, r *http.Request) {
+    books := h.store.GetAll()
+    respondJSON(w, http.StatusOK, APIResponse{
+        Success: true,
+        Data:    books,
+    })
+}
+
+func (h *BookHandler) GetBook(w http.ResponseWriter, r *http.Request) {
+    id, err := strconv.Atoi(chi.URLParam(r, "id"))
+    if err != nil {
+        respondJSON(w, http.StatusBadRequest, APIResponse{
+            Success: false,
+            Error:   "Invalid book ID",
+        })
+        return
+    }
+    
+    book, exists := h.store.GetByID(id)
+    if !exists {
+        respondJSON(w, http.StatusNotFound, APIResponse{
+            Success: false,
+            Error:   "Book not found",
+        })
+        return
+    }
+    
+    respondJSON(w, http.StatusOK, APIResponse{
+        Success: true,
+        Data:    book,
+    })
+}
+
+func (h *BookHandler) CreateBook(w http.ResponseWriter, r *http.Request) {
+    var book Book
+    if err := json.NewDecoder(r.Body).Decode(&book); err != nil {
+        respondJSON(w, http.StatusBadRequest, APIResponse{
+            Success: false,
+            Error:   "Invalid request body",
+        })
+        return
+    }
+    
+    // Validation
+    if book.Title == "" || book.Author == "" {
+        respondJSON(w, http.StatusBadRequest, APIResponse{
+            Success: false,
+            Error:   "Title and author are required",
+        })
+        return
+    }
+    
+    created := h.store.Create(book)
+    respondJSON(w, http.StatusCreated, APIResponse{
+        Success: true,
+        Data:    created,
+    })
+}
+
+func (h *BookHandler) UpdateBook(w http.ResponseWriter, r *http.Request) {
+    id, err := strconv.Atoi(chi.URLParam(r, "id"))
+    if err != nil {
+        respondJSON(w, http.StatusBadRequest, APIResponse{
+            Success: false,
+            Error:   "Invalid book ID",
+        })
+        return
+    }
+    
+    var book Book
+    if err := json.NewDecoder(r.Body).Decode(&book); err != nil {
+        respondJSON(w, http.StatusBadRequest, APIResponse{
+            Success: false,
+            Error:   "Invalid request body",
+        })
+        return
+    }
+    
+    if !h.store.Update(id, book) {
+        respondJSON(w, http.StatusNotFound, APIResponse{
+            Success: false,
+            Error:   "Book not found",
+        })
+        return
+    }
+    
+    book.ID = id
+    respondJSON(w, http.StatusOK, APIResponse{
+        Success: true,
+        Data:    book,
+    })
+}
+
+func (h *BookHandler) DeleteBook(w http.ResponseWriter, r *http.Request) {
+    id, err := strconv.Atoi(chi.URLParam(r, "id"))
+    if err != nil {
+        respondJSON(w, http.StatusBadRequest, APIResponse{
+            Success: false,
+            Error:   "Invalid book ID",
+        })
+        return
+    }
+    
+    if !h.store.Delete(id) {
+        respondJSON(w, http.StatusNotFound, APIResponse{
+            Success: false,
+            Error:   "Book not found",
+        })
+        return
+    }
+    
+    w.WriteHeader(http.StatusNoContent)
+}
+
+// Helper function
+func respondJSON(w http.ResponseWriter, status int, data interface{}) {
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(status)
+    json.NewEncoder(w).Encode(data)
+}
+
+func main() {
+    store := NewBookStore()
+    handler := NewBookHandler(store)
+    
+    r := chi.NewRouter()
+    r.Use(middleware.Logger)
+    r.Use(middleware.Recoverer)
+    
+    r.Route("/api/books", func(r chi.Router) {
+        r.Get("/", handler.ListBooks)
+        r.Post("/", handler.CreateBook)
+        r.Get("/{id}", handler.GetBook)
+        r.Put("/{id}", handler.UpdateBook)
+        r.Delete("/{id}", handler.DeleteBook)
+    })
+    
+    fmt.Println("Server starting on :3000")
+    http.ListenAndServe(":3000", r)
+}
+```
+
+**Testing:**
+```bash
+# Create book
+curl -X POST http://localhost:3000/api/books \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Go in Action","author":"William Kennedy","year":2015}'
+
+# Get all books
+curl http://localhost:3000/api/books
+
+# Get specific book
+curl http://localhost:3000/api/books/1
+
+# Update book
+curl -X PUT http://localhost:3000/api/books/1 \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Go in Action 2nd Ed","author":"William Kennedy","year":2021}'
+
+# Delete book
+curl -X DELETE http://localhost:3000/api/books/1
+```
+
+---
+
+#### Question 2: Implement rate limiting middleware
+
+**Problem:**
+Create a rate limiting middleware that limits requests per IP address.
+
+**Solution:**
+```go
+package main
+
+import (
+    "fmt"
+    "net/http"
+    "sync"
+    "time"
+    
+    "github.com/go-chi/chi/v5"
+)
+
+type RateLimiter struct {
+    mu       sync.Mutex
+    visitors map[string]*Visitor
+    limit    int
+    window   time.Duration
+}
+
+type Visitor struct {
+    requests []time.Time
+    mu       sync.Mutex
+}
+
+func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
+    rl := &RateLimiter{
+        visitors: make(map[string]*Visitor),
+        limit:    limit,
+        window:   window,
+    }
+    
+    // Cleanup old visitors periodically
+    go rl.cleanup()
+    
+    return rl
+}
+
+func (rl *RateLimiter) cleanup() {
+    ticker := time.NewTicker(time.Minute)
+    defer ticker.Stop()
+    
+    for range ticker.C {
+        rl.mu.Lock()
+        for ip, visitor := range rl.visitors {
+            visitor.mu.Lock()
+            if len(visitor.requests) == 0 {
+                delete(rl.visitors, ip)
+            }
+            visitor.mu.Unlock()
+        }
+        rl.mu.Unlock()
+    }
+}
+
+func (rl *RateLimiter) getVisitor(ip string) *Visitor {
+    rl.mu.Lock()
+    defer rl.mu.Unlock()
+    
+    visitor, exists := rl.visitors[ip]
+    if !exists {
+        visitor = &Visitor{
+            requests: make([]time.Time, 0),
+        }
+        rl.visitors[ip] = visitor
+    }
+    
+    return visitor
+}
+
+func (rl *RateLimiter) Allow(ip string) bool {
+    visitor := rl.getVisitor(ip)
+    visitor.mu.Lock()
+    defer visitor.mu.Unlock()
+    
+    now := time.Now()
+    cutoff := now.Add(-rl.window)
+    
+    // Remove old requests
+    validRequests := make([]time.Time, 0)
+    for _, reqTime := range visitor.requests {
+        if reqTime.After(cutoff) {
+            validRequests = append(validRequests, reqTime)
+        }
+    }
+    visitor.requests = validRequests
+    
+    // Check limit
+    if len(visitor.requests) >= rl.limit {
+        return false
+    }
+    
+    // Add new request
+    visitor.requests = append(visitor.requests, now)
+    return true
+}
+
+// Middleware
+func RateLimitMiddleware(rl *RateLimiter) func(http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            ip := r.RemoteAddr
+            
+            if !rl.Allow(ip) {
+                http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+                return
+            }
+            
+            next.ServeHTTP(w, r)
+        })
+    }
+}
+
+func main() {
+    // Allow 5 requests per 10 seconds
+    limiter := NewRateLimiter(5, 10*time.Second)
+    
+    r := chi.NewRouter()
+    r.Use(RateLimitMiddleware(limiter))
+    
+    r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+        w.Write([]byte("Request allowed"))
+    })
+    
+    fmt.Println("Server starting on :3000")
+    http.ListenAndServe(":3000", r)
+}
+```
+
+---
+
+#### Question 3: Implement request timeout handling
+
+**Problem:**
+Create middleware that enforces request timeouts.
+
+**Solution:**
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "net/http"
+    "time"
+    
+    "github.com/go-chi/chi/v5"
+    "github.com/go-chi/chi/v5/middleware"
+)
+
+// Timeout middleware
+func TimeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            ctx, cancel := context.WithTimeout(r.Context(), timeout)
+            defer cancel()
+            
+            // Create channel to signal completion
+            done := make(chan struct{})
+            
+            go func() {
+                next.ServeHTTP(w, r.WithContext(ctx))
+                close(done)
+            }()
+            
+            select {
+            case <-done:
+                // Request completed
+                return
+            case <-ctx.Done():
+                // Timeout occurred
+                w.WriteHeader(http.StatusRequestTimeout)
+                w.Write([]byte("Request timeout"))
+            }
+        })
+    }
+}
+
+// Handler that respects context
+func slowHandler(w http.ResponseWriter, r *http.Request) {
+    // Simulate slow operation
+    for i := 0; i < 10; i++ {
+        select {
+        case <-r.Context().Done():
+            // Context cancelled (timeout)
+            return
+        default:
+            time.Sleep(500 * time.Millisecond)
+            fmt.Printf("Processing... %d/10\n", i+1)
+        }
+    }
+    
+    w.Write([]byte("Completed successfully"))
+}
+
+func fastHandler(w http.ResponseWriter, r *http.Request) {
+    time.Sleep(500 * time.Millisecond)
+    w.Write([]byte("Fast response"))
+}
+
+func main() {
+    r := chi.NewRouter()
+    r.Use(middleware.Logger)
+    
+    // 2 second timeout
+    r.Use(TimeoutMiddleware(2 * time.Second))
+    
+    r.Get("/slow", slowHandler)  // Will timeout
+    r.Get("/fast", fastHandler)  // Will complete
+    
+    fmt.Println("Server starting on :3000")
+    http.ListenAndServe(":3000", r)
+}
+```
+
+---
+
+#### Question 4: Implement pagination
+
+**Problem:**
+Add pagination support to a list endpoint.
+
+**Solution:**
+```go
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "net/http"
+    "strconv"
+    
+    "github.com/go-chi/chi/v5"
+)
+
+type PaginatedResponse struct {
+    Success    bool        `json:"success"`
+    Data       interface{} `json:"data"`
+    Pagination Pagination  `json:"pagination"`
+}
+
+type Pagination struct {
+    Page       int `json:"page"`
+    PerPage    int `json:"per_page"`
+    Total      int `json:"total"`
+    TotalPages int `json:"total_pages"`
+}
+
+type Item struct {
+    ID   int    `json:"id"`
+    Name string `json:"name"`
+}
+
+// Generate sample data
+func generateItems(count int) []Item {
+    items := make([]Item, count)
+    for i := 0; i < count; i++ {
+        items[i] = Item{
+            ID:   i + 1,
+            Name: fmt.Sprintf("Item %d", i+1),
+        }
+    }
+    return items
+}
+
+func paginate(items []Item, page, perPage int) ([]Item, Pagination) {
+    total := len(items)
+    totalPages := (total + perPage - 1) / perPage
+    
+    // Calculate slice indices
+    start := (page - 1) * perPage
+    end := start + perPage
+    
+    if start > total {
+        start = total
+    }
+    if end > total {
+        end = total
+    }
+    
+    return items[start:end], Pagination{
+        Page:       page,
+        PerPage:    perPage,
+        Total:      total,
+        TotalPages: totalPages,
+    }
+}
+
+func listItemsHandler(w http.ResponseWriter, r *http.Request) {
+    // Parse query parameters
+    pageStr := r.URL.Query().Get("page")
+    perPageStr := r.URL.Query().Get("per_page")
+    
+    page, _ := strconv.Atoi(pageStr)
+    perPage, _ := strconv.Atoi(perPageStr)
+    
+    // Defaults
+    if page < 1 {
+        page = 1
+    }
+    if perPage < 1 || perPage > 100 {
+        perPage = 10
+    }
+    
+    // Get data
+    allItems := generateItems(100)
+    items, pagination := paginate(allItems, page, perPage)
+    
+    // Response
+    response := PaginatedResponse{
+        Success:    true,
+        Data:       items,
+        Pagination: pagination,
+    }
+    
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(response)
+}
+
+func main() {
+    r := chi.NewRouter()
+    r.Get("/items", listItemsHandler)
+    
+    fmt.Println("Server starting on :3000")
+    fmt.Println("Try: http://localhost:3000/items?page=1&per_page=10")
+    http.ListenAndServe(":3000", r)
+}
+```
+
+**Testing:**
+```bash
+curl "http://localhost:3000/items?page=1&per_page=10"
+curl "http://localhost:3000/items?page=2&per_page=20"
+```
+
+---
+
+#### Question 5: Implement API versioning
+
+**Problem:**
+Implement multiple API versions in the same application.
+
+**Solution:**
+```go
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "net/http"
+    
+    "github.com/go-chi/chi/v5"
+    "github.com/go-chi/chi/v5/middleware"
+)
+
+// V1 models
+type UserV1 struct {
+    ID   int    `json:"id"`
+    Name string `json:"name"`
+}
+
+// V2 models (added email)
+type UserV2 struct {
+    ID        int    `json:"id"`
+    FirstName string `json:"first_name"`
+    LastName  string `json:"last_name"`
+    Email     string `json:"email"`
+}
+
+// V1 Handlers
+func getUserV1(w http.ResponseWriter, r *http.Request) {
+    user := UserV1{
+        ID:   1,
+        Name: "John Doe",
+    }
+    
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(user)
+}
+
+// V2 Handlers
+func getUserV2(w http.ResponseWriter, r *http.Request) {
+    user := UserV2{
+        ID:        1,
+        FirstName: "John",
+        LastName:  "Doe",
+        Email:     "john@example.com",
+    }
+    
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(user)
+}
+
+// Version middleware
+func VersionMiddleware(version string) func(http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            w.Header().Set("API-Version", version)
+            next.ServeHTTP(w, r)
+        })
+    }
+}
+
+func main() {
+    r := chi.NewRouter()
+    r.Use(middleware.Logger)
+    
+    // API V1
+    r.Route("/api/v1", func(r chi.Router) {
+        r.Use(VersionMiddleware("1.0"))
+        r.Get("/user", getUserV1)
+        r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+            w.Write([]byte("API V1"))
+        })
+    })
+    
+    // API V2
+    r.Route("/api/v2", func(r chi.Router) {
+        r.Use(VersionMiddleware("2.0"))
+        r.Get("/user", getUserV2)
+        r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+            w.Write([]byte("API V2"))
+        })
+    })
+    
+    // Default (latest)
+    r.Route("/api", func(r chi.Router) {
+        r.Get("/user", getUserV2) // Point to latest
+    })
+    
+    fmt.Println("Server starting on :3000")
+    fmt.Println("V1: http://localhost:3000/api/v1/user")
+    fmt.Println("V2: http://localhost:3000/api/v2/user")
+    http.ListenAndServe(":3000", r)
+}
+```
+
+---
+
+### Best Practices Questions
+
+#### Question 6: How would you structure a production Chi application?
+
+**Answer:**
+
+**Recommended Structure:**
+
+```
+myapp/
+├── cmd/
+│   └── api/
+│       └── main.go              # Entry point
+├── internal/
+│   ├── config/
+│   │   └── config.go            # Configuration
+│   ├── handlers/
+│   │   ├── user_handler.go      # User endpoints
+│   │   └── product_handler.go   # Product endpoints
+│   ├── middleware/
+│   │   ├── auth.go              # Auth middleware
+│   │   ├── logger.go            # Custom logger
+│   │   └── cors.go              # CORS middleware
+│   ├── models/
+│   │   ├── user.go              # User model
+│   │   └── product.go           # Product model
+│   ├── repository/
+│   │   ├── user_repo.go         # User DB operations
+│   │   └── product_repo.go      # Product DB operations
+│   ├── service/
+│   │   ├── user_service.go      # User business logic
+│   │   └── product_service.go   # Product business logic
+│   └── router/
+│       └── router.go            # Route definitions
+├── migrations/
+│   └── 001_create_users.sql
+├── .env
+├── go.mod
+└── README.md
+```
+
+**Key Principles:**
+
+1. **Separation of Concerns:**
+   - Handlers: HTTP logic
+   - Services: Business logic
+   - Repositories: Data access
+
+2. **Dependency Injection:**
+```go
+type UserHandler struct {
+    service *UserService
+}
+
+func NewUserHandler(service *UserService) *UserHandler {
+    return &UserHandler{service: service}
+}
+```
+
+3. **Configuration Management:**
+```go
+type Config struct {
+    Port       string
+    DBHost     string
+    JWTSecret  string
+}
+
+func Load() *Config {
+    return &Config{
+        Port:      getEnv("PORT", "3000"),
+        DBHost:    getEnv("DB_HOST", "localhost"),
+        JWTSecret: getEnv("JWT_SECRET", ""),
+    }
+}
+```
+
+4. **Error Handling:**
+- Centralized error types
+- Consistent error responses
+- Proper logging
+
+5. **Testing:**
+- Unit tests for services
+- Integration tests for handlers
+- Mocks for dependencies
+
+---
+
+This guide covers the essentials of building REST APIs with Go and Chi framework with comprehensive interview preparation. Practice these patterns and explore the Chi documentation for more advanced features!
