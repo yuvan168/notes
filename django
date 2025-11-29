@@ -1,0 +1,2016 @@
+# Django Complete Guide & Interview Q&A
+
+## Table of Contents
+1. [Django Fundamentals](#django-fundamentals)
+2. [Project Structure](#project-structure)
+3. [Models](#models)
+4. [Views](#views)
+5. [URLs & Routing](#urls--routing)
+6. [Templates](#templates)
+7. [Forms](#forms)
+8. [Authentication & Authorization](#authentication--authorization)
+9. [Database & ORM](#database--orm)
+10. [Middleware](#middleware)
+11. [Class-Based Views](#class-based-views)
+12. [REST API with Django REST Framework](#rest-api-with-django-rest-framework)
+13. [Testing](#testing)
+14. [Deployment](#deployment)
+15. [Interview Questions & Answers](#interview-questions--answers)
+
+---
+
+## Django Fundamentals
+
+### What is Django?
+Django is a high-level Python web framework that follows the MTV (Model-Template-View) architecture. It provides built-in features for:
+- Database ORM
+- Admin interface
+- User authentication
+- Form handling
+- Template rendering
+
+### Installation
+```bash
+pip install django
+django-admin startproject projectname
+python manage.py startapp appname
+```
+
+### Key Components
+- **Models**: Database layer (ORM)
+- **Views**: Business logic layer
+- **Templates**: Presentation layer
+- **URLs**: Routing layer
+- **Admin**: Built-in administration interface
+
+---
+
+## Project Structure
+
+```
+myproject/
+├── myproject/              # Project settings folder
+│   ├── __init__.py
+│   ├── settings.py         # Project configuration
+│   ├── urls.py             # Project-level URL routing
+│   ├── asgi.py             # ASGI config for async
+│   └── wsgi.py             # WSGI config for servers
+├── myapp/                  # Django app folder
+│   ├── migrations/         # Database migration files
+│   ├── __init__.py
+│   ├── admin.py            # Admin interface config
+│   ├── apps.py             # App configuration
+│   ├── models.py           # Database models
+│   ├── tests.py            # Unit tests
+│   ├── urls.py             # App-level URL routing
+│   ├── views.py            # View functions/classes
+│   └── forms.py            # Form definitions
+├── templates/              # HTML templates
+├── static/                 # Static files (CSS, JS, images)
+├── manage.py               # Command-line utility
+└── db.sqlite3              # Database file (development)
+```
+
+---
+
+## Models
+
+### Model Basics
+Models represent database tables and are defined as Python classes.
+
+```python
+from django.db import models
+from django.contrib.auth.models import User
+
+class Product(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.TextField()
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    stock = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name_plural = 'Products'
+    
+    def __str__(self):
+        return self.name
+```
+
+### Field Types
+| Field Type | Purpose |
+|-----------|---------|
+| CharField | Short text strings |
+| TextField | Long text |
+| IntegerField | Integer numbers |
+| FloatField | Decimal numbers |
+| DecimalField | Precise decimals (financial) |
+| DateField | Date only |
+| DateTimeField | Date and time |
+| BooleanField | True/False |
+| EmailField | Email validation |
+| URLField | URL validation |
+| FileField | File uploads |
+| ImageField | Image uploads |
+| JSONField | JSON data |
+
+### Relationships
+
+#### One-to-Many (ForeignKey)
+```python
+class Category(models.Model):
+    name = models.CharField(max_length=100)
+
+class Product(models.Model):
+    category = models.ForeignKey(Category, on_delete=models.CASCADE)
+    # on_delete options: CASCADE, PROTECT, SET_NULL, SET_DEFAULT, DO_NOTHING
+```
+
+#### Many-to-Many
+```python
+class Author(models.Model):
+    name = models.CharField(max_length=100)
+
+class Book(models.Model):
+    authors = models.ManyToManyField(Author)
+    title = models.CharField(max_length=200)
+```
+
+#### One-to-One
+```python
+class UserProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    bio = models.TextField()
+```
+
+### Model Methods & Queries
+
+```python
+class Product(models.Model):
+    name = models.CharField(max_length=100)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    
+    def get_discount_price(self):
+        return self.price * 0.9
+    
+    def __str__(self):
+        return self.name
+
+# Queries
+Product.objects.all()                          # Get all
+Product.objects.filter(price__gt=100)         # Greater than
+Product.objects.filter(name__icontains='phone') # Case-insensitive search
+Product.objects.filter(price__range=[100, 500]) # Range
+Product.objects.exclude(price__lt=50)         # Exclude
+Product.objects.get(id=1)                     # Single object
+Product.objects.first()                       # First object
+Product.objects.count()                       # Count
+Product.objects.values('name', 'price')       # Specific fields
+Product.objects.order_by('-price')            # Ordering
+Product.objects.distinct()                    # Remove duplicates
+```
+
+### QuerySet Methods
+```python
+# Aggregation
+from django.db.models import Sum, Avg, Count, Max, Min
+Product.objects.aggregate(total_price=Sum('price'))
+Product.objects.values('category').annotate(count=Count('id'))
+
+# Update
+Product.objects.filter(price__lt=50).update(is_active=False)
+
+# Delete
+Product.objects.filter(is_active=False).delete()
+
+# Bulk operations
+Product.objects.bulk_create([Product(...), Product(...)])
+```
+
+---
+
+## Views
+
+### Function-Based Views (FBV)
+
+```python
+from django.shortcuts import render, redirect
+from django.http import HttpResponse, JsonResponse
+from django.views.decorators.http import require_http_methods
+from .models import Product
+from .forms import ProductForm
+
+def product_list(request):
+    products = Product.objects.all()
+    return render(request, 'products/list.html', {'products': products})
+
+def product_detail(request, pk):
+    product = Product.objects.get(pk=pk)
+    return render(request, 'products/detail.html', {'product': product})
+
+def product_create(request):
+    if request.method == 'POST':
+        form = ProductForm(request.POST)
+        if form.is_valid():
+            form.save()
+            return redirect('product_list')
+    else:
+        form = ProductForm()
+    return render(request, 'products/form.html', {'form': form})
+
+@require_http_methods(["GET", "POST"])
+def product_api(request):
+    if request.method == 'GET':
+        products = Product.objects.all().values()
+        return JsonResponse(list(products), safe=False)
+    elif request.method == 'POST':
+        # Handle POST
+        pass
+```
+
+### View Decorators
+
+```python
+from django.contrib.auth.decorators import login_required, permission_required
+from django.views.decorators.http import require_http_methods, require_safe
+from django.views.decorators.cache import cache_page
+
+@login_required
+def protected_view(request):
+    return render(request, 'protected.html')
+
+@permission_required('app.can_edit_product')
+def edit_product(request, pk):
+    # Only users with 'can_edit_product' permission
+    pass
+
+@cache_page(60 * 5)  # Cache for 5 minutes
+def cached_view(request):
+    # Expensive operation
+    pass
+
+@require_safe  # Only GET, HEAD, OPTIONS
+def read_only_view(request):
+    pass
+```
+
+---
+
+## URLs & Routing
+
+### URL Configuration
+
+```python
+# myproject/urls.py
+from django.contrib import admin
+from django.urls import path, include
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('products/', include('products.urls')),
+    path('api/', include('api.urls')),
+]
+
+# products/urls.py
+from django.urls import path
+from . import views
+
+app_name = 'products'
+
+urlpatterns = [
+    path('', views.product_list, name='list'),
+    path('<int:pk>/', views.product_detail, name='detail'),
+    path('create/', views.product_create, name='create'),
+    path('<int:pk>/edit/', views.product_edit, name='edit'),
+    path('<int:pk>/delete/', views.product_delete, name='delete'),
+]
+```
+
+### URL Parameters
+
+```python
+# Positional parameters
+path('posts/<int:pk>/', views.post_detail)      # /posts/5/
+path('users/<str:username>/', views.user_profile) # /users/john/
+
+# Named parameters
+path('articles/<int:year>/<int:month>/<slug:slug>/', views.article_detail)
+
+# Using re_path (regex)
+from django.urls import re_path
+re_path(r'^articles/(?P<year>[0-9]{4})/$', views.year_archive)
+```
+
+---
+
+## Templates
+
+### Template Basics
+
+```html
+<!-- products/list.html -->
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Products{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Products</h1>
+    
+    {% if products %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Price</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for product in products %}
+                <tr>
+                    <td>{{ product.name }}</td>
+                    <td>${{ product.price }}</td>
+                    <td>
+                        <a href="{% url 'products:detail' product.id %}">View</a>
+                        <a href="{% url 'products:edit' product.id %}">Edit</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No products available.</p>
+    {% endif %}
+</div>
+{% endblock %}
+```
+
+### Template Tags & Filters
+
+```django
+<!-- Variables -->
+{{ variable }}
+{{ object.attribute }}
+{{ list|length }}
+
+<!-- Conditionals -->
+{% if condition %}
+    <p>True</p>
+{% elif other_condition %}
+    <p>Other</p>
+{% else %}
+    <p>False</p>
+{% endif %}
+
+<!-- Loops -->
+{% for item in items %}
+    <p>{{ item }}</p>
+    {% if forloop.first %}
+        <p>First item</p>
+    {% endif %}
+    {% if forloop.last %}
+        <p>Last item</p>
+    {% endif %}
+{% empty %}
+    <p>No items</p>
+{% endfor %}
+
+<!-- Filters -->
+{{ text|upper }}              <!-- Uppercase -->
+{{ text|lower }}              <!-- Lowercase -->
+{{ text|truncatewords:10 }}   <!-- Truncate -->
+{{ price|floatformat:2 }}     <!-- Format decimal -->
+{{ date|date:"Y-m-d" }}       <!-- Format date -->
+{{ list|join:", " }}          <!-- Join -->
+{{ value|default:"N/A" }}     <!-- Default value -->
+
+<!-- URL reversal -->
+{% url 'app:view_name' arg1 arg2 %}
+
+<!-- CSRF token -->
+{% csrf_token %}
+
+<!-- Static files -->
+{% static 'css/style.css' %}
+```
+
+### Template Inheritance
+
+```html
+<!-- base.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{% block title %}My Site{% endblock %}</title>
+</head>
+<body>
+    <header>
+        <nav>{% include 'navbar.html' %}</nav>
+    </header>
+    
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    
+    <footer>
+        {% include 'footer.html' %}
+    </footer>
+</body>
+</html>
+
+<!-- products/list.html -->
+{% extends 'base.html' %}
+
+{% block title %}Products - {{ block.super }}{% endblock %}
+
+{% block content %}
+    <!-- Product list content -->
+{% endblock %}
+```
+
+---
+
+## Forms
+
+### Form Definition
+
+```python
+from django import forms
+from .models import Product
+
+class ProductForm(forms.ModelForm):
+    class Meta:
+        model = Product
+        fields = ['name', 'description', 'price', 'stock']
+    
+    def clean_price(self):
+        price = self.cleaned_data.get('price')
+        if price and price < 0:
+            raise forms.ValidationError("Price cannot be negative")
+        return price
+
+class SearchForm(forms.Form):
+    query = forms.CharField(max_length=100, required=False)
+    min_price = forms.DecimalField(required=False)
+    max_price = forms.DecimalField(required=False)
+```
+
+### Form Rendering
+
+```html
+<!-- Template -->
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Submit</button>
+</form>
+
+<!-- Render individually -->
+<form method="post">
+    {% csrf_token %}
+    {% for field in form %}
+        <div class="form-group">
+            {{ field.label_tag }}
+            {{ field }}
+            {% if field.errors %}
+                <div class="errors">
+                    {{ field.errors }}
+                </div>
+            {% endif %}
+        </div>
+    {% endfor %}
+    <button type="submit">Submit</button>
+</form>
+```
+
+### Form Processing
+
+```python
+def product_create(request):
+    if request.method == 'POST':
+        form = ProductForm(request.POST, request.FILES)
+        if form.is_valid():
+            product = form.save()
+            return redirect('products:detail', pk=product.id)
+    else:
+        form = ProductForm()
+    
+    return render(request, 'products/form.html', {'form': form})
+```
+
+---
+
+## Authentication & Authorization
+
+### User Authentication
+
+```python
+from django.contrib.auth.models import User
+from django.contrib.auth import authenticate, login, logout
+
+def register(request):
+    if request.method == 'POST':
+        username = request.POST['username']
+        password = request.POST['password']
+        email = request.POST['email']
+        
+        user = User.objects.create_user(
+            username=username,
+            password=password,
+            email=email
+        )
+        return redirect('login')
+    
+    return render(request, 'auth/register.html')
+
+def user_login(request):
+    if request.method == 'POST':
+        username = request.POST['username']
+        password = request.POST['password']
+        
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            return redirect('dashboard')
+        else:
+            error = "Invalid credentials"
+    
+    return render(request, 'auth/login.html')
+
+def user_logout(request):
+    logout(request)
+    return redirect('login')
+```
+
+### Permissions
+
+```python
+from django.contrib.auth.decorators import permission_required
+from django.contrib.auth.models import Permission
+from django.contrib.contenttypes.models import ContentType
+
+# Check permission in view
+@permission_required('app.can_delete_product')
+def delete_product(request, pk):
+    product = Product.objects.get(pk=pk)
+    product.delete()
+    return redirect('products:list')
+
+# Check in template
+{% if perms.app.can_edit_product %}
+    <a href="{% url 'products:edit' product.id %}">Edit</a>
+{% endif %}
+
+# Programmatically
+if request.user.has_perm('app.can_edit_product'):
+    # Allow edit
+    pass
+```
+
+### Groups
+
+```python
+from django.contrib.auth.models import Group, Permission
+
+# Create group
+editors = Group.objects.create(name='Editors')
+
+# Add permission to group
+edit_perm = Permission.objects.get(codename='can_edit_product')
+editors.permissions.add(edit_perm)
+
+# Add user to group
+request.user.groups.add(editors)
+
+# Check group
+if request.user.groups.filter(name='Editors').exists():
+    # User is in Editors group
+    pass
+```
+
+---
+
+## Database & ORM
+
+### Migrations
+
+```bash
+# Create migrations
+python manage.py makemigrations
+
+# Apply migrations
+python manage.py migrate
+
+# Show migration status
+python manage.py showmigrations
+
+# Create empty migration
+python manage.py makemigrations --empty app_name --name migration_name
+
+# Revert migrations
+python manage.py migrate app_name 0001
+```
+
+### Advanced Queries
+
+```python
+# Q objects for complex queries
+from django.db.models import Q
+
+Product.objects.filter(Q(price__gt=100) | Q(name__icontains='premium'))
+Product.objects.filter(Q(price__gt=100) & Q(is_active=True))
+Product.objects.exclude(Q(stock=0) | Q(is_active=False))
+
+# F expressions for field comparisons
+from django.db.models import F
+
+Product.objects.filter(stock__lt=F('reorder_level'))
+
+# Prefetch related (optimize queries)
+products = Product.objects.select_related('category').all()
+orders = Order.objects.prefetch_related('products').all()
+
+# Raw SQL
+Product.objects.raw('SELECT * FROM app_product WHERE price > %s', [100])
+```
+
+### Database Transactions
+
+```python
+from django.db import transaction
+
+@transaction.atomic
+def process_order(order_id):
+    order = Order.objects.get(id=order_id)
+    for item in order.items.all():
+        product = item.product
+        product.stock -= item.quantity
+        product.save()
+    order.status = 'completed'
+    order.save()
+
+# Manual transaction
+with transaction.atomic():
+    # Multiple operations
+    pass
+```
+
+---
+
+## Middleware
+
+### Custom Middleware
+
+```python
+# myapp/middleware.py
+class CustomMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+    
+    def __call__(self, request):
+        # Code before view execution
+        print(f"Processing request: {request.path}")
+        
+        response = self.get_response(request)
+        
+        # Code after view execution
+        print(f"Response status: {response.status_code}")
+        
+        return response
+
+# settings.py
+MIDDLEWARE = [
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'myapp.middleware.CustomMiddleware',
+]
+```
+
+### Built-in Middleware
+- **SecurityMiddleware**: HTTPS security headers
+- **SessionMiddleware**: Session management
+- **CommonMiddleware**: Common utilities
+- **CsrfViewMiddleware**: CSRF protection
+- **AuthenticationMiddleware**: User authentication
+- **MessageMiddleware**: Messages framework
+
+---
+
+## Class-Based Views
+
+### Generic Views
+
+```python
+from django.views.generic import (
+    ListView, DetailView, CreateView, UpdateView, DeleteView
+)
+from django.urls import reverse_lazy
+from .models import Product
+from .forms import ProductForm
+
+class ProductListView(ListView):
+    model = Product
+    template_name = 'products/list.html'
+    context_object_name = 'products'
+    paginate_by = 10
+
+class ProductDetailView(DetailView):
+    model = Product
+    template_name = 'products/detail.html'
+    context_object_name = 'product'
+
+class ProductCreateView(CreateView):
+    model = Product
+    form_class = ProductForm
+    template_name = 'products/form.html'
+    success_url = reverse_lazy('products:list')
+
+class ProductUpdateView(UpdateView):
+    model = Product
+    form_class = ProductForm
+    template_name = 'products/form.html'
+    success_url = reverse_lazy('products:list')
+
+class ProductDeleteView(DeleteView):
+    model = Product
+    template_name = 'products/confirm_delete.html'
+    success_url = reverse_lazy('products:list')
+```
+
+### Custom Class-Based Views
+
+```python
+from django.views import View
+from django.http import JsonResponse
+from django.utils.decorators import method_decorator
+from django.contrib.auth.decorators import login_required
+
+class ProductAPIView(View):
+    @method_decorator(login_required)
+    def get(self, request):
+        products = Product.objects.all().values()
+        return JsonResponse(list(products), safe=False)
+    
+    def post(self, request):
+        data = json.loads(request.body)
+        product = Product.objects.create(**data)
+        return JsonResponse({'id': product.id})
+```
+
+### Mixins
+
+```python
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+
+class ProductCreateView(LoginRequiredMixin, CreateView):
+    model = Product
+    form_class = ProductForm
+    success_url = reverse_lazy('products:list')
+
+class OwnerOnlyMixin(UserPassesTestMixin):
+    def test_func(self):
+        obj = self.get_object()
+        return obj.owner == self.request.user
+
+class ProductUpdateView(OwnerOnlyMixin, UpdateView):
+    model = Product
+    form_class = ProductForm
+    success_url = reverse_lazy('products:list')
+```
+
+---
+
+## REST API with Django REST Framework
+
+### Installation & Setup
+
+```bash
+pip install djangorestframework
+```
+
+### Serializers
+
+```python
+from rest_framework import serializers
+from .models import Product
+
+class ProductSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    
+    class Meta:
+        model = Product
+        fields = ['id', 'name', 'description', 'price', 'stock', 'category_name']
+    
+    def validate_price(self, value):
+        if value < 0:
+            raise serializers.ValidationError("Price cannot be negative")
+        return value
+
+# Custom serializer
+class CustomProductSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField(max_length=100)
+    price = serializers.DecimalField(max_digits=10, decimal_places=2)
+```
+
+### ViewSets & Routers
+
+```python
+from rest_framework.viewsets import ModelViewSet
+from rest_framework.routers import DefaultRouter
+from .serializers import ProductSerializer
+
+class ProductViewSet(ModelViewSet):
+    queryset = Product.objects.all()
+    serializer_class = ProductSerializer
+    filterset_fields = ['category', 'price']
+    search_fields = ['name', 'description']
+    ordering_fields = ['price', 'created_at']
+
+# urls.py
+router = DefaultRouter()
+router.register(r'products', ProductViewSet)
+
+urlpatterns = [
+    path('api/', include(router.urls)),
+]
+```
+
+### APIView
+
+```python
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+
+class ProductListAPIView(APIView):
+    def get(self, request):
+        products = Product.objects.all()
+        serializer = ProductSerializer(products, many=True)
+        return Response(serializer.data)
+    
+    def post(self, request):
+        serializer = ProductSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+```
+
+### Permissions & Authentication
+
+```python
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.authentication import TokenAuthentication
+
+class ProductViewSet(ModelViewSet):
+    queryset = Product.objects.all()
+    serializer_class = ProductSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+# Custom permission
+from rest_framework import permissions
+
+class IsOwnerOrReadOnly(permissions.BasePermission):
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return obj.owner == request.user
+```
+
+---
+
+## Testing
+
+### Unit Tests
+
+```python
+from django.test import TestCase
+from .models import Product
+
+class ProductModelTest(TestCase):
+    def setUp(self):
+        self.product = Product.objects.create(
+            name='Test Product',
+            price=100.00,
+            stock=10
+        )
+    
+    def test_product_name(self):
+        self.assertEqual(self.product.name, 'Test Product')
+    
+    def test_product_str(self):
+        self.assertEqual(str(self.product), 'Test Product')
+```
+
+### View Tests
+
+```python
+from django.test import TestCase, Client
+from django.urls import reverse
+
+class ProductViewTest(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.product = Product.objects.create(
+            name='Test Product',
+            price=100.00
+        )
+    
+    def test_product_list_view(self):
+        response = self.client.get(reverse('products:list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Test Product')
+    
+    def test_product_detail_view(self):
+        response = self.client.get(
+            reverse('products:detail', args=[self.product.id])
+        )
+        self.assertEqual(response.status_code, 200)
+```
+
+### API Tests
+
+```python
+from rest_framework.test import APITestCase
+from rest_framework import status
+
+class ProductAPITest(APITestCase):
+    def setUp(self):
+        self.product = Product.objects.create(
+            name='Test Product',
+            price=100.00
+        )
+    
+    def test_product_list_api(self):
+        response = self.client.get('/api/products/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+    
+    def test_product_create_api(self):
+        data = {
+            'name': 'New Product',
+            'price': 150.00
+        }
+        response = self.client.post('/api/products/', data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+python manage.py test
+
+# Run specific app tests
+python manage.py test myapp
+
+# Run specific test class
+python manage.py test myapp.tests.ProductModelTest
+
+# Run with verbosity
+python manage.py test -v 2
+
+# Run with coverage
+coverage run --source='.' manage.py test
+coverage report
+```
+
+---
+
+## Deployment
+
+### Settings for Production
+
+```python
+# settings.py
+DEBUG = False
+ALLOWED_HOSTS = ['yourdomain.com', 'www.yourdomain.com']
+
+SECURE_SSL_REDIRECT = True
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_SECURITY_POLICY = {
+    'default-src': ("'self'",),
+}
+
+# Database
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv('DB_NAME'),
+        'USER': os.getenv('DB_USER'),
+        'PASSWORD': os.getenv('DB_PASSWORD'),
+        'HOST': os.getenv('DB_HOST'),
+        'PORT': '5432',
+    }
+}
+
+# Static files
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATIC_URL = '/static/'
+
+# Media files
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_URL = '/media/'
+```
+
+### Using Environment Variables
+
+```python
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+SECRET_KEY = os.getenv('SECRET_KEY')
+DEBUG = os.getenv('DEBUG', False) == 'True'
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
+```
+
+### Gunicorn Deployment
+
+```bash
+# Install gunicorn
+pip install gunicorn
+
+# Run gunicorn
+gunicorn myproject.wsgi:application --bind 0.0.0.0:8000 --workers 4
+
+# Systemd service file
+[Unit]
+Description=Django Application
+After=network.target
+
+[Service]
+Type=notify
+ExecStart=/path/to/venv/bin/gunicorn myproject.wsgi --workers 3
+WorkingDirectory=/path/to/project
+User=www-data
+Group=www-data
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Nginx Configuration
+
+```nginx
+server {
+    listen 80;
+    server_name yourdomain.com;
+
+    location /static/ {
+        alias /path/to/project/staticfiles/;
+    }
+
+    location /media/ {
+        alias /path/to/project/media/;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+---
+
+## Interview Questions & Answers
+
+### 1. What is Django and what are its advantages?
+
+**Answer:**
+Django is a high-level Python web framework that follows the MTV (Model-Template-View) architecture. 
+
+**Advantages:**
+- **Batteries included**: Built-in admin panel, authentication, ORM
+- **Rapid development**: Scaffolding and reusable components
+- **Secure**: CSRF protection, SQL injection protection, XSS prevention
+- **Scalable**: Can handle large applications
+- **Well-documented**: Extensive documentation and large community
+- **DRY principle**: Don't Repeat Yourself
+- **ORM**: Database-agnostic queries
+- **Admin interface**: Auto-generated admin panel
+
+---
+
+### 2. What is the MTV architecture in Django?
+
+**Answer:**
+MTV stands for Model-Template-View:
+
+- **Model**: Database layer that defines data structure and relationships
+  - Defined using Python classes
+  - Automatically generates database schema
+  - Provides ORM for database queries
+
+- **Template**: Presentation layer that renders HTML
+  - Uses Django template engine
+  - Supports template inheritance and includes
+  - Can use variables, loops, and conditionals
+
+- **View**: Business logic layer that processes requests
+  - Can be function-based or class-based
+  - Processes data and passes to templates
+  - Handles HTTP requests and responses
+
+---
+
+### 3. Explain the difference between FBV and CBV.
+
+**Answer:**
+
+**Function-Based Views (FBV):**
+```python
+def product_list(request):
+    products = Product.objects.all()
+    return render(request, 'products/list.html', {'products': products})
+```
+- Simple and straightforward
+- Good for small views
+- Easier for beginners
+- Less reusable code
+- Need decorators for additional functionality
+
+**Class-Based Views (CBV):**
+```python
+class ProductListView(ListView):
+    model = Product
+    template_name = 'products/list.html'
+```
+- More powerful and flexible
+- Better code reusability through inheritance
+- Mixins for adding functionality
+- Better for complex views
+- Steeper learning curve
+
+**When to use:**
+- FBV: Simple views, quick prototyping
+- CBV: Complex views, CRUD operations, need reusability
+
+---
+
+### 4. What are Django models and how do they work?
+
+**Answer:**
+Models are Python classes that represent database tables. They define the structure and relationships of your data.
+
+```python
+class Product(models.Model):
+    name = models.CharField(max_length=100)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return self.name
+```
+
+**Key features:**
+- Each class maps to a database table
+- Each attribute maps to a column
+- Django automatically generates SQL
+- Provides ORM for database operations
+- Supports relationships (ForeignKey, ManyToMany, OneToOne)
+- Meta class for model options
+
+---
+
+### 5. What are migrations and why are they important?
+
+**Answer:**
+Migrations are Django's way of managing database schema changes over time.
+
+**Importance:**
+- Track changes to models
+- Version control for database schema
+- Allow team collaboration
+- Reversible changes
+- Reproducible development environments
+
+**Migration workflow:**
+```bash
+1. Make changes to models
+2. python manage.py makemigrations  # Create migration files
+3. python manage.py migrate         # Apply migrations
+4. Repeat as needed
+```
+
+---
+
+### 6. Explain QuerySet filtering in Django.
+
+**Answer:**
+QuerySets are lazy-evaluated database queries. They're evaluated when:
+- Iterated
+- Converted to list
+- Called with `list()`, `get()`, `count()`, etc.
+
+**Common filters:**
+```python
+Product.objects.filter(price__gt=100)        # Greater than
+Product.objects.filter(price__lt=50)         # Less than
+Product.objects.filter(price__range=[50, 100])  # Range
+Product.objects.filter(name__icontains='phone') # Case-insensitive search
+Product.objects.filter(name__startswith='A')    # Starts with
+Product.objects.exclude(stock=0)             # Exclude
+```
+
+**Benefits of lazy evaluation:**
+- More efficient queries
+- Can chain multiple filters
+- Query is only executed when needed
+
+---
+
+### 7. What is the difference between select_related and prefetch_related?
+
+**Answer:**
+Both optimize database queries for relationships, but work differently:
+
+**select_related:**
+- Uses SQL JOIN
+- Works with ForeignKey and OneToOne
+- Single query, returns fewer rows
+- Good for one-to-one relationships
+
+```python
+orders = Order.objects.select_related('customer').all()
+# Single query with JOIN
+```
+
+**prefetch_related:**
+- Separate queries (one per relationship)
+- Works with ForeignKey, OneToOne, ManyToMany, and reverse relations
+- Multiple queries but faster than N+1
+- Good for many-to-many relationships
+
+```python
+products = Product.objects.prefetch_related('categories').all()
+# Multiple queries, more efficient
+```
+
+---
+
+### 8. What is middleware in Django?
+
+**Answer:**
+Middleware is a framework of hooks into Django's request/response processing. Each middleware component is a class that can process requests and responses.
+
+**Request flow:**
+```
+Request → Middleware → View
+Response ← Middleware ← View
+```
+
+**Example middleware:**
+```python
+class CustomMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+    
+    def __call__(self, request):
+        # Process request
+        response = self.get_response(request)
+        # Process response
+        return response
+```
+
+**Common built-in middleware:**
+- SecurityMiddleware
+- CsrfViewMiddleware
+- AuthenticationMiddleware
+- SessionMiddleware
+
+---
+
+### 9. Explain CSRF protection in Django.
+
+**Answer:**
+CSRF (Cross-Site Request Forgery) protection prevents unauthorized actions on behalf of users.
+
+**How it works:**
+1. Server generates unique token per session
+2. Token included in every form as hidden field
+3. Token sent with POST/PUT/DELETE requests
+4. Server validates token before processing
+
+**Implementation:**
+```html
+<!-- Template -->
+<form method="post">
+    {% csrf_token %}
+    <input type="text" name="name">
+    <button>Submit</button>
+</form>
+```
+
+```python
+# Views automatically validate CSRF token
+# CsrfViewMiddleware handles validation
+```
+
+---
+
+### 10. What are Django signals?
+
+**Answer:**
+Signals allow decoupled applications to get notified when certain actions occur.
+
+**Common signals:**
+- `pre_save`: Before model instance saved
+- `post_save`: After model instance saved
+- `pre_delete`: Before model instance deleted
+- `post_delete`: After model instance deleted
+
+**Example:**
+```python
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
+@receiver(post_save, sender=Product)
+def create_product_log(sender, instance, created, **kwargs):
+    if created:
+        print(f"New product created: {instance.name}")
+```
+
+---
+
+### 11. How do you handle file uploads in Django?
+
+**Answer:**
+Django provides built-in support for file uploads.
+
+**Model definition:**
+```python
+class Document(models.Model):
+    title = models.CharField(max_length=200)
+    file = models.FileField(upload_to='documents/%Y/%m/%d/')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+```
+
+**Form:**
+```python
+class DocumentForm(forms.ModelForm):
+    class Meta:
+        model = Document
+        fields = ['title', 'file']
+```
+
+**View:**
+```python
+def upload_document(request):
+    if request.method == 'POST':
+        form = DocumentForm(request.POST, request.FILES)
+        if form.is_valid():
+            form.save()
+            return redirect('documents:list')
+    else:
+        form = DocumentForm()
+    return render(request, 'upload.html', {'form': form})
+```
+
+**Settings:**
+```python
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+```
+
+---
+
+### 12. What is the Django admin interface and how do you customize it?
+
+**Answer:**
+Django provides an auto-generated admin interface for managing models.
+
+**Basic registration:**
+```python
+# admin.py
+from django.contrib import admin
+from .models import Product
+
+admin.site.register(Product)
+```
+
+**Customization:**
+```python
+class ProductAdmin(admin.ModelAdmin):
+    list_display = ['name', 'price', 'stock', 'created_at']
+    list_filter = ['created_at', 'is_active']
+    search_fields = ['name', 'description']
+    ordering = ['-created_at']
+    readonly_fields = ['created_at', 'updated_at']
+    
+    fieldsets = (
+        ('Basic Info', {
+            'fields': ('name', 'description')
+        }),
+        ('Pricing', {
+            'fields': ('price', 'stock')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def save_model(self, request, obj, form, change):
+        obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
+admin.site.register(Product, ProductAdmin)
+```
+
+---
+
+### 13. Explain Django ORM and its advantages.
+
+**Answer:**
+Django ORM (Object-Relational Mapping) allows you to interact with databases using Python objects instead of SQL.
+
+**Advantages:**
+- Database-agnostic: Switch databases without changing code
+- Type-safe: Catches errors at development time
+- Security: Prevents SQL injection
+- Readable: Python code is cleaner than SQL
+- Lazy evaluation: Queries optimized automatically
+
+**Example:**
+```python
+# Without ORM (SQL)
+cursor.execute("SELECT * FROM products WHERE price > 100")
+
+# With ORM (Django)
+Product.objects.filter(price__gt=100)
+```
+
+**Relationships:**
+```python
+# Foreign key
+order.customer.name
+
+# Reverse relation
+customer.order_set.all()
+
+# Many-to-many
+book.authors.all()
+```
+
+---
+
+### 14. What are Django forms and why use them?
+
+**Answer:**
+Forms in Django handle form rendering, validation, and processing.
+
+**Benefits:**
+- Automatic HTML rendering
+- Built-in validation
+- CSRF protection
+- Error handling
+- Works with models (ModelForm)
+
+**Example:**
+```python
+class ProductForm(forms.ModelForm):
+    class Meta:
+        model = Product
+        fields = ['name', 'price']
+    
+    def clean_price(self):
+        price = self.cleaned_data.get('price')
+        if price < 0:
+            raise forms.ValidationError("Invalid price")
+        return price
+```
+
+---
+
+### 15. How do you implement user authentication in Django?
+
+**Answer:**
+Django provides built-in user authentication system.
+
+```python
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.models import User
+
+def login_view(request):
+    if request.method == 'POST':
+        username = request.POST['username']
+        password = request.POST['password']
+        
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            return redirect('dashboard')
+    
+    return render(request, 'login.html')
+
+def logout_view(request):
+    logout(request)
+    return redirect('login')
+
+def register_view(request):
+    if request.method == 'POST':
+        username = request.POST['username']
+        password = request.POST['password']
+        
+        user = User.objects.create_user(username=username, password=password)
+        return redirect('login')
+    
+    return render(request, 'register.html')
+```
+
+---
+
+### 16. What is the difference between request.GET and request.POST?
+
+**Answer:**
+
+| Aspect | GET | POST |
+|--------|-----|------|
+| Purpose | Retrieve data | Submit data |
+| Visibility | URL visible | Hidden in body |
+| Size limit | Limited | Larger |
+| Caching | Cached | Not cached |
+| Bookmarking | Bookmarkable | Not bookmarkable |
+| Security | Less secure | More secure |
+| Use case | Query parameters, search | Forms, sensitive data |
+
+```python
+def search(request):
+    if request.method == 'GET':
+        query = request.GET.get('q', '')  # From URL
+        results = Product.objects.filter(name__icontains=query)
+    
+    return render(request, 'search.html', {'results': results})
+```
+
+---
+
+### 17. Explain Django template inheritance.
+
+**Answer:**
+Template inheritance allows you to build a base "skeleton" template that contains all the common elements and defines **blocks** that child templates can override.
+
+**Base template:**
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{% block title %}Default Title{% endblock %}</title>
+</head>
+<body>
+    <header>
+        <nav>Navigation</nav>
+    </header>
+    
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    
+    <footer>
+        <p>© 2024 My Site</p>
+    </footer>
+</body>
+</html>
+```
+
+**Child template:**
+```html
+{% extends 'base.html' %}
+
+{% block title %}Products{% endblock %}
+
+{% block content %}
+    <h1>Products</h1>
+    <!-- Product list content -->
+{% endblock %}
+```
+
+**Benefits:**
+- DRY principle
+- Consistent layout
+- Easy maintenance
+- Code reusability
+
+---
+
+### 18. What are Django permissions and how do you use them?
+
+**Answer:**
+Permissions control what users can do in the application.
+
+**Using permissions:**
+```python
+from django.contrib.auth.decorators import permission_required
+
+@permission_required('app.can_delete_product')
+def delete_product(request, pk):
+    product = Product.objects.get(pk=pk)
+    product.delete()
+    return redirect('products:list')
+
+# In template
+{% if perms.app.can_edit_product %}
+    <a href="{% url 'products:edit' product.id %}">Edit</a>
+{% endif %}
+
+# In view
+if request.user.has_perm('app.can_edit_product'):
+    # Allow edit
+    pass
+```
+
+**Creating permissions:**
+```python
+class Product(models.Model):
+    name = models.CharField(max_length=100)
+    
+    class Meta:
+        permissions = [
+            ('can_publish', 'Can publish product'),
+            ('can_archive', 'Can archive product'),
+        ]
+```
+
+---
+
+### 19. What is Django REST Framework and why use it?
+
+**Answer:**
+Django REST Framework (DRF) is a powerful toolkit for building REST APIs with Django.
+
+**Why use it:**
+- Serialization: Convert models to JSON
+- Validation: Built-in validation
+- Authentication: Multiple auth methods
+- Permissions: Granular permission control
+- Pagination: Built-in pagination
+- Filtering: Query parameter filtering
+- Throttling: Rate limiting
+- Documentation: Auto-generated API docs
+
+**Example:**
+```python
+from rest_framework import serializers, viewsets
+from .models import Product
+
+class ProductSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Product
+        fields = ['id', 'name', 'price']
+
+class ProductViewSet(viewsets.ModelViewSet):
+    queryset = Product.objects.all()
+    serializer_class = ProductSerializer
+```
+
+---
+
+### 20. How do you optimize Django applications?
+
+**Answer:**
+Common optimization techniques:
+
+**Database optimization:**
+- Use `select_related()` and `prefetch_related()`
+- Index frequently queried fields
+- Use database-level aggregation
+- Avoid N+1 queries
+
+```python
+products = Product.objects.select_related('category').all()
+```
+
+**Query optimization:**
+- Use `only()` and `defer()` to select specific fields
+- Use `values()` for partial data
+- Cache query results
+
+```python
+Product.objects.only('id', 'name')
+Product.objects.defer('description')
+```
+
+**Caching:**
+```python
+from django.views.decorators.cache import cache_page
+
+@cache_page(60 * 5)
+def product_list(request):
+    # 5 minute cache
+    pass
+```
+
+**Other optimizations:**
+- Use CDN for static files
+- Enable gzip compression
+- Use async views for I/O operations
+- Profile code with tools like Django Debug Toolbar
+- Use pagination for large datasets
+- Optimize images
+
+---
+
+### 21. What is the Django template engine and its features?
+
+**Answer:**
+Django's template engine renders HTML using variables, filters, and tags.
+
+**Features:**
+- **Variables**: `{{ variable_name }}`
+- **Filters**: `{{ value|filter }}`
+- **Tags**: `{% tag %}`
+- **Inheritance**: Template reuse
+- **Includes**: Reusable snippets
+- **Comments**: `{# comment #}`
+
+**Example:**
+```django
+{% for product in products %}
+    <h2>{{ product.name }}</h2>
+    <p>${{ product.price|floatformat:2 }}</p>
+    <p>{{ product.description|truncatewords:20 }}</p>
+{% empty %}
+    <p>No products available.</p>
+{% endfor %}
+```
+
+---
+
+### 22. Explain Django context processors.
+
+**Answer:**
+Context processors are functions that receive a request and return a dictionary of context variables available to all templates.
+
+**Example:**
+```python
+# context_processors.py
+def app_info(request):
+    return {
+        'site_name': 'My Store',
+        'current_year': datetime.now().year,
+        'user_email': request.user.email if request.user.is_authenticated else None
+    }
+
+# settings.py
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'OPTIONS': {
+            'context_processors': [
+                'myapp.context_processors.app_info',
+            ],
+        },
+    },
+]
+
+# template.html
+<footer>
+    <p>{{ site_name }} © {{ current_year }}</p>
+</footer>
+```
+
+---
+
+### 23. What is the difference between HttpResponse and render?
+
+**Answer:**
+
+**HttpResponse:**
+- Returns plain content
+- Requires manual HTML construction
+- Less convenient
+
+```python
+def view(request):
+    html = '<h1>Hello</h1>'
+    return HttpResponse(html)
+```
+
+**render:**
+- Loads and renders template
+- Passes context variables
+- More convenient and maintainable
+
+```python
+def view(request):
+    context = {'name': 'John'}
+    return render(request, 'template.html', context)
+```
+
+---
+
+### 24. How do you handle errors and exceptions in Django?
+
+**Answer:**
+Django provides error handling through views and middleware.
+
+**Custom error views:**
+```python
+# urls.py
+handler404 = 'myapp.views.page_not_found'
+handler500 = 'myapp.views.server_error'
+
+# views.py
+def page_not_found(request, exception):
+    return render(request, '404.html', status=404)
+
+def server_error(request):
+    return render(request, '500.html', status=500)
+```
+
+**Try-except:**
+```python
+def get_product(request, pk):
+    try:
+        product = Product.objects.get(pk=pk)
+        return render(request, 'product.html', {'product': product})
+    except Product.DoesNotExist:
+        return render(request, '404.html', status=404)
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        return render(request, '500.html', status=500)
+```
+
+---
+
+### 25. What is Django's URL dispatcher?
+
+**Answer:**
+Django's URL dispatcher maps URLs to views.
+
+**How it works:**
+1. Request comes to web server
+2. Django extracts URL path
+3. Matches against URL patterns in order
+4. Extracts named groups as parameters
+5. Calls corresponding view
+
+```python
+# urls.py
+urlpatterns = [
+    path('products/', views.product_list, name='product_list'),
+    path('products/<int:pk>/', views.product_detail, name='product_detail'),
+    path('products/<str:slug>/edit/', views.edit_product, name='edit_product'),
+]
+
+# Reverse URL
+reverse('product_detail', args=[1])  # /products/1/
+
+# In template
+<a href="{% url 'product_detail' product.id %}">View</a>
+```
+
+**URL patterns:**
+- `path()`: Simple string matching
+- `re_path()`: Regex matching
+- Include for app URLs
+
+```python
+urlpatterns = [
+    path('api/', include('api.urls')),
+    path('admin/', admin.site.urls),
+]
+```
+
+---
+
+## Additional Tips for Interviews
+
+### Common Interview Scenarios:
+
+**1. Scalability Question:**
+"How would you scale a Django application?"
+- Use database replication and sharding
+- Implement caching (Redis, Memcached)
+- Use CDN for static files
+- Deploy multiple app servers
+- Use load balancing (Nginx)
+- Implement async tasks (Celery)
+
+**2. Security Question:**
+"How would you secure a Django application?"
+- Enable HTTPS
+- Use CSRF tokens
+- Validate all inputs
+- Use parameterized queries (ORM)
+- Implement rate limiting
+- Add authentication and authorization
+- Use environment variables for secrets
+- Regular security audits
+
+**3. Performance Question:**
+"How would you improve database performance?"
+- Use indexes
+- Use select_related/prefetch_related
+- Implement query caching
+- Optimize N+1 queries
+- Use database connection pooling
+- Profile queries with Django Debug Toolbar
+
+**4. Architecture Question:**
+"How would you structure a large Django project?"
+- Separate into multiple apps by feature
+- Use blueprint pattern for organization
+- Implement service layer for business logic
+- Use repositories for data access
+- Implement dependency injection
+- Use REST API for frontend communication
+
+---
+
+## Real-World Example: E-Commerce Application
+
+```python
+# models.py
+class Category(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.TextField()
+
+class Product(models.Model):
+    name = models.CharField(max_length=200)
+    category = models.ForeignKey(Category, on_delete=models.CASCADE)
+    description = models.TextField()
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    stock = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+class Order(models.Model):
+    customer = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    total_price = models.DecimalField(max_digits=10, decimal_places=2)
+    status = models.CharField(max_length=50, choices=[
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled')
+    ])
+
+class OrderItem(models.Model):
+    order = models.ForeignKey(Order, on_delete=models.CASCADE)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    quantity = models.IntegerField()
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+
+# views.py
+from django.shortcuts import render, redirect
+from django.views.generic import ListView, DetailView
+
+class ProductListView(ListView):
+    model = Product
+    template_name = 'products/list.html'
+    context_object_name = 'products'
+    paginate_by = 12
+
+class ProductDetailView(DetailView):
+    model = Product
+    template_name = 'products/detail.html'
+    context_object_name = 'product'
+
+@login_required
+def add_to_cart(request, product_id):
+    product = Product.objects.get(id=product_id)
+    # Add to cart logic
+    return redirect('cart')
+
+# serializers.py (DRF)
+class ProductSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Product
+        fields = ['id', 'name', 'price', 'stock']
+
+class OrderSerializer(serializers.ModelSerializer):
+    items = OrderItemSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = Order
+        fields = ['id', 'customer', 'total_price', 'status', 'created_at', 'items']
+
+# viewsets.py (DRF)
+class ProductViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Product.objects.all()
+    serializer_class = ProductSerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['category']
+    search_fields = ['name', 'description']
+    ordering_fields = ['price', 'created_at']
+```
+
+---
+
+This comprehensive guide covers everything you need to know about Django for interviews and development. Good luck!
