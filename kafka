@@ -1,0 +1,4585 @@
+# Apache Kafka - Complete Guide
+
+## Table of Contents
+1. [Introduction](#introduction)
+2. [Core Concepts](#core-concepts)
+3. [Architecture](#architecture)
+4. [Key Components](#key-components)
+5. [Message Flow](#message-flow)
+6. [Producer API](#producer-api)
+7. [Consumer API](#consumer-api)
+8. [Kafka with Spring Boot](#kafka-with-spring-boot)
+9. [Advanced Topics](#advanced-topics)
+10. [Best Practices](#best-practices)
+
+---
+
+## Introduction
+
+### What is Apache Kafka?
+Apache Kafka is a **distributed streaming platform** and **message broker** designed for:
+- **High throughput**: Handle millions of messages per second
+- **Scalability**: Horizontal scaling across multiple servers
+- **Fault tolerance**: Data replication and persistence
+- **Real-time processing**: Low latency message delivery
+- **Durability**: Messages are persisted to disk
+
+### Use Cases
+- **Event Sourcing**: Capture state changes as events
+- **Log Aggregation**: Collect logs from multiple services
+- **Stream Processing**: Real-time data processing pipelines
+- **Microservices Communication**: Asynchronous messaging between services
+- **Metrics & Monitoring**: Collect and process system metrics
+- **Data Integration**: Connect different data systems
+
+---
+
+## Core Concepts
+
+### 1. **Topic**
+A topic is a **category or feed name** to which messages are published.
+- Topics are **multi-subscriber** (many consumers can read from one topic)
+- Topics are **split into partitions** for parallelism
+- Each message in a partition has a unique **offset**
+
+```
+Topic: "orders"
+├── Partition 0: [msg0, msg1, msg2, ...]
+├── Partition 1: [msg0, msg1, msg2, ...]
+└── Partition 2: [msg0, msg1, msg2, ...]
+```
+
+### 2. **Partition**
+- A topic is divided into **ordered, immutable** sequences of messages
+- Each partition is an **ordered queue**
+- Messages within a partition are **ordered** (guaranteed order)
+- Messages across partitions are **not ordered**
+- Partitions enable **parallelism** and **scalability**
+
+### 3. **Offset**
+- A **unique sequential ID** assigned to each message in a partition
+- Offsets are **immutable** and **monotonically increasing**
+- Consumers track their position using offsets
+- Kafka stores offset metadata in a special topic `__consumer_offsets`
+
+```
+Partition 0: [0] [1] [2] [3] [4] [5] ...
+             ↑   ↑   ↑   ↑   ↑   ↑
+          Offsets (sequential)
+```
+
+### 4. **Producer**
+- **Publishes** messages to topics
+- Can send messages to specific partitions or let Kafka decide
+- Can specify **keys** for message routing
+- Supports **synchronous** and **asynchronous** sends
+- Can batch messages for efficiency
+
+### 5. **Consumer**
+- **Subscribes** to topics and processes messages
+- Part of a **consumer group**
+- Maintains its **offset position**
+- Can read from specific partitions
+- Supports **auto-commit** or **manual commit** of offsets
+
+### 6. **Consumer Group**
+- A group of consumers working together
+- Each partition is consumed by **only one consumer** in the group
+- Enables **parallel processing**
+- Provides **load balancing** and **fault tolerance**
+
+```
+Topic with 4 partitions:
+Consumer Group "order-processors":
+  Consumer 1 → Partition 0, 1
+  Consumer 2 → Partition 2, 3
+```
+
+### 7. **Broker**
+- A Kafka **server** that stores and serves messages
+- Multiple brokers form a **cluster**
+- Each broker can handle thousands of partitions
+- Brokers manage **replication** and **leader election**
+
+### 8. **ZooKeeper (Legacy) / KRaft (New)**
+- **ZooKeeper** (being phased out): Manages cluster metadata
+- **KRaft** (Kafka Raft): New consensus protocol, no ZooKeeper needed
+- Handles **leader election**, **configuration**, and **cluster coordination**
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Kafka Cluster                           │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │  Broker 1   │  │  Broker 2   │  │  Broker 3   │        │
+│  │             │  │             │  │             │        │
+│  │ Topic: orders│  │ Topic: orders│  │ Topic: orders│      │
+│  │ Partition 0 │  │ Partition 1 │  │ Partition 2 │        │
+│  │ (Leader)    │  │ (Leader)    │  │ (Leader)    │        │
+│  └─────────────┘  └─────────────┘  └─────────────┘        │
+└─────────────────────────────────────────────────────────────┘
+         ↑                                      ↓
+    ┌────┴────┐                          ┌─────┴──────┐
+    │Producers│                          │ Consumers  │
+    └─────────┘                          └────────────┘
+```
+
+### Key Architecture Points:
+1. **Distributed**: Data spread across multiple brokers
+2. **Replicated**: Each partition has multiple copies
+3. **Leader-Follower**: One leader handles reads/writes per partition
+4. **Partitioned**: Topics split for parallel processing
+5. **Persistent**: Messages stored on disk
+
+---
+
+## Key Components
+
+### 1. Replication
+- Each partition has **replicas** across brokers
+- **Replication Factor**: Number of copies (e.g., 3)
+- **Leader**: Handles all reads and writes
+- **Followers**: Replicate data from leader
+- **ISR (In-Sync Replicas)**: Followers caught up with leader
+
+```
+Topic: "orders", Partition 0, Replication Factor: 3
+
+Broker 1: [Leader] - Receives all writes
+Broker 2: [Follower - ISR]
+Broker 3: [Follower - ISR]
+```
+
+### 2. Acknowledgments (acks)
+Controls producer write durability:
+
+- **acks=0**: Fire and forget (fastest, least safe)
+- **acks=1**: Leader acknowledgment (balanced)
+- **acks=all**: All ISR acknowledgment (slowest, safest)
+
+### 3. Retention Policy
+- **Time-based**: Keep messages for X days (e.g., 7 days)
+- **Size-based**: Keep up to X bytes per partition
+- **Compaction**: Keep only latest value per key
+
+---
+
+## Message Flow
+
+### Producer to Broker:
+```
+1. Producer creates message
+2. Serializes key and value
+3. Determines partition (via key hash or round-robin)
+4. Sends to leader broker
+5. Leader writes to log
+6. Followers replicate
+7. Acknowledgment sent back
+```
+
+### Broker to Consumer:
+```
+1. Consumer subscribes to topic
+2. Kafka assigns partitions
+3. Consumer fetches from last committed offset
+4. Processes messages
+5. Commits offset (auto or manual)
+6. Repeats from step 3
+```
+
+---
+
+## Producer API
+
+### Basic Java Producer
+
+```java
+import org.apache.kafka.clients.producer.*;
+import org.apache.kafka.common.serialization.StringSerializer;
+import java.util.Properties;
+
+public class SimpleProducer {
+    
+    public static void main(String[] args) {
+        // Configuration
+        Properties props = new Properties();
+        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        
+        // Optional: Performance tuning
+        props.put(ProducerConfig.ACKS_CONFIG, "all");
+        props.put(ProducerConfig.RETRIES_CONFIG, 3);
+        props.put(ProducerConfig.BATCH_SIZE_CONFIG, 16384);
+        props.put(ProducerConfig.LINGER_MS_CONFIG, 10);
+        props.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, "snappy");
+        
+        // Create producer
+        KafkaProducer<String, String> producer = new KafkaProducer<>(props);
+        
+        try {
+            // Send message synchronously
+            ProducerRecord<String, String> record = 
+                new ProducerRecord<>("orders", "order-123", "Order details here");
+            
+            RecordMetadata metadata = producer.send(record).get();
+            System.out.printf("Sent to partition %d, offset %d%n", 
+                metadata.partition(), metadata.offset());
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            producer.close();
+        }
+    }
+}
+```
+
+### Asynchronous Producer with Callback
+
+```java
+public class AsyncProducer {
+    
+    public static void main(String[] args) {
+        Properties props = new Properties();
+        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        
+        KafkaProducer<String, String> producer = new KafkaProducer<>(props);
+        
+        // Send with callback
+        ProducerRecord<String, String> record = 
+            new ProducerRecord<>("orders", "order-456", "Another order");
+        
+        producer.send(record, new Callback() {
+            @Override
+            public void onCompletion(RecordMetadata metadata, Exception exception) {
+                if (exception != null) {
+                    System.err.println("Error sending message: " + exception.getMessage());
+                } else {
+                    System.out.printf("Message sent - Topic: %s, Partition: %d, Offset: %d%n",
+                        metadata.topic(), metadata.partition(), metadata.offset());
+                }
+            }
+        });
+        
+        // Don't forget to close
+        producer.close();
+    }
+}
+```
+
+### Custom Partitioner
+
+```java
+import org.apache.kafka.clients.producer.Partitioner;
+import org.apache.kafka.common.Cluster;
+import java.util.Map;
+
+public class CustomPartitioner implements Partitioner {
+    
+    @Override
+    public int partition(String topic, Object key, byte[] keyBytes, 
+                        Object value, byte[] valueBytes, Cluster cluster) {
+        
+        int numPartitions = cluster.partitionCountForTopic(topic);
+        
+        // Custom logic: VIP orders to partition 0
+        if (key != null && key.toString().startsWith("VIP-")) {
+            return 0;
+        }
+        
+        // Others distributed evenly
+        return Math.abs(key.hashCode()) % numPartitions;
+    }
+    
+    @Override
+    public void close() {}
+    
+    @Override
+    public void configure(Map<String, ?> configs) {}
+}
+```
+
+---
+
+## Consumer API
+
+### Basic Java Consumer
+
+```java
+import org.apache.kafka.clients.consumer.*;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import java.time.Duration;
+import java.util.*;
+
+public class SimpleConsumer {
+    
+    public static void main(String[] args) {
+        // Configuration
+        Properties props = new Properties();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, "order-processing-group");
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "true");
+        props.put(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, "1000");
+        
+        // Create consumer
+        KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props);
+        
+        // Subscribe to topics
+        consumer.subscribe(Arrays.asList("orders"));
+        
+        try {
+            while (true) {
+                // Poll for messages
+                ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
+                
+                for (ConsumerRecord<String, String> record : records) {
+                    System.out.printf("Received - Key: %s, Value: %s, " +
+                                    "Partition: %d, Offset: %d%n",
+                        record.key(), record.value(), 
+                        record.partition(), record.offset());
+                    
+                    // Process the message
+                    processOrder(record.value());
+                }
+            }
+        } finally {
+            consumer.close();
+        }
+    }
+    
+    private static void processOrder(String order) {
+        // Business logic here
+        System.out.println("Processing: " + order);
+    }
+}
+```
+
+### Manual Commit Consumer
+
+```java
+public class ManualCommitConsumer {
+    
+    public static void main(String[] args) {
+        Properties props = new Properties();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, "manual-commit-group");
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false"); // Manual commit
+        
+        KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props);
+        consumer.subscribe(Arrays.asList("orders"));
+        
+        try {
+            while (true) {
+                ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
+                
+                for (ConsumerRecord<String, String> record : records) {
+                    try {
+                        // Process message
+                        processOrder(record.value());
+                        
+                        // Commit offset after successful processing
+                        consumer.commitSync();
+                        System.out.println("Offset committed for: " + record.offset());
+                        
+                    } catch (Exception e) {
+                        System.err.println("Error processing message: " + e.getMessage());
+                        // Don't commit - will reprocess on restart
+                    }
+                }
+            }
+        } finally {
+            consumer.close();
+        }
+    }
+    
+    private static void processOrder(String order) throws Exception {
+        // Business logic that might fail
+        if (order.contains("error")) {
+            throw new Exception("Invalid order");
+        }
+        System.out.println("Processed: " + order);
+    }
+}
+```
+
+### Seeking to Specific Offset
+
+```java
+public class SeekConsumer {
+    
+    public static void main(String[] args) {
+        Properties props = new Properties();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, "seek-group");
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        
+        KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props);
+        
+        String topic = "orders";
+        TopicPartition partition0 = new TopicPartition(topic, 0);
+        
+        // Assign specific partition
+        consumer.assign(Arrays.asList(partition0));
+        
+        // Seek to specific offset
+        consumer.seek(partition0, 100);
+        
+        // Or seek to beginning
+        // consumer.seekToBeginning(Arrays.asList(partition0));
+        
+        // Or seek to end
+        // consumer.seekToEnd(Arrays.asList(partition0));
+        
+        while (true) {
+            ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
+            for (ConsumerRecord<String, String> record : records) {
+                System.out.printf("Offset: %d, Key: %s, Value: %s%n",
+                    record.offset(), record.key(), record.value());
+            }
+        }
+    }
+}
+```
+
+---
+
+## Kafka with Spring Boot
+
+### Maven Dependencies (pom.xml)
+
+```xml
+<dependencies>
+    <!-- Spring Boot Starter for Kafka -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter</artifactId>
+    </dependency>
+    
+    <dependency>
+        <groupId>org.springframework.kafka</groupId>
+        <artifactId>spring-kafka</artifactId>
+    </dependency>
+    
+    <!-- For JSON serialization -->
+    <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+    </dependency>
+</dependencies>
+```
+
+### Application Configuration (application.yml)
+
+```yaml
+spring:
+  kafka:
+    bootstrap-servers: localhost:9092
+    
+    # Producer Configuration
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        linger.ms: 10
+        batch.size: 16384
+    
+    # Consumer Configuration
+    consumer:
+      group-id: order-service-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      properties:
+        spring.json.trusted.packages: "*"
+    
+    # Listener Configuration
+    listener:
+      ack-mode: manual
+```
+
+### Spring Boot Producer
+
+```java
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.SendResult;
+import org.springframework.stereotype.Service;
+import java.util.concurrent.CompletableFuture;
+
+@Service
+public class OrderProducerService {
+    
+    private final KafkaTemplate<String, OrderEvent> kafkaTemplate;
+    private static final String TOPIC = "orders";
+    
+    public OrderProducerService(KafkaTemplate<String, OrderEvent> kafkaTemplate) {
+        this.kafkaTemplate = kafkaTemplate;
+    }
+    
+    // Synchronous send
+    public void sendOrderSync(OrderEvent order) {
+        try {
+            SendResult<String, OrderEvent> result = 
+                kafkaTemplate.send(TOPIC, order.getOrderId(), order).get();
+            
+            System.out.println("Order sent: " + result.getRecordMetadata().offset());
+        } catch (Exception e) {
+            System.err.println("Failed to send order: " + e.getMessage());
+        }
+    }
+    
+    // Asynchronous send with callback
+    public void sendOrderAsync(OrderEvent order) {
+        CompletableFuture<SendResult<String, OrderEvent>> future = 
+            kafkaTemplate.send(TOPIC, order.getOrderId(), order);
+        
+        future.whenComplete((result, ex) -> {
+            if (ex == null) {
+                System.out.printf("Order sent successfully - Partition: %d, Offset: %d%n",
+                    result.getRecordMetadata().partition(),
+                    result.getRecordMetadata().offset());
+            } else {
+                System.err.println("Failed to send order: " + ex.getMessage());
+            }
+        });
+    }
+    
+    // Send to specific partition
+    public void sendToPartition(OrderEvent order, int partition) {
+        kafkaTemplate.send(TOPIC, partition, order.getOrderId(), order);
+    }
+}
+```
+
+### Spring Boot Consumer
+
+```java
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.support.Acknowledgment;
+import org.springframework.kafka.support.KafkaHeaders;
+import org.springframework.messaging.handler.annotation.Header;
+import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.stereotype.Service;
+
+@Service
+public class OrderConsumerService {
+    
+    // Basic listener
+    @KafkaListener(topics = "orders", groupId = "order-processing-group")
+    public void consumeOrder(OrderEvent order) {
+        System.out.println("Received order: " + order.getOrderId());
+        processOrder(order);
+    }
+    
+    // Listener with manual acknowledgment
+    @KafkaListener(topics = "orders", groupId = "manual-ack-group")
+    public void consumeWithManualAck(
+            @Payload OrderEvent order,
+            @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
+            @Header(KafkaHeaders.OFFSET) long offset,
+            Acknowledgment acknowledgment) {
+        
+        try {
+            System.out.printf("Processing order %s from partition %d, offset %d%n",
+                order.getOrderId(), partition, offset);
+            
+            processOrder(order);
+            
+            // Acknowledge after successful processing
+            acknowledgment.acknowledge();
+            System.out.println("Message acknowledged");
+            
+        } catch (Exception e) {
+            System.err.println("Failed to process order: " + e.getMessage());
+            // Don't acknowledge - message will be reprocessed
+        }
+    }
+    
+    // Multiple topics
+    @KafkaListener(topics = {"orders", "payments"}, groupId = "multi-topic-group")
+    public void consumeMultipleTopics(
+            @Payload String message,
+            @Header(KafkaHeaders.RECEIVED_TOPIC) String topic) {
+        
+        System.out.println("Received from topic " + topic + ": " + message);
+    }
+    
+    // Specific partitions
+    @KafkaListener(
+        topicPartitions = @TopicPartition(
+            topic = "orders",
+            partitions = {"0", "1"}
+        ),
+        groupId = "partition-specific-group"
+    )
+    public void consumeFromPartitions(OrderEvent order) {
+        System.out.println("Received from partitions 0 or 1: " + order.getOrderId());
+    }
+    
+    private void processOrder(OrderEvent order) {
+        // Business logic
+        System.out.println("Processing order: " + order);
+    }
+}
+```
+
+### Event Model
+
+```java
+public class OrderEvent {
+    private String orderId;
+    private String customerId;
+    private double amount;
+    private String status;
+    private long timestamp;
+    
+    // Constructors
+    public OrderEvent() {}
+    
+    public OrderEvent(String orderId, String customerId, double amount, String status) {
+        this.orderId = orderId;
+        this.customerId = customerId;
+        this.amount = amount;
+        this.status = status;
+        this.timestamp = System.currentTimeMillis();
+    }
+    
+    // Getters and Setters
+    public String getOrderId() { return orderId; }
+    public void setOrderId(String orderId) { this.orderId = orderId; }
+    
+    public String getCustomerId() { return customerId; }
+    public void setCustomerId(String customerId) { this.customerId = customerId; }
+    
+    public double getAmount() { return amount; }
+    public void setAmount(double amount) { this.amount = amount; }
+    
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    
+    public long getTimestamp() { return timestamp; }
+    public void setTimestamp(long timestamp) { this.timestamp = timestamp; }
+    
+    @Override
+    public String toString() {
+        return String.format("OrderEvent{orderId='%s', customerId='%s', amount=%.2f, status='%s'}",
+            orderId, customerId, amount, status);
+    }
+}
+```
+
+### Kafka Configuration Class
+
+```java
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.common.serialization.StringSerializer;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.core.*;
+import org.springframework.kafka.support.serializer.JsonSerializer;
+import org.springframework.kafka.support.serializer.JsonDeserializer;
+import java.util.HashMap;
+import java.util.Map;
+
+@Configuration
+public class KafkaConfig {
+    
+    private static final String BOOTSTRAP_SERVERS = "localhost:9092";
+    
+    // Producer Configuration
+    @Bean
+    public ProducerFactory<String, OrderEvent> producerFactory() {
+        Map<String, Object> config = new HashMap<>();
+        config.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, BOOTSTRAP_SERVERS);
+        config.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        config.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
+        config.put(ProducerConfig.ACKS_CONFIG, "all");
+        config.put(ProducerConfig.RETRIES_CONFIG, 3);
+        config.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
+        
+        return new DefaultKafkaProducerFactory<>(config);
+    }
+    
+    @Bean
+    public KafkaTemplate<String, OrderEvent> kafkaTemplate() {
+        return new KafkaTemplate<>(producerFactory());
+    }
+    
+    // Consumer Configuration
+    @Bean
+    public ConsumerFactory<String, OrderEvent> consumerFactory() {
+        Map<String, Object> config = new HashMap<>();
+        config.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, BOOTSTRAP_SERVERS);
+        config.put(ConsumerConfig.GROUP_ID_CONFIG, "order-service-group");
+        config.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        config.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
+        config.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        config.put(JsonDeserializer.TRUSTED_PACKAGES, "*");
+        
+        return new DefaultKafkaConsumerFactory<>(
+            config,
+            new StringDeserializer(),
+            new JsonDeserializer<>(OrderEvent.class)
+        );
+    }
+    
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, OrderEvent> kafkaListenerContainerFactory() {
+        ConcurrentKafkaListenerContainerFactory<String, OrderEvent> factory =
+            new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(consumerFactory());
+        factory.setConcurrency(3); // 3 concurrent consumers
+        factory.getContainerProperties().setPollTimeout(3000);
+        
+        return factory;
+    }
+}
+```
+
+### REST Controller Example
+
+```java
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/orders")
+public class OrderController {
+    
+    private final OrderProducerService producerService;
+    
+    public OrderController(OrderProducerService producerService) {
+        this.producerService = producerService;
+    }
+    
+    @PostMapping
+    public ResponseEntity<String> createOrder(@RequestBody OrderEvent order) {
+        try {
+            producerService.sendOrderAsync(order);
+            return ResponseEntity.ok("Order submitted successfully");
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                .body("Failed to submit order: " + e.getMessage());
+        }
+    }
+    
+    @PostMapping("/sync")
+    public ResponseEntity<String> createOrderSync(@RequestBody OrderEvent order) {
+        try {
+            producerService.sendOrderSync(order);
+            return ResponseEntity.ok("Order created successfully");
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                .body("Failed to create order: " + e.getMessage());
+        }
+    }
+}
+```
+
+---
+
+## Advanced Topics
+
+### 1. Idempotent Producer
+
+Prevents duplicate messages even with retries:
+
+```java
+Properties props = new Properties();
+props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
+props.put(ProducerConfig.ACKS_CONFIG, "all");
+props.put(ProducerConfig.RETRIES_CONFIG, Integer.MAX_VALUE);
+props.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, 5);
+```
+
+### 2. Transactions
+
+Atomic writes across multiple partitions:
+
+```java
+Properties props = new Properties();
+props.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, "order-transaction-1");
+props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
+
+KafkaProducer<String, String> producer = new KafkaProducer<>(props);
+
+// Initialize transactions
+producer.initTransactions();
+
+try {
+    // Begin transaction
+    producer.beginTransaction();
+    
+    // Send multiple messages
+    producer.send(new ProducerRecord<>("orders", "key1", "order1"));
+    producer.send(new ProducerRecord<>("payments", "key2", "payment1"));
+    producer.send(new ProducerRecord<>("inventory", "key3", "update1"));
+    
+    // Commit transaction
+    producer.commitTransaction();
+    
+} catch (Exception e) {
+    // Rollback on error
+    producer.abortTransaction();
+}
+```
+
+### 3. Exactly-Once Semantics (EOS)
+
+```java
+// Producer side
+props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
+props.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, "unique-txn-id");
+
+// Consumer side
+props.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
+```
+
+### 4. Stream Processing with Kafka Streams
+
+```java
+import org.apache.kafka.streams.*;
+import org.apache.kafka.streams.kstream.*;
+
+public class OrderStreamProcessor {
+    
+    public static void main(String[] args) {
+        Properties props = new Properties();
+        props.put(StreamsConfig.APPLICATION_ID_CONFIG, "order-stream-processor");
+        props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        
+        StreamsBuilder builder = new StreamsBuilder();
+        
+        // Read from orders topic
+        KStream<String, OrderEvent> orders = builder.stream("orders");
+        
+        // Filter high-value orders
+        KStream<String, OrderEvent> highValueOrders = 
+            orders.filter((key, order) -> order.getAmount() > 1000);
+        
+        // Transform
+        KStream<String, String> notifications = highValueOrders
+            .mapValues(order -> "High value order alert: " + order.getOrderId());
+        
+        // Write to new topic
+        notifications.to("high-value-order-alerts");
+        
+        // Aggregate by customer
+        KTable<String, Long> orderCountByCustomer = orders
+            .groupBy((key, order) -> order.getCustomerId())
+            .count();
+        
+        // Start the stream
+        KafkaStreams streams = new KafkaStreams(builder.build(), props);
+        streams.start();
+        
+        // Shutdown hook
+        Runtime.getRuntime().addShutdownHook(new Thread(streams::close));
+    }
+}
+```
+
+### 5. Dead Letter Queue Pattern
+
+```java
+@Service
+public class OrderConsumerWithDLQ {
+    
+    private final KafkaTemplate<String, OrderEvent> kafkaTemplate;
+    private static final String DLQ_TOPIC = "orders-dlq";
+    
+    @KafkaListener(topics = "orders", groupId = "order-group")
+    public void consume(
+            @Payload OrderEvent order,
+            @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
+            @Header(KafkaHeaders.OFFSET) long offset,
+            Acknowledgment acknowledgment) {
+        
+        try {
+            processOrder(order);
+            acknowledgment.acknowledge();
+            
+        } catch (RecoverableException e) {
+            // Retry logic (don't acknowledge)
+            System.err.println("Recoverable error, will retry: " + e.getMessage());
+            
+        } catch (NonRecoverableException e) {
+            // Send to DLQ
+            System.err.println("Non-recoverable error, sending to DLQ: " + e.getMessage());
+            kafkaTemplate.send(DLQ_TOPIC, order);
+            acknowledgment.acknowledge(); // Acknowledge original message
+        }
+    }
+    
+    private void processOrder(OrderEvent order) throws Exception {
+        // Processing logic
+    }
+}
+```
+
+### 6. Message Retry with Backoff
+
+```java
+@Configuration
+public class KafkaRetryConfig {
+    
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, OrderEvent> retryKafkaListenerContainerFactory() {
+        ConcurrentKafkaListenerContainerFactory<String, OrderEvent> factory =
+            new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(consumerFactory());
+        
+        // Configure retry with exponential backoff
+        factory.setCommonErrorHandler(new DefaultErrorHandler(
+            new FixedBackOff(1000L, 3L) // 1 second delay, 3 retries
+        ));
+        
+        return factory;
+    }
+}
+```
+
+---
+
+## Best Practices
+
+### 1. **Partitioning Strategy**
+- Use meaningful keys for related messages
+- Balance partition count (too many = overhead, too few = no parallelism)
+- Consider: `partitions = max(producers, consumers) * N` where N is 2-3
+
+### 2. **Consumer Group Design**
+- One consumer group per application
+- Scale consumers = scale processing
+- Consumers ≤ Partitions (extra consumers are idle)
+
+### 3. **Message Design**
+- Keep messages small (<1MB)
+- Use Avro or Protocol Buffers for schema evolution
+- Include metadata (timestamp, version, correlation ID)
+
+### 4. **Error Handling**
+- Implement Dead Letter Queues
+- Use retry with backoff
+- Log failures with context
+- Monitor consumer lag
+
+### 5. **Performance Tuning**
+
+**Producer:**
+```properties
+# Batch messages for throughput
+linger.ms=10
+batch.size=16384
+
+# Compression
+compression.type=snappy
+
+# In-flight requests
+max.in.flight.requests.per.connection=5
+```
+
+**Consumer:**
+```properties
+# Fetch size
+fetch.min.bytes=1024
+fetch.max.wait.ms=500
+
+# Poll records
+max.poll.records=500
+max.poll.interval.ms=300000
+```
+
+### 6. **Monitoring**
+Monitor these metrics:
+- **Producer**: request latency, record send rate, error rate
+- **Consumer**: lag, commit rate, poll duration
+- **Broker**: request rate, byte rate, partition count
+- **System**: CPU, memory, disk I/O, network
+
+### 7. **Security**
+```properties
+# SSL
+security.protocol=SSL
+ssl.truststore.location=/path/to/truststore
+ssl.keystore.location=/path/to/keystore
+
+# SASL
+security.protocol=SASL_SSL
+sasl.mechanism=PLAIN
+sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="user" password="pass";
+```
+
+### 8. **Operational**
+- Use replication factor ≥ 3 for production
+- Set `min.insync.replicas=2` with `acks=all`
+- Regular broker rolling restarts
+- Monitor disk usage and retention policies
+- Use log compaction for state topics
+
+---
+
+## Quick Reference Commands
+
+### Topic Management
+```bash
+# Create topic
+kafka-topics.sh --create --topic orders --bootstrap-server localhost:9092 --partitions 3 --replication-factor 2
+
+# List topics
+kafka-topics.sh --list --bootstrap-server localhost:9092
+
+# Describe topic
+kafka-topics.sh --describe --topic orders --bootstrap-server localhost:9092
+
+# Delete topic
+kafka-topics.sh --delete --topic orders --bootstrap-server localhost:9092
+```
+
+### Console Producer/Consumer
+```bash
+# Produce messages
+kafka-console-producer.sh --topic orders --bootstrap-server localhost:9092
+
+# Consume from beginning
+kafka-console-consumer.sh --topic orders --from-beginning --bootstrap-server localhost:9092
+
+# Consume with key
+kafka-console-consumer.sh --topic orders --from-beginning --property print.key=true --bootstrap-server localhost:9092
+```
+
+### Consumer Groups
+```bash
+# List consumer groups
+kafka-consumer-groups.sh --list --bootstrap-server localhost:9092
+
+# Describe group
+kafka-consumer-groups.sh --describe --group order-group --bootstrap-server localhost:9092
+
+# Reset offsets
+kafka-consumer-groups.sh --reset-offsets --to-earliest --group order-group --topic orders --execute --bootstrap-server localhost:9092
+```
+
+---
+
+## Common Patterns
+
+### 1. Event Sourcing
+Store all changes as events in Kafka.
+
+### 2. CQRS (Command Query Responsibility Segregation)
+Separate read and write models using Kafka.
+
+### 3. Saga Pattern
+Distributed transactions across microservices.
+
+### 4. Outbox Pattern
+Ensure database and Kafka consistency.
+
+### 5. Change Data Capture (CDC)
+Stream database changes to Kafka.
+
+---
+
+## Summary
+
+**Key Takeaways:**
+- Kafka = distributed, durable, high-throughput messaging
+- Topics are split into partitions for parallelism
+- Consumer groups enable load balancing
+- Use appropriate acks level for durability vs performance
+- Manual offset management for exactly-once processing
+- Spring Boot makes Kafka integration seamless
+- Monitor consumer lag and broker health
+- Design for idempotency and failure recovery
+
+**When to Use Kafka:**
+✅ High throughput messaging
+✅ Event streaming and processing
+✅ Log aggregation
+✅ Microservices communication
+✅ Real-time analytics
+
+**When NOT to Use Kafka:**
+❌ Simple request-response patterns
+❌ Low-latency (<1ms) requirements
+❌ Small-scale applications
+❌ Transactional messaging with complex routing
+
+---
+
+## Kafka Interview Questions & Answers
+
+### Basic Level Questions
+
+#### Q1: What is Apache Kafka?
+
+**Answer:**
+Apache Kafka is a distributed streaming platform and publish-subscribe messaging system designed for:
+- **High-throughput**: Handle millions of messages per second
+- **Fault-tolerance**: Data replication across brokers
+- **Scalability**: Horizontal scaling by adding brokers
+- **Durability**: Messages persisted to disk
+- **Real-time processing**: Low-latency message delivery
+
+**Key Components**: Producers, Consumers, Brokers, Topics, Partitions, ZooKeeper/KRaft
+
+---
+
+#### Q2: What are the main use cases of Kafka?
+
+**Answer:**
+1. **Messaging**: Asynchronous communication between microservices
+2. **Website Activity Tracking**: User clicks, page views, searches
+3. **Log Aggregation**: Collect logs from multiple services
+4. **Stream Processing**: Real-time data pipelines (Kafka Streams)
+5. **Event Sourcing**: Store all state changes as events
+6. **Metrics Collection**: Monitor system performance
+7. **Commit Log**: Replicate data between systems
+
+---
+
+#### Q3: Explain Kafka's architecture.
+
+**Answer:**
+```
+Producers → Kafka Cluster (Brokers) → Consumers
+              ↓
+         ZooKeeper/KRaft
+```
+
+**Components**:
+- **Producers**: Publish messages to topics
+- **Brokers**: Servers that store and serve data
+- **Topics**: Categories for messages
+- **Partitions**: Subdivisions of topics for parallelism
+- **Consumers**: Read and process messages
+- **Consumer Groups**: Coordinate multiple consumers
+- **ZooKeeper/KRaft**: Cluster coordination and metadata management
+
+---
+
+#### Q4: What is a Kafka Topic?
+
+**Answer:**
+A topic is a **category or feed name** where messages are published.
+
+**Characteristics**:
+- Multi-subscriber (many consumers can read)
+- Partitioned for scalability
+- Retained for a configurable time
+- Immutable (messages cannot be modified)
+
+**Example**:
+```java
+ProducerRecord<String, String> record = 
+    new ProducerRecord<>("orders", "order-123", "Order data");
+```
+
+Topic "orders" stores all order-related messages.
+
+---
+
+#### Q5: What is a Partition in Kafka?
+
+**Answer:**
+A partition is an **ordered, immutable sequence of messages** within a topic.
+
+**Key Points**:
+- Topics are split into partitions
+- Each partition is an ordered queue
+- Messages within a partition are ordered
+- Messages across partitions are NOT ordered
+- Each message has a unique **offset** (position in partition)
+
+**Example**:
+```
+Topic: orders (3 partitions)
+├── Partition 0: [msg0, msg1, msg2, ...]
+├── Partition 1: [msg0, msg1, msg2, ...]
+└── Partition 2: [msg0, msg1, msg2, ...]
+```
+
+**Benefits**: Parallelism, scalability, fault tolerance
+
+---
+
+#### Q6: What is an Offset in Kafka?
+
+**Answer:**
+An offset is a **unique sequential ID** assigned to each message in a partition.
+
+**Properties**:
+- Monotonically increasing (0, 1, 2, 3...)
+- Unique per partition
+- Immutable
+- Used by consumers to track position
+
+**Example**:
+```
+Partition 0: [0] [1] [2] [3] [4] [5]
+                    ↑
+            Consumer at offset 2
+```
+
+Consumers can:
+- Commit offsets (mark as processed)
+- Seek to specific offset
+- Reset to beginning/end
+
+---
+
+#### Q7: What is a Consumer Group?
+
+**Answer:**
+A consumer group is a **set of consumers working together** to consume messages from topics.
+
+**Rules**:
+- Each partition is consumed by **only ONE** consumer in the group
+- Different groups can consume the same messages
+- Provides load balancing and fault tolerance
+
+**Example**:
+```
+Topic with 4 partitions:
+Consumer Group "group-1":
+  Consumer A → Partition 0, 1
+  Consumer B → Partition 2, 3
+
+Consumer Group "group-2":
+  Consumer C → Partition 0, 1, 2, 3
+```
+
+Both groups receive all messages independently.
+
+---
+
+#### Q8: Difference between Kafka and traditional messaging systems (RabbitMQ)?
+
+**Answer**:
+
+| Feature | Kafka | RabbitMQ |
+|---------|-------|----------|
+| **Type** | Distributed log, streaming | Message broker |
+| **Throughput** | Very high (millions/sec) | Moderate (thousands/sec) |
+| **Message Retention** | Persistent (days/weeks) | Deleted after consumption |
+| **Ordering** | Per partition | Per queue |
+| **Replayability** | Yes (seek to offset) | No |
+| **Use Case** | Streaming, logs, events | Task queues, RPC |
+| **Scalability** | Horizontal (add brokers) | Vertical + clustering |
+| **Complexity** | Higher | Lower |
+
+**When to use Kafka**: High throughput, event streaming, log aggregation, multiple consumers for same data
+
+**When to use RabbitMQ**: Traditional messaging, complex routing, priority queues
+
+---
+
+### Intermediate Level Questions
+
+#### Q9: How does Kafka ensure message ordering?
+
+**Answer:**
+Kafka guarantees **order within a partition**, not across partitions.
+
+**Strategy 1: Use Message Keys**
+```java
+// All messages with same key go to same partition
+producer.send(new ProducerRecord<>("orders", "customer-123", order));
+```
+Hash(key) % num_partitions = partition number
+
+**Strategy 2: Single Partition**
+```bash
+kafka-topics --create --topic critical-orders --partitions 1
+```
+Not scalable but guarantees global order.
+
+**Strategy 3: Sequence Numbers**
+```java
+public class Event {
+    private Long sequenceNumber;
+    private LocalDateTime timestamp;
+}
+```
+Consumer can reorder if needed.
+
+**Important**: If order is critical, use keys to ensure related messages go to the same partition.
+
+---
+
+#### Q10: What are the different types of Kafka delivery semantics?
+
+**Answer:**
+
+**1. At-most-once** (may lose messages):
+```java
+props.put(ProducerConfig.ACKS_CONFIG, "0");
+props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "true");
+```
+Fast but can lose data.
+
+**2. At-least-once** (may duplicate):
+```java
+props.put(ProducerConfig.ACKS_CONFIG, "all");
+props.put(ProducerConfig.RETRIES_CONFIG, 3);
+props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
+// Manual commit after processing
+```
+Recommended for most use cases.
+
+**3. Exactly-once** (no loss, no duplication):
+```java
+props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
+props.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, "txn-1");
+props.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
+```
+Most complex but guarantees no duplicates.
+
+---
+
+#### Q11: What is the role of ZooKeeper in Kafka?
+
+**Answer:**
+ZooKeeper manages Kafka cluster coordination (being replaced by KRaft).
+
+**Responsibilities**:
+1. **Broker Management**: Track live brokers
+2. **Leader Election**: Choose partition leaders
+3. **Configuration Management**: Store topic configs
+4. **Access Control**: Manage ACLs
+5. **Consumer Group Coordination**: Track consumer offsets (legacy)
+
+**Example**:
+```
+ZooKeeper stores:
+/brokers/ids/0 → Broker 0 metadata
+/brokers/topics/orders → Topic configuration
+/controller → Current controller broker
+```
+
+**KRaft Mode** (Kafka 3.0+):
+- No ZooKeeper dependency
+- Uses Raft consensus protocol
+- Simpler architecture
+- Faster metadata operations
+
+---
+
+#### Q12: Explain Kafka Producer acknowledgment modes (acks).
+
+**Answer:**
+
+**acks=0** (Fire and forget):
+```java
+props.put(ProducerConfig.ACKS_CONFIG, "0");
+```
+- No acknowledgment
+- Fastest, lowest latency
+- Risk of data loss
+- Use case: Metrics, logs where loss is acceptable
+
+**acks=1** (Leader acknowledgment):
+```java
+props.put(ProducerConfig.ACKS_CONFIG, "1");
+```
+- Leader confirms write
+- Balanced performance/reliability
+- Risk: Leader fails before replication
+- Use case: Most applications
+
+**acks=all/-1** (All ISR acknowledgment):
+```java
+props.put(ProducerConfig.ACKS_CONFIG, "all");
+props.put("min.insync.replicas", "2");
+```
+- All in-sync replicas confirm
+- Highest durability
+- Higher latency
+- Use case: Financial transactions, critical data
+
+---
+
+#### Q13: What is an ISR (In-Sync Replica)?
+
+**Answer:**
+ISR is the set of replicas that are **caught up** with the partition leader.
+
+**Criteria for ISR**:
+- Actively fetching from leader
+- Within `replica.lag.time.max.ms` (default 10 seconds)
+
+**Example**:
+```
+Partition 0, Replication Factor: 3
+Leader (Broker 1): Offset 1000 ✓
+Follower (Broker 2): Offset 1000 ✓ (ISR)
+Follower (Broker 3): Offset 950 ✗ (Not ISR - lagging)
+
+ISR = [1, 2]
+```
+
+**Configuration**:
+```java
+props.put("min.insync.replicas", "2");
+```
+With `acks=all`, requires at least 2 ISRs to acknowledge.
+
+**Leader Failure**:
+- New leader elected from ISR
+- Ensures no data loss
+- Out-of-sync replicas cannot become leader
+
+---
+
+#### Q14: How do you handle consumer failures in Kafka?
+
+**Answer:**
+
+**Strategy 1: Manual Offset Commit**
+```java
+props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
+
+@KafkaListener(topics = "orders")
+public void consume(OrderEvent event, Acknowledgment ack) {
+    try {
+        processOrder(event);
+        ack.acknowledge(); // Commit only after success
+    } catch (Exception e) {
+        // Don't commit - message will be reprocessed
+        logger.error("Processing failed", e);
+    }
+}
+```
+
+**Strategy 2: Retry with Backoff**
+```java
+@Bean
+public ConcurrentKafkaListenerContainerFactory<String, Order> factory() {
+    factory.setCommonErrorHandler(
+        new DefaultErrorHandler(new FixedBackOff(1000L, 3L))
+    );
+    return factory;
+}
+```
+
+**Strategy 3: Dead Letter Queue (DLQ)**
+```java
+try {
+    processOrder(event);
+    ack.acknowledge();
+} catch (NonRecoverableException e) {
+    kafkaTemplate.send("orders-dlq", event);
+    ack.acknowledge();
+}
+```
+
+**Strategy 4: Consumer Rebalancing**
+- Kafka detects failed consumer
+- Reassigns partitions to other consumers
+- Automatically handles failover
+
+---
+
+#### Q15: What is log compaction in Kafka?
+
+**Answer:**
+Log compaction keeps only the **latest value for each key**, deleting older values.
+
+**Use Case**: Maintain current state (e.g., user profiles, product inventory)
+
+**Example**:
+```
+Before compaction:
+key1 → value1 (offset 0)
+key2 → value2 (offset 1)
+key1 → value3 (offset 2)  ← Latest for key1
+key2 → value4 (offset 3)  ← Latest for key2
+key1 → value5 (offset 4)  ← Latest for key1
+
+After compaction:
+key1 → value5 (offset 4)  ← Only latest
+key2 → value4 (offset 3)  ← Only latest
+```
+
+**Configuration**:
+```bash
+kafka-topics --create --topic user-updates \
+  --config cleanup.policy=compact \
+  --config min.cleanable.dirty.ratio=0.5
+```
+
+**Benefits**:
+- Reduce storage
+- Maintain complete state
+- Faster consumer bootstrap
+
+---
+
+#### Q16: Explain Kafka's replication mechanism.
+
+**Answer:**
+
+**Replication Factor**: Number of copies of each partition
+
+**Example**:
+```bash
+kafka-topics --create --topic orders \
+  --partitions 3 \
+  --replication-factor 3
+```
+
+**Architecture**:
+```
+Partition 0:
+  Broker 1: LEADER (handles all reads/writes)
+  Broker 2: FOLLOWER (replicates from leader)
+  Broker 3: FOLLOWER (replicates from leader)
+```
+
+**Replication Process**:
+1. Producer sends message to leader
+2. Leader writes to local log
+3. Followers fetch from leader
+4. Followers write to their logs
+5. Leader tracks ISR (in-sync replicas)
+6. Once all ISR acknowledge, message is committed
+
+**Configuration**:
+```properties
+# Require 2 replicas to acknowledge
+min.insync.replicas=2
+# With acks=all
+acks=all
+```
+
+**Fault Tolerance**:
+- `replication-factor=3` tolerates 2 broker failures
+- `min.insync.replicas=2` ensures durability
+
+---
+
+#### Q17: What is the difference between Kafka Streams and Kafka Consumer API?
+
+**Answer:**
+
+| Feature | Consumer API | Kafka Streams |
+|---------|-------------|---------------|
+| **Purpose** | Read messages | Stream processing |
+| **Complexity** | Simple | Complex transformations |
+| **State** | Stateless | Stateful operations |
+| **Operations** | Read, commit | Filter, map, join, aggregate |
+| **Deployment** | Any app | Embedded library |
+| **Fault Tolerance** | Manual | Automatic |
+
+**Consumer API Example**:
+```java
+@KafkaListener(topics = "orders")
+public void consume(Order order) {
+    processOrder(order);
+}
+```
+
+**Kafka Streams Example**:
+```java
+StreamsBuilder builder = new StreamsBuilder();
+KStream<String, Order> orders = builder.stream("orders");
+
+// Filter high-value orders
+orders.filter((key, order) -> order.getAmount() > 1000)
+      .mapValues(order -> "High value: " + order.getId())
+      .to("high-value-orders");
+
+// Aggregate by customer
+KTable<String, Long> countByCustomer = orders
+    .groupBy((key, order) -> order.getCustomerId())
+    .count();
+```
+
+**When to use**:
+- **Consumer API**: Simple message processing
+- **Kafka Streams**: Complex transformations, aggregations, joins
+
+---
+
+### Advanced Level Questions
+
+#### Q18: Explain the Outbox Pattern and why it's used with Kafka.
+
+**Answer:**
+The Outbox Pattern ensures **atomic writes** to database and Kafka.
+
+**Problem**:
+```java
+// What if Kafka fails after DB save?
+saleRepository.save(sale);
+kafkaTemplate.send("sales", sale); // Fails!
+// Inconsistent state
+```
+
+**Solution - Outbox Pattern**:
+
+**1. Create Outbox Table**:
+```sql
+CREATE TABLE outbox (
+    id BIGINT PRIMARY KEY,
+    aggregate_type VARCHAR(50),
+    aggregate_id BIGINT,
+    event_type VARCHAR(50),
+    payload JSON,
+    created_at TIMESTAMP,
+    published BOOLEAN DEFAULT FALSE
+);
+```
+
+**2. Atomic Write**:
+```java
+@Transactional
+public Sale createSale(Sale sale) {
+    // Save sale
+    Sale saved = saleRepository.save(sale);
+    
+    // Save to outbox (same transaction)
+    OutboxEvent outbox = new OutboxEvent(
+        "Sale", saved.getId(), "SALE_CREATED", 
+        serializeToJson(saved)
+    );
+    outboxRepository.save(outbox);
+    
+    return saved; // Both saved atomically
+}
+```
+
+**3. Publisher Process**:
+```java
+@Scheduled(fixedDelay = 1000)
+public void publishOutboxEvents() {
+    List<OutboxEvent> pending = outboxRepository.findByPublishedFalse();
+    
+    for (OutboxEvent event : pending) {
+        try {
+            kafkaTemplate.send(event.getTopic(), event.getPayload());
+            event.setPublished(true);
+            outboxRepository.save(event);
+        } catch (Exception e) {
+            // Retry next time
+        }
+    }
+}
+```
+
+**Benefits**:
+- Guaranteed eventual consistency
+- No data loss
+- Survives failures
+
+---
+
+#### Q19: How would you implement exactly-once semantics in Kafka?
+
+**Answer:**
+
+**Requirements**:
+1. Idempotent Producer
+2. Transactional Producer
+3. Transactional Consumer
+
+**Implementation**:
+
+**1. Producer Configuration**:
+```java
+Properties props = new Properties();
+props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
+props.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, "order-producer-1");
+props.put(ProducerConfig.ACKS_CONFIG, "all");
+props.put(ProducerConfig.RETRIES_CONFIG, Integer.MAX_VALUE);
+props.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, 5);
+
+KafkaProducer<String, Order> producer = new KafkaProducer<>(props);
+
+// Initialize transactions
+producer.initTransactions();
+```
+
+**2. Transactional Writes**:
+```java
+try {
+    producer.beginTransaction();
+    
+    // Send multiple messages atomically
+    producer.send(new ProducerRecord<>("orders", order));
+    producer.send(new ProducerRecord<>("inventory", update));
+    producer.send(new ProducerRecord<>("billing", charge));
+    
+    producer.commitTransaction();
+    
+} catch (Exception e) {
+    producer.abortTransaction();
+}
+```
+
+**3. Consumer Configuration**:
+```java
+props.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
+props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+```
+
+**4. Idempotent Processing**:
+```java
+@KafkaListener(topics = "orders")
+public void consume(Order order) {
+    String idempotencyKey = order.getId() + "-" + order.getVersion();
+    
+    if (processedOrders.contains(idempotencyKey)) {
+        return; // Already processed
+    }
+    
+    processOrder(order);
+    processedOrders.add(idempotencyKey);
+}
+```
+
+**Result**: Each message processed exactly once, no duplicates, no loss.
+
+---
+
+#### Q20: What is Kafka's internal architecture for handling requests?
+
+**Answer:**
+
+**Request Processing Flow**:
+
+```
+1. Client sends request to any broker
+2. Broker receives request in network thread
+3. Request queued in request queue
+4. I/O thread picks up request
+5. Process request (read/write to log)
+6. Response queued in response queue
+7. Network thread sends response to client
+```
+
+**Key Components**:
+
+**1. Network Layer**:
+- Acceptor thread: Accept new connections
+- Processor threads: Read/write from sockets
+- Non-blocking I/O (Java NIO)
+
+**2. Request Handler Pool**:
+- I/O threads process requests
+- Write to disk (log segments)
+- Update index
+
+**3. Log Manager**:
+- Manages log segments per partition
+- Handles log retention
+- Flushes to disk
+
+**4. Replica Manager**:
+- Manages partition replicas
+- Handles replication
+- Tracks ISR
+
+**5. Controller**:
+- One broker is controller
+- Manages partition leaders
+- Handles broker failures
+
+**Example**:
+```
+Producer Request:
+┌─────────────┐
+│   Client    │
+└──────┬──────┘
+       │ 1. Send record
+       ▼
+┌─────────────┐
+│   Broker    │
+│  (Leader)   │
+│             │
+│ Network ─► Queue ─► I/O Thread ─► Log ─► Response
+│                                    │
+│                                    ▼
+│                              [Disk Write]
+└─────────────┘
+```
+
+---
+
+#### Q21: How do you optimize Kafka performance?
+
+**Answer:**
+
+**Producer Optimization**:
+
+```java
+// 1. Batching
+props.put(ProducerConfig.BATCH_SIZE_CONFIG, 32768); // 32KB
+props.put(ProducerConfig.LINGER_MS_CONFIG, 10); // Wait 10ms
+
+// 2. Compression
+props.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, "snappy");
+
+// 3. Buffer memory
+props.put(ProducerConfig.BUFFER_MEMORY_CONFIG, 67108864); // 64MB
+
+// 4. In-flight requests
+props.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, 5);
+```
+
+**Consumer Optimization**:
+
+```java
+// 1. Fetch size
+props.put(ConsumerConfig.FETCH_MIN_BYTES_CONFIG, 1024); // 1KB
+props.put(ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, 500);
+
+// 2. Max records per poll
+props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 500);
+
+// 3. Concurrent consumers
+@Bean
+public ConcurrentKafkaListenerContainerFactory<String, Order> factory() {
+    factory.setConcurrency(3); // 3 threads per instance
+    return factory;
+}
+
+// 4. Batch processing
+@KafkaListener(topics = "orders")
+public void consumeBatch(List<Order> orders) {
+    orderRepository.saveAll(orders); // Batch DB insert
+}
+```
+
+**Broker Optimization**:
+
+```properties
+# 1. OS-level optimizations
+# Increase file descriptors
+ulimit -n 100000
+
+# 2. JVM tuning
+KAFKA_HEAP_OPTS="-Xmx6g -Xms6g"
+KAFKA_JVM_PERFORMANCE_OPTS="-XX:+UseG1GC"
+
+# 3. Log segment size
+log.segment.bytes=1073741824  # 1GB
+
+# 4. Replication threads
+num.replica.fetchers=4
+
+# 5. Network threads
+num.network.threads=8
+num.io.threads=16
+```
+
+**Partition Tuning**:
+```bash
+# More partitions = more parallelism
+# Rule of thumb: partitions = max(producers, consumers) * 2-3
+kafka-topics --alter --topic orders --partitions 12
+```
+
+---
+
+#### Q22: Explain Kafka consumer rebalancing and how to handle it.
+
+**Answer:**
+
+**What is Rebalancing?**
+Redistributing partitions among consumers when:
+- Consumer joins group
+- Consumer leaves group
+- Partitions added to topic
+- Consumer crashes
+
+**Rebalancing Process**:
+```
+Before:
+Consumer 1 → Partitions 0, 1, 2
+Consumer 2 → Partitions 3, 4, 5
+
+Consumer 3 joins →
+
+After Rebalance:
+Consumer 1 → Partitions 0, 1
+Consumer 2 → Partitions 2, 3
+Consumer 3 → Partitions 4, 5
+```
+
+**Problems with Rebalancing**:
+- Stop-the-world event (all consumers pause)
+- Duplicate processing if commits missed
+- Increased latency during rebalance
+
+**Optimization Strategies**:
+
+**1. Static Membership** (Kafka 2.3+):
+```java
+props.put(ConsumerConfig.GROUP_INSTANCE_ID_CONFIG, "consumer-1");
+props.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 45000);
+```
+Consumer keeps same partitions after restart.
+
+**2. Cooperative Rebalancing** (Kafka 2.4+):
+```java
+props.put(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG,
+    CooperativeStickyAssignor.class.getName());
+```
+Only affected partitions rebalance, others keep processing.
+
+**3. Increase Session Timeout**:
+```java
+props.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 30000);
+props.put(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, 3000);
+```
+
+**4. Commit Before Rebalance**:
+```java
+@KafkaListener(topics = "orders")
+public void consume(Order order, 
+                   ConsumerRebalanceListener rebalanceListener) {
+    // Custom listener commits offsets before rebalance
+}
+```
+
+---
+
+#### Q23: How would you monitor Kafka in production?
+
+**Answer:**
+
+**1. Key Metrics to Monitor**:
+
+**Broker Metrics**:
+```
+under-replicated-partitions  # Should be 0
+offline-partitions-count     # Should be 0
+active-controller-count      # Should be 1
+request-rate
+byte-rate
+network-processor-avg-idle-percent
+```
+
+**Producer Metrics**:
+```
+record-send-rate
+record-error-rate
+request-latency-avg
+batch-size-avg
+compression-rate-avg
+```
+
+**Consumer Metrics**:
+```
+records-consumed-rate
+records-lag-max              # CRITICAL
+commit-latency-avg
+poll-idle-ratio
+```
+
+**2. Monitoring Consumer Lag**:
+```bash
+# Command line
+kafka-consumer-groups --describe \
+  --group order-service-group \
+  --bootstrap-server localhost:9092
+
+# Output shows lag per partition
+TOPIC    PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG
+orders   0          1000            1000            0
+orders   1          950             1000            50  ← Lagging!
+```
+
+**3. Spring Boot Actuator**:
+```yaml
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+```
+
+**4. JMX Metrics**:
+```java
+// Enable JMX
+export JMX_PORT=9999
+```
+
+**5. Alerting**:
+```yaml
+alerts:
+  - name: HighConsumerLag
+    condition: lag > 10000
+    severity: critical
+    action: page_oncall
+    
+  - name: UnderReplicatedPartitions
+    condition: count > 0
+    severity: critical
+    action: page_oncall
+    
+  - name: HighProducerLatency
+    condition: p99 > 100ms
+    severity: warning
+    action: slack_alert
+```
+
+**6. Monitoring Tools**:
+- **Prometheus + Grafana**: Metrics visualization
+- **Kafka Manager/CMAK**: Cluster management UI
+- **Burrow**: Consumer lag monitoring
+- **Datadog/New Relic**: APM monitoring
+- **Confluent Control Center**: Enterprise monitoring
+
+---
+
+#### Q24: Explain Kafka security features.
+
+**Answer:**
+
+**1. Authentication (SASL)**:
+
+```properties
+# SASL/PLAIN
+security.protocol=SASL_SSL
+sasl.mechanism=PLAIN
+sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required \
+  username="admin" \
+  password="admin-secret";
+```
+
+**2. Authorization (ACLs)**:
+
+```bash
+# Grant permissions
+kafka-acls --add \
+  --allow-principal User:alice \
+  --operation Read \
+  --operation Write \
+  --topic orders \
+  --bootstrap-server localhost:9092
+
+# List ACLs
+kafka-acls --list --bootstrap-server localhost:9092
+```
+
+**3. Encryption (SSL/TLS)**:
+
+```properties
+# Producer/Consumer
+security.protocol=SSL
+ssl.truststore.location=/var/private/ssl/kafka.client.truststore.jks
+ssl.truststore.password=test1234
+ssl.keystore.location=/var/private/ssl/kafka.client.keystore.jks
+ssl.keystore.password=test1234
+ssl.key.password=test1234
+```
+
+**4. Encryption at Rest**:
+- Use encrypted file systems (LUKS, BitLocker)
+- Or encrypt messages at application level
+
+**5. Network Isolation**:
+- Private VPC/VPN
+- Firewall rules
+- Security groups
+
+**6. Audit Logging**:
+```properties
+# Enable audit logs
+log4j.logger.kafka.authorizer.logger=INFO, authorizerAppender
+```
+
+---
+
+#### Q25: What are Kafka Streams vs KSQL vs Kafka Connect?
+
+**Answer:**
+
+| Feature | Kafka Streams | KSQL | Kafka Connect |
+|---------|--------------|------|---------------|
+| **Purpose** | Stream processing | SQL queries | Data integration |
+| **Language** | Java/Scala | SQL | Configuration |
+| **Deployment** | Embedded library | Separate server | Separate server |
+| **Use Case** | Complex processing | Ad-hoc queries | Import/export data |
+| **Learning Curve** | Medium | Easy | Easy |
+
+**Kafka Streams Example**:
+```java
+StreamsBuilder builder = new StreamsBuilder();
+KStream<String, Order> orders = builder.stream("orders");
+
+orders.filter((k, v) -> v.getAmount() > 1000)
+      .to("high-value-orders");
+
+KafkaStreams streams = new KafkaStreams(builder.build(), props);
+streams.start();
+```
+
+**KSQL Example**:
+```sql
+CREATE STREAM high_value_orders AS
+  SELECT * FROM orders
+  WHERE amount > 1000;
+```
+
+**Kafka Connect Example**:
+```json
+{
+  "name": "mysql-source-connector",
+  "config": {
+    "connector.class": "io.confluent.connect.jdbc.JdbcSourceConnector",
+    "connection.url": "jdbc:mysql://localhost:3306/mydb",
+    "table.whitelist": "orders",
+    "mode": "incrementing",
+    "topic.prefix": "mysql-"
+  }
+}
+```
+
+**When to use**:
+- **Kafka Streams**: Custom stream processing logic
+- **KSQL**: Quick SQL-based transformations
+- **Kafka Connect**: Import/export from databases, file systems
+
+---
+
+### Scenario-Based Questions
+
+#### Q26: Your consumer lag is increasing. How do you troubleshoot?
+
+**Answer:**
+
+**Step 1: Identify the Problem** (2 minutes)
+```bash
+# Check lag
+kafka-consumer-groups --describe --group order-service
+```
+
+**Step 2: Root Cause Analysis**
+
+**Possible Causes**:
+
+1. **Traffic Spike**:
+```bash
+# Check produce rate
+kafka-run-class kafka.tools.JmxTool \
+  --object-name kafka.server:type=BrokerTopicMetrics,name=MessagesInPerSec
+```
+
+2. **Slow Processing**:
+```java
+// Add timing logs
+long start = System.currentTimeMillis();
+processOrder(order);
+long duration = System.currentTimeMillis() - start;
+logger.info("Processing took: {}ms", duration);
+```
+
+3. **Consumer Crash**:
+```bash
+# Check consumer status
+kubectl get pods | grep consumer
+kubectl logs consumer-pod --tail=100
+```
+
+4. **Partition Imbalance**:
+```bash
+# Check partition distribution
+kafka-consumer-groups --describe --group order-service --members
+```
+
+**Step 3: Solutions**
+
+**If traffic spike**:
+```bash
+# Scale consumers
+kubectl scale deployment order-consumer --replicas=10
+```
+
+**If slow processing**:
+```java
+// Batch processing
+@KafkaListener(topics = "orders")
+public void consumeBatch(List<Order> orders) {
+    orderRepository.saveAll(orders); // Faster
+}
+
+// Or parallel processing
+@Bean
+public ConcurrentKafkaListenerContainerFactory<String, Order> factory() {
+    factory.setConcurrency(5);
+    return factory;
+}
+```
+
+**If insufficient partitions**:
+```bash
+# Add partitions
+kafka-topics --alter --topic orders --partitions 12
+```
+
+**Step 4: Monitor and Validate**
+```bash
+# Watch lag decrease
+watch -n 5 'kafka-consumer-groups --describe --group order-service | grep LAG'
+```
+
+---
+
+#### Q27: A Kafka broker goes down. What happens and how do you recover?
+
+**Answer:**
+
+**What Happens**:
+
+1. **Controller Detects Failure**:
+   - Broker stops sending heartbeats to ZooKeeper/Controller
+   - Controller marks broker as dead
+
+2. **Leader Election**:
+   - For partitions where dead broker was leader
+   - Controller elects new leaders from ISR
+
+3. **Clients Redirect**:
+   - Producers/consumers get metadata updates
+   - Reconnect to new leaders
+
+4. **Replication Resumes**:
+   - New leader continues serving requests
+   - Remaining followers replicate from new leader
+
+**Example**:
+```
+Before Failure:
+Topic: orders, Partition 0
+  Broker 1 (Leader) ✓
+  Broker 2 (Follower) ✓
+  Broker 3 (Follower) ✓
+
+Broker 1 Crashes:
+
+After Leader Election:
+Topic: orders, Partition 0
+  Broker 1 (Dead) ✗
+  Broker 2 (NEW Leader) ✓
+  Broker 3 (Follower) ✓
+```
+
+**Recovery Steps**:
+
+**1. Immediate Actions**:
+```bash
+# Check cluster status
+kafka-broker-api-versions --bootstrap-server localhost:9092
+
+# Verify under-replicated partitions
+kafka-topics --describe --under-replicated-partitions
+```
+
+**2. Bring Broker Back**:
+```bash
+# Restart Kafka broker
+systemctl restart kafka
+
+# Or in Docker
+docker restart kafka
+```
+
+**3. Monitor Replication**:
+```bash
+# Check if broker rejoined
+kafka-broker-api-versions --bootstrap-server localhost:9092
+
+# Monitor replication progress
+watch 'kafka-topics --describe --topic orders'
+```
+
+**4. Verify Data Integrity**:
+```bash
+# Check consumer offsets
+kafka-consumer-groups --describe --group order-service
+
+# Validate no data loss
+```
+
+**Prevention**:
+- **Replication Factor ≥ 3**
+- **min.insync.replicas = 2**
+- **acks = all**
+- Regular health checks
+- Monitoring alerts
+
+**No Data Loss If**:
+- `replication-factor=3`
+- `min.insync.replicas=2`
+- `acks=all`
+- At least 2 brokers alive
+
+---
+
+#### Q28: How do you perform zero-downtime Kafka upgrades?
+
+**Answer:**
+
+**Rolling Upgrade Strategy**:
+
+**Step 1: Preparation**
+```bash
+# Backup configurations
+cp /etc/kafka/server.properties /backup/
+
+# Read release notes for breaking changes
+# Test in staging environment first
+```
+
+**Step 2: Upgrade One Broker at a Time**
+```bash
+# For each broker:
+
+# 1. Stop the broker gracefully
+kafka-server-stop.sh
+
+# 2. Update Kafka binaries
+tar -xzf kafka_2.13-3.6.0.tgz
+cp -r kafka_2.13-3.6.0/* /opt/kafka/
+
+# 3. Update configuration if needed
+vim /etc/kafka/server.properties
+
+# 4. Start the broker
+kafka-server-start.sh -daemon /etc/kafka/server.properties
+
+# 5. Verify broker is healthy
+kafka-broker-api-versions --bootstrap-server localhost:9092
+
+# 6. Wait for replication to catch up
+kafka-topics --describe --under-replicated-partitions
+
+# 7. Repeat for next broker
+```
+
+**Step 3: Update Clients**
+```xml
+<!-- Update producer/consumer dependencies -->
+<dependency>
+    <groupId>org.apache.kafka</groupId>
+    <artifactId>kafka-clients</artifactId>
+    <version>3.6.0</version>
+</dependency>
+```
+
+**Step 4: Enable New Features**
+```properties
+# After all brokers upgraded
+inter.broker.protocol.version=3.6
+log.message.format.version=3.6
+```
+
+**Best Practices**:
+- Upgrade during low-traffic period
+- One broker at a time
+- Monitor metrics during upgrade
+- Have rollback plan ready
+- Test in staging first
+
+---
+
+#### Q29: Design a microservices architecture using Kafka for an e-commerce system.
+
+**Answer:**
+
+**Architecture**:
+
+```
+┌──────────────┐
+│   Frontend   │
+└──────┬───────┘
+       │ HTTP REST
+       ▼
+┌──────────────┐     Kafka Topics
+│ API Gateway  │
+└──────┬───────┘
+       │
+       ▼
+┌─────────────────────────────────────────────────┐
+│                 Kafka Cluster                   │
+│  Topics:                                        │
+│  - order-events                                 │
+│  - payment-events                               │
+│  - inventory-events                             │
+│  - shipping-events                              │
+│  - notification-events                          │
+└─────────────────────────────────────────────────┘
+       ▲                    │
+       │                    ▼
+┌──────┴─────────────────────────────────┐
+│         Microservices                  │
+│                                         │
+│  ┌────────────┐   ┌──────────────┐   │
+│  │   Order    │   │   Payment    │   │
+│  │  Service   │   │   Service    │   │
+│  └────────────┘   └──────────────┘   │
+│                                       │
+│  ┌────────────┐   ┌──────────────┐   │
+│  │ Inventory  │   │   Shipping   │   │
+│  │  Service   │   │   Service    │   │
+│  └────────────┘   └──────────────┘   │
+│                                       │
+│  ┌────────────┐   ┌──────────────┐   │
+│  │Notification│   │  Analytics   │   │
+│  │  Service   │   │   Service    │   │
+│  └────────────┘   └──────────────┘   │
+└───────────────────────────────────────┘
+```
+
+**Event Flow**:
+
+**1. Order Creation**:
+```java
+// Order Service
+@PostMapping("/orders")
+public ResponseEntity<Order> createOrder(@RequestBody Order order) {
+    // Save to DB
+    Order saved = orderRepository.save(order);
+    
+    // Publish event
+    OrderCreatedEvent event = new OrderCreatedEvent(
+        saved.getId(),
+        saved.getCustomerId(),
+        saved.getItems(),
+        saved.getTotalAmount()
+    );
+    kafkaTemplate.send("order-events", event);
+    
+    return ResponseEntity.ok(saved);
+}
+```
+
+**2. Payment Processing**:
+```java
+// Payment Service
+@KafkaListener(topics = "order-events")
+public void handleOrderCreated(OrderCreatedEvent event) {
+    // Process payment
+    Payment payment = processPayment(event);
+    
+    // Publish result
+    if (payment.isSuccessful()) {
+        kafkaTemplate.send("payment-events", 
+            new PaymentSuccessEvent(event.getOrderId(), payment));
+    } else {
+        kafkaTemplate.send("payment-events",
+            new PaymentFailedEvent(event.getOrderId(), payment));
+    }
+}
+```
+
+**3. Inventory Update**:
+```java
+// Inventory Service
+@KafkaListener(topics = "payment-events")
+public void handlePaymentSuccess(PaymentSuccessEvent event) {
+    // Reduce inventory
+    for (OrderItem item : event.getItems()) {
+        inventoryRepository.reduceStock(item.getProductId(), item.getQuantity());
+    }
+    
+    // Publish event
+    kafkaTemplate.send("inventory-events",
+        new InventoryUpdatedEvent(event.getOrderId()));
+}
+```
+
+**4. Shipping**:
+```java
+// Shipping Service
+@KafkaListener(topics = "inventory-events")
+public void handleInventoryUpdated(InventoryUpdatedEvent event) {
+    // Create shipment
+    Shipment shipment = createShipment(event.getOrderId());
+    
+    kafkaTemplate.send("shipping-events",
+        new ShipmentCreatedEvent(shipment));
+}
+```
+
+**5. Notifications**:
+```java
+// Notification Service
+@KafkaListener(topics = {"order-events", "payment-events", "shipping-events"})
+public void handleEvents(Object event) {
+    if (event instanceof OrderCreatedEvent) {
+        sendEmail("Order confirmed");
+    } else if (event instanceof PaymentSuccessEvent) {
+        sendEmail("Payment received");
+    } else if (event instanceof ShipmentCreatedEvent) {
+        sendEmail("Order shipped");
+    }
+}
+```
+
+**Benefits**:
+- **Async processing**: Fast API responses
+- **Decoupling**: Services independent
+- **Scalability**: Scale services independently
+- **Reliability**: Event replay, fault tolerance
+- **Audit**: Complete event log
+
+---
+
+#### Q30: How would you implement saga pattern with Kafka?
+
+**Answer:**
+
+**Saga Pattern**: Manage distributed transactions across microservices.
+
+**Example: Order Processing Saga**
+
+**Steps**:
+1. Create order
+2. Process payment
+3. Update inventory
+4. Create shipment
+
+If any step fails, compensating actions rollback previous steps.
+
+**Implementation**:
+
+**1. Orchestrator Service**:
+```java
+@Service
+public class OrderSagaOrchestrator {
+    
+    @KafkaListener(topics = "order-commands")
+    public void startOrderSaga(CreateOrderCommand command) {
+        SagaState saga = new SagaState(command.getOrderId());
+        
+        try {
+            // Step 1: Reserve inventory
+            kafkaTemplate.send("inventory-commands",
+                new ReserveInventoryCommand(command));
+            saga.inventoryReserved = true;
+            
+        } catch (Exception e) {
+            compensate(saga);
+        }
+    }
+    
+    @KafkaListener(topics = "inventory-events")
+    public void handleInventoryReserved(InventoryReservedEvent event) {
+        SagaState saga = getSaga(event.getOrderId());
+        
+        try {
+            // Step 2: Process payment
+            kafkaTemplate.send("payment-commands",
+                new ProcessPaymentCommand(event));
+            saga.paymentProcessed = true;
+            
+        } catch (Exception e) {
+            compensate(saga);
+        }
+    }
+    
+    @KafkaListener(topics = "payment-events")
+    public void handlePaymentProcessed(PaymentProcessedEvent event) {
+        SagaState saga = getSaga(event.getOrderId());
+        
+        try {
+            // Step 3: Create shipment
+            kafkaTemplate.send("shipping-commands",
+                new CreateShipmentCommand(event));
+            saga.shipmentCreated = true;
+            
+            // Saga completed successfully
+            kafkaTemplate.send("order-events",
+                new OrderCompletedEvent(event.getOrderId()));
+            
+        } catch (Exception e) {
+            compensate(saga);
+        }
+    }
+    
+    private void compensate(SagaState saga) {
+        // Rollback in reverse order
+        if (saga.paymentProcessed) {
+            kafkaTemplate.send("payment-commands",
+                new RefundPaymentCommand(saga.orderId));
+        }
+        
+        if (saga.inventoryReserved) {
+            kafkaTemplate.send("inventory-commands",
+                new ReleaseInventoryCommand(saga.orderId));
+        }
+        
+        kafkaTemplate.send("order-events",
+            new OrderFailedEvent(saga.orderId));
+    }
+}
+```
+
+**2. Saga State**:
+```java
+public class SagaState {
+    private String orderId;
+    private boolean inventoryReserved = false;
+    private boolean paymentProcessed = false;
+    private boolean shipmentCreated = false;
+    private SagaStatus status = SagaStatus.PENDING;
+    
+    // Store in database or Kafka topic for persistence
+}
+```
+
+**3. Inventory Service**:
+```java
+@KafkaListener(topics = "inventory-commands")
+public void handleReserveInventory(ReserveInventoryCommand cmd) {
+    try {
+        reserveStock(cmd.getProductId(), cmd.getQuantity());
+        
+        kafkaTemplate.send("inventory-events",
+            new InventoryReservedEvent(cmd.getOrderId()));
+            
+    } catch (InsufficientStockException e) {
+        kafkaTemplate.send("inventory-events",
+            new InventoryReservationFailedEvent(cmd.getOrderId()));
+    }
+}
+
+@KafkaListener(topics = "inventory-commands")
+public void handleReleaseInventory(ReleaseInventoryCommand cmd) {
+    releaseReservedStock(cmd.getOrderId());
+}
+```
+
+**Benefits**:
+- Distributed transaction management
+- Automatic rollback on failure
+- Event-driven coordination
+- Scalable and resilient
+
+---
+
+*This comprehensive guide covers fundamental to advanced Kafka concepts with practical examples for both pure Java and Spring Boot applications.*
+
+
+
+# Kafka Integration Guide for Inventory Microservices Project
+
+## Table of Contents
+1. [Integration Overview](#integration-overview)
+2. [Step-by-Step Integration Procedure](#step-by-step-integration-procedure)
+3. [Use Cases for This Project](#use-cases-for-this-project)
+4. [Implementation Details](#implementation-details)
+5. [Testing the Integration](#testing-the-integration)
+6. [Interview Questions & Answers](#interview-questions--answers)
+
+---
+
+## Integration Overview
+
+### Current Project Architecture
+```
+Frontend (React + Vite)
+    ↓ HTTP REST
+User Service (Spring Boot) → MySQL
+    ↓ HTTP REST
+Sales Service (Spring Boot) → MySQL
+    ↓ HTTP REST
+Product Service (Spring Boot) → MySQL
+```
+
+### Enhanced Architecture with Kafka
+```
+Frontend (React + Vite)
+    ↓ HTTP REST
+User Service → MySQL → Kafka (user events)
+    ↓
+Sales Service → MySQL → Kafka (sale events)
+    ↓                       ↓
+Product Service → MySQL ← Kafka Consumer (inventory updates)
+    ↓
+Notification Service ← Kafka Consumer (notifications)
+Analytics Service ← Kafka Consumer (analytics)
+```
+
+### Benefits of Integration
+- **Asynchronous Processing**: Don't block API responses
+- **Event-Driven Architecture**: Services react to events
+- **Scalability**: Handle high throughput of sales/orders
+- **Decoupling**: Services communicate via events
+- **Audit Trail**: All events stored in Kafka
+- **Real-time Analytics**: Stream processing of events
+
+---
+
+## Step-by-Step Integration Procedure
+
+### Phase 1: Setup Kafka Environment
+
+#### Step 1.1: Install Kafka (Windows)
+
+```powershell
+# Download Kafka from https://kafka.apache.org/downloads
+# Extract to C:\kafka
+
+# Or using Chocolatey
+choco install apache-kafka
+
+# Or use Docker (Recommended)
+# Create docker-compose.yml
+```
+
+**docker-compose.yml**:
+```yaml
+version: '3.8'
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    hostname: zookeeper
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    hostname: kafka
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "9101:9101"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_METRIC_REPORTERS: io.confluent.metrics.reporter.ConfluentMetricsReporter
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_CONFLUENT_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      CONFLUENT_METRICS_REPORTER_BOOTSTRAP_SERVERS: kafka:29092
+      CONFLUENT_METRICS_REPORTER_TOPIC_REPLICAS: 1
+      CONFLUENT_METRICS_ENABLE: 'false'
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    depends_on:
+      - kafka
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+```
+
+**Start Kafka:**
+```powershell
+# Using Docker
+docker-compose up -d
+
+# Verify Kafka is running
+docker ps
+
+# Access Kafka UI at http://localhost:8090
+```
+
+#### Step 1.2: Create Topics
+
+```powershell
+# Access Kafka container
+docker exec -it kafka bash
+
+# Create topics
+kafka-topics --create --topic user-events --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+
+kafka-topics --create --topic sale-events --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+
+kafka-topics --create --topic product-events --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+
+kafka-topics --create --topic inventory-updates --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+
+kafka-topics --create --topic notifications --bootstrap-server localhost:9092 --partitions 2 --replication-factor 1
+
+# List topics
+kafka-topics --list --bootstrap-server localhost:9092
+
+# Exit container
+exit
+```
+
+---
+
+### Phase 2: Update Microservices with Kafka
+
+#### Step 2.1: Add Kafka Dependencies to Each Service
+
+**Update pom.xml** (for User Service, Sales Service, Product Service):
+
+```xml
+<dependencies>
+    <!-- Existing dependencies... -->
+    
+    <!-- Kafka -->
+    <dependency>
+        <groupId>org.springframework.kafka</groupId>
+        <artifactId>spring-kafka</artifactId>
+    </dependency>
+    
+    <!-- For JSON serialization -->
+    <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+    </dependency>
+    
+    <!-- Optional: For testing -->
+    <dependency>
+        <groupId>org.springframework.kafka</groupId>
+        <artifactId>spring-kafka-test</artifactId>
+        <scope>test</scope>
+    </dependency>
+</dependencies>
+```
+
+---
+
+### Phase 3: Sales Service Integration (Most Important)
+
+#### Step 3.1: Configure Kafka in Sales Service
+
+**sales-service/src/main/resources/application.yml**:
+
+```yaml
+spring:
+  application:
+    name: sales-service
+  
+  datasource:
+    url: jdbc:mysql://localhost:3306/sales_db
+    username: root
+    password: your_password
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+  
+  # Kafka Configuration
+  kafka:
+    bootstrap-servers: localhost:9092
+    
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+        linger.ms: 10
+        batch.size: 16384
+    
+    consumer:
+      group-id: sales-service-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      properties:
+        spring.json.trusted.packages: "*"
+    
+    listener:
+      ack-mode: manual
+
+server:
+  port: 8082
+
+product:
+  service:
+    url: http://localhost:8081
+```
+
+#### Step 3.2: Create Event Models
+
+**sales-service/src/main/java/com/example/salesservice/event/SaleCreatedEvent.java**:
+
+```java
+package com.example.salesservice.event;
+
+import java.time.LocalDateTime;
+
+public class SaleCreatedEvent {
+    private Long saleId;
+    private Long productId;
+    private Integer quantity;
+    private Double totalAmount;
+    private String customerName;
+    private String customerEmail;
+    private LocalDateTime timestamp;
+    private String eventType = "SALE_CREATED";
+    
+    // Constructors
+    public SaleCreatedEvent() {
+        this.timestamp = LocalDateTime.now();
+    }
+    
+    public SaleCreatedEvent(Long saleId, Long productId, Integer quantity, 
+                           Double totalAmount, String customerName, String customerEmail) {
+        this.saleId = saleId;
+        this.productId = productId;
+        this.quantity = quantity;
+        this.totalAmount = totalAmount;
+        this.customerName = customerName;
+        this.customerEmail = customerEmail;
+        this.timestamp = LocalDateTime.now();
+    }
+    
+    // Getters and Setters
+    public Long getSaleId() { return saleId; }
+    public void setSaleId(Long saleId) { this.saleId = saleId; }
+    
+    public Long getProductId() { return productId; }
+    public void setProductId(Long productId) { this.productId = productId; }
+    
+    public Integer getQuantity() { return quantity; }
+    public void setQuantity(Integer quantity) { this.quantity = quantity; }
+    
+    public Double getTotalAmount() { return totalAmount; }
+    public void setTotalAmount(Double totalAmount) { this.totalAmount = totalAmount; }
+    
+    public String getCustomerName() { return customerName; }
+    public void setCustomerName(String customerName) { this.customerName = customerName; }
+    
+    public String getCustomerEmail() { return customerEmail; }
+    public void setCustomerEmail(String customerEmail) { this.customerEmail = customerEmail; }
+    
+    public LocalDateTime getTimestamp() { return timestamp; }
+    public void setTimestamp(LocalDateTime timestamp) { this.timestamp = timestamp; }
+    
+    public String getEventType() { return eventType; }
+    public void setEventType(String eventType) { this.eventType = eventType; }
+    
+    @Override
+    public String toString() {
+        return String.format("SaleCreatedEvent{saleId=%d, productId=%d, quantity=%d, amount=%.2f, customer='%s'}",
+            saleId, productId, quantity, totalAmount, customerName);
+    }
+}
+```
+
+**sales-service/src/main/java/com/example/salesservice/event/InventoryUpdateEvent.java**:
+
+```java
+package com.example.salesservice.event;
+
+import java.time.LocalDateTime;
+
+public class InventoryUpdateEvent {
+    private Long productId;
+    private Integer quantitySold;
+    private String operation = "REDUCE";
+    private String reason;
+    private LocalDateTime timestamp;
+    
+    public InventoryUpdateEvent() {
+        this.timestamp = LocalDateTime.now();
+    }
+    
+    public InventoryUpdateEvent(Long productId, Integer quantitySold, String reason) {
+        this.productId = productId;
+        this.quantitySold = quantitySold;
+        this.reason = reason;
+        this.timestamp = LocalDateTime.now();
+    }
+    
+    // Getters and Setters
+    public Long getProductId() { return productId; }
+    public void setProductId(Long productId) { this.productId = productId; }
+    
+    public Integer getQuantitySold() { return quantitySold; }
+    public void setQuantitySold(Integer quantitySold) { this.quantitySold = quantitySold; }
+    
+    public String getOperation() { return operation; }
+    public void setOperation(String operation) { this.operation = operation; }
+    
+    public String getReason() { return reason; }
+    public void setReason(String reason) { this.reason = reason; }
+    
+    public LocalDateTime getTimestamp() { return timestamp; }
+    public void setTimestamp(LocalDateTime timestamp) { this.timestamp = timestamp; }
+    
+    @Override
+    public String toString() {
+        return String.format("InventoryUpdateEvent{productId=%d, quantity=%d, operation='%s'}",
+            productId, quantitySold, operation);
+    }
+}
+```
+
+#### Step 3.3: Create Kafka Producer Service
+
+**sales-service/src/main/java/com/example/salesservice/kafka/SaleEventProducer.java**:
+
+```java
+package com.example.salesservice.kafka;
+
+import com.example.salesservice.event.SaleCreatedEvent;
+import com.example.salesservice.event.InventoryUpdateEvent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.SendResult;
+import org.springframework.stereotype.Service;
+import java.util.concurrent.CompletableFuture;
+
+@Service
+public class SaleEventProducer {
+    
+    private static final Logger logger = LoggerFactory.getLogger(SaleEventProducer.class);
+    private static final String SALE_EVENTS_TOPIC = "sale-events";
+    private static final String INVENTORY_UPDATES_TOPIC = "inventory-updates";
+    private static final String NOTIFICATIONS_TOPIC = "notifications";
+    
+    private final KafkaTemplate<String, Object> kafkaTemplate;
+    
+    public SaleEventProducer(KafkaTemplate<String, Object> kafkaTemplate) {
+        this.kafkaTemplate = kafkaTemplate;
+    }
+    
+    /**
+     * Publish sale created event
+     */
+    public void publishSaleCreatedEvent(SaleCreatedEvent event) {
+        String key = "sale-" + event.getSaleId();
+        
+        CompletableFuture<SendResult<String, Object>> future = 
+            kafkaTemplate.send(SALE_EVENTS_TOPIC, key, event);
+        
+        future.whenComplete((result, ex) -> {
+            if (ex == null) {
+                logger.info("✅ Sale event published successfully: {} to partition: {}, offset: {}",
+                    event.getSaleId(), 
+                    result.getRecordMetadata().partition(),
+                    result.getRecordMetadata().offset());
+            } else {
+                logger.error("❌ Failed to publish sale event: {}", event.getSaleId(), ex);
+            }
+        });
+    }
+    
+    /**
+     * Publish inventory update event
+     */
+    public void publishInventoryUpdateEvent(InventoryUpdateEvent event) {
+        String key = "product-" + event.getProductId();
+        
+        CompletableFuture<SendResult<String, Object>> future = 
+            kafkaTemplate.send(INVENTORY_UPDATES_TOPIC, key, event);
+        
+        future.whenComplete((result, ex) -> {
+            if (ex == null) {
+                logger.info("✅ Inventory update event published: product {} to partition: {}, offset: {}",
+                    event.getProductId(),
+                    result.getRecordMetadata().partition(),
+                    result.getRecordMetadata().offset());
+            } else {
+                logger.error("❌ Failed to publish inventory update: product {}", event.getProductId(), ex);
+            }
+        });
+    }
+    
+    /**
+     * Publish notification event
+     */
+    public void publishNotification(String message) {
+        kafkaTemplate.send(NOTIFICATIONS_TOPIC, message);
+        logger.info("📧 Notification sent: {}", message);
+    }
+}
+```
+
+#### Step 3.4: Update Sale Controller with Kafka
+
+**sales-service/src/main/java/com/example/salesservice/controller/SaleController.java**:
+
+```java
+package com.example.salesservice.controller;
+
+import com.example.salesservice.entity.Sale;
+import com.example.salesservice.repo.SaleRepository;
+import com.example.salesservice.event.SaleCreatedEvent;
+import com.example.salesservice.event.InventoryUpdateEvent;
+import com.example.salesservice.kafka.SaleEventProducer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import java.time.LocalDateTime;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/sales")
+@CrossOrigin(origins = "*")
+public class SaleController {
+    
+    private static final Logger logger = LoggerFactory.getLogger(SaleController.class);
+    
+    @Autowired
+    private SaleRepository saleRepository;
+    
+    @Autowired
+    private SaleEventProducer saleEventProducer;
+    
+    /**
+     * Create a new sale with Kafka event publishing
+     */
+    @PostMapping
+    public ResponseEntity<?> createSale(@RequestBody Sale sale) {
+        try {
+            // Validate sale
+            if (sale.getProductId() == null || sale.getQuantity() == null || sale.getQuantity() <= 0) {
+                return ResponseEntity.badRequest().body("Invalid sale data");
+            }
+            
+            // Set timestamp
+            sale.setSaleDate(LocalDateTime.now());
+            
+            // Save sale to database
+            Sale savedSale = saleRepository.save(sale);
+            logger.info("💾 Sale saved to database: {}", savedSale.getId());
+            
+            // Publish sale created event
+            SaleCreatedEvent saleEvent = new SaleCreatedEvent(
+                savedSale.getId(),
+                savedSale.getProductId(),
+                savedSale.getQuantity(),
+                savedSale.getTotalAmount(),
+                savedSale.getCustomerName(),
+                savedSale.getCustomerEmail()
+            );
+            saleEventProducer.publishSaleCreatedEvent(saleEvent);
+            
+            // Publish inventory update event
+            InventoryUpdateEvent inventoryEvent = new InventoryUpdateEvent(
+                savedSale.getProductId(),
+                savedSale.getQuantity(),
+                "Sale #" + savedSale.getId()
+            );
+            saleEventProducer.publishInventoryUpdateEvent(inventoryEvent);
+            
+            // Publish notification
+            String notification = String.format(
+                "New sale created: #%d - %s purchased %d units for $%.2f",
+                savedSale.getId(),
+                savedSale.getCustomerName(),
+                savedSale.getQuantity(),
+                savedSale.getTotalAmount()
+            );
+            saleEventProducer.publishNotification(notification);
+            
+            return ResponseEntity.status(HttpStatus.CREATED).body(savedSale);
+            
+        } catch (Exception e) {
+            logger.error("❌ Error creating sale", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Error creating sale: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Get all sales
+     */
+    @GetMapping
+    public ResponseEntity<List<Sale>> getAllSales() {
+        try {
+            List<Sale> sales = saleRepository.findAll();
+            return ResponseEntity.ok(sales);
+        } catch (Exception e) {
+            logger.error("Error fetching sales", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+    
+    /**
+     * Get sale by ID
+     */
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getSaleById(@PathVariable Long id) {
+        return saleRepository.findById(id)
+            .map(ResponseEntity::ok)
+            .orElse(ResponseEntity.notFound().build());
+    }
+    
+    /**
+     * Delete sale
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteSale(@PathVariable Long id) {
+        try {
+            if (!saleRepository.existsById(id)) {
+                return ResponseEntity.notFound().build();
+            }
+            saleRepository.deleteById(id);
+            logger.info("🗑️ Sale deleted: {}", id);
+            return ResponseEntity.ok().body("Sale deleted successfully");
+        } catch (Exception e) {
+            logger.error("Error deleting sale", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Error deleting sale: " + e.getMessage());
+        }
+    }
+}
+```
+
+#### Step 3.5: Kafka Configuration Class
+
+**sales-service/src/main/java/com/example/salesservice/config/KafkaConfig.java**:
+
+```java
+package com.example.salesservice.config;
+
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.common.serialization.StringSerializer;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.core.*;
+import org.springframework.kafka.support.serializer.JsonSerializer;
+import org.springframework.kafka.support.serializer.JsonDeserializer;
+import java.util.HashMap;
+import java.util.Map;
+
+@Configuration
+public class KafkaConfig {
+    
+    @Value("${spring.kafka.bootstrap-servers}")
+    private String bootstrapServers;
+    
+    /**
+     * Producer Configuration
+     */
+    @Bean
+    public ProducerFactory<String, Object> producerFactory() {
+        Map<String, Object> config = new HashMap<>();
+        config.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        config.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        config.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
+        
+        // Reliability settings
+        config.put(ProducerConfig.ACKS_CONFIG, "all");
+        config.put(ProducerConfig.RETRIES_CONFIG, 3);
+        config.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
+        
+        // Performance settings
+        config.put(ProducerConfig.BATCH_SIZE_CONFIG, 16384);
+        config.put(ProducerConfig.LINGER_MS_CONFIG, 10);
+        config.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, "snappy");
+        
+        return new DefaultKafkaProducerFactory<>(config);
+    }
+    
+    @Bean
+    public KafkaTemplate<String, Object> kafkaTemplate() {
+        return new KafkaTemplate<>(producerFactory());
+    }
+    
+    /**
+     * Consumer Configuration
+     */
+    @Bean
+    public ConsumerFactory<String, Object> consumerFactory() {
+        Map<String, Object> config = new HashMap<>();
+        config.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        config.put(ConsumerConfig.GROUP_ID_CONFIG, "sales-service-group");
+        config.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        config.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
+        config.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        config.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+        config.put(JsonDeserializer.TRUSTED_PACKAGES, "*");
+        
+        return new DefaultKafkaConsumerFactory<>(config);
+    }
+    
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, Object> kafkaListenerContainerFactory() {
+        ConcurrentKafkaListenerContainerFactory<String, Object> factory =
+            new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(consumerFactory());
+        factory.setConcurrency(3); // 3 concurrent consumers
+        factory.getContainerProperties().setPollTimeout(3000);
+        return factory;
+    }
+}
+```
+
+---
+
+### Phase 4: Create Analytics/Notification Service (Optional)
+
+#### Step 4.1: Create New Spring Boot Service
+
+**Create new service:**
+```powershell
+cd C:\Users\YU20587239\Inventory-microservices-frontend
+mkdir analytics-service
+cd analytics-service
+```
+
+**analytics-service/pom.xml**:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+         https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.1.5</version>
+        <relativePath/>
+    </parent>
+    
+    <groupId>com.example</groupId>
+    <artifactId>analytics-service</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>analytics-service</name>
+    
+    <properties>
+        <java.version>17</java.version>
+    </properties>
+    
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+        
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+    
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+```
+
+#### Step 4.2: Analytics Consumer
+
+**analytics-service/src/main/java/com/example/analyticsservice/kafka/SaleEventConsumer.java**:
+
+```java
+package com.example.analyticsservice.kafka;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.support.Acknowledgment;
+import org.springframework.kafka.support.KafkaHeaders;
+import org.springframework.messaging.handler.annotation.Header;
+import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.stereotype.Service;
+
+@Service
+public class SaleEventConsumer {
+    
+    private static final Logger logger = LoggerFactory.getLogger(SaleEventConsumer.class);
+    
+    private int totalSalesCount = 0;
+    private double totalRevenue = 0.0;
+    
+    @KafkaListener(
+        topics = "sale-events",
+        groupId = "analytics-service-group"
+    )
+    public void consumeSaleEvent(
+            @Payload JsonNode saleEvent,
+            @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
+            @Header(KafkaHeaders.OFFSET) long offset,
+            Acknowledgment acknowledgment) {
+        
+        try {
+            Long saleId = saleEvent.get("saleId").asLong();
+            Double amount = saleEvent.get("totalAmount").asDouble();
+            Integer quantity = saleEvent.get("quantity").asInt();
+            String customer = saleEvent.get("customerName").asText();
+            
+            // Update analytics
+            totalSalesCount++;
+            totalRevenue += amount;
+            
+            logger.info("📊 [ANALYTICS] Sale #{} processed - Customer: {}, Amount: ${}, Quantity: {}",
+                saleId, customer, amount, quantity);
+            logger.info("📈 Total Sales: {}, Total Revenue: ${}", totalSalesCount, totalRevenue);
+            
+            // Acknowledge the message
+            acknowledgment.acknowledge();
+            
+        } catch (Exception e) {
+            logger.error("❌ Error processing sale event from partition {}, offset {}", 
+                partition, offset, e);
+        }
+    }
+    
+    @KafkaListener(
+        topics = "notifications",
+        groupId = "notification-service-group"
+    )
+    public void consumeNotification(
+            @Payload String notification,
+            Acknowledgment acknowledgment) {
+        
+        logger.info("📧 [NOTIFICATION] {}", notification);
+        
+        // Here you could send emails, SMS, push notifications, etc.
+        // For now, just log it
+        
+        acknowledgment.acknowledge();
+    }
+    
+    @KafkaListener(
+        topics = "inventory-updates",
+        groupId = "analytics-inventory-group"
+    )
+    public void consumeInventoryUpdate(
+            @Payload JsonNode inventoryEvent,
+            Acknowledgment acknowledgment) {
+        
+        try {
+            Long productId = inventoryEvent.get("productId").asLong();
+            Integer quantity = inventoryEvent.get("quantitySold").asInt();
+            String operation = inventoryEvent.get("operation").asText();
+            
+            logger.info("📦 [INVENTORY ANALYTICS] Product #{} - {} quantity: {}",
+                productId, operation, quantity);
+            
+            acknowledgment.acknowledge();
+            
+        } catch (Exception e) {
+            logger.error("❌ Error processing inventory update", e);
+        }
+    }
+    
+    // Endpoint to get current statistics
+    public String getStatistics() {
+        return String.format("Total Sales: %d, Total Revenue: $%.2f", 
+            totalSalesCount, totalRevenue);
+    }
+}
+```
+
+**analytics-service/src/main/resources/application.yml**:
+
+```yaml
+spring:
+  application:
+    name: analytics-service
+  
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: analytics-service-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      properties:
+        spring.json.trusted.packages: "*"
+    listener:
+      ack-mode: manual
+
+server:
+  port: 8084
+
+logging:
+  level:
+    com.example.analyticsservice: DEBUG
+    org.springframework.kafka: INFO
+```
+
+---
+
+## Testing the Integration
+
+### Step 1: Start All Services
+
+```powershell
+# Terminal 1: Start Kafka
+docker-compose up
+
+# Terminal 2: Start User Service
+cd user-service
+mvn spring-boot:run
+
+# Terminal 3: Start Sales Service
+cd sales-service
+mvn spring-boot:run
+
+# Terminal 4: Start Analytics Service (if created)
+cd analytics-service
+mvn spring-boot:run
+
+# Terminal 5: Start Frontend
+npm run dev
+```
+
+### Step 2: Test Sale Creation
+
+**Using cURL:**
+```powershell
+# Create a sale
+curl -X POST http://localhost:8082/api/sales `
+  -H "Content-Type: application/json" `
+  -d '{
+    "productId": 1,
+    "quantity": 5,
+    "totalAmount": 149.95,
+    "customerName": "John Doe",
+    "customerEmail": "john@example.com"
+  }'
+```
+
+**Using Postman:**
+```
+POST http://localhost:8082/api/sales
+Content-Type: application/json
+
+{
+  "productId": 1,
+  "quantity": 5,
+  "totalAmount": 149.95,
+  "customerName": "John Doe",
+  "customerEmail": "john@example.com"
+}
+```
+
+### Step 3: Monitor Kafka Events
+
+**Using Kafka UI:**
+- Open http://localhost:8090
+- Navigate to Topics
+- View messages in `sale-events`, `inventory-updates`, `notifications`
+
+**Using Console Consumer:**
+```powershell
+# Monitor sale events
+docker exec -it kafka kafka-console-consumer --topic sale-events --bootstrap-server localhost:9092 --from-beginning
+
+# Monitor inventory updates
+docker exec -it kafka kafka-console-consumer --topic inventory-updates --bootstrap-server localhost:9092 --from-beginning
+
+# Monitor notifications
+docker exec -it kafka kafka-console-consumer --topic notifications --bootstrap-server localhost:9092 --from-beginning
+```
+
+### Step 4: Check Logs
+
+**Sales Service logs should show:**
+```
+💾 Sale saved to database: 1
+✅ Sale event published successfully: 1 to partition: 0, offset: 0
+✅ Inventory update event published: product 1 to partition: 1, offset: 0
+📧 Notification sent: New sale created: #1 - John Doe purchased 5 units for $149.95
+```
+
+**Analytics Service logs should show:**
+```
+📊 [ANALYTICS] Sale #1 processed - Customer: John Doe, Amount: $149.95, Quantity: 5
+📈 Total Sales: 1, Total Revenue: $149.95
+📦 [INVENTORY ANALYTICS] Product #1 - REDUCE quantity: 5
+📧 [NOTIFICATION] New sale created: #1 - John Doe purchased 5 units for $149.95
+```
+
+---
+
+## Interview Questions & Answers
+
+### Basic Level Questions
+
+#### Q1: What is Apache Kafka and why would you use it in a microservices architecture?
+
+**Answer:**
+Apache Kafka is a distributed streaming platform and message broker. In our inventory microservices project, I used Kafka for:
+
+1. **Asynchronous Communication**: When a sale is created, the API responds immediately without waiting for inventory updates or notifications
+2. **Event-Driven Architecture**: Services react to events rather than direct API calls
+3. **Decoupling Services**: Sales Service doesn't need to know about Analytics or Notification services
+4. **Scalability**: Can handle thousands of sales per second
+5. **Reliability**: Events are persisted, so no data loss if a service is down
+6. **Audit Trail**: All events are stored in Kafka for compliance and debugging
+
+Example: When a user creates a sale, we publish events to Kafka topics, and multiple consumers (Analytics, Notification, Inventory) process them independently.
+
+---
+
+#### Q2: Explain the difference between Kafka topics and partitions.
+
+**Answer:**
+- **Topic**: A category or feed name (like "sale-events") where messages are published
+- **Partition**: Topics are divided into partitions for parallelism
+
+In our project:
+```
+Topic: sale-events (3 partitions)
+├── Partition 0: [sale-1, sale-4, sale-7]
+├── Partition 1: [sale-2, sale-5, sale-8]
+└── Partition 2: [sale-3, sale-6, sale-9]
+```
+
+**Benefits of Partitions:**
+1. **Parallelism**: Multiple consumers can read from different partitions simultaneously
+2. **Ordering**: Messages within a partition are ordered
+3. **Scalability**: Add more partitions to handle more load
+
+**Key Point**: Messages with the same key go to the same partition, ensuring order for related events (e.g., all events for product #5 go to the same partition).
+
+---
+
+#### Q3: What is a consumer group in Kafka?
+
+**Answer:**
+A consumer group is a set of consumers that work together to consume messages from topics. Each partition is consumed by only ONE consumer in the group.
+
+In our project:
+```yaml
+Consumer Group: "analytics-service-group"
+  Consumer 1 → Partition 0
+  Consumer 2 → Partition 1
+  Consumer 3 → Partition 2
+```
+
+**Benefits:**
+1. **Load Balancing**: Work is distributed among consumers
+2. **Fault Tolerance**: If one consumer fails, others take over
+3. **Scalability**: Add more consumers up to the number of partitions
+
+**Example**: If we have 3 partitions and add a 4th consumer, it will be idle. If we remove a consumer, Kafka rebalances and redistributes partitions.
+
+---
+
+#### Q4: What is the difference between Kafka and RabbitMQ?
+
+**Answer:**
+
+| Feature | Kafka | RabbitMQ |
+|---------|-------|----------|
+| **Type** | Distributed log / streaming | Traditional message broker |
+| **Performance** | Very high (millions/sec) | Moderate (thousands/sec) |
+| **Message Retention** | Persistent (days/weeks) | Deleted after consumed |
+| **Use Case** | Event streaming, logs | Task queues, RPC |
+| **Ordering** | Per partition | Per queue |
+| **Complexity** | Higher | Lower |
+
+**In our project, we chose Kafka because:**
+- High throughput for sales events
+- Need event replay capability
+- Want event-driven architecture
+- Multiple consumers need the same events
+
+---
+
+### Intermediate Level Questions
+
+#### Q5: How did you implement Kafka in your Sales Service? Walk me through the flow.
+
+**Answer:**
+Here's the complete flow:
+
+1. **User creates a sale** via POST request to `/api/sales`
+
+2. **Controller receives request**:
+   ```java
+   Sale savedSale = saleRepository.save(sale);
+   ```
+
+3. **Publish events to Kafka**:
+   ```java
+   // Sale created event
+   SaleCreatedEvent saleEvent = new SaleCreatedEvent(
+       savedSale.getId(), savedSale.getProductId(), 
+       savedSale.getQuantity(), savedSale.getTotalAmount()
+   );
+   saleEventProducer.publishSaleCreatedEvent(saleEvent);
+   
+   // Inventory update event
+   InventoryUpdateEvent inventoryEvent = new InventoryUpdateEvent(
+       savedSale.getProductId(), savedSale.getQuantity()
+   );
+   saleEventProducer.publishInventoryUpdateEvent(inventoryEvent);
+   
+   // Notification event
+   saleEventProducer.publishNotification("Sale created: #" + savedSale.getId());
+   ```
+
+4. **Kafka stores events** in respective topics
+
+5. **Consumers process events**:
+   - Analytics Service: Updates statistics
+   - Notification Service: Sends email/SMS
+   - Inventory Service: Reduces stock
+
+6. **Response returned** to client immediately (async processing)
+
+**Key Point**: The API responds in ~50ms while event processing happens asynchronously.
+
+---
+
+#### Q6: What are acknowledgments (acks) in Kafka and which level did you use?
+
+**Answer:**
+Acknowledgments control how Kafka confirms message receipt:
+
+- **acks=0**: Fire and forget (no confirmation)
+- **acks=1**: Leader broker confirms
+- **acks=all**: All in-sync replicas confirm (most reliable)
+
+**In our project, I used `acks=all`:**
+```yaml
+spring:
+  kafka:
+    producer:
+      acks: all
+```
+
+**Why?**
+- Sales data is critical business data
+- Can't afford to lose transactions
+- Slight latency increase acceptable for reliability
+
+**Trade-off**: Higher latency (~10ms more) but guaranteed durability. For non-critical events like logs, I might use `acks=1`.
+
+---
+
+#### Q7: How do you handle failures when publishing to Kafka?
+
+**Answer:**
+I implemented multiple strategies:
+
+1. **Automatic Retries**:
+```yaml
+spring:
+  kafka:
+    producer:
+      retries: 3
+```
+
+2. **Idempotent Producer** (prevents duplicates):
+```yaml
+spring:
+  kafka:
+    producer:
+      properties:
+        enable.idempotence: true
+```
+
+3. **Callback Error Handling**:
+```java
+future.whenComplete((result, ex) -> {
+    if (ex != null) {
+        logger.error("Failed to publish event", ex);
+        // Option 1: Store in database for retry
+        saveToRetryTable(event);
+        // Option 2: Alert operations
+        sendAlert("Kafka publish failed");
+    }
+});
+```
+
+4. **Database as Source of Truth**:
+   - Save to database FIRST
+   - Then publish to Kafka
+   - If Kafka fails, we still have the data
+
+5. **Monitoring**: Alert if error rate exceeds threshold
+
+---
+
+#### Q8: Explain offset management in your Kafka consumers.
+
+**Answer:**
+Offsets track which messages a consumer has processed. I used **manual offset commit**:
+
+```yaml
+spring:
+  kafka:
+    consumer:
+      enable-auto-commit: false
+    listener:
+      ack-mode: manual
+```
+
+**Consumer code:**
+```java
+@KafkaListener(topics = "sale-events")
+public void consume(@Payload SaleEvent event, Acknowledgment ack) {
+    try {
+        processSale(event);
+        ack.acknowledge(); // Commit only after successful processing
+    } catch (Exception e) {
+        // Don't commit - message will be reprocessed
+        logger.error("Processing failed, will retry", e);
+    }
+}
+```
+
+**Why manual commit?**
+- **At-least-once delivery**: Ensures no message loss
+- **Exactly-once processing**: Combined with idempotency
+- **Error handling**: Can retry failed messages
+
+**Alternative**: Auto-commit is simpler but risks data loss if processing fails after commit.
+
+---
+
+#### Q9: How would you scale your Kafka consumers?
+
+**Answer:**
+Scaling strategy:
+
+1. **Horizontal Scaling** (preferred):
+```yaml
+spring:
+  kafka:
+    listener:
+      concurrency: 3  # 3 concurrent consumers per instance
+```
+
+Deploy multiple instances:
+```
+Instance 1: 3 consumers → Partitions 0, 1, 2
+Instance 2: 3 consumers → Partitions 3, 4, 5
+```
+
+2. **Prerequisites**:
+   - Partitions ≥ Consumers (extra consumers are idle)
+   - Consumer group ID same for all instances
+   - Kafka handles rebalancing automatically
+
+3. **Monitoring**:
+```java
+// Check consumer lag
+kafka-consumer-groups --describe --group analytics-service-group
+```
+
+4. **Auto-scaling**:
+   - Monitor lag metric
+   - Scale up if lag > threshold (e.g., 10,000 messages)
+   - Scale down when lag < threshold
+
+**Real Example**: During Black Friday, we might scale from 3 to 15 consumers to handle 10x traffic.
+
+---
+
+### Advanced Level Questions
+
+#### Q10: How would you implement exactly-once semantics in your project?
+
+**Answer:**
+Exactly-once requires multiple components:
+
+1. **Idempotent Producer**:
+```java
+props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
+props.put(ProducerConfig.ACKS_CONFIG, "all");
+props.put(ProducerConfig.RETRIES_CONFIG, Integer.MAX_VALUE);
+```
+
+2. **Transactional Producer**:
+```java
+props.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, "sales-txn-1");
+
+producer.initTransactions();
+producer.beginTransaction();
+producer.send(record1);
+producer.send(record2);
+producer.commitTransaction(); // Atomic commit
+```
+
+3. **Transactional Consumer**:
+```java
+props.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
+```
+
+4. **Database Integration**:
+```java
+@Transactional
+public void processSale(Sale sale) {
+    // Save to DB
+    saleRepository.save(sale);
+    
+    // Publish to Kafka (in same transaction)
+    kafkaTemplate.send("sale-events", event);
+    
+    // Both succeed or both fail
+}
+```
+
+5. **Idempotent Business Logic**:
+```java
+// Use unique keys to prevent duplicate processing
+String idempotencyKey = event.getSaleId() + "-" + event.getTimestamp();
+if (processedEvents.contains(idempotencyKey)) {
+    return; // Already processed
+}
+processEvent(event);
+processedEvents.add(idempotencyKey);
+```
+
+---
+
+#### Q11: What is the Outbox Pattern and how would you implement it?
+
+**Answer:**
+The Outbox Pattern ensures database and Kafka consistency:
+
+**Problem**: Database save succeeds but Kafka publish fails → data inconsistency
+
+**Solution**:
+1. **Create Outbox Table**:
+```sql
+CREATE TABLE outbox (
+    id BIGINT PRIMARY KEY,
+    aggregate_type VARCHAR(50),
+    aggregate_id BIGINT,
+    event_type VARCHAR(50),
+    payload JSON,
+    created_at TIMESTAMP,
+    processed BOOLEAN DEFAULT FALSE
+);
+```
+
+2. **Save to DB and Outbox in same transaction**:
+```java
+@Transactional
+public Sale createSale(Sale sale) {
+    // Save sale
+    Sale saved = saleRepository.save(sale);
+    
+    // Save event to outbox
+    OutboxEvent outbox = new OutboxEvent(
+        "Sale", saved.getId(), "SALE_CREATED",
+        serializeToJson(saved)
+    );
+    outboxRepository.save(outbox);
+    
+    return saved;
+}
+```
+
+3. **Separate service polls outbox and publishes**:
+```java
+@Scheduled(fixedDelay = 1000)
+public void publishOutboxEvents() {
+    List<OutboxEvent> pending = outboxRepository
+        .findByProcessedFalse();
+    
+    for (OutboxEvent event : pending) {
+        try {
+            kafkaTemplate.send("sale-events", event.getPayload());
+            event.setProcessed(true);
+            outboxRepository.save(event);
+        } catch (Exception e) {
+            // Retry next time
+        }
+    }
+}
+```
+
+**Benefits**:
+- Guaranteed eventual consistency
+- No data loss
+- Survives service crashes
+
+---
+
+#### Q12: How would you handle message ordering in Kafka?
+
+**Answer:**
+Kafka guarantees order within a partition, not across partitions.
+
+**Strategy 1: Use Keys**
+```java
+// All events for same product go to same partition
+String key = "product-" + productId;
+producer.send(new ProducerRecord<>("inventory-updates", key, event));
+```
+
+**Strategy 2: Single Partition** (not scalable)
+```bash
+kafka-topics --create --topic orders --partitions 1
+```
+
+**Strategy 3: Sequence Numbers**
+```java
+public class OrderEvent {
+    private Long orderId;
+    private Long sequenceNumber; // 1, 2, 3, 4...
+    private LocalDateTime timestamp;
+}
+
+// Consumer reorders if needed
+@KafkaListener(topics = "orders")
+public void consume(OrderEvent event) {
+    eventBuffer.add(event);
+    eventBuffer.sort(Comparator.comparing(OrderEvent::getSequenceNumber));
+    processInOrder(eventBuffer);
+}
+```
+
+**Strategy 4: Kafka Streams** (for complex ordering)
+```java
+KStream<String, OrderEvent> stream = builder.stream("orders");
+stream.groupByKey()
+    .windowedBy(TimeWindows.of(Duration.ofMinutes(5)))
+    .reduce((oldValue, newValue) -> newValue)
+    .toStream()
+    .to("ordered-output");
+```
+
+**In our project**: I use product ID as key to ensure all inventory updates for the same product are ordered.
+
+---
+
+#### Q13: Explain how you would implement dead letter queue (DLQ) pattern.
+
+**Answer:**
+DLQ stores messages that can't be processed:
+
+```java
+@Service
+public class SaleConsumerWithDLQ {
+    
+    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private static final String DLQ_TOPIC = "sale-events-dlq";
+    private static final int MAX_RETRIES = 3;
+    
+    @KafkaListener(topics = "sale-events")
+    public void consume(
+            @Payload SaleEvent event,
+            @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
+            @Header(KafkaHeaders.OFFSET) long offset,
+            Acknowledgment ack) {
+        
+        try {
+            processSale(event);
+            ack.acknowledge();
+            
+        } catch (ValidationException e) {
+            // Non-recoverable error - send to DLQ
+            logger.error("Invalid sale event, sending to DLQ", e);
+            sendToDLQ(event, partition, offset, e.getMessage());
+            ack.acknowledge(); // Don't reprocess
+            
+        } catch (TransientException e) {
+            // Recoverable error - retry
+            int retryCount = getRetryCount(event);
+            if (retryCount < MAX_RETRIES) {
+                logger.warn("Retry {} for sale {}", retryCount, event.getSaleId());
+                incrementRetryCount(event);
+                // Don't acknowledge - will be redelivered
+            } else {
+                logger.error("Max retries exceeded, sending to DLQ");
+                sendToDLQ(event, partition, offset, "Max retries exceeded");
+                ack.acknowledge();
+            }
+        }
+    }
+    
+    private void sendToDLQ(SaleEvent event, int partition, long offset, String reason) {
+        DLQMessage dlq = new DLQMessage(
+            event,
+            partition,
+            offset,
+            reason,
+            LocalDateTime.now()
+        );
+        kafkaTemplate.send(DLQ_TOPIC, dlq);
+    }
+    
+    // Separate consumer for DLQ - manual review and reprocessing
+    @KafkaListener(topics = "sale-events-dlq")
+    public void consumeDLQ(@Payload DLQMessage dlqMessage) {
+        logger.error("DLQ Message: {}", dlqMessage);
+        // Alert operations team
+        alertOps("Message in DLQ: " + dlqMessage.getReason());
+    }
+}
+```
+
+**DLQ Message Structure**:
+```java
+public class DLQMessage {
+    private Object originalMessage;
+    private int originalPartition;
+    private long originalOffset;
+    private String errorReason;
+    private LocalDateTime failedAt;
+    private int retryCount;
+}
+```
+
+---
+
+#### Q14: How would you monitor Kafka in production?
+
+**Answer:**
+Comprehensive monitoring strategy:
+
+**1. Key Metrics to Monitor:**
+
+```java
+// Producer Metrics
+- record-send-rate
+- record-error-rate
+- request-latency-avg
+- batch-size-avg
+
+// Consumer Metrics
+- records-consumed-rate
+- records-lag-max (CRITICAL)
+- commit-latency-avg
+- poll-idle-ratio
+
+// Broker Metrics
+- under-replicated-partitions (should be 0)
+- offline-partitions-count (should be 0)
+- active-controller-count (should be 1)
+```
+
+**2. Consumer Lag Monitoring:**
+```bash
+# Check lag
+kafka-consumer-groups --describe --group analytics-service-group --bootstrap-server localhost:9092
+
+# Output shows:
+# TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG
+# sale-events     0          1000            1000            0
+# sale-events     1          950             1000            50  ← LAG!
+```
+
+**3. Spring Boot Actuator**:
+```yaml
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+```
+
+**4. Alerting Rules**:
+```yaml
+alerts:
+  - name: HighConsumerLag
+    condition: lag > 10000
+    action: scale_consumers
+    
+  - name: ProducerErrors
+    condition: error_rate > 0.01
+    action: alert_oncall
+    
+  - name: UnderReplicatedPartitions
+    condition: count > 0
+    action: critical_alert
+```
+
+**5. Logging**:
+```java
+logger.info("📊 Message consumed - Topic: {}, Partition: {}, Offset: {}, Lag: {}",
+    topic, partition, offset, lag);
+```
+
+**6. Tools**:
+- **Kafka UI**: Visual monitoring
+- **Prometheus + Grafana**: Metrics and dashboards
+- **ELK Stack**: Log aggregation
+- **Datadog/New Relic**: APM monitoring
+
+---
+
+#### Q15: Explain Kafka's replication and ISR (In-Sync Replicas).
+
+**Answer:**
+
+**Replication**:
+```bash
+# Create topic with replication factor 3
+kafka-topics --create --topic critical-sales \
+  --partitions 3 \
+  --replication-factor 3 \
+  --config min.insync.replicas=2
+```
+
+**Architecture**:
+```
+Topic: critical-sales, Partition 0
+├── Broker 1: LEADER (handles reads/writes)
+├── Broker 2: FOLLOWER (replicates from leader)
+└── Broker 3: FOLLOWER (replicates from leader)
+```
+
+**ISR (In-Sync Replicas)**:
+- Followers that are "caught up" with the leader
+- Must be within `replica.lag.time.max.ms` (default 10s)
+
+**Configuration**:
+```yaml
+spring:
+  kafka:
+    producer:
+      acks: all  # Wait for all ISRs
+    admin:
+      properties:
+        min.insync.replicas: 2  # At least 2 replicas must acknowledge
+```
+
+**Scenarios**:
+
+1. **Normal Operation**:
+```
+Leader: Offset 1000, ISR: [1, 2, 3]
+```
+
+2. **Follower Lags**:
+```
+Leader: Offset 1000
+Follower 2: Offset 1000 (ISR)
+Follower 3: Offset 950 (NOT in ISR - lagging)
+ISR: [1, 2]
+```
+
+3. **Leader Failure**:
+```
+Leader (Broker 1) crashes
+→ Kafka elects new leader from ISR (Broker 2)
+→ No data loss
+```
+
+**Why this matters**:
+- `replication-factor=3` + `min.insync.replicas=2` + `acks=all`
+- = Can tolerate 1 broker failure without data loss
+- = Requires 2/3 brokers to acknowledge writes
+
+---
+
+### Behavioral/Scenario Questions
+
+#### Q16: You notice consumer lag increasing rapidly in production. How do you handle it?
+
+**Answer:**
+
+**Step 1: Immediate Assessment** (5 minutes)
+```bash
+# Check lag
+kafka-consumer-groups --describe --group sales-group
+
+# Check if consumers are running
+kubectl get pods | grep sales-consumer
+
+# Check error logs
+kubectl logs -f sales-consumer-pod --tail=100
+```
+
+**Step 2: Root Cause Analysis**
+Common causes:
+1. **Traffic Spike**: More messages than consumers can handle
+2. **Slow Processing**: Database queries taking too long
+3. **Consumer Crash**: Service down or in crash loop
+4. **Network Issues**: Kafka unreachable
+
+**Step 3: Quick Fixes**
+
+*If traffic spike:*
+```bash
+# Scale consumers
+kubectl scale deployment sales-consumer --replicas=10
+```
+
+*If slow processing:*
+```java
+// Add batch processing
+@KafkaListener(topics = "sales")
+public void consumeBatch(List<SaleEvent> events) {
+    // Process 100 at a time instead of 1
+    saleRepository.saveAll(events);
+}
+```
+
+*If consumer crash:*
+```bash
+# Restart consumers
+kubectl rollout restart deployment sales-consumer
+```
+
+**Step 4: Long-term Solutions**
+1. Auto-scaling based on lag
+2. Optimize processing logic
+3. Add more partitions
+4. Implement caching
+
+**Step 5: Communication**
+- Alert stakeholders
+- Update incident ticket
+- Schedule post-mortem
+
+**Metrics to track**:
+- Time to detect: < 5 min
+- Time to resolve: < 30 min
+- Messages lost: 0
+
+---
+
+#### Q17: Your Kafka cluster is down. How do you ensure the application continues working?
+
+**Answer:**
+
+**Immediate Actions**:
+
+1. **Graceful Degradation**:
+```java
+@Service
+public class ResilientSaleService {
+    
+    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final OutboxRepository outboxRepository;
+    
+    public Sale createSale(Sale sale) {
+        // Save to database (always works)
+        Sale saved = saleRepository.save(sale);
+        
+        try {
+            // Try to publish to Kafka
+            kafkaTemplate.send("sale-events", saved).get(100, TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+            // Kafka is down - fallback to outbox
+            logger.warn("Kafka unavailable, using outbox pattern");
+            outboxRepository.save(new OutboxEvent(saved));
+        }
+        
+        return saved;
+    }
+}
+```
+
+2. **Circuit Breaker Pattern**:
+```java
+@Service
+public class KafkaPublisher {
+    
+    private CircuitBreaker circuitBreaker = CircuitBreaker.ofDefaults("kafka");
+    
+    public void publish(Event event) {
+        circuitBreaker.executeSupplier(() -> {
+            kafkaTemplate.send("events", event);
+            return true;
+        });
+    }
+}
+```
+
+3. **Health Check**:
+```java
+@Component
+public class KafkaHealthIndicator implements HealthIndicator {
+    
+    @Override
+    public Health health() {
+        try {
+            adminClient.listTopics().names().get(5, TimeUnit.SECONDS);
+            return Health.up().build();
+        } catch (Exception e) {
+            return Health.down().withDetail("error", e.getMessage()).build();
+        }
+    }
+}
+```
+
+**Recovery Steps**:
+1. Switch to backup Kafka cluster
+2. Process outbox events
+3. Verify data consistency
+4. Monitor for duplicate processing
+
+**Prevention**:
+- Multi-region Kafka deployment
+- Regular backups
+- Disaster recovery drills
+
+---
+
+#### Q18: How do you ensure data consistency between database and Kafka?
+
+**Answer:**
+
+**Problem**: Database saves but Kafka publish fails → inconsistent state
+
+**Solution 1: Outbox Pattern** (Already covered in Q11)
+
+**Solution 2: Change Data Capture (CDC)**:
+```java
+// Use Debezium to capture database changes
+// MySQL → Debezium → Kafka
+// No application code needed
+```
+
+**Solution 3: Transactional Outbox with Polling**:
+```java
+@Transactional
+public void createSale(Sale sale) {
+    // 1. Save to DB
+    saleRepository.save(sale);
+    
+    // 2. Save to outbox table (same transaction)
+    outboxRepository.save(new OutboxEvent(sale));
+    
+    // Both succeed or both fail (atomic)
+}
+
+// Separate process publishes from outbox
+@Scheduled(fixedDelay = 1000)
+public void publishEvents() {
+    outboxRepository.findPending().forEach(event -> {
+        kafkaTemplate.send(event.getTopic(), event.getPayload());
+        event.setPublished(true);
+        outboxRepository.save(event);
+    });
+}
+```
+
+**Solution 4: Kafka Transactions** (requires Kafka 0.11+):
+```java
+@Transactional
+public void createSale(Sale sale) {
+    saleRepository.save(sale);
+    
+    // Kafka transaction
+    kafkaTemplate.executeInTransaction(ops -> {
+        ops.send("sale-events", sale);
+        return true;
+    });
+}
+```
+
+**Best Practice**: Use Outbox Pattern for critical data, simple async publish for non-critical.
+
+---
+
+## Summary: Key Integration Points
+
+### What We Achieved:
+✅ Asynchronous event-driven architecture  
+✅ Decoupled microservices  
+✅ Real-time analytics and notifications  
+✅ Scalable message processing  
+✅ Fault-tolerant system  
+✅ Audit trail of all events  
+
+### Architecture Flow:
+```
+User creates sale 
+  → Sales Service saves to DB 
+  → Publishes events to Kafka 
+  → Multiple consumers process events 
+  → Analytics updated 
+  → Notifications sent 
+  → Inventory reduced
+```
+
+### Production Considerations:
+1. **Monitoring**: Consumer lag, error rates
+2. **Scaling**: Auto-scale based on lag
+3. **Error Handling**: DLQ, retries, idempotency
+4. **Security**: SSL, SASL authentication
+5. **Backup**: Regular topic backups
+6. **Testing**: Integration tests with embedded Kafka
+
+---
+
+## Quick Start Commands
+
+```powershell
+# Start Kafka
+docker-compose up -d
+
+# Create topics
+docker exec -it kafka kafka-topics --create --topic sale-events --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+
+# Monitor events
+docker exec -it kafka kafka-console-consumer --topic sale-events --bootstrap-server localhost:9092 --from-beginning
+
+# Check consumer lag
+docker exec -it kafka kafka-consumer-groups --describe --group analytics-service-group --bootstrap-server localhost:9092
+
+# Access Kafka UI
+# http://localhost:8090
+```
+
+---
+
+**End of Integration Guide**
