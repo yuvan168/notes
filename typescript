@@ -1,0 +1,4252 @@
+# TypeScript Complete Guide - Theory & Examples
+
+## Table of Contents
+1. [Introduction & Setup](#introduction--setup)
+2. [Type Theory Fundamentals](#type-theory-fundamentals)
+3. [Basic Types](#basic-types)
+4. [Advanced Types](#advanced-types)
+5. [Functions](#functions)
+6. [Classes & OOP](#classes--oop)
+7. [Interfaces](#interfaces)
+8. [Generics](#generics)
+9. [Decorators](#decorators)
+10. [Modules & Namespaces](#modules--namespaces)
+11. [Practical Examples](#practical-examples)
+
+---
+
+## Introduction & Setup
+
+### What is TypeScript?
+
+TypeScript is a superset of JavaScript that adds **static type checking** at compile time. It compiles to clean, readable JavaScript that runs on any browser, on Node.js, or in any JavaScript engine that supports ECMAScript 3 (or newer).
+
+### Key Benefits
+
+- **Type Safety**: Catch errors before runtime
+- **Better IDE Support**: Improved autocomplete and refactoring
+- **Self-Documenting Code**: Types serve as documentation
+- **Scalability**: Easier to maintain large codebases
+- **JavaScript Compatible**: All valid JS is valid TS
+
+### Installation & Setup
+
+```bash
+# Install TypeScript globally
+npm install -g typescript
+
+# Check version
+tsc --version
+
+# Initialize a TypeScript project
+tsc --init
+
+# Watch mode (auto-compile on file changes)
+tsc --watch
+
+# Compile specific file
+tsc filename.ts
+
+# Compile with configuration
+tsc --project tsconfig.json
+```
+
+### Basic tsconfig.json
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2020",           // Target JavaScript version
+    "module": "ESNext",           // Module system
+    "lib": ["ES2020", "DOM"],     // Available APIs
+    "outDir": "./dist",           // Output directory
+    "rootDir": "./src",           // Source root
+    "strict": true,               // Enable all strict type checks
+    "esModuleInterop": true,      // Enable ES module compatibility
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  }
+}
+```
+
+---
+
+## Type Theory Fundamentals
+
+### What is a Type System?
+
+A **type system** is a formal framework for assigning properties to values and expressions in a program. It defines:
+
+- **What operations are valid** on values
+- **How values can be combined** without errors
+- **Compile-time guarantees** about runtime behavior
+
+### Static vs Dynamic Typing
+
+**Static Typing** (TypeScript):
+- Types are checked at **compile time** before execution
+- Errors caught before the program runs
+- Better IDE support and refactoring tools
+- More explicit but requires more code
+
+```typescript
+let x: string = "hello";
+// x = 123;  // Error caught at compile time
+```
+
+**Dynamic Typing** (JavaScript):
+- Types are checked at **runtime** during execution
+- Flexibility but errors discovered only when code runs
+- Less ceremony but harder to debug large codebases
+
+```javascript
+let x = "hello";
+x = 123;  // No error - runs fine, but unexpected behavior later
+```
+
+### Structural vs Nominal Typing
+
+**Nominal Typing**: Types are based on explicit declarations.
+
+```typescript
+// Java-style (nominal)
+class Dog {
+  bark() { }
+}
+
+class Cat {
+  meow() { }
+}
+
+const dog: Dog = new Cat();  // Error: Cat is not Dog (different names)
+```
+
+**Structural Typing**: Types are based on their shape/structure (what properties they have).
+
+```typescript
+// TypeScript uses structural typing
+interface HasBark {
+  bark(): void;
+}
+
+class Dog {
+  bark() { console.log("Woof!"); }
+}
+
+const dog: HasBark = new Dog();  // OK - has bark() method
+
+// Even without explicit implementation!
+const obj = { bark: () => console.log("Woof!") };
+const hasBarker: HasBark = obj;  // OK - shape matches
+```
+
+**Advantage of Structural Typing**:
+- More flexible and less verbose
+- Types can be compatible even if they're not explicitly related
+- Great for duck typing patterns
+
+### Type Soundness
+
+**Type Sound** means if code compiles, it's guaranteed not to have certain errors at runtime.
+
+```typescript
+// TypeScript with strict mode is mostly sound
+function process(x: string) {
+  return x.toUpperCase();  // Only strings have toUpperCase
+}
+
+process("hello");   // ✓ Safe
+// process(123);    // ✗ Compile error - prevented
+
+// Without strict mode, soundness can be broken
+let value: string = "hello";
+(value as any) = 123;          // Cast to any breaks soundness
+value.toUpperCase();            // Runtime error possible!
+```
+
+### Type Inference
+
+TypeScript automatically deduces types without explicit annotations.
+
+```typescript
+// Inference examples
+let x = 5;                    // x: number (inferred from literal)
+let y = "hello";              // y: string
+let z = [1, 2, 3];           // z: number[]
+const obj = { name: "Alice" }; // obj: { name: string }
+
+// Contextual inference
+const numbers: (number | string)[] = [1, "two", 3];
+// numbers[0] is inferred as: number | string
+
+// Assignment inference
+function getValue(x: boolean) {
+  return x ? 1 : "zero";
+}
+const result = getValue(true);  // result: number | string
+
+// Function parameter inference
+const add = (a: number, b: number) => a + b;  // return type: number
+```
+
+**Type Inference Algorithm**: TypeScript uses a sophisticated algorithm:
+1. Look at declared types
+2. Look at assignments and return statements
+3. Look at function arguments
+4. Use context and bidirectional type checking
+
+### Covariance and Contravariance
+
+These describe how generic types relate to their type parameters.
+
+**Covariant**: A type relationship is preserved.
+
+```typescript
+class Animal {}
+class Dog extends Animal {}
+
+// Arrays are covariant in their element type
+const dogs: Dog[] = [new Dog()];
+const animals: Animal[] = dogs;  // OK - Dog[] is subtype of Animal[]
+
+// This works because you can safely use a Dog wherever an Animal is expected
+```
+
+**Contravariant**: A type relationship is reversed.
+
+```typescript
+// Function parameters are contravariant
+type Callback<T> = (value: T) => void;
+
+const animalCallback: Callback<Animal> = (animal) => {
+  console.log("Animal callback");
+};
+
+const dogCallback: Callback<Dog> = (dog) => {
+  console.log("Dog callback");
+};
+
+// You can use an Animal callback where a Dog callback is expected
+// Why? Because the function accepts any Animal, including Dogs
+const processor: Callback<Dog> = animalCallback;  // OK
+processor(new Dog());  // Works!
+```
+
+**Invariant**: No relationship is preserved.
+
+```typescript
+// Mutable arrays should be invariant, but TypeScript treats them as covariant
+// This can actually cause type safety issues:
+
+const dogs: Dog[] = [new Dog()];
+const animals: Animal[] = dogs;  // Allowed (covariant)
+animals.push(new Cat());          // Type error, but...
+const dog = dogs[0];              // Might not be a Dog!
+```
+
+### Union and Intersection Types
+
+**Union Types** (`|`): A value can be one of several types.
+
+```typescript
+type Result = string | number | boolean;
+
+function process(value: Result) {
+  if (typeof value === "string") {
+    // Inside this block, value is string
+    return value.toUpperCase();
+  }
+  return value;
+}
+```
+
+**Intersection Types** (`&`): A value must be all of multiple types.
+
+```typescript
+type HasName = { name: string };
+type HasAge = { age: number };
+type Person = HasName & HasAge;
+
+const person: Person = {
+  name: "Alice",
+  age: 30
+};  // Must have BOTH properties
+```
+
+### Type Compatibility
+
+When is one type assignable to another?
+
+```typescript
+// Primitive types
+let x: number = 5;
+let y: 5 = 5;
+y = x;          // Error: number is not assignable to 5
+x = y;          // OK: 5 (literal) is assignable to number
+
+// Objects - structural typing
+interface A { x: number }
+interface B { x: number; y: number }
+
+let a: A = { x: 1 };
+let b: B = { x: 1, y: 2 };
+
+a = b;  // OK: B has all properties of A (width subtyping)
+// b = a;  // Error: B requires y property
+```
+
+**Assignability Rule**: Type `T` is assignable to type `U` if:
+- `T` has all properties of `U`
+- All properties of `T` are assignable to corresponding properties of `U`
+- Special rules apply for functions, classes, etc.
+
+### Type Narrowing
+
+Reducing a type from broader to narrower possibilities.
+
+```typescript
+function process(value: string | number) {
+  // value is string | number
+
+  if (typeof value === "string") {
+    // value is string (narrowed)
+    return value.toUpperCase();
+  } else {
+    // value is number (narrowed)
+    return value.toFixed(2);
+  }
+}
+
+// Discriminated unions (tagged unions)
+type Shape = { kind: "circle"; radius: number }
+  | { kind: "square"; side: number };
+
+function area(shape: Shape) {
+  switch (shape.kind) {
+    case "circle":
+      // shape is { kind: "circle"; radius: number }
+      return Math.PI * shape.radius ** 2;
+    case "square":
+      // shape is { kind: "square"; side: number }
+      return shape.side ** 2;
+  }
+}
+
+// Type guards
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+const x: unknown = "hello";
+if (isString(x)) {
+  // x is string
+  x.toUpperCase();
+}
+```
+
+### Generic Constraints
+
+Generics allow you to work with multiple types while maintaining type safety.
+
+```typescript
+// Without constraint - too broad
+function getFirst<T>(array: T[]) {
+  return array[0];  // T
+}
+
+// With constraint - more specific
+function getLength<T extends { length: number }>(value: T) {
+  return value.length;  // Safe: we know length exists
+}
+
+getLength([1, 2, 3]);     // 3
+getLength("hello");       // 5
+// getLength(123);        // Error: number has no length
+
+// Keyof constraint
+function getProperty<T, K extends keyof T>(obj: T, key: K): T[K] {
+  return obj[key];  // Safe: key exists on T
+}
+
+const person = { name: "Alice", age: 30 };
+getProperty(person, "name");   // "Alice"
+// getProperty(person, "email");  // Error: email not in person
+```
+
+### Type Erasure
+
+TypeScript types are **erased** at runtime - they only exist during compilation.
+
+```typescript
+// TypeScript code
+let x: number = 5;
+let y: string = "hello";
+
+// Compiled to JavaScript
+var x = 5;
+var y = "hello";
+
+// All type information is gone!
+// This means you cannot check types at runtime:
+
+function process(value: string | number) {
+  if (typeof value === "string") { ... }  // ✓ Works - JS typeof
+  // if (value is string) { ... }         // ✗ Syntax error - TypeScript only
+}
+```
+
+**Implications**:
+- You cannot use type information for runtime decisions
+- You need to use type guards or discriminators
+- Performance is not affected by type complexity
+
+### Protocol-Oriented Design
+
+Designing systems around interfaces/protocols rather than concrete classes.
+
+```typescript
+// Protocol-oriented approach
+interface Repository<T> {
+  find(id: number): T | undefined;
+  save(item: T): void;
+  delete(id: number): void;
+}
+
+interface Logger {
+  log(message: string): void;
+}
+
+// Implementation can vary
+class ConsoleLogger implements Logger {
+  log(message: string) {
+    console.log(message);
+  }
+}
+
+class FileLogger implements Logger {
+  log(message: string) {
+    // Write to file
+  }
+}
+
+// Service depends on abstractions, not concrete implementations
+class UserService {
+  constructor(
+    private userRepo: Repository<User>,
+    private logger: Logger
+  ) {}
+
+  getUser(id: number) {
+    this.logger.log(`Getting user ${id}`);
+    return this.userRepo.find(id);
+  }
+}
+
+// Easy to swap implementations
+const service1 = new UserService(userRepo, new ConsoleLogger());
+const service2 = new UserService(userRepo, new FileLogger());
+```
+
+**Benefits**:
+- Loose coupling
+- Easy to test (mock implementations)
+- Easy to extend
+- Follows SOLID principles
+
+---
+
+## Basic Types
+
+### Theory: Primitive Type System
+
+**What are Primitive Types?**
+
+Primitive types are the fundamental building blocks of TypeScript's type system. They represent single, indivisible values that cannot be broken down further. Unlike objects, primitives are:
+
+- **Immutable**: Their values cannot change
+- **Non-object**: They are not instances of classes
+- **Comparable by value**: `5 === 5` compares their actual values
+- **Stored on the stack**: In memory, they use direct value storage
+
+**Type vs Value**:
+- A **type** is a set of allowed values and operations
+- A **value** is a specific instance
+
+```typescript
+let x: number;  // x has type 'number'
+x = 5;          // x now holds the value 5
+```
+
+**Primitive vs Reference Types**:
+
+```typescript
+// Primitive: Stored as actual value
+let a: number = 5;
+let b = a;      // Copy the value
+b = 10;
+console.log(a); // 5 - unchanged!
+
+// Reference: Stored as pointer to object
+let obj1 = { value: 5 };
+let obj2 = obj1;    // Copy the reference
+obj2.value = 10;
+console.log(obj1.value); // 10 - changed!
+```
+
+**The Type Lattice**: Primitive types form a hierarchy:
+
+```
+any (top - least specific)
+  ↓
+string | number | boolean | ... (union types)
+  ↓
+"hello" | 42 | true (literal types - most specific)
+never (bottom - impossible type)
+```
+
+### Primitive Types
+
+TypeScript supports all JavaScript primitive types with explicit type annotations.
+
+```typescript
+// String
+let message: string = "Hello TypeScript";
+let template: string = `Multiline
+string with ${message}`;
+
+// Number (includes integers, floats, Infinity, NaN)
+let integer: number = 42;
+let float: number = 3.14;
+let infinity: number = Infinity;
+let notANumber: number = NaN;
+
+// Boolean
+let isActive: boolean = true;
+let hasPermission: boolean = false;
+
+// Undefined & Null
+let u: undefined = undefined;
+let n: null = null;
+
+// Symbol
+let sym: symbol = Symbol("unique");
+
+// BigInt (for large integers beyond Number.MAX_SAFE_INTEGER)
+let bigNumber: bigint = BigInt(9007199254740992);
+let bigLiteral: bigint = 1000n;
+```
+
+### Any Type
+
+The `any` type disables type checking. Use it as a last resort!
+
+```typescript
+// Avoid this in strict mode
+let anything: any = "could be anything";
+anything = 123;
+anything.toUpperCase();  // No error even if wrong
+
+// Better alternative: unknown
+let something: unknown = "value";
+// something.toUpperCase();  // Error: object is of type 'unknown'
+if (typeof something === "string") {
+  something.toUpperCase();  // Now it's safe
+}
+```
+
+### Array Types
+
+**Theory: Collection Typing**
+
+Arrays in TypeScript combine **homogeneity** (single element type) with **dynamicity** (variable length). Key concepts:
+
+- **Element Type**: The type of each element in the array
+- **Homogeneous vs Heterogeneous**: Arrays can contain one type or multiple types
+- **Variance**: How array type relationships work with inheritance
+- **Mutability**: Arrays are mutable by default
+
+**Why TypeScript Requires Array Types**:
+1. **Safety**: Prevents accessing non-existent methods on elements
+2. **Inference**: IDE can suggest methods available on elements
+3. **Documentation**: Types serve as contract for what data goes in
+
+**Array Covariance Problem**:
+
+```typescript
+class Animal { move() { } }
+class Dog extends Animal { bark() { } }
+
+// TypeScript allows covariant arrays (potentially unsafe)
+const dogs: Dog[] = [new Dog()];
+const animals: Animal[] = dogs;
+
+// This is technically unsafe:
+animals.push(new Animal());  // Allowed
+const dog = dogs[0];         // Type says Dog, but might be Animal!
+
+// Solution: Use readonly arrays for safety
+const readonlyDogs: readonly Dog[] = [new Dog()];
+// readonlyAnimals.push(...);  // Error - cannot modify
+```
+
+```typescript
+// Array of strings
+let strings: string[] = ["a", "b", "c"];
+let alternativeStrings: Array<string> = ["x", "y", "z"];
+
+// Array of numbers
+let numbers: number[] = [1, 2, 3];
+
+// Array of mixed types (union)
+let mixed: (string | number)[] = [1, "two", 3];
+
+// Array of objects
+interface User {
+  id: number;
+  name: string;
+}
+let users: User[] = [
+  { id: 1, name: "Alice" },
+  { id: 2, name: "Bob" }
+];
+
+// Readonly arrays
+let readonlyNumbers: readonly number[] = [1, 2, 3];
+// readonlyNumbers.push(4);  // Error: Property 'push' does not exist
+```
+
+### Tuple Types
+
+**Theory: Fixed-Length Heterogeneous Collections**
+
+Tuples extend arrays by adding:
+- **Fixed length**: Exactly N elements
+- **Heterogeneous types**: Each position has its own type
+- **Positional typing**: Type depends on position, not just element
+- **Labeled elements**: Can name each position for clarity
+
+**Use Cases**:
+- Return multiple values from functions
+- Coordinate systems (x, y, z)
+- Key-value pairs
+- Function signatures as data
+
+**Position-Based Type Safety**:
+
+```typescript
+// Without tuples - all elements have same type
+type Pair1 = (string | number)[];
+const p1: Pair1 = ["hello", 42];
+// p1[0] could be string OR number - ambiguous!
+
+// With tuples - position matters
+type Pair2 = [string, number];
+const p2: Pair2 = ["hello", 42];
+// p2[0] is definitely string
+// p2[1] is definitely number
+```
+
+```typescript
+// Basic tuple
+let tuple: [string, number] = ["hello", 42];
+
+// With optional elements
+let optional: [string, number?] = ["hello"];
+
+// With rest elements
+let rest: [string, ...number[]] = ["hello", 1, 2, 3];
+
+// Named tuples (ES2023+)
+let namedTuple: [name: string, age: number, email: string] = 
+  ["Alice", 30, "alice@example.com"];
+
+// Real-world example: coordinate system
+type Point = [x: number, y: number, z?: number];
+const point: Point = [10, 20];
+const point3D: Point = [10, 20, 5];
+```
+
+### Union Types
+
+A value can be one of multiple types.
+
+```typescript
+// String or number
+let id: string | number;
+id = "USR123";  // OK
+id = 123;       // OK
+// id = true;   // Error
+
+// String or null
+let nickname: string | null = "John";
+nickname = null;  // OK
+
+// Multiple types
+function formatValue(value: string | number | boolean): string {
+  if (typeof value === "string") {
+    return value.toUpperCase();
+  } else if (typeof value === "number") {
+    return value.toFixed(2);
+  } else {
+    return value ? "true" : "false";
+  }
+}
+
+// Using with constants
+type Status = "active" | "inactive" | "pending";
+let status: Status = "active";  // OK
+// let status2: Status = "deleted";  // Error
+```
+
+### Literal Types
+
+A variable can only have specific literal values.
+
+```typescript
+### Union Types
+
+**Theory: Set Theory and Discriminated Unions**
+
+Union types represent the **mathematical union** of multiple types:
+
+$$T_1 \cup T_2 = \{x \mid x \in T_1 \text{ or } x \in T_2\}$$
+
+**Key Principles**:
+- **Union expands possibilities**: `string | number` has more valid values than `string` alone
+- **Type narrowing reduces possibilities**: After checking type, possibilities decrease
+- **Discriminated unions improve type safety**: Using a tag field enables exhaustive checking
+
+**Type Narrowing Techniques**:
+
+```typescript
+// 1. typeof guards (for primitives)
+function process(x: string | number) {
+  if (typeof x === "string") {
+    // x: string
+  } else {
+    // x: number
+  }
+}
+
+// 2. instanceof guards (for classes)
+class Dog { bark() {} }
+class Cat { meow() {} }
+
+function sound(pet: Dog | Cat) {
+  if (pet instanceof Dog) {
+    // pet: Dog
+    pet.bark();
+  } else {
+    // pet: Cat
+    pet.meow();
+  }
+}
+
+// 3. Discriminated unions (best practice)
+type Shape = { kind: "circle"; radius: number }
+  | { kind: "square"; side: number };
+
+function area(shape: Shape) {
+  switch (shape.kind) {
+    case "circle": return Math.PI * shape.radius ** 2;
+    case "square": return shape.side ** 2;
+  }
+  // TypeScript ensures all cases covered (exhaustiveness check)
+}
+
+// 4. Custom type guards
+function isString(x: unknown): x is string {
+  return typeof x === "string";
+}
+```
+
+**Union Distribution over Generics**:
+
+```typescript
+// Distributive conditional types
+type Flatten<T> = T extends Array<infer U> ? U : T;
+
+// When T is a union, it distributes:
+type T1 = Flatten<string[] | number[]>;
+// = Flatten<string[]> | Flatten<number[]>
+// = string | number
+```
+
+A string or number
+let id: string | number;
+id = "USR123";  // OK
+id = 123;       // OK
+// id = true;   // Error
+
+// String or null
+let nickname: string | null = "John";
+nickname = null;  // OK
+
+// Multiple types
+function formatValue(value: string | number | boolean): string {
+  if (typeof value === "string") {
+    return value.toUpperCase();
+  } else if (typeof value === "number") {
+    return value.toFixed(2);
+  } else {
+    return value ? "true" : "false";
+  }
+}
+
+// Using with constants
+type Status = "active" | "inactive" | "pending";
+let status: Status = "active";  // OK
+// let status2: Status = "deleted";  // Error
+```
+
+### Literal Types
+
+**Theory: Constant Type Expressions**
+
+Literal types are the **most specific types** - they represent single values. They form the bottom of the type hierarchy.
+
+**Literal Type Hierarchy**:
+
+```
+any
+  ↓
+string          number            boolean
+  ↓               ↓                  ↓
+"hello" | "world"  1 | 2 | 3       true | false
+  ↓               ↓                  ↓
+"hello"         1                  true  (literal types)
+```
+
+**Why Literal Types Matter**:
+- **Exactness**: `type Port = 8080;` only accepts exactly 8080
+- **Discriminators**: Use literals to tag union types
+- **Constants**: Prevent accidental reassignment to unexpected values
+- **Enums alternative**: More flexible than traditional enums
+
+**Literal Type Widening**:
+
+```typescript
+// Without explicit type - widens automatically
+let x = 5;      // x: number (widened from 5)
+let y = "hi";   // y: string (widened from "hi")
+
+// With const - stays literal
+const a = 5;    // a: 5 (literal type)
+const b = "hi"; // b: "hi" (literal type)
+
+// Force literal with as const
+let c = 5 as const;     // c: 5 (literal)
+let obj = { x: 5 } as const;
+// obj: { readonly x: 5 }
+```
+
+### Enum Types
+
+**Theory: Named Constants and Exhaustiveness**
+
+Enums solve several problems:
+- **Magic numbers**: `8080` vs `Port.HTTP` is more readable
+- **Exhaustiveness checking**: Compiler ensures all cases handled
+- **Reverse mapping**: Can go from value back to name
+- **Namespace**: Group related constants together
+
+**Enum Pitfalls**:
+
+```typescript
+// String enums are better than numeric
+enum Color {
+  Red = "RED",
+  Green = "GREEN",
+  Blue = "BLUE"
+}
+// Advantage: Debugging shows "RED" not 0
+
+// Numeric enums have reverse mapping
+enum Status {
+  Active = 0,
+  Inactive = 1
+}
+console.log(Status[0]);  // "Active" - unexpected!
+
+// Solution: Use const enums
+const enum Permission {
+  Read = "read",
+  Write = "write",
+  Delete = "delete"
+}
+// Compiles to inline values, no object created
+```
+
+**Exhaustiveness Checking**:
+
+```typescript
+enum Color { Red, Green, Blue }
+
+function getHex(color: Color): string {
+  switch (color) {
+    case Color.Red:    return "#FF0000";
+    case Color.Green:  return "#00FF00";
+    case Color.Blue:   return "#0000FF";
+  }
+  // TypeScript ensures all cases covered!
+}
+
+// If you add a new color, you'll get a compile error:
+enum Color { Red, Green, Blue, Yellow }
+// switch is incomplete - Yellow not handled
+```
+
+```typescript
+// Numeric enum (default)
+enum Direction {
+  Up = 0,
+  Down = 1,
+  Left = 2,
+  Right = 3
+}
+// Can also omit values - auto-increments from 0
+enum Status {
+  Active,      // 0
+  Inactive,    // 1
+  Pending      // 2
+}
+
+// String enum
+enum Color {
+  Red = "RED",
+  Green = "GREEN",
+  Blue = "BLUE"
+}
+
+// Heterogeneous enum (mixed types)
+enum Mixed {
+  No = 0,
+  Yes = "YES",
+  Maybe = "MAYBE"
+}
+
+// Using enums
+let direction: Direction = Direction.Up;
+let status: Status = Status.Active;
+let color: Color = Color.Red;
+
+// Real-world example
+enum UserRole {
+  ADMIN = "admin",
+  MODERATOR = "moderator",
+  USER = "user"
+}
+
+interface User {
+  id: number;
+  role: UserRole;
+}
+
+const user: User = {
+  id: 1,
+  role: UserRole.ADMIN
+};
+```
+
+### Object Types
+
+```typescript
+// Inline object type
+let person: { name: string; age: number } = {
+  name: "Alice",
+  age: 30
+};
+
+// Optional properties
+let config: { host?: string; port?: number } = {};
+config.host = "localhost";
+
+// Readonly properties
+let account: { readonly id: number; balance: number } = {
+  id: 1,
+  balance: 1000
+};
+// account.id = 2;  // Error: readonly
+
+// Nested objects
+type Address = {
+  street: string;
+  city: string;
+  country: string;
+};
+
+type Profile = {
+  name: string;
+  age: number;
+  address: Address;
+};
+
+const profile: Profile = {
+  name: "Bob",
+  age: 25,
+  address: {
+    street: "123 Main St",
+    city: "New York",
+    country: "USA"
+  }
+};
+```
+
+---
+
+## Advanced Types
+
+### Theory: Meta-Programming and Type Algebra
+
+**What are Advanced Types?**
+
+Advanced types allow you to **manipulate types as if they were values**. They implement type-level computation:
+
+- **Conditional types**: if/then/else for types
+- **Mapped types**: for loops over type properties
+- **Template literal types**: string interpolation for types
+- **Utility types**: Pre-built type transformations
+
+**Type Algebra**: Types follow algebraic rules:
+
+$$A \cap B = \{x \mid x \in A \text{ and } x \in B\}$$
+$$A \cup B = \{x \mid x \in A \text{ or } x \in B\}$$
+
+**Real-World Problem**: Without advanced types:
+
+```typescript
+// Without advanced types - lots of boilerplate
+interface User {
+  name: string;
+  age: number;
+  email: string;
+}
+
+interface UserReadonly {
+  readonly name: string;
+  readonly age: number;
+  readonly email: string;
+}
+
+interface UserOptional {
+  name?: string;
+  age?: number;
+  email?: string;
+}
+
+// With advanced types - one definition
+type User = { name: string; age: number; email: string };
+type UserReadonly = Readonly<User>;
+type UserOptional = Partial<User>;
+```
+
+### Intersection Types
+
+**Theory: Combining Type Properties**
+
+Intersections combine multiple types into one. The result must satisfy **all** constraints simultaneously.
+
+```typescript
+type Admin = {
+  adminPower: () => void;
+};
+
+type User = {
+  name: string;
+};
+
+// Combined type
+type AdminUser = Admin & User;
+
+const adminUser: AdminUser = {
+  name: "Alice",
+  adminPower: () => console.log("Admin powers activated")
+};
+
+// Practical example: middleware composition
+type Middleware = {
+  use: (fn: Function) => void;
+};
+
+type Logger = {
+  log: (message: string) => void;
+};
+
+type LoggingMiddleware = Middleware & Logger;
+```
+
+### Type Aliases vs Interfaces
+
+**Theory: Declaration Sites and Merging**
+
+Both define object shapes, but they differ fundamentally:
+
+**Interfaces**:
+- Can be **merged** (augmented multiple times)
+- Designed for **object-oriented** hierarchies
+- Must use `extends` for inheritance
+- More rigid, follows class-like patterns
+- Better for plugin systems (external packages can extend)
+
+**Type Aliases**:
+- Cannot be merged (one definition only)
+- Can represent **any** type (not just objects)
+- Supports unions, intersections, conditionals
+- More flexible for complex types
+- Better for algebraic/functional approaches
+
+**Declaration Merging Example**:
+
+```typescript
+// Interfaces merge automatically - powerful for extending existing types
+interface Array<T> {
+  customMethod(): void;
+}
+
+// Add to global Window
+declare global {
+  interface Window {
+    myGlobal: string;
+  }
+}
+
+// Type aliases don't merge - redefinition is error
+type Point = { x: number };
+// type Point = { y: number };  // Error: duplicate identifier
+```
+
+**Modern Best Practice**:
+```typescript
+// Prefer type for new code (more consistent)
+type User = { name: string; age: number };
+
+// Use interface when you need merging
+interface DatabaseConfig {
+  host: string;
+  port: number;
+}
+
+// Package-users can extend:
+declare global {
+  interface DatabaseConfig {
+    ssl: boolean;
+  }
+}
+```
+
+```typescript
+// Type aliases (flexible)
+type Point = {
+  x: number;
+  y: number;
+};
+
+type PointWithZ = Point & { z: number };
+
+// Interfaces (structural)
+interface IPerson {
+  name: string;
+  age: number;
+}
+
+interface IEmployee extends IPerson {
+  employeeId: number;
+}
+
+// Key differences:
+// - Type aliases can union, intersect; interfaces cannot
+// - Interfaces can be merged; type aliases cannot
+// - Both work similarly for objects
+
+// Declaration merging (interfaces only)
+interface Window {
+  myCustomProperty: string;
+}
+
+interface Window {
+  anotherProperty: number;
+}
+
+// Now Window has both properties
+```
+
+### Conditional Types
+
+**Theory: Type-Level Ternary Operators**
+
+Conditional types enable **type-level computation**. They ask: "Does this type meet a condition?"
+
+**Syntax**:
+```typescript
+T extends U ? X : Y
+```
+
+**Semantics**:
+- If `T` is assignable to `U`, the type is `X`
+- Otherwise, the type is `Y`
+
+**Key Insight - Distributivity**:
+
+```typescript
+// When used with unions, conditional types distribute
+type IsString<T> = T extends string ? true : false;
+
+// Without distribution (used directly):
+type A = IsString<string | number>;  // boolean | false... complex!
+
+// With distribution (in mapped types):
+type B = (string | number) extends string ? true : false;  // false
+
+// Real example:
+type Flatten<T> = T extends Array<infer U> ? U : T;
+type X = Flatten<string[] | number[]>;
+// Distributes to:
+// = Flatten<string[]> | Flatten<number[]>
+// = string | number
+```
+
+**The `infer` Keyword - Type Variable Binding**:
+
+```typescript
+// Extract type from array
+type GetArrayElement<T> = T extends Array<infer E> ? E : never;
+type Num = GetArrayElement<number[]>;  // number
+
+// Extract type from Promise
+type GetPromiseType<T> = T extends Promise<infer P> ? P : never;
+type StrPromise = GetPromiseType<Promise<string>>;  // string
+
+// Extract from function return type
+type GetReturnType<T> = T extends (...args: any[]) => infer R ? R : never;
+type NumReturn = GetReturnType<() => number>;  // number
+```
+
+Types that depend on conditions.
+
+```typescript
+// Basic conditional type
+type IsString<T> = T extends string ? true : false;
+
+type A = IsString<"hello">;     // true
+type B = IsString<number>;      // false
+
+// Practical example: get array element type
+type Flatten<T> = T extends Array<infer U> ? U : T;
+
+type Str = Flatten<string[]>;   // string
+type Num = Flatten<number>;     // number
+
+// Extract type from union
+type Exclude<T, U> = T extends U ? never : T;
+
+type T0 = Exclude<"a" | "b" | "c", "a">;  // "b" | "c"
+
+// Real-world: Promise unwrapping
+type Awaited<T> = T extends Promise<infer U> ? U : T;
+
+type PromiseString = Awaited<Promise<string>>;  // string
+type JustNumber = Awaited<number>;              // number
+```
+
+### Mapped Types
+
+**Theory: Type-Level Iteration and Transformation**
+
+Mapped types are the **type-level equivalent of for loops**. They iterate over properties and create new types.
+
+**Syntax**:
+```typescript
+{ [K in Keys]: Transform<T[K]> }
+```
+
+**How They Work**:
+1. `K in Keys` - iterate over each key in Keys
+2. `T[K]` - access the property type at key K
+3. Apply transformation to each property
+4. Build new type with transformed properties
+
+**Real-World Example - Form Validation**:
+
+```typescript
+// Problem: Need error types for each field
+type User = { name: string; email: string; age: number };
+
+// Old way - lots of duplication
+type UserErrors = {
+  name?: string[];
+  email?: string[];
+  age?: string[];
+};
+
+// With mapped types - one definition
+type Errors<T> = {
+  [K in keyof T]?: string[];
+};
+
+type UserErrors = Errors<User>;
+// = { name?: string[]; email?: string[]; age?: string[] }
+
+// Add a field to User automatically adds to UserErrors!
+```
+
+**Modifiers and Key Remapping**:
+
+```typescript
+// Remove properties with + (default)
+type Getters<T> = {
+  [K in keyof T as `get${Capitalize<string & K>}`]: () => T[K];
+};
+
+// Conditional property remapping
+type Flatten<T> = {
+  [K in keyof T as T[K] extends object ? never : K]: T[K];
+};
+
+// Remove readonly
+type Mutable<T> = {
+  -readonly [K in keyof T]: T[K];
+};
+
+// Make optional required
+type Required<T> = {
+  [K in keyof T]-?: T[K];
+};
+```
+
+Transform types by mapping over their properties.
+
+```typescript
+// Make all properties readonly
+type Readonly<T> = {
+  readonly [K in keyof T]: T[K];
+};
+
+type User = {
+  name: string;
+  age: number;
+};
+
+type ReadonlyUser = Readonly<User>;
+// Result: { readonly name: string; readonly age: number }
+
+// Make all properties optional
+type Partial<T> = {
+  [K in keyof T]?: T[K];
+};
+
+type PartialUser = Partial<User>;
+// Result: { name?: string; age?: number }
+
+// Convert to getters
+type Getters<T> = {
+  [K in keyof T as `get${Capitalize<string & K>}`]: () => T[K];
+};
+
+type UserGetters = Getters<User>;
+// Result: { getName: () => string; getAge: () => number }
+
+// Real-world: create API response wrapper
+type ApiResponse<T> = {
+  data: T;
+  loading: boolean;
+  error: string | null;
+};
+
+type UserResponse = ApiResponse<User>;
+// Result: { data: User; loading: boolean; error: string | null }
+```
+
+### Template Literal Types
+
+**Theory: String Type Computation**
+
+Template literal types perform **compile-time string manipulation**. They:
+
+- Create exact string patterns
+- Compose types from string parts
+- Enable strongly-typed string protocols
+- Work with unions to create all combinations
+
+**Combinatorial Explosion**:
+
+```typescript
+type Method = "GET" | "POST" | "PUT" | "DELETE";
+type Endpoint = "/api" | "/users" | "/posts";
+
+// Creates all combinations: 4 × 3 = 12 types
+type Route = `${Method} ${Endpoint}`;
+
+// Examples: "GET /api", "POST /users", "PUT /posts", etc.
+```
+
+**Real-World Use Case - Event Handlers**:
+
+```typescript
+// Auto-generate camelCase event handlers from event names
+type EventHandlers<T extends Record<string, any>> = {
+  [K in keyof T as `on${Capitalize<string & K>}`]: (event: T[K]) => void;
+};
+
+type Events = {
+  click: MouseEvent;
+  change: Event;
+  submit: SubmitEvent;
+};
+
+type Handlers = EventHandlers<Events>;
+// = {
+//   onClick: (event: MouseEvent) => void;
+//   onChange: (event: Event) => void;
+//   onSubmit: (event: SubmitEvent) => void;
+// }
+```
+
+**String Manipulation Utilities**:
+
+```typescript
+// Capitalize first letter
+type Capitalize<S extends string> = S extends `${infer F}${infer R}`
+  ? `${Uppercase<F>}${R}`
+  : S;
+
+// Convert to kebab-case from camelCase
+type KebabCase<S extends string> = S extends `${infer F}${infer R}`
+  ? `${Lowercase<F>}${R extends Capitalize<R> ? `-${Lowercase<R>}` : R}`
+  : S;
+
+type MyEvent = KebabCase<"onClick">;  // "on-click"
+```
+
+Create types using template literals.
+
+```typescript
+type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
+type Endpoint = "/users" | "/products" | "/orders";
+
+// Combine into valid routes
+type Route = `${HttpMethod} ${Endpoint}`;
+
+const route1: Route = "GET /users";      // OK
+const route2: Route = "POST /products";  // OK
+// const route3: Route = "PATCH /users";  // Error
+
+// String manipulation
+type EventName<T extends string> = `on${Capitalize<T>}`;
+
+type OnClick = EventName<"click">;   // "onClick"
+type OnChange = EventName<"change">; // "onChange"
+
+// Real-world: database column naming
+type ColumnName = `col_${string}` | `field_${string}`;
+
+const col: ColumnName = "col_user_id";      // OK
+const field: ColumnName = "field_email";    // OK
+// const invalid: ColumnName = "data_id";  // Error
+```
+
+---
+
+## Functions
+
+### Theory: Functions as First-Class Values
+
+**What are Functions in Type Systems?**
+
+Functions are **first-class citizens** - they can be:
+- Passed as arguments
+- Returned from other functions
+- Stored in variables
+- Composed together
+
+**Function Types vs Function Values**:
+
+```typescript
+// Function type (describes shape)
+type Add = (a: number, b: number) => number;
+
+// Function value (implements the type)
+const add: Add = (a, b) => a + b;
+
+// Without type annotation, TypeScript infers:
+const add2 = (a: number, b: number): number => a + b;
+// Type automatically becomes: (a: number, b: number) => number
+```
+
+**Function Signature Components**:
+
+```typescript
+//    Parameters       Return type
+//         ↓                ↓
+function process(x: string, y: number): boolean {
+  return x.length > y;
+}
+
+//    Type parameter (generic)
+//         ↓
+function identity<T>(value: T): T {
+  return value;
+}
+```
+
+**Parameter Variance**:
+
+```typescript
+// Functions are CONTRAVARIANT in parameter types
+type NumericProcessor = (n: number) => void;
+type GeneralProcessor = (x: any) => void;
+
+// Can use general processor where numeric is expected
+const g: NumericProcessor = (n: any) => console.log(n);  // OK
+
+// Cannot use numeric processor where general is expected
+// const n: GeneralProcessor = (x: number) => console.log(x);  // Error
+```
+
+**Return Type Covariance**:
+
+```typescript
+// Functions are COVARIANT in return types
+type AnimalReturner = () => Animal;
+type DogReturner = () => Dog;
+
+// Can use Dog returner where Animal returner expected
+const dog: AnimalReturner = () => new Dog();  // OK
+```
+
+### Basic Function Types
+
+```typescript
+// Explicit return type
+function add(a: number, b: number): number {
+  return a + b;
+}
+
+// Arrow function with return type
+const multiply = (a: number, b: number): number => a * b;
+
+// Inferred return type
+function greet(name: string) {
+  return `Hello, ${name}!`;  // Return type: string
+}
+
+// Void return type
+function logMessage(msg: string): void {
+  console.log(msg);
+}
+
+// Optional parameters
+function introduce(name: string, age?: number): string {
+  return age ? `${name} is ${age}` : `${name}`;
+}
+
+introduce("Alice");           // OK
+introduce("Alice", 30);       // OK
+
+// Default parameters
+function createUser(name: string, role: string = "user"): void {
+  console.log(`${name} - ${role}`);
+}
+
+createUser("Bob");            // Bob - user
+createUser("Alice", "admin"); // Alice - admin
+
+// Rest parameters
+function sum(...numbers: number[]): number {
+  return numbers.reduce((a, b) => a + b, 0);
+}
+
+sum(1, 2, 3);  // 6
+```
+
+### Function Overloads
+
+**Theory: Ad-Hoc Polymorphism**
+
+Function overloads allow one function name to have **multiple type signatures**. This is **ad-hoc polymorphism** (distinct from generics which is parametric polymorphism).
+
+**Key Concepts**:
+- **Overload signatures**: Multiple possible type declarations (no implementation)
+- **Implementation signature**: The actual code (must be compatible with all overloads)
+- **Compiler selects**: Uses overload signatures to type-check calls, not implementation
+
+**Why Overloads?**
+
+```typescript
+// Without overloads - union types everywhere
+function process(input: string | number): string | number {
+  if (typeof input === "string") return input.toUpperCase();
+  return input * 2;
+}
+
+const result = process("hello");
+// TypeScript doesn't know result is string (type: string | number)
+// Lost type information!
+
+// With overloads - preserves input/output relationship
+function process(input: string): string;
+function process(input: number): number;
+function process(input: string | number): string | number {
+  if (typeof input === "string") return input.toUpperCase();
+  return input * 2;
+}
+
+const result = process("hello");
+// result: string (type preserved!)
+```
+
+**Overload Resolution Order**:
+
+```typescript
+// TypeScript tries overloads in declaration order
+function greet(person: string): string;
+function greet(people: string[]): string[];
+function greet(person: string | string[]): string | string[] {
+  if (typeof person === "string") {
+    return `Hello, ${person}`;
+  }
+  return person.map(p => `Hello, ${p}`);
+}
+
+greet("Alice");        // Uses first overload
+greet(["Alice", "Bob"]); // Uses second overload
+```
+
+Define multiple signatures for the same function.
+
+```typescript
+// Overload signatures (no implementation)
+function process(input: string): string;
+function process(input: number): number;
+function process(input: boolean): boolean;
+
+// Implementation (signature must be compatible with all overloads)
+function process(input: string | number | boolean): string | number | boolean {
+  if (typeof input === "string") {
+    return input.toUpperCase();
+  } else if (typeof input === "number") {
+    return input * 2;
+  } else {
+    return !input;
+  }
+}
+
+console.log(process("hello"));  // "HELLO"
+console.log(process(21));       // 42
+console.log(process(true));     // false
+
+// Real-world: flexible API
+function formatDate(date: Date, format: string): string;
+function formatDate(timestamp: number, format: string): string;
+function formatDate(input: Date | number, format: string): string {
+  const date = typeof input === "number" ? new Date(input) : input;
+  // Implementation
+  return date.toString();
+}
+
+formatDate(new Date(), "yyyy-MM-dd");
+formatDate(1640000000000, "yyyy-MM-dd");
+```
+
+### Function Types
+
+```typescript
+// Function type annotation
+type MathOperation = (a: number, b: number) => number;
+
+const add: MathOperation = (a, b) => a + b;
+const subtract: MathOperation = (a, b) => a - b;
+
+// Constructor type
+type Constructor<T> = new (...args: any[]) => T;
+
+class MyClass {}
+const constructor: Constructor<MyClass> = MyClass;
+
+// Callback functions
+function processArray(
+  array: number[],
+  callback: (item: number, index: number) => void
+): void {
+  array.forEach(callback);
+}
+
+processArray([1, 2, 3], (item, index) => {
+  console.log(`Item ${index}: ${item}`);
+});
+
+// Generic function type
+type Transformer<T, U> = (input: T) => U;
+
+const stringToNumber: Transformer<string, number> = (s) => parseInt(s);
+```
+
+### This Binding
+
+```typescript
+// Specify 'this' type in methods
+interface Calculator {
+  value: number;
+  add(this: Calculator, n: number): void;
+}
+
+const calculator: Calculator = {
+  value: 0,
+  add(this: Calculator, n: number) {
+    this.value += n;
+  }
+};
+
+calculator.add(5);  // OK
+calculator.value;   // 5
+
+// Arrow functions capture 'this'
+class Counter {
+  count = 0;
+
+  // Method
+  incrementMethod() {
+    this.count++;
+  }
+
+  // Arrow - captures 'this'
+  incrementArrow = () => {
+    this.count++;
+  };
+}
+
+const counter = new Counter();
+counter.incrementMethod();  // OK
+counter.incrementArrow();   // OK
+```
+
+---
+
+## Classes & OOP
+
+### Theory: Object-Oriented Type System
+
+**Classes vs Interfaces**:
+
+Classes are:
+- **Nominal types**: Identity matters (different classes = different types)
+- **Constructible**: Can create instances with `new`
+- **Implementation**: Define actual behavior
+- **Runtime entities**: Exist in JavaScript output
+
+Interfaces are:
+- **Structural types**: Shape matters, not identity
+- **Non-constructible**: Only for typing
+- **Abstract**: No implementation
+- **Compile-time only**: Erased in JavaScript
+
+**The Class Hierarchy Principle**:
+
+```typescript
+// IS-A relationship (inheritance)
+class Animal { move() {} }
+class Dog extends Animal { bark() {} }
+
+const dog: Dog = new Dog();
+const animal: Animal = dog;  // OK - Dog IS-A Animal
+
+// HAS-A relationship (composition) - often better
+class Engine { start() {} }
+class Car { engine: Engine = new Engine(); }
+
+const car = new Car();
+car.engine.start();  // Better than inheritance chain
+```
+
+**Access Modifiers and Encapsulation**:
+
+```typescript
+// Information hiding principle
+class BankAccount {
+  private balance = 0;           // Hidden from outside
+  protected owner = "";          // Hidden from outside, visible to subclasses
+  public accountNumber = "";     // Visible everywhere
+
+  public deposit(amount: number) {
+    if (amount > 0) {
+      this.balance += amount;    // Can access private here
+    }
+  }
+}
+
+// Enforced at compile time only (erased in JS)
+// Privacy is a TypeScript compile-time feature
+```
+
+### Basic Class Syntax
+
+```typescript
+class Animal {
+  // Properties
+  name: string;
+  age: number;
+
+  // Constructor
+  constructor(name: string, age: number) {
+    this.name = name;
+    this.age = age;
+  }
+
+  // Methods
+  describe(): string {
+    return `${this.name} is ${this.age} years old`;
+  }
+}
+
+const dog = new Animal("Rex", 5);
+console.log(dog.describe());  // Rex is 5 years old
+```
+
+### Access Modifiers
+
+```typescript
+class BankAccount {
+  // Public (default) - accessible everywhere
+  public accountNumber: string;
+
+  // Private - only inside this class
+  private balance: number;
+
+  // Protected - inside class and subclasses
+  protected owner: string;
+
+  // Readonly - cannot be modified after initialization
+  readonly createdDate: Date;
+
+  constructor(
+    accountNumber: string,
+    owner: string,
+    initialBalance: number
+  ) {
+    this.accountNumber = accountNumber;
+    this.owner = owner;
+    this.balance = initialBalance;
+    this.createdDate = new Date();
+  }
+
+  // Private method
+  private calculateInterest(): number {
+    return this.balance * 0.05;
+  }
+
+  // Public method accessing private members
+  getBalance(): number {
+    return this.balance;
+  }
+
+  deposit(amount: number): void {
+    if (amount > 0) {
+      this.balance += amount;
+    }
+  }
+}
+
+const account = new BankAccount("ACC123", "John", 1000);
+account.deposit(500);
+console.log(account.getBalance());      // 1500
+// account.balance;                     // Error: private
+// account.calculateInterest();         // Error: private
+```
+
+### Parameter Properties
+
+```typescript
+// Shorthand for declaring and initializing properties
+class User {
+  constructor(
+    public id: number,
+    private password: string,
+    protected email: string,
+    readonly role: string = "user"
+  ) {}
+}
+
+const user = new User(1, "secret", "user@example.com", "admin");
+console.log(user.id);      // 1
+console.log(user.role);    // "admin"
+// console.log(user.password);  // Error: private
+```
+
+### Inheritance
+
+**Theory: Liskov Substitution Principle**
+
+The **Liskov Substitution Principle (LSP)** states: a derived class must be usable wherever a base class is expected.
+
+```typescript
+// Valid inheritance (follows LSP)
+class Animal {
+  move() { console.log("Moving"); }
+}
+
+class Dog extends Animal {
+  move() { console.log("Dog running"); }
+  bark() { console.log("Woof!"); }
+}
+
+// LSP satisfied - Dog is valid Animal
+const animal: Animal = new Dog();
+animal.move();  // Works!
+
+// Invalid inheritance (violates LSP)
+class Bird {
+  fly() { }
+}
+
+class Penguin extends Bird {
+  // fly() { }  // Can't fly! Violates LSP
+}
+```
+
+**Method Overriding and Liskov**:
+
+```typescript
+// Covariant return types are safe
+class Animal {
+  reproduce(): Animal {
+    return new Animal();
+  }
+}
+
+class Dog extends Animal {
+  // OK: Dog IS-A Animal, covariance preserved
+  reproduce(): Dog {
+    return new Dog();
+  }
+}
+
+// Contravariant parameters would violate type safety
+// TypeScript prevents this
+```
+
+```typescript
+// Base class
+class Animal {
+  name: string;
+  age: number;
+
+  constructor(name: string, age: number) {
+    this.name = name;
+    this.age = age;
+  }
+
+  speak(): string {
+    return `${this.name} makes a sound`;
+  }
+}
+
+// Derived class
+class Dog extends Animal {
+  breed: string;
+
+  constructor(name: string, age: number, breed: string) {
+    super(name, age);  // Call parent constructor
+    this.breed = breed;
+  }
+
+  // Override method
+  speak(): string {
+    return `${this.name} barks`;
+  }
+
+  // Additional method
+  getInfo(): string {
+    return `${this.name} is a ${this.breed}`;
+  }
+}
+
+const dog = new Dog("Buddy", 3, "Golden Retriever");
+console.log(dog.speak());       // Buddy barks
+console.log(dog.getInfo());     // Buddy is a Golden Retriever
+```
+
+### Getters & Setters
+
+```typescript
+class Temperature {
+  private celsius: number = 0;
+
+  // Getter
+  get fahrenheit(): number {
+    return (this.celsius * 9) / 5 + 32;
+  }
+
+  // Setter
+  set fahrenheit(value: number) {
+    this.celsius = ((value - 32) * 5) / 9;
+  }
+
+  get celsius_value(): number {
+    return this.celsius;
+  }
+
+  set celsius_value(value: number) {
+    if (value < -273.15) {
+      throw new Error("Temperature cannot be below absolute zero");
+    }
+    this.celsius = value;
+  }
+}
+
+const temp = new Temperature();
+temp.celsius_value = 25;
+console.log(temp.fahrenheit);  // 77
+temp.fahrenheit = 86;
+console.log(temp.celsius_value);  // 30
+```
+
+### Static Members
+
+```typescript
+class MathUtils {
+  static readonly PI = 3.14159;
+
+  static add(a: number, b: number): number {
+    return a + b;
+  }
+
+  static subtract(a: number, b: number): number {
+    return a - b;
+  }
+}
+
+console.log(MathUtils.PI);           // 3.14159
+console.log(MathUtils.add(10, 5));   // 15
+// const utils = new MathUtils();   // Can still create instance
+
+// Static properties and methods don't require an instance
+```
+
+### Abstract Classes
+
+```typescript
+// Abstract class - cannot be instantiated
+abstract class Shape {
+  abstract area(): number;
+
+  describe(): string {
+    return `Shape with area: ${this.area()}`;
+  }
+}
+
+class Circle extends Shape {
+  constructor(private radius: number) {
+    super();
+  }
+
+  area(): number {
+    return Math.PI * this.radius ** 2;
+  }
+}
+
+class Rectangle extends Shape {
+  constructor(private width: number, private height: number) {
+    super();
+  }
+
+  area(): number {
+    return this.width * this.height;
+  }
+}
+
+// const shape = new Shape();  // Error: Cannot instantiate abstract class
+
+const circle = new Circle(5);
+const rect = new Rectangle(4, 6);
+
+console.log(circle.describe());  // Shape with area: 78.53981...
+console.log(rect.describe());    // Shape with area: 24
+```
+
+---
+
+## Interfaces
+
+### Theory: Structural Typing and Protocols
+
+**What are Interfaces?**
+
+Interfaces define **contracts** - what properties and methods an object must have. TypeScript uses **structural typing**, meaning:
+
+- An object satisfies an interface if it has all required properties
+- The object doesn't need to explicitly implement the interface
+- This is called "duck typing" or "structural subtyping"
+
+**Structural vs Nominal Typing**:
+
+```typescript
+// Structural typing (TypeScript)
+interface Dog {
+  bark(): void;
+}
+
+class Puppy {
+  bark() { console.log("Woof!"); }
+}
+
+const dog: Dog = new Puppy();  // OK - shape matches!
+
+// Nominal typing (Java)
+interface Dog { bark() }
+class Puppy implements Dog {   // Must explicitly declare
+  bark() {}
+}
+
+// In Java, this would fail without explicit "implements"
+```
+
+**Compatibility and Width Subtyping**:
+
+```typescript
+interface Animal {
+  name: string;
+  age: number;
+}
+
+interface Dog {
+  name: string;
+  age: number;
+  breed: string;
+}
+
+// Dog is wider than Animal (has more properties)
+const dog: Dog = { name: "Rex", age: 5, breed: "Lab" };
+
+// Can assign wider type to narrower (lose info, but safe)
+const animal: Animal = dog;  // OK
+
+// Cannot assign narrower to wider (missing properties)
+// dog = animal;  // Error: missing breed
+```
+
+**The Interface Segregation Principle**:
+
+```typescript
+// Bad: Large interface with many methods
+interface Worker {
+  work(): void;
+  sleep(): void;
+  eat(): void;
+  think(): void;
+}
+
+// Better: Small, focused interfaces
+interface Workable {
+  work(): void;
+}
+
+interface Restable {
+  sleep(): void;
+}
+
+interface Eatable {
+  eat(): void;
+}
+
+// Implement only what you need
+class Robot implements Workable {
+  work() {}
+  // No need to implement sleep, eat
+}
+
+class Human implements Workable, Restable, Eatable {
+  work() {}
+  sleep() {}
+  eat() {}
+}
+```
+
+### Basic Interface
+
+```typescript
+interface Person {
+  name: string;
+  age: number;
+  email?: string;  // Optional property
+  readonly id: number;  // Readonly property
+}
+
+const person: Person = {
+  id: 1,
+  name: "Alice",
+  age: 30,
+  email: "alice@example.com"
+};
+
+const person2: Person = {
+  id: 2,
+  name: "Bob",
+  age: 25
+};
+```
+
+### Interface Methods
+
+```typescript
+interface Logger {
+  log(message: string): void;
+  error(message: string, code: number): void;
+  debug?(message: string): void;  // Optional method
+}
+
+class ConsoleLogger implements Logger {
+  log(message: string): void {
+    console.log("[LOG]", message);
+  }
+
+  error(message: string, code: number): void {
+    console.error(`[ERROR ${code}]`, message);
+  }
+
+  debug(message: string): void {
+    console.debug("[DEBUG]", message);
+  }
+}
+
+const logger: Logger = new ConsoleLogger();
+logger.log("Application started");
+logger.error("Database connection failed", 500);
+```
+
+### Extending Interfaces
+
+```typescript
+interface Animal {
+  name: string;
+  age: number;
+}
+
+interface Dog extends Animal {
+  breed: string;
+  bark(): void;
+}
+
+interface Cat extends Animal {
+  color: string;
+  meow(): void;
+}
+
+interface Pet extends Dog, Cat {
+  owner: string;
+}
+
+const pet: Pet = {
+  name: "Charlie",
+  age: 3,
+  breed: "Labrador",
+  color: "golden",
+  owner: "John",
+  bark() { console.log("Woof!"); },
+  meow() { console.log("Meow!"); }
+};
+```
+
+### Indexable Interface
+
+```typescript
+interface Dictionary {
+  [key: string]: string | number;
+}
+
+const dict: Dictionary = {
+  name: "Alice",
+  age: 30,
+  email: "alice@example.com"
+};
+
+// Type-safe object with numeric keys
+interface StringArray {
+  [index: number]: string;
+}
+
+const stringArray: StringArray = ["a", "b", "c"];
+```
+
+### Function Interface
+
+```typescript
+interface Comparator {
+  (a: number, b: number): number;
+}
+
+const ascending: Comparator = (a, b) => a - b;
+const descending: Comparator = (a, b) => b - a;
+
+[3, 1, 4, 1, 5].sort(ascending);   // [1, 1, 3, 4, 5]
+[3, 1, 4, 1, 5].sort(descending);  // [5, 4, 3, 1, 1]
+```
+
+### Constructor Interface
+
+```typescript
+interface Constructor {
+  new (name: string, age: number): Person;
+}
+
+interface Person {
+  name: string;
+  age: number;
+}
+
+class PersonClass implements Person {
+  name: string;
+  age: number;
+
+  constructor(name: string, age: number) {
+    this.name = name;
+    this.age = age;
+  }
+}
+
+function createPerson(
+  PersonConstructor: Constructor,
+  name: string,
+  age: number
+): Person {
+  return new PersonConstructor(name, age);
+}
+
+const person = createPerson(PersonClass, "Alice", 30);
+```
+
+---
+
+## Generics
+
+### Theory: Parametric Polymorphism
+
+**What are Generics?**
+
+Generics enable **parametric polymorphism** - writing code that works with any type. This is distinct from:
+
+- **Ad-hoc polymorphism**: Function overloads (multiple signatures)
+- **Subtype polymorphism**: Inheritance and interfaces
+- **Parametric polymorphism**: Generics (our focus)
+
+**The Generic Type Parameter**:
+
+```typescript
+// T is a type variable - it represents any type
+function identity<T>(value: T): T {
+  return value;
+}
+
+// When called, T is bound to specific types:
+identity<string>("hello");    // T is bound to string
+identity<number>(42);         // T is bound to number
+identity<boolean>(true);      // T is bound to boolean
+
+// Type inference - T inferred from argument
+identity("hello");  // T inferred as string
+identity(42);       // T inferred as number
+```
+
+**Generic Constraints - Bounded Quantification**:
+
+```typescript
+// Without constraint - T could be anything
+function process1<T>(value: T): number {
+  // return value.length;  // Error: T might not have length
+}
+
+// With constraint - T must have length property
+function process2<T extends { length: number }>(value: T): number {
+  return value.length;  // OK
+}
+
+process2("hello");      // string has length
+process2([1, 2, 3]);    // array has length
+// process2(123);       // number doesn't have length
+```
+
+**Generic Relationships - Variance in Generics**:
+
+```typescript
+// Arrays are covariant (Dog[] ⊆ Animal[])
+type Dogs = Dog[];
+type Animals = Animal[];
+const dogs: Dogs = [new Dog()];
+const animals: Animals = dogs;  // OK
+
+// Generics usually don't have this relationship
+interface Box<T> {
+  get(): T;
+}
+
+type BoxOfDog = Box<Dog>;
+type BoxOfAnimal = Box<Animal>;
+
+const boxOfDog: BoxOfDog = { get: () => new Dog() };
+// boxOfAnimal: BoxOfAnimal = boxOfDog;  // Error!
+// Why? Using BoxOfAnimal means someone could put a Cat in it
+```
+
+**Multiple Type Parameters**:
+
+```typescript
+// Can constrain multiple parameters
+function merge<T extends object, U extends object>(obj1: T, obj2: U): T & U {
+  return { ...obj1, ...obj2 };
+}
+
+// Can have one parameter depend on another
+function getProperty<T, K extends keyof T>(obj: T, key: K): T[K] {
+  return obj[key];
+}
+
+// Parameter can be constrained by another parameter
+function createArray<T, N extends T[]>(first: T, ...rest: N): [T, ...N] {
+  return [first, ...rest];
+}
+```
+
+### Basic Generics
+
+```typescript
+// Generic function
+function identity<T>(arg: T): T {
+  return arg;
+}
+
+identity<string>("hello");      // T is string
+identity<number>(42);           // T is number
+identity("hello");              // T inferred as string
+identity(42);                   // T inferred as number
+
+// Generic with constraints
+function getProperty<T, K extends keyof T>(obj: T, key: K): T[K] {
+  return obj[key];
+}
+
+const person = { name: "Alice", age: 30 };
+getProperty(person, "name");    // OK: "Alice"
+// getProperty(person, "email");  // Error: "email" not in person
+```
+
+### Generic Classes
+
+```typescript
+class Container<T> {
+  private items: T[] = [];
+
+  add(item: T): void {
+    this.items.push(item);
+  }
+
+  get(index: number): T | undefined {
+    return this.items[index];
+  }
+
+  getAll(): T[] {
+    return this.items;
+  }
+}
+
+const stringContainer = new Container<string>();
+stringContainer.add("hello");
+stringContainer.add("world");
+
+const numberContainer = new Container<number>();
+numberContainer.add(1);
+numberContainer.add(2);
+numberContainer.add(3);
+```
+
+### Generic Interfaces
+
+```typescript
+interface Repository<T> {
+  getById(id: number): T | undefined;
+  getAll(): T[];
+  save(item: T): void;
+  delete(id: number): void;
+}
+
+interface User {
+  id: number;
+  name: string;
+}
+
+class UserRepository implements Repository<User> {
+  private users: User[] = [];
+
+  getById(id: number): User | undefined {
+    return this.users.find(u => u.id === id);
+  }
+
+  getAll(): User[] {
+    return this.users;
+  }
+
+  save(item: User): void {
+    const existing = this.users.findIndex(u => u.id === item.id);
+    if (existing >= 0) {
+      this.users[existing] = item;
+    } else {
+      this.users.push(item);
+    }
+  }
+
+  delete(id: number): void {
+    this.users = this.users.filter(u => u.id !== id);
+  }
+}
+```
+
+### Generic Constraints
+
+```typescript
+// Constraint: must have length property
+function getLength<T extends { length: number }>(arg: T): number {
+  return arg.length;
+}
+
+getLength("hello");     // 5
+getLength([1, 2, 3]);   // 3
+// getLength(123);      // Error: number has no length
+
+// Constraint: must extend a specific type
+function merge<T extends object, U extends object>(obj1: T, obj2: U): T & U {
+  return { ...obj1, ...obj2 };
+}
+
+const result = merge({ name: "Alice" }, { age: 30 });
+// result = { name: "Alice", age: 30 }
+
+// Constraint with keyof
+function pick<T, K extends keyof T>(obj: T, key: K): T[K] {
+  return obj[key];
+}
+
+const person = { name: "Alice", age: 30 };
+pick(person, "name");   // OK
+// pick(person, "email");  // Error
+```
+
+### Generic Type Patterns
+
+```typescript
+// Async operations
+type AsyncResult<T> = Promise<T> | T;
+
+async function process<T>(input: AsyncResult<T>): Promise<T> {
+  return input instanceof Promise ? await input : input;
+}
+
+// Optional fields
+type Partial<T> = {
+  [K in keyof T]?: T[K];
+};
+
+// Pick properties
+type Pick<T, K extends keyof T> = {
+  [P in K]: T[P];
+};
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+}
+
+type UserPreview = Pick<User, "id" | "name">;
+// UserPreview = { id: number; name: string }
+
+// Record type
+type UserRoles = "admin" | "user" | "guest";
+type Permissions = Record<UserRoles, string[]>;
+
+const permissions: Permissions = {
+  admin: ["read", "write", "delete"],
+  user: ["read"],
+  guest: []
+};
+```
+
+---
+
+## Decorators
+
+## Decorators
+
+### Theory: Metaprogramming and Aspect-Oriented Programming
+
+**What are Decorators?**
+
+Decorators are a form of **metaprogramming** - they allow your code to modify or enhance other code at runtime. They implement **Aspect-Oriented Programming (AOP)**:
+
+**Key Concepts**:
+- **Aspect**: A cross-cutting concern (logging, caching, validation)
+- **Join point**: Where the aspect is applied (methods, properties)
+- **Advice**: The code to run (before, after, around)
+- **Weaving**: Applying aspects to code
+
+**Why Decorators?**
+
+```typescript
+// Without decorators - cross-cutting concern mixed with business logic
+class UserService {
+  getUser(id: number) {
+    console.log(`[LOG] Getting user ${id}`);
+    const startTime = Date.now();
+    try {
+      const user = this.fetchUser(id);
+      console.log(`[LOG] Got user in ${Date.now() - startTime}ms`);
+      return user;
+    } catch (error) {
+      console.error(`[ERROR] Failed to get user:`, error);
+      throw error;
+    }
+  }
+}
+
+// With decorators - separation of concerns
+class UserService {
+  @LogExecution
+  @HandleErrors
+  getUser(id: number) {
+    return this.fetchUser(id);
+  }
+}
+```
+
+**Decorator Factory Pattern**:
+
+```typescript
+// Decorator with parameters (factory pattern)
+function Retry(times: number = 3) {
+  return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+    // Returns decorator function
+    return {
+      value: async function(...args: any[]) {
+        // Wraps original method
+      }
+    };
+  };
+}
+
+@Retry(5)  // Factory creates decorator with parameter
+class DataService {
+  @Retry(3)
+  async fetchData() { }
+}
+```
+
+**Decorator Execution Order**:
+
+```typescript
+// Decorators are applied bottom-up on same target
+// But factory functions execute top-down
+
+// Order: Factory1 → Factory2 → Decorator2 → Decorator1
+@Decorator1
+@Decorator2
+class MyClass { }
+
+// For methods: Parameter → Property → Method → Class
+@ClassDecorator
+class Example {
+  @PropertyDecorator
+  prop: any;
+
+  @MethodDecorator
+  method(@ParameterDecorator param: any) { }
+}
+```
+
+### What are Decorators?
+
+```json
+{
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  }
+}
+```
+
+### Class Decorators
+
+```typescript
+// Simple class decorator
+function Sealed<T extends { new(...args: any[]): {} }>(constructor: T) {
+  Object.seal(constructor);
+  Object.seal(constructor.prototype);
+}
+
+@Sealed
+class Animal {
+  name = "Animal";
+}
+
+// Decorator with parameters
+function Component(selector: string) {
+  return function <T extends { new(...args: any[]): {} }>(constructor: T) {
+    console.log(`Registering component for selector: ${selector}`);
+    return class extends constructor {
+      selector = selector;
+    };
+  };
+}
+
+@Component(".user-card")
+class UserCard {
+  render() {
+    console.log("Rendering user card");
+  }
+}
+```
+
+### Method Decorators
+
+```typescript
+// Method decorator template
+function Validate(target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+  const originalMethod = descriptor.value;
+
+  descriptor.value = function(...args: any[]) {
+    console.log(`Calling ${propertyKey} with args:`, args);
+    return originalMethod.apply(this, args);
+  };
+
+  return descriptor;
+}
+
+class Calculator {
+  @Validate
+  add(a: number, b: number): number {
+    return a + b;
+  }
+}
+
+// Retry decorator
+function Retry(times: number = 3) {
+  return function(target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+    const originalMethod = descriptor.value;
+
+    descriptor.value = async function(...args: any[]) {
+      for (let i = 0; i < times; i++) {
+        try {
+          return await originalMethod.apply(this, args);
+        } catch (error) {
+          if (i === times - 1) throw error;
+          console.log(`Retry attempt ${i + 1}`);
+        }
+      }
+    };
+
+    return descriptor;
+  };
+}
+
+class DataService {
+  @Retry(3)
+  async fetchData() {
+    // Implementation
+    return "data";
+  }
+}
+```
+
+### Property Decorators
+
+```typescript
+// Track property changes
+function Observable(target: any, propertyKey: string) {
+  let value: any;
+
+  Object.defineProperty(target, propertyKey, {
+    get() {
+      return value;
+    },
+    set(newValue) {
+      console.log(`${propertyKey} changed to ${newValue}`);
+      value = newValue;
+    }
+  });
+}
+
+class User {
+  @Observable
+  name: string = "Unknown";
+
+  @Observable
+  email: string = "";
+}
+
+// Validation decorator
+function MinLength(length: number) {
+  return function(target: any, propertyKey: string) {
+    let value: string;
+
+    Object.defineProperty(target, propertyKey, {
+      get() {
+        return value;
+      },
+      set(newValue: string) {
+        if (newValue.length < length) {
+          throw new Error(`${propertyKey} must be at least ${length} characters`);
+        }
+        value = newValue;
+      }
+    });
+  };
+}
+
+class Account {
+  @MinLength(6)
+  password: string = "";
+}
+```
+
+### Parameter Decorators
+
+```typescript
+// Parameter decorator for logging
+function LogParameter(target: any, propertyKey: string | symbol | undefined, parameterIndex: number) {
+  console.log(`Parameter decorator on ${propertyKey}, parameter index: ${parameterIndex}`);
+}
+
+class Service {
+  method(@LogParameter param1: string, @LogParameter param2: number) {
+    // Implementation
+  }
+}
+
+// Validation decorator for required parameters
+function Required(target: any, propertyKey: string, parameterIndex: number) {
+  const existingMetadata = Reflect.getOwnMetadata("required", target[propertyKey]) || [];
+  existingMetadata.push(parameterIndex);
+  Reflect.defineMetadata("required", existingMetadata, target[propertyKey]);
+}
+```
+
+---
+
+## Modules & Namespaces
+
+### Theory: Code Organization and Dependency Management
+
+**Module System Principles**:
+
+**Encapsulation**: Hide internal details, expose only public API
+```typescript
+// module.ts
+const internalState = {}; // Hidden
+export function publicAPI() { } // Exposed
+```
+
+**Dependency Management**: Explicit imports make dependencies clear
+```typescript
+import { Component } from "react";  // Clear dependency
+// vs global Component - unclear origin
+```
+
+**Code Reuse**: Define once, import many times
+**Testing**: Mock dependencies by swapping imports
+
+**CommonJS vs ES Modules**:
+
+```
+CommonJS (Node.js)         ES Modules (Standard)
+module.exports = {...}     export {...}
+require("module")          import {...} from "module"
+Synchronous loading        Asynchronous loading
+Dynamic paths possible     Static analysis friendly
+
+TypeScript transpiles to either based on tsconfig
+```
+
+**Module Resolution**:
+
+```typescript
+// TypeScript tries these in order:
+import { X } from "./file";
+// 1. ./file.ts
+// 2. ./file.tsx
+// 3. ./file/package.json (main field)
+// 4. ./file/index.ts
+
+import { X } from "lodash";
+// 1. ./node_modules/lodash/package.json (main field)
+// 2. ./node_modules/lodash (index.ts)
+// 3. ../node_modules/lodash (recurse up)
+```
+
+**Module Patterns**:
+
+```typescript
+// Namespace pattern (avoid in modern TS)
+namespace Geometry {
+  export interface Point { x: number; y: number; }
+}
+
+// Barrel pattern (re-export)
+export { UserService } from "./services/user";
+export { ProductService } from "./services/product";
+export * as Types from "./types";
+
+// Lazy loading
+async function getModule() {
+  return import("./large-module");
+}
+```
+
+### ES6 Modules
+
+```typescript
+// math.ts
+export function add(a: number, b: number): number {
+  return a + b;
+}
+
+export function subtract(a: number, b: number): number {
+  return a - b;
+}
+
+export const PI = 3.14159;
+
+// Default export
+export default class Calculator {
+  multiply(a: number, b: number): number {
+    return a * b;
+  }
+}
+
+// main.ts - Importing
+import Calculator, { add, subtract, PI } from "./math";
+import * as Math from "./math";
+
+console.log(add(2, 3));           // 5
+console.log(Math.subtract(10, 3)); // 7
+
+// With aliases
+import { add as addition, subtract as subtraction } from "./math";
+console.log(addition(2, 3));  // 5
+```
+
+### Re-exporting
+
+```typescript
+// validators.ts
+export function validateEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+export function validatePassword(password: string): boolean {
+  return password.length >= 8;
+}
+
+// index.ts - Re-export
+export { validateEmail, validatePassword } from "./validators";
+export * from "./validators";  // Export all
+
+// User code
+import { validateEmail } from "./";  // Works!
+```
+
+### Namespaces (Legacy)
+
+```typescript
+// Avoid in modern TypeScript, use modules instead
+namespace Geometry {
+  export interface Point {
+    x: number;
+    y: number;
+  }
+
+  export function distance(p1: Point, p2: Point): number {
+    return Math.sqrt(
+      Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2)
+    );
+  }
+}
+
+const point1: Geometry.Point = { x: 0, y: 0 };
+const point2: Geometry.Point = { x: 3, y: 4 };
+console.log(Geometry.distance(point1, point2));  // 5
+```
+
+---
+
+## Practical Examples
+
+### Example 1: API Client with TypeScript
+
+```typescript
+// types.ts
+export interface User {
+  id: number;
+  name: string;
+  email: string;
+  role: "admin" | "user";
+}
+
+export interface ApiResponse<T> {
+  data: T;
+  status: number;
+  message: string;
+}
+
+export interface ApiError {
+  code: string;
+  message: string;
+}
+
+// api.ts
+import { User, ApiResponse, ApiError } from "./types";
+
+class ApiClient {
+  private baseUrl: string = "https://api.example.com";
+
+  async get<T>(endpoint: string): Promise<T> {
+    try {
+      const response = await fetch(`${this.baseUrl}${endpoint}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return response.json();
+    } catch (error) {
+      console.error("API Error:", error);
+      throw error;
+    }
+  }
+
+  async post<T>(endpoint: string, data: any): Promise<T> {
+    try {
+      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return response.json();
+    } catch (error) {
+      console.error("API Error:", error);
+      throw error;
+    }
+  }
+}
+
+// userService.ts
+class UserService {
+  constructor(private api: ApiClient) {}
+
+  async getUser(id: number): Promise<User> {
+    const response = await this.api.get<ApiResponse<User>>(`/users/${id}`);
+    return response.data;
+  }
+
+  async createUser(user: Omit<User, "id">): Promise<User> {
+    const response = await this.api.post<ApiResponse<User>>("/users", user);
+    return response.data;
+  }
+
+  async updateUser(id: number, updates: Partial<User>): Promise<User> {
+    const response = await this.api.post<ApiResponse<User>>(
+      `/users/${id}`,
+      updates
+    );
+    return response.data;
+  }
+}
+
+// Usage
+const apiClient = new ApiClient();
+const userService = new UserService(apiClient);
+
+userService.getUser(1).then(user => {
+  console.log("User:", user);
+});
+```
+
+### Example 2: State Management with TypeScript
+
+```typescript
+// Store with type safety
+type Action = { type: "SET_USER"; payload: User }
+  | { type: "SET_LOADING"; payload: boolean }
+  | { type: "SET_ERROR"; payload: string | null };
+
+interface State {
+  user: User | null;
+  loading: boolean;
+  error: string | null;
+}
+
+class Store {
+  private state: State = {
+    user: null,
+    loading: false,
+    error: null
+  };
+
+  private listeners: Set<(state: State) => void> = new Set();
+
+  dispatch(action: Action): void {
+    switch (action.type) {
+      case "SET_USER":
+        this.state = { ...this.state, user: action.payload };
+        break;
+      case "SET_LOADING":
+        this.state = { ...this.state, loading: action.payload };
+        break;
+      case "SET_ERROR":
+        this.state = { ...this.state, error: action.payload };
+        break;
+    }
+    this.notifyListeners();
+  }
+
+  subscribe(listener: (state: State) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private notifyListeners(): void {
+    this.listeners.forEach(listener => listener(this.state));
+  }
+
+  getState(): Readonly<State> {
+    return this.state;
+  }
+}
+
+// Usage
+const store = new Store();
+
+store.subscribe(state => {
+  console.log("State updated:", state);
+});
+
+store.dispatch({ type: "SET_LOADING", payload: true });
+store.dispatch({
+  type: "SET_USER",
+  payload: { id: 1, name: "Alice", email: "alice@example.com", role: "user" }
+});
+store.dispatch({ type: "SET_LOADING", payload: false });
+```
+
+### Example 3: Form Validation with TypeScript
+
+```typescript
+// validators.ts
+type ValidationRule<T> = (value: T) => boolean | string;
+
+class Validator<T extends Record<string, any>> {
+  private rules: Map<keyof T, ValidationRule<any>[]> = new Map();
+
+  addRule<K extends keyof T>(field: K, rule: ValidationRule<T[K]>): void {
+    if (!this.rules.has(field)) {
+      this.rules.set(field, []);
+    }
+    this.rules.get(field)!.push(rule);
+  }
+
+  validate(data: T): { valid: boolean; errors: Record<keyof T, string[]> } {
+    const errors: Record<keyof T, string[]> = {} as any;
+
+    for (const [field, rules] of this.rules) {
+      errors[field] = [];
+      const value = data[field];
+
+      for (const rule of rules) {
+        const result = rule(value);
+        if (typeof result === "string") {
+          errors[field].push(result);
+        } else if (!result) {
+          errors[field].push(`Validation failed for ${String(field)}`);
+        }
+      }
+    }
+
+    return {
+      valid: Object.values(errors).every(e => e.length === 0),
+      errors
+    };
+  }
+}
+
+// Usage
+interface SignupForm {
+  email: string;
+  password: string;
+  confirmPassword: string;
+}
+
+const validator = new Validator<SignupForm>();
+
+validator.addRule("email", (value) =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) || "Invalid email"
+);
+
+validator.addRule("password", (value) =>
+  value.length >= 8 || "Password must be at least 8 characters"
+);
+
+validator.addRule("confirmPassword", (value) =>
+  value.length >= 8 || "Confirmation must match requirements"
+);
+
+const formData: SignupForm = {
+  email: "user@example.com",
+  password: "12345",
+  confirmPassword: "12345"
+};
+
+const result = validator.validate(formData);
+console.log(result);
+// {
+//   valid: false,
+//   errors: {
+//     email: [],
+//     password: ["Password must be at least 8 characters"],
+//     confirmPassword: ["Confirmation must match requirements"]
+//   }
+// }
+```
+
+### Example 4: React Component with TypeScript
+
+```typescript
+// components/UserCard.tsx
+import React, { FC, ReactNode } from "react";
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  avatar?: string;
+}
+
+interface UserCardProps {
+  user: User;
+  onSelect?: (user: User) => void;
+  children?: ReactNode;
+}
+
+const UserCard: FC<UserCardProps> = ({ user, onSelect, children }) => {
+  return (
+    <div className="user-card" onClick={() => onSelect?.(user)}>
+      {user.avatar && <img src={user.avatar} alt={user.name} />}
+      <h3>{user.name}</h3>
+      <p>{user.email}</p>
+      {children}
+    </div>
+  );
+};
+
+// Custom hook with TypeScript
+interface UseAsyncState<T> {
+  data: T | null;
+  loading: boolean;
+  error: Error | null;
+}
+
+function useAsync<T>(
+  asyncFunction: () => Promise<T>,
+  immediate: boolean = true
+): UseAsyncState<T> {
+  const [state, setState] = React.useState<UseAsyncState<T>>({
+    data: null,
+    loading: immediate,
+    error: null
+  });
+
+  const execute = React.useCallback(async () => {
+    setState({ data: null, loading: true, error: null });
+    try {
+      const response = await asyncFunction();
+      setState({ data: response, loading: false, error: null });
+    } catch (error) {
+      setState({
+        data: null,
+        loading: false,
+        error: error instanceof Error ? error : new Error(String(error))
+      });
+    }
+  }, [asyncFunction]);
+
+  React.useEffect(() => {
+    if (immediate) {
+      execute();
+    }
+  }, [execute, immediate]);
+
+  return state;
+}
+
+// Usage
+const UserList: FC = () => {
+  const { data: users, loading, error } = useAsync<User[]>(
+    () => fetch("/api/users").then(r => r.json()),
+    true
+  );
+
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+
+  return (
+    <div>
+      {users?.map(user => (
+        <UserCard key={user.id} user={user} />
+      ))}
+    </div>
+  );
+};
+
+export default UserCard;
+```
+
+---
+
+## Best Practices
+
+### Type Safety
+
+```typescript
+// ✓ Good: Explicit types
+const count: number = 5;
+const users: User[] = [];
+const config: Config = { timeout: 5000 };
+
+// ✗ Avoid: Using any
+let data: any = fetchData();  // Dangerous!
+
+// ✓ Better: Use unknown
+let data: unknown = fetchData();
+if (typeof data === "object" && data !== null) {
+  // Safe narrowing
+}
+```
+
+### Strict Mode
+
+```json
+// Enable in tsconfig.json for maximum safety
+{
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true
+  }
+}
+```
+
+### Null Safety
+
+```typescript
+// ✗ Without strictNullChecks
+function getName(user: { name: string }) {
+  return user.name;  // Could be null
+}
+
+// ✓ With strictNullChecks
+function getName(user: { name: string | null }) {
+  return user.name ?? "Unknown";  // Handle null
+}
+
+// Optional chaining and nullish coalescing
+const city = user?.address?.city ?? "Unknown";
+const count = data?.items?.length ?? 0;
+```
+
+### Error Handling
+
+```typescript
+// Type-safe error handling
+type Result<T, E = Error> = { ok: true; value: T } | { ok: false; error: E };
+
+function processData(data: string): Result<number> {
+  try {
+    const parsed = JSON.parse(data);
+    return { ok: true, value: parsed };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error : new Error(String(error)) };
+  }
+}
+
+const result = processData('{"value": 42}');
+if (result.ok) {
+  console.log(result.value);  // 42
+} else {
+  console.error(result.error.message);
+}
+```
+
+---
+
+## Common Pitfalls & Solutions
+
+### 1. Over-using `any`
+
+```typescript
+// ✗ Bad
+const data: any = fetchUser();
+
+// ✓ Good
+const data: User = fetchUser();
+
+// ✓ If uncertain
+const data: unknown = fetchUser();
+if (isUser(data)) {
+  // Now TypeScript knows it's a User
+}
+```
+
+### 2. Not using `as const` for literals
+
+```typescript
+// ✗ Bad: Status might be reassigned to anything
+let status = "active";  // type: string
+
+// ✓ Good: Status can only be "active"
+const status = "active" as const;  // type: "active"
+
+// ✓ With types
+type Status = "active" | "inactive";
+const status: Status = "active";
+```
+
+### 3. Forgetting to handle async/await errors
+
+```typescript
+// ✗ Bad: Unhandled promise rejection
+async function loadUser(id: number) {
+  const user = await fetchUser(id);  // Could throw!
+  return user;
+}
+
+// ✓ Good: Handle errors
+async function loadUser(id: number): Promise<User> {
+  try {
+    const user = await fetchUser(id);
+    return user;
+  } catch (error) {
+    console.error("Failed to load user:", error);
+    throw error;
+  }
+}
+```
+
+### 4. Type assertion instead of type narrowing
+
+```typescript
+// ✗ Bad: Unsafe type assertion
+const value = someValue as string;
+value.toUpperCase();  // Could crash if not string!
+
+// ✓ Good: Type narrowing
+const value = someValue;
+if (typeof value === "string") {
+  value.toUpperCase();  // Safe!
+}
+```
+
+---
+
+## Type System Theory Summary
+
+### Core Concepts Review
+
+**The Type Hierarchy**:
+```
+┌─────────────────────────────┐
+│          any (unsafe)       │
+├─────────────────────────────┤
+│   Structural/nominal types  │
+│  (classes, interfaces, etc.)│
+├─────────────────────────────┤
+│    Union types (OR logic)   │
+│    Intersection (AND logic) │
+├─────────────────────────────┤
+│    Literal types (exact)    │
+├─────────────────────────────┤
+│      never (impossible)     │
+└─────────────────────────────┘
+```
+
+**Four Pillars of TypeScript's Type System**:
+
+1. **Inference**: Automatic type deduction from context
+   - Flow-sensitive type narrowing
+   - Contextual typing from assignments
+   - Best common type finding
+
+2. **Declaration**: Explicit type annotation
+   - Parameter types: `(x: string)`
+   - Return types: `(): boolean`
+   - Variable types: `const x: number`
+
+3. **Compatibility**: When types can be used interchangeably
+   - Structural subtyping (shape-based)
+   - Liskov substitution principle
+   - Variance (covariance/contravariance)
+
+4. **Generics**: Parametric polymorphism
+   - Type parameters: `<T>`
+   - Constraints: `<T extends Base>`
+   - Multiple bounds: `<T extends A & B>`
+
+### Common Type System Patterns
+
+**Pattern 1: Discriminated Unions (for safety)**
+```typescript
+type Result<T> = { ok: true; value: T } | { ok: false; error: Error };
+
+function handle<T>(result: Result<T>) {
+  if (result.ok) {
+    console.log(result.value);  // T is definitely here
+  } else {
+    console.error(result.error); // Error is definitely here
+  }
+}
+```
+
+**Pattern 2: Builder Pattern (for ergonomics)**
+```typescript
+class QueryBuilder<T> {
+  private query: any = {};
+
+  where(condition: (T extends Record<infer K, any> ? K : never)): this {
+    return this;
+  }
+
+  build(): T {
+    return this.query;
+  }
+}
+```
+
+**Pattern 3: Dependency Injection (for testability)**
+```typescript
+interface Logger { log(msg: string): void; }
+interface Repository { find(id: number): any; }
+
+class Service {
+  constructor(private logger: Logger, private repo: Repository) {}
+  
+  // Mock implementations for testing
+}
+```
+
+**Pattern 4: Middleware/Decorator (for composition)**
+```typescript
+type Middleware<T> = (value: T) => T;
+
+function compose<T>(...middlewares: Middleware<T>[]): Middleware<T> {
+  return (value: T) => middlewares.reduce((v, m) => m(v), value);
+}
+```
+
+### Type Safety Guarantees
+
+**What TypeScript Guarantees** (with strict mode):
+- ✓ Property access is safe (methods exist)
+- ✓ Array/string indexing is type-safe
+- ✓ Function calls have correct arguments
+- ✓ Null/undefined checked (with strictNullChecks)
+
+**What TypeScript Cannot Guarantee**:
+- ✗ Runtime array bounds checks
+- ✗ File I/O success
+- ✗ Network reliability
+- ✗ Type erasure effects (types disappear at runtime)
+
+### Design Principles
+
+**SOLID in TypeScript**:
+
+1. **S**ingle Responsibility: One class, one reason to change
+2. **O**pen/Closed: Open for extension, closed for modification
+3. **L**iskov Substitution: Subtypes are substitutable
+4. **I**nterface Segregation: Many specific interfaces vs one general
+5. **D**ependency Inversion: Depend on abstractions, not concretions
+
+**DRY (Don't Repeat Yourself)**:
+- Use mapped types instead of duplicating property definitions
+- Use generics for common patterns
+- Extract common interfaces
+
+**Kiss (Keep It Simple, Stupid)**:
+- Prefer simple types over complex generics
+- Avoid over-engineering type systems
+- Balance type safety with productivity
+
+---
+
+## Important Questions & Answers
+
+### Type System Fundamentals
+
+**Q1: What's the difference between `any` and `unknown`?**
+
+A: Both accept any value, but they differ in how they treat that value:
+
+```typescript
+// any - no restrictions (unsafe)
+let x: any = "hello";
+x.toUpperCase();        // No error - assumes method exists
+x.push(5);              // No error - no checks!
+
+// unknown - must narrow before use (safe)
+let y: unknown = "hello";
+// y.toUpperCase();      // Error: unknown has no methods
+if (typeof y === "string") {
+  y.toUpperCase();      // OK - narrowed to string
+}
+
+// Best practice: Use unknown by default, any as last resort
+```
+
+**Q2: When should I use `interface` vs `type`?**
+
+A: Modern recommendation: **Use `type` for new code**. Interfaces only if you need:
+- Declaration merging (extending existing types)
+- Plugin systems where packages extend your types
+
+```typescript
+// Prefer type
+type User = { name: string; age: number };
+
+// Use interface for extension
+interface Config { host: string; }
+declare global {
+  interface Config { port: number; }  // Can add elsewhere
+}
+```
+
+**Q3: What does `extends` mean in generics?**
+
+A: It creates a **constraint** - the type must be assignable to the constraint:
+
+```typescript
+// T must be a string (or subtype of string)
+function process<T extends string>(value: T): T {
+  return value;
+}
+
+// T must have a length property
+function getLength<T extends { length: number }>(x: T): number {
+  return x.length;
+}
+
+// T must be a key of U
+function getProp<T, K extends keyof T>(obj: T, key: K): T[K] {
+  return obj[key];
+}
+```
+
+**Q4: Why does TypeScript allow `let x: number = 5; let y: 5 = x;` to fail?**
+
+A: **Literal types are narrower than their base types**. Assignment requires compatibility:
+
+```typescript
+let x: number = 5;    // x: number (can change to any number)
+let y: 5 = 5;         // y: 5 (exactly 5)
+
+y = x;  // Error: x could be 6, but y must be 5
+x = y;  // OK: y is 5, which is a valid number
+```
+
+**Q5: How does type inference work with `const` vs `let`?**
+
+A: `const` literals don't widen; `let` literals widen to base types:
+
+```typescript
+const x = 5;      // x: 5 (literal, won't change)
+let y = 5;        // y: number (could change to any number)
+
+const obj = { name: "Alice" };  // { name: "Alice" } (literal object)
+let arr = [1, 2];               // number[] (could add any number)
+
+const arr2 = [1, 2] as const;   // readonly [1, 2] (force literal)
+```
+
+### Functions & Signatures
+
+**Q6: When should I use function overloads?**
+
+A: When one function has **multiple unrelated signatures** where input type determines output type:
+
+```typescript
+// Good use case for overloads
+function parse(input: string): string[];
+function parse(input: number): number[];
+function parse(input: string | number): string[] | number[] {
+  if (typeof input === "string") return input.split(",");
+  return [input];
+}
+
+const result1 = parse("a,b,c");  // result1: string[]
+const result2 = parse(123);      // result2: number[]
+
+// Don't use overloads for just optional parameters
+// ✗ Bad
+function greet(name: string): void;
+function greet(name: string, age: number): void;
+
+// ✓ Good - use optional parameters
+function greet(name: string, age?: number): void {
+  console.log(name, age);
+}
+```
+
+**Q7: What's the difference between `void` and `never` return types?**
+
+A: Both indicate the function doesn't return a useful value, but for different reasons:
+
+```typescript
+// void - function returns undefined (normal)
+function log(msg: string): void {
+  console.log(msg);
+}
+
+// never - function never returns (infinite loop or throws)
+function throwError(msg: string): never {
+  throw new Error(msg);
+}
+
+function infinite(): never {
+  while (true) { }
+}
+
+// never is subtler - used for exhaustiveness checking
+type Result = "success" | "error";
+
+function handle(result: Result): string {
+  if (result === "success") return "ok";
+  if (result === "error") return "failed";
+  
+  const exhaustive: never = result;  // Error if Result changes!
+  return exhaustive;
+}
+```
+
+**Q8: How do I type a callback function?**
+
+A: Use function type or callback interface:
+
+```typescript
+// Function type
+type Callback<T> = (error: Error | null, data: T) => void;
+
+function fetchData<T>(callback: Callback<T>): void {
+  try {
+    callback(null, {} as T);
+  } catch (e) {
+    callback(e as Error, null as any);
+  }
+}
+
+// With multiple callbacks - use object
+type Handlers<T> = {
+  onSuccess: (data: T) => void;
+  onError: (error: Error) => void;
+};
+
+function fetchWithHandlers<T>(handlers: Handlers<T>) {
+  // Implementation
+}
+```
+
+### Objects & Interfaces
+
+**Q9: What's the difference between `Partial<T>` and making properties optional manually?**
+
+A: They're equivalent, but `Partial<T>` is reusable:
+
+```typescript
+interface User {
+  name: string;
+  email: string;
+  age: number;
+}
+
+// Manual - repetitive
+interface PartialUser {
+  name?: string;
+  email?: string;
+  age?: number;
+}
+
+// With Partial - concise
+type PartialUser = Partial<User>;
+
+// Both are equivalent and can be used interchangeably
+const user: Partial<User> = { name: "Alice" };  // OK
+```
+
+**Q10: How do I make only specific properties readonly?**
+
+A: Use mapped types with conditional logic:
+
+```typescript
+// Make only certain properties readonly
+type ReadonlyProps<T, K extends keyof T> = T & {
+  readonly [P in K]: T[P];
+};
+
+type User = { name: string; email: string; age: number };
+type UserWithReadonlyAge = ReadonlyProps<User, "age">;
+
+const user: UserWithReadonlyAge = {
+  name: "Alice",
+  email: "alice@example.com",
+  age: 30
+};
+
+user.age = 31;  // Error: readonly
+```
+
+**Q11: What's the pattern for creating a "builder" type-safely?**
+
+A:
+
+```typescript
+class BuilderExample<T extends Record<string, any>> {
+  private data: Partial<T> = {};
+
+  set<K extends keyof T>(key: K, value: T[K]): this {
+    this.data[key] = value;
+    return this;
+  }
+
+  build(): T {
+    return this.data as T;
+  }
+}
+
+interface User {
+  name: string;
+  email: string;
+  age: number;
+}
+
+const user = new BuilderExample<User>()
+  .set("name", "Alice")
+  .set("email", "alice@example.com")
+  .set("age", 30)
+  .build();
+
+// set("invalid", "value");  // Error: invalid key
+```
+
+### Generics & Advanced Types
+
+**Q12: How do I extract a type from a generic?**
+
+A: Use `infer` in conditional types:
+
+```typescript
+// Extract array element type
+type ArrayElement<T> = T extends Array<infer E> ? E : never;
+type Num = ArrayElement<number[]>;  // number
+
+// Extract Promise type
+type Unwrap<T> = T extends Promise<infer P> ? P : T;
+type Str = Unwrap<Promise<string>>;  // string
+
+// Extract function return type
+type ReturnType<T> = T extends (...args: any[]) => infer R ? R : never;
+type Bool = ReturnType<() => boolean>;  // boolean
+```
+
+**Q13: What's the purpose of `keyof`?**
+
+A: Gets all keys of a type as a union of literal types:
+
+```typescript
+interface User {
+  name: string;
+  email: string;
+  age: number;
+}
+
+type Keys = keyof User;  // "name" | "email" | "age"
+
+// Useful for type-safe property access
+function getProperty<T, K extends keyof T>(obj: T, key: K): T[K] {
+  return obj[key];
+}
+
+const user = { name: "Alice", email: "alice@example.com" };
+const name = getProperty(user, "name");      // OK: string
+// const invalid = getProperty(user, "phone");  // Error: not a key
+```
+
+**Q14: How do I make a readonly object mutable?**
+
+A: Use `-readonly` in mapped types:
+
+```typescript
+type ReadonlyUser = {
+  readonly name: string;
+  readonly age: number;
+};
+
+type User = {
+  -readonly [K in keyof ReadonlyUser]: ReadonlyUser[K];
+};
+
+// Result: { name: string; age: number }
+```
+
+**Q15: What's the difference between `Record<K, T>` and `{ [key: K]: T }`?**
+
+A: Same thing, `Record` is just a utility for readability:
+
+```typescript
+// These are equivalent
+type Dict1<T> = { [key: string]: T };
+type Dict2<T> = Record<string, T>;
+
+// Record is cleaner with literal unions
+type UserRoles = "admin" | "user" | "guest";
+
+type Permissions1 = { [K in UserRoles]: string[] };
+type Permissions2 = Record<UserRoles, string[]>;
+
+// Permissions2 is more readable
+```
+
+### Classes & OOP
+
+**Q16: When should I use classes vs interfaces?**
+
+A: 
+- **Interfaces**: Define contracts for structure
+- **Classes**: When you need actual implementation and instances
+
+```typescript
+// Use interface for structure
+interface Logger {
+  log(msg: string): void;
+}
+
+// Use class for implementation
+class ConsoleLogger implements Logger {
+  log(msg: string) {
+    console.log(msg);
+  }
+}
+
+// Don't use class as interface (it works but confuses intent)
+// ✗ Don't do this
+interface Logger extends ConsoleLogger { }
+```
+
+**Q17: What are parameter properties?**
+
+A: Shorthand for declaring and initializing properties in constructor:
+
+```typescript
+// Long way
+class User {
+  name: string;
+  age: number;
+  constructor(name: string, age: number) {
+    this.name = name;
+    this.age = age;
+  }
+}
+
+// Short way - parameter properties
+class User {
+  constructor(public name: string, public age: number) {}
+}
+
+// Can use with access modifiers
+class User {
+  constructor(
+    public name: string,
+    private password: string,
+    protected role: string
+  ) {}
+}
+```
+
+**Q18: What's the difference between static and instance members?**
+
+A: Static belongs to class, instance belongs to each object:
+
+```typescript
+class Counter {
+  static count = 0;      // Shared by all instances
+  value = 0;             // Each instance has its own
+
+  constructor() {
+    Counter.count++;      // Increment shared counter
+  }
+
+  static reset() {
+    Counter.count = 0;    // Static method
+  }
+
+  increment() {
+    this.value++;         // Instance method
+  }
+}
+
+const c1 = new Counter();
+const c2 = new Counter();
+
+console.log(Counter.count);  // 2 - shared
+console.log(c1.value, c2.value);  // 0, 0 - separate
+```
+
+**Q19: How do I enforce that a class cannot be instantiated?**
+
+A: Make constructor private or use abstract:
+
+```typescript
+// Method 1: Private constructor
+class Utilities {
+  private constructor() {}  // Cannot instantiate
+
+  static helper() {
+    return "helping";
+  }
+}
+
+// Utilities() -> Error
+
+// Method 2: Abstract class
+abstract class Base {
+  abstract method(): void;
+}
+
+// new Base()  // Error - abstract
+
+class Derived extends Base {
+  method() { }
+}
+
+new Derived();  // OK
+```
+
+**Q20: What's the difference between method and property function?**
+
+A: Methods are inherited, property functions are recreated per instance:
+
+```typescript
+class Example {
+  // Method - shared by all instances
+  method() {
+    return this.name;
+  }
+
+  // Property function - each instance gets new function
+  arrow = () => {
+    return this.name;
+  };
+
+  name = "test";
+}
+
+const e1 = new Example();
+const e2 = new Example();
+
+e1.method === e2.method;       // true - same function
+e1.arrow === e2.arrow;         // false - different functions (more memory)
+```
+
+### Common Mistakes
+
+**Q21: Why do I get "is not assignable to" error?**
+
+A: Types don't match. Check for:
+1. Mismatch in property types
+2. Missing required properties
+3. Extra properties not allowed
+
+```typescript
+interface User {
+  name: string;
+  age: number;
+}
+
+// ✗ Missing age
+const user1: User = { name: "Alice" };
+
+// ✗ Type mismatch
+const user2: User = { name: "Alice", age: "30" };
+
+// ✓ Correct
+const user3: User = { name: "Alice", age: 30 };
+```
+
+**Q22: How do I avoid the "Object is possibly null" error?**
+
+A: Enable strictNullChecks and check before use:
+
+```typescript
+// tsconfig.json: "strictNullChecks": true
+
+function process(user: User | null) {
+  // user.name  // Error: possibly null
+
+  if (user) {
+    user.name;  // OK - narrowed
+  }
+
+  // Or use optional chaining
+  user?.name;  // Safe - returns undefined if null
+
+  // Or nullish coalescing
+  const name = user?.name ?? "Unknown";
+}
+```
+
+**Q23: Why doesn't my union type narrowing work?**
+
+A: TypeScript's type guard might be too broad. Be specific:
+
+```typescript
+type Result = string | number | boolean;
+
+function process(x: Result) {
+  if (x) {
+    // Still Result - x is truthy but not narrowed
+  }
+
+  if (typeof x === "string") {
+    // x is string - narrowed!
+    x.toUpperCase();
+  }
+
+  if (typeof x === "number") {
+    // x is number - narrowed!
+    x.toFixed(2);
+  }
+}
+```
+
+**Q24: What does "Type 'X' is not assignable to type 'Y'" actually mean?**
+
+A: `X` is not compatible with `Y`. Usually:
+- `X` is missing properties that `Y` requires
+- `X` has properties with wrong types
+- `X` is too general (like `any`)
+
+```typescript
+interface Strict { name: string; age: number }
+
+// ✗ Missing age - not assignable
+const obj1: Strict = { name: "Alice" };
+
+// ✗ age is wrong type - not assignable
+const obj2: Strict = { name: "Alice", age: "30" };
+
+// ✓ All properties match
+const obj3: Strict = { name: "Alice", age: 30 };
+```
+
+### Performance & Best Practices
+
+**Q25: Does TypeScript affect runtime performance?**
+
+A: No. TypeScript is completely erased:
+- All types removed during compilation
+- Type checking is compile-time only
+- Generated JavaScript is regular JS
+- Zero runtime overhead
+
+```typescript
+// This TypeScript code:
+const x: number = 5;
+const y: string = "hello";
+
+// Becomes this JavaScript:
+var x = 5;
+var y = "hello";
+
+// Types are gone!
+```
+
+**Q26: What does "strict mode" do?**
+
+A: Enables 9 compiler checks for maximum type safety:
+
+```json
+{
+  "compilerOptions": {
+    "strict": true  // Enables:
+    // - noImplicitAny: disallow 'any' inference
+    // - strictNullChecks: null/undefined must be explicit
+    // - strictFunctionTypes: strict parameter checking
+    // - strictBindCallApply: strict bind/call/apply
+    // - strictPropertyInitialization: properties must initialize
+    // - noImplicitThis: disallow implicit 'any' for 'this'
+    // - alwaysStrict: emit 'use strict'
+    // - noImplicitReturns: all code paths must return
+    // - noFallthroughCasesInSwitch: switch cases must break
+  }
+}
+```
+
+**Q27: When should I use `as const`?**
+
+A: To preserve literal types (prevent widening):
+
+```typescript
+// Without as const
+let direction = "up";  // type: string (could change to "down")
+
+// With as const  
+let direction = "up" as const;  // type: "up" (exact value)
+
+// For objects
+const config = { host: "localhost", port: 3000 } as const;
+// { readonly host: "localhost"; readonly port: 3000 }
+
+// Perfect for string unions
+const directions = ["up", "down", "left", "right"] as const;
+type Direction = (typeof directions)[number];  // "up" | "down" | "left" | "right"
+```
+
+**Q28: What's the performance impact of complex types?**
+
+A: Complex types can slow TypeScript compilation but don't affect runtime:
+
+```typescript
+// Simple type (fast)
+type Simple = string | number;
+
+// Complex type (slower to check, but still compiles)
+type Complex = {
+  [K in "a" | "b" | "c"]: K extends "a" ? string : number
+};
+
+// Tips to keep types fast:
+// 1. Avoid recursive conditional types
+// 2. Cache computed types
+// 3. Use simpler alternatives when possible
+// 4. Profile with: tsc --diagnostics
+```
+
+---
+
+## Resources
+
+- [Official TypeScript Handbook](https://www.typescriptlang.org/docs/)
+- [TypeScript Playground](https://www.typescriptlang.org/play)
+- [Definitely Typed](https://definitelytyped.org/) - Type definitions for libraries
+- [Advanced Types Guide](https://www.typescriptlang.org/docs/handbook/2/types-from-types.html)
+- [TypeScript in 5 Minutes](https://www.typescriptlang.org/docs/handbook/typescript-in-5-minutes.html)
+- [Type Challenges](https://github.com/type-challenges/type-challenges) - Practice advanced types
+
+---
+
+**Last Updated**: December 2025
+**Version**: 2.0 (Enhanced with Theory Notes)
+**Contents**: 11 chapters, 50+ working examples, comprehensive theory explanations
