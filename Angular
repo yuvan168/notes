@@ -1,0 +1,4513 @@
+# Angular Complete Notes: Detailed Theory & Practical Guide
+
+## Table of Contents
+
+1. [Angular Fundamentals](#angular-fundamentals)
+2. [TypeScript Essentials for Angular](#typescript-essentials-for-angular)
+3. [Angular Architecture](#angular-architecture)
+4. [Components & Component Lifecycle](#components--component-lifecycle)
+5. [Templates & Data Binding](#templates--data-binding)
+6. [Directives](#directives)
+7. [Services & Dependency Injection](#services--dependency-injection)
+8. [HTTP & HTTPClient](#http--httpclient)
+9. [Forms: Template-Driven vs Reactive](#forms-template-driven-vs-reactive)
+10. [Routing & Navigation](#routing--navigation)
+11. [Observables & RxJS](#observables--rxjs)
+12. [Pipes](#pipes)
+13. [Guards & Interceptors](#guards--interceptors)
+14. [State Management](#state-management)
+15. [Important Questions & Answers](#important-questions--answers)
+
+---
+
+## Angular Fundamentals
+
+### What is Angular?
+
+Angular is a **TypeScript-based, open-source web framework** developed and maintained by Google for building dynamic single-page applications (SPAs). It provides a complete solution for frontend development with built-in tools for:
+
+- **Component-based architecture** (modular, reusable UI building blocks)
+- **Declarative templates** (HTML with Angular syntax for binding and control flow)
+- **Dependency injection** (built-in, powerful IoC container)
+- **Reactive programming** (built on RxJS Observables)
+- **Routing** (client-side navigation)
+- **Forms** (both template-driven and reactive)
+- **HTTP** (for backend communication)
+- **Testing utilities** (Jasmine/Karma)
+- **Build optimization** (tree-shaking, code splitting, lazy loading)
+
+### Imperative vs Declarative (Angular Perspective)
+
+```typescript
+// ❌ IMPERATIVE - Manual DOM manipulation (jQuery way)
+const button = document.getElementById('button');
+button.addEventListener('click', () => {
+  const element = document.getElementById('output');
+  element.textContent = 'Button clicked!';
+});
+
+// ✅ DECLARATIVE - Angular way
+// Component
+export class ClickComponent {
+  message = 'Button clicked!';
+  
+  onButtonClick() {
+    this.message = 'Button was clicked!';
+  }
+}
+
+// Template
+/*
+<button (click)="onButtonClick()">Click Me</button>
+<p>{{ message }}</p>
+*/
+```
+
+**Why Declarative?**
+- Focus on "what" not "how" - describe the desired state
+- Angular handles DOM updates automatically
+- More maintainable and easier to reason about
+- Two-way binding reduces boilerplate
+
+### Angular vs Other Frameworks
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                 FRAMEWORK COMPARISON                         │
+├─────────────────────────────────────────────────────────────┤
+│ Angular    │ Full framework, TypeScript-first, steep learning│
+│ React      │ Library, flexible, large ecosystem             │
+│ Vue        │ Progressive, gentle learning curve             │
+│ Svelte     │ Compiler-based, smallest bundle               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## TypeScript Essentials for Angular
+
+### Why TypeScript?
+
+Angular is **TypeScript-first**. TypeScript provides:
+
+```typescript
+// Type Safety - Catch errors at compile time
+interface User {
+  id: number;
+  name: string;
+  email: string;
+}
+
+function displayUser(user: User): void {
+  console.log(`${user.name} (${user.email})`);
+}
+
+// ✅ CORRECT
+displayUser({ id: 1, name: 'John', email: 'john@example.com' });
+
+// ❌ ERROR - Property 'phone' does not exist on type 'User'
+displayUser({ id: 1, name: 'John', email: 'john@example.com', phone: '123' });
+```
+
+### Decorators in Angular
+
+Decorators are **functions that modify classes, methods, or properties**. Angular uses decorators extensively:
+
+```typescript
+import { Component, Input, Output, EventEmitter } from '@angular/core';
+
+@Component({
+  selector: 'app-greeting',
+  template: '<h1>Hello {{ name }}!</h1>'
+})
+export class GreetingComponent {
+  @Input() name: string = 'World';
+  @Output() nameChange = new EventEmitter<string>();
+  
+  changeName(newName: string) {
+    this.nameChange.emit(newName);
+  }
+}
+
+// Usage: <app-greeting [name]="userName" (nameChange)="userName = $event"></app-greeting>
+```
+
+### Access Modifiers
+
+```typescript
+export class Person {
+  public fullName: string = 'John Doe';      // Accessible everywhere
+  protected age: number = 30;                 // Accessible in class and subclasses
+  private ssn: string = '123-45-6789';       // Accessible only in this class
+  readonly email: string = 'john@example.com'; // Cannot be modified
+}
+
+export class Employee extends Person {
+  work() {
+    console.log(this.fullName);   // ✅ OK - public
+    console.log(this.age);         // ✅ OK - protected
+    console.log(this.ssn);         // ❌ ERROR - private
+  }
+}
+```
+
+---
+
+## Angular Architecture
+
+### High-Level Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│            Main Application (main.ts)               │
+│  - Platform initializer                             │
+│  - Bootstraps root module                           │
+└──────────────────┬──────────────────────────────────┘
+                   │
+┌──────────────────▼──────────────────────────────────┐
+│         Application Module (AppModule)              │
+│  - Declares components, pipes, directives           │
+│  - Imports dependencies                             │
+│  - Provides services                                │
+│  - Specifies root component                         │
+└──────────────────┬──────────────────────────────────┘
+                   │
+┌──────────────────▼──────────────────────────────────┐
+│       Root Component (AppComponent)                 │
+│  - Entry point to component tree                    │
+│  - Defines main template                            │
+└──────────────────┬──────────────────────────────────┘
+                   │
+        ┌──────────┴──────────┬───────────┐
+        │                     │           │
+   ┌────▼────┐          ┌─────▼──┐   ┌───▼────┐
+   │Component1│          │Component2│   │Component3│
+   └──────────┘          └──────────┘   └────────┘
+        │                      │            │
+   ┌────▼────┐          ┌─────▼──┐    ┌───▼────┐
+   │Service A │          │Service B│    │Service C│
+   └──────────┘          └──────────┘    └────────┘
+```
+
+### Module System
+
+```typescript
+// feature.module.ts
+import { NgModule } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FeatureComponent } from './feature.component';
+import { FeatureService } from './feature.service';
+
+@NgModule({
+  declarations: [FeatureComponent],      // Components, directives, pipes
+  imports: [CommonModule],               // Other modules
+  providers: [FeatureService],           // Services
+  exports: [FeatureComponent]            // Available to other modules
+})
+export class FeatureModule { }
+
+// app.module.ts
+@NgModule({
+  declarations: [AppComponent],
+  imports: [BrowserModule, FeatureModule],
+  providers: [],
+  bootstrap: [AppComponent]
+})
+export class AppModule { }
+```
+
+---
+
+## Components & Component Lifecycle
+
+### Creating Components
+
+```typescript
+// Manually
+import { Component, OnInit } from '@angular/core';
+
+@Component({
+  selector: 'app-user-profile',
+  templateUrl: './user-profile.component.html',
+  styleUrls: ['./user-profile.component.css']
+})
+export class UserProfileComponent implements OnInit {
+  user = { name: 'John', email: 'john@example.com' };
+  
+  ngOnInit(): void {
+    // Component initialized
+    console.log('User component initialized');
+  }
+}
+
+// Using CLI
+// ng generate component user-profile
+// or ng g c user-profile
+
+// Real-world example: User Dashboard Component
+@Component({
+  selector: 'app-dashboard',
+  template: `
+    <div class="dashboard">
+      <h1>Welcome, {{ user?.name }}</h1>
+      <div class="stats">
+        <p>Posts: {{ userStats?.postCount }}</p>
+        <p>Followers: {{ userStats?.followers }}</p>
+      </div>
+      <button (click)="editProfile()">Edit Profile</button>
+      <button (click)="logout()">Logout</button>
+    </div>
+  `,
+  styles: [`
+    .dashboard { padding: 20px; background: #f5f5f5; }
+    h1 { color: #333; }
+    .stats { display: flex; gap: 20px; margin: 20px 0; }
+  `]
+})
+export class DashboardComponent implements OnInit {
+  user: User | null = null;
+  userStats: UserStats | null = null;
+  
+  constructor(
+    private userService: UserService,
+    private router: Router
+  ) {}
+  
+  ngOnInit() {
+    this.loadUserData();
+  }
+  
+  private loadUserData() {
+    // Load user info
+    this.userService.getCurrentUser().subscribe(
+      user => {
+        this.user = user;
+        // Then load stats for that user
+        this.loadUserStats(user.id);
+      }
+    );
+  }
+  
+  private loadUserStats(userId: number) {
+    this.userService.getUserStats(userId).subscribe(
+      stats => this.userStats = stats
+    );
+  }
+  
+  editProfile() {
+    if (this.user) {
+      this.router.navigate(['/profile/edit', this.user.id]);
+    }
+  }
+  
+  logout() {
+    this.userService.logout();
+    this.router.navigate(['/login']);
+  }
+}
+```
+
+**Key Concepts:**
+- **Selector**: CSS selector that identifies the component in templates
+- **Template**: Inline HTML or external file reference
+- **Styles**: Component-scoped CSS (not global)
+- **Decorators**: @Component defines metadata
+- **Initialization**: ngOnInit called after component created and inputs set
+
+### Component Lifecycle Hooks
+
+```typescript
+export class LifecycleComponent implements 
+  OnInit, 
+  OnChanges, 
+  OnDestroy, 
+  AfterViewInit {
+  
+  // 1. Runs when @Input properties change
+  ngOnChanges(changes: SimpleChanges): void {
+    console.log('Input properties changed:', changes);
+  }
+  
+  // 2. Runs once after component initialized
+  ngOnInit(): void {
+    console.log('Component initialized');
+    // Load data from API here
+  }
+  
+  // 3. Runs after component checked (after every change detection)
+  ngAfterContentInit(): void {
+    console.log('After content projected');
+  }
+  
+  // 4. Runs after view initialized (template and child components)
+  ngAfterViewInit(): void {
+    console.log('View fully initialized');
+    // Access @ViewChild here
+  }
+  
+  // 5. Runs on every change detection cycle
+  ngDoCheck(): void {
+    console.log('Change detection running');
+  }
+  
+  // 6. Runs when component destroyed
+  ngOnDestroy(): void {
+    console.log('Component destroyed');
+    // Cleanup: unsubscribe, clear timers
+  }
+}
+
+// Real-world example: User Profile with lifecycle
+@Component({
+  selector: 'app-user-profile',
+  template: `
+    <div *ngIf="user">
+      <h1>{{ user.name }}</h1>
+      <img [src]="user.avatar" />
+      <p>{{ user.bio }}</p>
+      <button (click)="followUser()" [disabled]="isFollowing">
+        {{ isFollowing ? 'Following' : 'Follow' }}
+      </button>
+    </div>
+    <div *ngIf="!user">Loading...</div>
+  `
+})
+export class UserProfileComponent implements OnInit, OnChanges, OnDestroy {
+  @Input() userId: number = 0;
+  user: User | null = null;
+  isFollowing = false;
+  private destroy$ = new Subject<void>();
+  
+  constructor(private userService: UserService) {}
+  
+  // Called when @Input userId changes
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['userId'] && !changes['userId'].firstChange) {
+      console.log('User ID changed from', changes['userId'].previousValue, 
+                  'to', changes['userId'].currentValue);
+      this.loadUserProfile();
+    }
+  }
+  
+  // Component initialization - load data
+  ngOnInit() {
+    console.log('Profile component initialized');
+    this.loadUserProfile();
+    
+    // Listen to user profile updates from service
+    this.userService.userUpdated$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(updatedUser => {
+        if (updatedUser.id === this.userId) {
+          this.user = updatedUser;
+        }
+      });
+  }
+  
+  private loadUserProfile() {
+    if (this.userId > 0) {
+      this.userService.getUserProfile(this.userId)
+        .pipe(takeUntil(this.destroy$))
+        .subscribe(user => {
+          this.user = user;
+          this.checkFollowStatus();
+        });
+    }
+  }
+  
+  private checkFollowStatus() {
+    if (this.user) {
+      this.userService.isFollowing(this.user.id)
+        .pipe(takeUntil(this.destroy$))
+        .subscribe(following => this.isFollowing = following);
+    }
+  }
+  
+  followUser() {
+    if (this.user) {
+      this.userService.follow(this.user.id)
+        .subscribe(() => this.isFollowing = true);
+    }
+  }
+  
+  // Cleanup when component destroyed
+  ngOnDestroy() {
+    console.log('Profile component destroyed - cleaning up subscriptions');
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+}
+
+// ⚠️ COMMON MISTAKE: Not cleaning up subscriptions
+export class BadComponent implements OnInit {
+  ngOnInit() {
+    // ❌ This subscription leaks memory!
+    this.userService.getUsers().subscribe(users => {
+      this.users = users;
+    });
+  }
+}
+
+// ✅ CORRECT: Always cleanup in ngOnDestroy
+export class GoodComponent implements OnInit, OnDestroy {
+  private subscriptions = new Subscription();
+  
+  ngOnInit() {
+    // Subscribe and track subscription
+    this.subscriptions.add(
+      this.userService.getUsers().subscribe(users => {
+        this.users = users;
+      })
+    );
+  }
+  
+  ngOnDestroy() {
+    this.subscriptions.unsubscribe();
+  }
+}
+```
+
+**Lifecycle Execution Order (with detailed timing):**
+
+```
+1. Constructor (not technically a hook, but runs first)
+   └─ Dependency injection happens
+   └─ Properties initialized
+
+2. ngOnChanges (called BEFORE ngOnInit)
+   └─ Runs every time @Input properties change
+   └─ Receives SimpleChanges object with previous/current values
+
+3. ngOnInit (runs ONCE after component created)
+   └─ Safe to access @Input properties
+   └─ Safe to access @ViewChild (NO, see next point)
+   └─ Perfect for: data loading, subscriptions
+
+4. ngAfterContentInit
+   └─ Content projection initialized
+   └─ <ng-content> rendered
+
+5. ngAfterViewInit
+   └─ Template and child components fully rendered
+   └─ NOW safe to access @ViewChild/@ViewChildren
+   └─ Avoid: modifying properties that trigger change detection
+
+6. ngDoCheck
+   └─ Called on EVERY change detection cycle
+   └─ Expensive - use sparingly
+   └─ Runs after ngAfterContentInit and ngAfterViewInit
+
+7. ngOnDestroy (runs when component removed from DOM)
+   └─ Final opportunity for cleanup
+   └─ Unsubscribe from Observables
+   └─ Clear timers, intervals
+   └─ Detach event listeners
+```
+
+**Real Scenario - Chat Component Lifecycle:**
+
+```typescript
+@Component({
+  selector: 'app-chat',
+  template: `
+    <div class="chat-container">
+      <div class="messages" #messageContainer>
+        <div *ngFor="let msg of messages" class="message">
+          {{ msg.text }}
+        </div>
+      </div>
+      <input [(ngModel)]="newMessage" (keyup.enter)="sendMessage()" />
+    </div>
+  `
+})
+export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
+  @Input() conversationId: number = 0;
+  @ViewChild('messageContainer') messageContainer: ElementRef | null = null;
+  
+  messages: ChatMessage[] = [];
+  newMessage = '';
+  private destroy$ = new Subject<void>();
+  private messageServiceConnection: any = null;
+  
+  constructor(
+    private chatService: ChatService,
+    private websocketService: WebSocketService
+  ) {
+    console.log('[Constructor] Chat component being created');
+  }
+  
+  ngOnInit() {
+    console.log('[ngOnInit] Starting to load conversation', this.conversationId);
+    
+    // Load previous messages
+    this.chatService.getMessages(this.conversationId)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(messages => {
+        this.messages = messages;
+        this.scrollToBottom();
+      });
+    
+    // Connect to WebSocket for real-time updates
+    this.messageServiceConnection = this.websocketService
+      .connect(this.conversationId)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(newMessage => {
+        this.messages.push(newMessage);
+        this.scrollToBottom();
+      });
+  }
+  
+  ngAfterViewInit() {
+    console.log('[ngAfterViewInit] View initialized, scrolling to bottom');
+    // NOW safe to access @ViewChild
+    this.scrollToBottom();
+  }
+  
+  private scrollToBottom() {
+    if (this.messageContainer) {
+      setTimeout(() => {
+        this.messageContainer!.nativeElement.scrollTop = 
+          this.messageContainer!.nativeElement.scrollHeight;
+      });
+    }
+  }
+  
+  sendMessage() {
+    if (this.newMessage.trim()) {
+      this.chatService.sendMessage(this.conversationId, this.newMessage)
+        .subscribe(sentMessage => {
+          this.messages.push(sentMessage);
+          this.newMessage = '';
+          this.scrollToBottom();
+        });
+    }
+  }
+  
+  ngOnDestroy() {
+    console.log('[ngOnDestroy] Cleaning up chat component');
+    // Close WebSocket connection
+    this.websocketService.disconnect(this.conversationId);
+    // Complete subject to unsubscribe all observables
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+}
+```
+
+### Component Communication
+
+```typescript
+// Parent to Child via @Input
+@Component({
+  selector: 'app-parent',
+  template: `
+    <app-child [message]="parentMessage"></app-child>
+  `
+})
+export class ParentComponent {
+  parentMessage = 'Hello from parent';
+}
+
+@Component({
+  selector: 'app-child',
+  template: `<p>{{ message }}</p>`
+})
+export class ChildComponent {
+  @Input() message: string = '';
+}
+
+// Child to Parent via @Output
+@Component({
+  selector: 'app-child',
+  template: `<button (click)="notifyParent()">Send Message</button>`
+})
+export class ChildComponent {
+  @Output() messageEvent = new EventEmitter<string>();
+  
+  notifyParent() {
+    this.messageEvent.emit('Hello from child');
+  }
+}
+
+@Component({
+  selector: 'app-parent',
+  template: `
+    <app-child (messageEvent)="receivedMessage($event)"></app-child>
+    <p>{{ receivedMsg }}</p>
+  `
+})
+export class ParentComponent {
+  receivedMsg = '';
+  
+  receivedMessage(msg: string) {
+    this.receivedMsg = msg;
+  }
+}
+
+// Via Service (for sibling communication)
+@Injectable({ providedIn: 'root' })
+export class CommunicationService {
+  message$ = new BehaviorSubject<string>('Initial');
+  
+  sendMessage(msg: string) {
+    this.message$.next(msg);
+  }
+}
+
+// Component 1 sends
+export class Sender1Component {
+  constructor(private comService: CommunicationService) {}
+  
+  send() {
+    this.comService.sendMessage('Hello from sibling 1');
+  }
+}
+
+// Component 2 receives
+export class Receiver2Component implements OnInit {
+  constructor(private comService: CommunicationService) {}
+  
+  ngOnInit() {
+    this.comService.message$.subscribe(msg => {
+      console.log('Received:', msg);
+    });
+  }
+}
+
+// ========== DETAILED REAL-WORLD EXAMPLE ==========
+
+// Example: E-commerce shopping cart system
+
+// Product Service - Share state between components
+@Injectable({ providedIn: 'root' })
+export class CartService {
+  private cartItems$ = new BehaviorSubject<CartItem[]>([]);
+  cart$ = this.cartItems$.asObservable();
+  
+  private cartTotal$ = new BehaviorSubject<number>(0);
+  cartTotal = this.cartTotal$.asObservable();
+  
+  addToCart(item: CartItem) {
+    const current = this.cartItems$.value;
+    const existing = current.find(i => i.id === item.id);
+    
+    if (existing) {
+      existing.quantity += item.quantity;
+    } else {
+      current.push(item);
+    }
+    
+    this.cartItems$.next([...current]);
+    this.updateTotal();
+  }
+  
+  removeFromCart(itemId: number) {
+    const current = this.cartItems$.value.filter(i => i.id !== itemId);
+    this.cartItems$.next(current);
+    this.updateTotal();
+  }
+  
+  private updateTotal() {
+    const total = this.cartItems$.value.reduce(
+      (sum, item) => sum + (item.price * item.quantity), 0
+    );
+    this.cartTotal$.next(total);
+  }
+}
+
+// Product List Component - Parent
+@Component({
+  selector: 'app-product-list',
+  template: `
+    <div class="products">
+      <app-product-card 
+        *ngFor="let product of products"
+        [product]="product"
+        (addToCart)="onAddToCart($event)"
+      ></app-product-card>
+    </div>
+  `
+})
+export class ProductListComponent implements OnInit {
+  products: Product[] = [];
+  
+  constructor(
+    private productService: ProductService,
+    private cartService: CartService
+  ) {}
+  
+  ngOnInit() {
+    this.productService.getProducts().subscribe(
+      products => this.products = products
+    );
+  }
+  
+  // Receive event from child component
+  onAddToCart(cartItem: CartItem) {
+    this.cartService.addToCart(cartItem);
+    console.log('Added to cart:', cartItem);
+  }
+}
+
+// Product Card Component - Child
+@Component({
+  selector: 'app-product-card',
+  template: `
+    <div class="product-card">
+      <img [src]="product.image" [alt]="product.name" />
+      <h3>{{ product.name }}</h3>
+      <p>{{ product.price | currency }}</p>
+      <input type="number" [(ngModel)]="quantity" min="1" />
+      <button (click)="addToCart()">Add to Cart</button>
+    </div>
+  `,
+  styles: [`
+    .product-card {
+      border: 1px solid #ddd;
+      padding: 15px;
+      border-radius: 8px;
+    }
+  `]
+})
+export class ProductCardComponent {
+  @Input() product: Product = {} as Product;
+  @Output() addToCart = new EventEmitter<CartItem>();
+  
+  quantity = 1;
+  
+  onAddToCart() {
+    this.addToCart.emit({
+      id: this.product.id,
+      name: this.product.name,
+      price: this.product.price,
+      quantity: this.quantity
+    });
+    this.quantity = 1;
+  }
+}
+
+// Cart Summary Component - Sibling using Service
+@Component({
+  selector: 'app-cart-summary',
+  template: `
+    <div class="cart-summary">
+      <h2>Cart ({{ (cartItems$ | async)?.length || 0 }})</h2>
+      <div *ngFor="let item of (cartItems$ | async)">
+        <span>{{ item.name }} x {{ item.quantity }}</span>
+        <span>{{ item.price * item.quantity | currency }}</span>
+        <button (click)="removeItem(item.id)">Remove</button>
+      </div>
+      <div class="total">
+        Total: {{ (cartTotal$ | async) | currency }}
+      </div>
+    </div>
+  `
+})
+export class CartSummaryComponent {
+  cartItems$ = this.cartService.cart$;
+  cartTotal$ = this.cartService.cartTotal;
+  
+  constructor(private cartService: CartService) {}
+  
+  removeItem(itemId: number) {
+    this.cartService.removeFromCart(itemId);
+  }
+}
+
+// ========== KEY COMMUNICATION PATTERNS ==========
+
+// ❌ WRONG - Tightly coupled, hard to reuse
+export class BadParentComponent {
+  child: ChildComponent | null = null;
+  
+  // Direct access to child - very bad practice
+  someMethod() {
+    this.child?.doSomething();  // Tight coupling
+  }
+}
+
+// ✅ CORRECT - Loose coupling via events
+export class GoodParentComponent {
+  onChildAction(data: any) {
+    // Handle event from child
+  }
+}
+```
+
+**Communication Patterns Summary:**
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│           COMPONENT COMMUNICATION PATTERNS                    │
+├──────────────────────────────────────────────────────────────┤
+│ Parent → Child    │ @Input properties                        │
+│ Child → Parent    │ @Output EventEmitter                     │
+│ Sibling ↔ Sibling │ Shared Service + Observable              │
+│ Complex State     │ State Management Service / NgRx          │
+│ Unrelated comps   │ Service with BehaviorSubject/ReplaySubject
+│ Async data        │ async pipe + Observable                  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Templates & Data Binding
+
+### Types of Data Binding
+
+```html
+<!-- 1. Interpolation (one-way) -->
+<p>Hello {{ userName }}</p>
+
+<!-- 2. Property Binding (one-way) -->
+<img [src]="imageUrl" />
+<button [disabled]="isDisabled">Click</button>
+
+<!-- 3. Event Binding -->
+<button (click)="handleClick()">Click Me</button>
+<input (keyup.enter)="onEnter()">
+
+<!-- 4. Two-Way Binding ([(ngModel)]) -->
+<input [(ngModel)]="userName" />
+<!-- Equivalent to: -->
+<!-- <input [ngModel]="userName" (ngModelChange)="userName = $event"> -->
+
+<!-- 5. Attribute Binding (when no property exists) -->
+<button [attr.aria-label]="buttonLabel">Accessible Button</button>
+
+<!-- 6. Class Binding -->
+<div [class.active]="isActive"></div>
+<div [ngClass]="{'active': isActive, 'disabled': isDisabled}"></div>
+
+<!-- 7. Style Binding -->
+<div [style.color]="textColor"></div>
+<div [ngStyle]="{'color': textColor, 'font-size': fontSize + 'px'}"></div>
+```
+
+### Template Syntax Examples
+
+```typescript
+export class TemplateComponent {
+  items = ['Apple', 'Banana', 'Orange'];
+  isVisible = true;
+  count = 5;
+  user = { name: 'John', age: 30 };
+}
+```
+
+```html
+<!-- Structural Directives -->
+
+<!-- *ngIf: Conditional rendering -->
+<div *ngIf="isVisible">
+  Visible content
+</div>
+
+<div *ngIf="user; else noUser">
+  <p>{{ user.name }}</p>
+</div>
+<ng-template #noUser>
+  <p>No user found</p>
+</ng-template>
+
+<!-- *ngFor: List rendering -->
+<ul>
+  <li *ngFor="let item of items; let i = index">
+    {{ i }}: {{ item }}
+  </li>
+</ul>
+
+<div *ngFor="let item of items; let first = first; let last = last">
+  <span *ngIf="first">First: </span>
+  {{ item }}
+  <span *ngIf="last"> (Last)</span>
+</div>
+
+<!-- *ngSwitch: Switch-case -->
+<div [ngSwitch]="status">
+  <div *ngSwitchCase="'active'">Active Status</div>
+  <div *ngSwitchCase="'inactive'">Inactive Status</div>
+  <div *ngSwitchDefault>Unknown Status</div>
+</div>
+```
+
+---
+
+## Directives
+
+### Built-in Directives
+
+```typescript
+export class DirectiveComponent {
+  isBold = true;
+  classes = { 'text-red': true, 'bg-yellow': false };
+  styles = { 'color': 'red', 'font-size': '20px' };
+  items = ['Angular', 'React', 'Vue'];
+  status = 'loading';
+}
+```
+
+```html
+<!-- Attribute Directives -->
+
+<!-- ngClass: Dynamic classes -->
+<div [ngClass]="classes">Dynamic Classes</div>
+
+<!-- ngStyle: Dynamic styles -->
+<div [ngStyle]="styles">Dynamic Styles</div>
+
+<!-- ngModel: Two-way binding (in forms) -->
+<input [(ngModel)]="name" />
+
+<!-- Structural Directives (modify DOM structure) -->
+
+<!-- ngIf: Conditional rendering -->
+<p *ngIf="isBold">Bold Text</p>
+
+<!-- ngFor: Looping -->
+<ul>
+  <li *ngFor="let item of items">{{ item }}</li>
+</ul>
+
+<!-- ngSwitch: Multi-way conditional -->
+<div [ngSwitch]="status">
+  <div *ngSwitchCase="'loading'">Loading...</div>
+  <div *ngSwitchCase="'error'">Error!</div>
+  <div *ngSwitchDefault>Done!</div>
+</div>
+```
+
+### Creating Custom Directives
+
+```typescript
+// Highlight directive
+import { Directive, ElementRef, HostListener, Input } from '@angular/core';
+
+@Directive({
+  selector: '[appHighlight]'
+})
+export class HighlightDirective {
+  @Input() appHighlight = 'yellow';
+  @Input() highlightColor = 'yellow';
+  
+  constructor(private el: ElementRef) {
+    this.el.nativeElement.style.backgroundColor = this.highlightColor;
+  }
+  
+  @HostListener('mouseenter')
+  onMouseEnter() {
+    this.el.nativeElement.style.backgroundColor = this.appHighlight;
+  }
+  
+  @HostListener('mouseleave')
+  onMouseLeave() {
+    this.el.nativeElement.style.backgroundColor = 'transparent';
+  }
+}
+
+// Usage
+// <p appHighlight highlightColor="yellow">Hover me</p>
+```
+
+---
+
+## Services & Dependency Injection
+
+### Creating Services
+
+```typescript
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+}
+
+@Injectable({
+  providedIn: 'root'  // Available application-wide
+})
+export class UserService {
+  private apiUrl = 'http://api.example.com/users';
+  
+  constructor(private http: HttpClient) {}
+  
+  getUsers(): Observable<User[]> {
+    return this.http.get<User[]>(this.apiUrl);
+  }
+  
+  getUserById(id: number): Observable<User> {
+    return this.http.get<User>(`${this.apiUrl}/${id}`);
+  }
+  
+  createUser(user: User): Observable<User> {
+    return this.http.post<User>(this.apiUrl, user);
+  }
+  
+  updateUser(id: number, user: User): Observable<User> {
+    return this.http.put<User>(`${this.apiUrl}/${id}`, user);
+  }
+  
+  deleteUser(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.apiUrl}/${id}`);
+  }
+}
+
+// ========== DETAILED REAL-WORLD EXAMPLE ==========
+
+// Authentication Service with state management
+@Injectable({ providedIn: 'root' })
+export class AuthService {
+  private currentUser$ = new BehaviorSubject<User | null>(null);
+  private token$ = new BehaviorSubject<string | null>(null);
+  private isLoading$ = new BehaviorSubject<boolean>(false);
+  
+  // Public observables for components
+  currentUser = this.currentUser$.asObservable();
+  isAuthenticated$ = this.currentUser$.pipe(
+    map(user => user !== null)
+  );
+  isLoading = this.isLoading$.asObservable();
+  
+  constructor(private http: HttpClient) {
+    this.loadTokenFromStorage();
+  }
+  
+  private loadTokenFromStorage() {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      this.token$.next(token);
+      this.loadCurrentUser();
+    }
+  }
+  
+  login(email: string, password: string): Observable<AuthResponse> {
+    this.isLoading$.next(true);
+    
+    return this.http.post<AuthResponse>('/api/auth/login', { email, password })
+      .pipe(
+        tap(response => {
+          this.token$.next(response.token);
+          localStorage.setItem('auth_token', response.token);
+          this.currentUser$.next(response.user);
+        }),
+        finalize(() => this.isLoading$.next(false))
+      );
+  }
+  
+  register(user: UserRegistration): Observable<AuthResponse> {
+    this.isLoading$.next(true);
+    
+    return this.http.post<AuthResponse>('/api/auth/register', user)
+      .pipe(
+        tap(response => {
+          this.token$.next(response.token);
+          localStorage.setItem('auth_token', response.token);
+          this.currentUser$.next(response.user);
+        }),
+        finalize(() => this.isLoading$.next(false))
+      );
+  }
+  
+  logout(): Observable<void> {
+    return this.http.post<void>('/api/auth/logout', {})
+      .pipe(
+        finalize(() => {
+          this.token$.next(null);
+          this.currentUser$.next(null);
+          localStorage.removeItem('auth_token');
+        })
+      );
+  }
+  
+  private loadCurrentUser() {
+    this.http.get<User>('/api/auth/me')
+      .subscribe(
+        user => this.currentUser$.next(user),
+        error => console.error('Failed to load current user', error)
+      );
+  }
+  
+  getToken(): string | null {
+    return this.token$.value;
+  }
+}
+
+// Product Service with caching
+@Injectable({ providedIn: 'root' })
+export class ProductService {
+  private productsCache: Map<number, Product[]> = new Map();
+  private productCache$: { [key: number]: Observable<Product> } = {};
+  
+  constructor(private http: HttpClient) {}
+  
+  // Get products with caching by category
+  getProductsByCategory(categoryId: number): Observable<Product[]> {
+    if (this.productsCache.has(categoryId)) {
+      return of(this.productsCache.get(categoryId)!);
+    }
+    
+    return this.http.get<Product[]>(`/api/products?category=${categoryId}`)
+      .pipe(
+        tap(products => this.productsCache.set(categoryId, products))
+      );
+  }
+  
+  // Get single product with caching
+  getProductById(id: number): Observable<Product> {
+    if (!this.productCache$[id]) {
+      this.productCache$[id] = this.http.get<Product>(`/api/products/${id}`)
+        .pipe(
+          shareReplay(1)  // Cache the observable
+        );
+    }
+    
+    return this.productCache$[id];
+  }
+  
+  // Search with debounce
+  search(query: string): Observable<Product[]> {
+    if (!query.trim()) {
+      return of([]);
+    }
+    
+    return this.http.get<Product[]>('/api/products/search', {
+      params: { q: query }
+    });
+  }
+  
+  // Invalidate cache
+  invalidateCache() {
+    this.productsCache.clear();
+    this.productCache$ = {};
+  }
+}
+
+// Real-time Notification Service
+@Injectable({ providedIn: 'root' })
+export class NotificationService {
+  private notifications$ = new Subject<Notification>();
+  notifications = this.notifications$.asObservable();
+  
+  constructor(private websocketService: WebSocketService) {
+    this.initializeWebSocketListener();
+  }
+  
+  private initializeWebSocketListener() {
+    this.websocketService.on('notification')
+      .subscribe(notification => {
+        this.notifications$.next(notification);
+      });
+  }
+  
+  sendNotification(message: string, type: 'info' | 'success' | 'error' | 'warning' = 'info') {
+    this.notifications$.next({
+      message,
+      type,
+      timestamp: new Date()
+    });
+  }
+}
+```
+
+### Dependency Injection
+
+```typescript
+// ✅ CORRECT - Inject via constructor
+@Component({
+  selector: 'app-user-list',
+  template: `
+    <div *ngFor="let user of users">
+      {{ user.name }}
+    </div>
+  `
+})
+export class UserListComponent implements OnInit {
+  users: User[] = [];
+  
+  constructor(private userService: UserService) {}
+  
+  ngOnInit() {
+    this.userService.getUsers().subscribe(
+      users => this.users = users,
+      error => console.error(error)
+    );
+  }
+}
+
+// Service Scope Control
+@Injectable()
+export class ComponentScopedService {
+  // Provided at component level - new instance per component
+}
+
+@Component({
+  selector: 'app-example',
+  providers: [ComponentScopedService]  // Instance per component
+})
+export class ExampleComponent {}
+
+// Hierarchical Injection
+@NgModule({
+  providers: [ApplicationService]  // Root level
+})
+
+@Component({
+  providers: [FeatureService]  // Component level (child components)
+})
+```
+
+---
+
+## HTTP & HTTPClient
+
+### Making HTTP Requests
+
+```typescript
+import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
+import { Observable } from 'rxjs';
+
+@Injectable({ providedIn: 'root' })
+export class ApiService {
+  constructor(private http: HttpClient) {}
+  
+  // GET request
+  getUsers(): Observable<User[]> {
+    return this.http.get<User[]>('http://api.example.com/users');
+  }
+  
+  // GET with query parameters
+  searchUsers(query: string): Observable<User[]> {
+    let params = new HttpParams();
+    params = params.set('q', query);
+    return this.http.get<User[]>('http://api.example.com/users', { params });
+  }
+  
+  // POST request
+  createUser(user: User): Observable<User> {
+    const headers = new HttpHeaders({
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer token123'
+    });
+    return this.http.post<User>('http://api.example.com/users', user, { headers });
+  }
+  
+  // PUT request
+  updateUser(id: number, user: User): Observable<User> {
+    return this.http.put<User>(`http://api.example.com/users/${id}`, user);
+  }
+  
+  // DELETE request
+  deleteUser(id: number): Observable<void> {
+    return this.http.delete<void>(`http://api.example.com/users/${id}`);
+  }
+}
+
+// ========== DETAILED REAL-WORLD EXAMPLE ==========
+
+// Advanced HTTP Service with pagination, filtering, sorting
+@Injectable({ providedIn: 'root' })
+export class AdvancedUserService {
+  private apiUrl = 'http://api.example.com/users';
+  
+  constructor(private http: HttpClient) {}
+  
+  // Get users with advanced filtering, pagination, sorting
+  getUsers(
+    page: number = 1,
+    pageSize: number = 10,
+    sortBy: string = 'name',
+    sortDir: 'asc' | 'desc' = 'asc',
+    filters?: { status?: string; role?: string }
+  ): Observable<PaginatedResponse<User>> {
+    let params = new HttpParams()
+      .set('page', page.toString())
+      .set('pageSize', pageSize.toString())
+      .set('sortBy', sortBy)
+      .set('sortDir', sortDir);
+    
+    // Add optional filters
+    if (filters?.status) {
+      params = params.set('status', filters.status);
+    }
+    if (filters?.role) {
+      params = params.set('role', filters.role);
+    }
+    
+    return this.http.get<PaginatedResponse<User>>(this.apiUrl, { params })
+      .pipe(
+        retry(1),  // Retry once on failure
+        catchError(this.handleError)
+      );
+  }
+  
+  // Upload file
+  uploadUserAvatar(userId: number, file: File): Observable<UploadResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('userId', userId.toString());
+    
+    // Don't set Content-Type header - browser will set it with boundary
+    return this.http.post<UploadResponse>(`${this.apiUrl}/${userId}/avatar`, formData);
+  }
+  
+  // Bulk operations
+  bulkDeleteUsers(userIds: number[]): Observable<BulkDeleteResponse> {
+    return this.http.post<BulkDeleteResponse>(`${this.apiUrl}/bulk-delete`, {
+      ids: userIds
+    });
+  }
+  
+  // Get with response headers
+  getUsersWithHeaders(): Observable<HttpResponse<User[]>> {
+    return this.http.get<User[]>(this.apiUrl, { observe: 'response' });
+  }
+  
+  private handleError(error: HttpErrorResponse) {
+    let errorMessage = 'Unknown error occurred';
+    
+    if (error.error instanceof ErrorEvent) {
+      // Client-side error
+      errorMessage = `Error: ${error.error.message}`;
+    } else {
+      // Server-side error
+      errorMessage = `Error Code: ${error.status}\nMessage: ${error.message}`;
+    }
+    
+    console.error(errorMessage);
+    return throwError(() => new Error(errorMessage));
+  }
+}
+
+// ========== HTTP REQUEST WITH LOADING AND ERROR HANDLING ==========
+
+@Component({
+  selector: 'app-user-list',
+  template: `
+    <div *ngIf="isLoading" class="spinner">Loading...</div>
+    <div *ngIf="error" class="error-message">{{ error }}</div>
+    <div *ngIf="!isLoading && !error">
+      <div *ngFor="let user of users" class="user-card">
+        <h3>{{ user.name }}</h3>
+        <p>{{ user.email }}</p>
+      </div>
+    </div>
+  `
+})
+export class UserListComponent implements OnInit {
+  users: User[] = [];
+  isLoading = false;
+  error: string | null = null;
+  private destroy$ = new Subject<void>();
+  
+  constructor(private userService: UserService) {}
+  
+  ngOnInit() {
+    this.loadUsers();
+  }
+  
+  loadUsers() {
+    this.isLoading = true;
+    this.error = null;
+    
+    this.userService.getUsers()
+      .pipe(
+        takeUntil(this.destroy$),
+        finalize(() => this.isLoading = false)
+      )
+      .subscribe(
+        users => this.users = users,
+        error => {
+          console.error('Failed to load users', error);
+          this.error = 'Failed to load users. Please try again.';
+        }
+      );
+  }
+  
+  ngOnDestroy() {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+}
+```
+
+### Error Handling
+
+```typescript
+import { catchError, retry } from 'rxjs/operators';
+import { of } from 'rxjs';
+
+export class UserListComponent implements OnInit {
+  users: User[] = [];
+  error: string = '';
+  
+  constructor(private userService: UserService) {}
+  
+  ngOnInit() {
+    this.userService.getUsers()
+      .pipe(
+        retry(1),  // Retry once on failure
+        catchError(error => {
+          this.error = 'Failed to load users: ' + error.message;
+          return of([]);  // Return empty array on error
+        })
+      )
+      .subscribe(users => {
+        this.users = users;
+      });
+  }
+}
+```
+
+---
+
+## Forms: Template-Driven vs Reactive
+
+### Template-Driven Forms
+
+```typescript
+// Component
+export class LoginComponent {
+  user = { email: '', password: '' };
+  submitted = false;
+  
+  onSubmit() {
+    this.submitted = true;
+    console.log('Login:', this.user);
+  }
+}
+```
+
+```html
+<!-- Template -->
+<form #loginForm="ngForm" (ngSubmit)="onSubmit()">
+  <div>
+    <label>Email:
+      <input 
+        type="email" 
+        name="email" 
+        [(ngModel)]="user.email"
+        required
+      />
+    </label>
+    <span *ngIf="loginForm.get('email')?.hasError('required') && submitted">
+      Email is required
+    </span>
+  </div>
+  
+  <div>
+    <label>Password:
+      <input 
+        type="password" 
+        name="password" 
+        [(ngModel)]="user.password"
+        required
+        minlength="6"
+      />
+    </label>
+    <span *ngIf="loginForm.get('password')?.hasError('minlength') && submitted">
+      Password must be at least 6 characters
+    </span>
+  </div>
+  
+  <button [disabled]="!loginForm.valid">Login</button>
+</form>
+```
+
+### Reactive Forms (Better for Complex)
+
+```typescript
+import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+
+export class LoginComponent {
+  loginForm: FormGroup;
+  submitted = false;
+  
+  constructor(private fb: FormBuilder) {
+    this.loginForm = this.fb.group({
+      email: ['', [Validators.required, Validators.email]],
+      password: ['', [Validators.required, Validators.minLength(6)]],
+      rememberMe: [false]
+    });
+  }
+  
+  get email() { return this.loginForm.get('email'); }
+  get password() { return this.loginForm.get('password'); }
+  
+  onSubmit() {
+    this.submitted = true;
+    
+    if (this.loginForm.invalid) {
+      return;
+    }
+    
+    console.log('Form Value:', this.loginForm.value);
+  }
+}
+```
+
+```html
+<!-- Reactive Form Template -->
+<form [formGroup]="loginForm" (ngSubmit)="onSubmit()">
+  <div>
+    <label>Email:
+      <input 
+        type="email" 
+        formControlName="email"
+      />
+    </label>
+    <span *ngIf="email?.hasError('required') && submitted">
+      Email is required
+    </span>
+    <span *ngIf="email?.hasError('email') && submitted">
+      Email must be valid
+    </span>
+  </div>
+  
+  <div>
+    <label>Password:
+      <input 
+        type="password" 
+        formControlName="password"
+      />
+    </label>
+    <span *ngIf="password?.hasError('required') && submitted">
+      Password is required
+    </span>
+    <span *ngIf="password?.hasError('minlength') && submitted">
+      Password must be 6+ characters
+    </span>
+  </div>
+  
+  <div>
+    <label>
+      <input type="checkbox" formControlName="rememberMe" />
+      Remember me
+    </label>
+  </div>
+  
+  <button [disabled]="loginForm.invalid">Login</button>
+</form>
+```
+
+// ========== DETAILED REAL-WORLD EXAMPLE ==========
+
+// Complex form with dynamic fields
+@Component({
+  selector: 'app-user-registration',
+  template: `
+    <form [formGroup]="registrationForm" (ngSubmit)="onSubmit()">
+      <!-- Basic Info -->
+      <div class="form-group">
+        <label>Email:
+          <input type="email" formControlName="email" />
+        </label>
+        <div class="error" *ngIf="getFieldError('email', submitted)">
+          {{ getFieldError('email', submitted) }}
+        </div>
+      </div>
+      
+      <!-- Conditional Fields -->
+      <div class="form-group" *ngIf="registrationForm.get('userType')?.value === 'business'">
+        <label>Company Name:
+          <input type="text" formControlName="companyName" />
+        </label>
+      </div>
+      
+      <!-- Form Array (Dynamic) -->
+      <div formArrayName="addresses">
+        <div *ngFor="let address of addresses.controls; let i = index">
+          <div [formGroupName]="i">
+            <input type="text" formControlName="street" placeholder="Street" />
+            <input type="text" formControlName="city" placeholder="City" />
+          </div>
+          <button (click)="removeAddress(i)">Remove</button>
+        </div>
+        <button (click)="addAddress()">Add Address</button>
+      </div>
+      
+      <button [disabled]="!registrationForm.valid">Register</button>
+    </form>
+  `
+})
+export class UserRegistrationComponent implements OnInit {
+  registrationForm: FormGroup;
+  submitted = false;
+  
+  constructor(private fb: FormBuilder) {
+    this.registrationForm = this.initializeForm();
+  }
+  
+  ngOnInit() {
+    // Watch for user type changes to show/hide fields
+    this.registrationForm.get('userType')?.valueChanges
+      .subscribe(userType => {
+        const companyControl = this.registrationForm.get('companyName');
+        if (userType === 'business') {
+          companyControl?.setValidators([Validators.required]);
+        } else {
+          companyControl?.clearValidators();
+        }
+        companyControl?.updateValueAndValidity();
+      });
+  }
+  
+  private initializeForm(): FormGroup {
+    return this.fb.group({
+      email: ['', [Validators.required, Validators.email]],
+      password: ['', [Validators.required, Validators.minLength(8)]],
+      confirmPassword: ['', Validators.required],
+      userType: ['individual'],
+      companyName: [''],
+      addresses: this.fb.array([
+        this.createAddressFormGroup()
+      ])
+    }, { 
+      validators: this.passwordMatchValidator 
+    });
+  }
+  
+  private createAddressFormGroup(): FormGroup {
+    return this.fb.group({
+      street: ['', Validators.required],
+      city: ['', Validators.required],
+      state: ['', Validators.required],
+      zipCode: ['', Validators.required]
+    });
+  }
+  
+  get addresses(): FormArray {
+    return this.registrationForm.get('addresses') as FormArray;
+  }
+  
+  addAddress() {
+    this.addresses.push(this.createAddressFormGroup());
+  }
+  
+  removeAddress(index: number) {
+    this.addresses.removeAt(index);
+  }
+  
+  // Custom validator
+  passwordMatchValidator(form: FormGroup): { [key: string]: any } | null {
+    const password = form.get('password')?.value;
+    const confirmPassword = form.get('confirmPassword')?.value;
+    
+    return password && confirmPassword && password !== confirmPassword
+      ? { passwordMismatch: true }
+      : null;
+  }
+  
+  getFieldError(fieldName: string, submitted: boolean): string | null {
+    const field = this.registrationForm.get(fieldName);
+    
+    if (!field || !submitted || !field.errors) {
+      return null;
+    }
+    
+    if (field.errors['required']) return `${fieldName} is required`;
+    if (field.errors['email']) return 'Invalid email format';
+    if (field.errors['minlength']) return `Minimum length is ${field.errors['minlength'].requiredLength}`;
+    
+    return null;
+  }
+  
+  onSubmit() {
+    this.submitted = true;
+    
+    if (this.registrationForm.invalid) {
+      console.log('Form has errors');
+      return;
+    }
+    
+    console.log('Submitting:', this.registrationForm.value);
+    // Submit to API
+  }
+}
+
+// ========== FORM PATTERNS ==========
+
+// ✅ Real-time validation feedback
+@Component({
+  template: `
+    <div class="email-validation">
+      <input 
+        type="email" 
+        formControlName="email"
+        #emailInput
+      />
+      <div *ngIf="emailInput.touched && emailInput.errors">
+        <span class="error" *ngIf="emailInput.errors['required']">Email required</span>
+        <span class="error" *ngIf="emailInput.errors['email']">Invalid email</span>
+        <span class="spinner" *ngIf="isCheckingEmail">Checking...</span>
+        <span class="success" *ngIf="emailAvailable">Email available!</span>
+      </div>
+    </div>
+  `
+})
+export class EmailValidationComponent {
+  form = this.fb.group({
+    email: ['', [Validators.required, Validators.email], [this.emailAvailabilityValidator()]]
+  });
+  
+  isCheckingEmail = false;
+  emailAvailable = false;
+  
+  constructor(
+    private fb: FormBuilder,
+    private userService: UserService
+  ) {}
+  
+  emailAvailabilityValidator() {
+    return (control: AbstractControl): Observable<ValidationErrors | null> => {
+      if (!control.value) {
+        return of(null);
+      }
+      
+      this.isCheckingEmail = true;
+      return this.userService.checkEmailAvailability(control.value)
+        .pipe(
+          map(isAvailable => {
+            this.isCheckingEmail = false;
+            this.emailAvailable = isAvailable;
+            return isAvailable ? null : { emailTaken: true };
+          }),
+          catchError(() => {
+            this.isCheckingEmail = false;
+            return of(null);
+          })
+        );
+    };
+  }
+}
+
+---
+
+## Routing & Navigation
+
+### Setting Up Routes
+
+```typescript
+// app-routing.module.ts
+import { NgModule } from '@angular/core';
+import { RouterModule, Routes } from '@angular/router';
+import { HomeComponent } from './pages/home/home.component';
+import { UserListComponent } from './pages/users/user-list/user-list.component';
+import { UserDetailComponent } from './pages/users/user-detail/user-detail.component';
+
+const routes: Routes = [
+  { path: '', component: HomeComponent },
+  { path: 'users', component: UserListComponent },
+  { path: 'users/:id', component: UserDetailComponent },
+  { path: 'about', component: AboutComponent },
+  { path: '**', redirectTo: '' }  // Wildcard - must be last
+];
+
+@NgModule({
+  imports: [RouterModule.forRoot(routes)],
+  exports: [RouterModule]
+})
+export class AppRoutingModule { }
+```
+
+### Navigation
+
+```typescript
+export class UserListComponent {
+  constructor(private router: Router) {}
+  
+  // Programmatic navigation
+  navigateToUser(userId: number) {
+    this.router.navigate(['/users', userId]);
+  }
+  
+  goHome() {
+    this.router.navigateByUrl('/');
+  }
+}
+```
+
+```html
+<!-- Template-based navigation -->
+<a routerLink="/">Home</a>
+<a [routerLink]="['/users', user.id]">View User</a>
+<a routerLink="/about" routerLinkActive="active">About</a>
+
+<router-outlet></router-outlet>
+```
+
+### Route Parameters
+
+```typescript
+// Accessing route parameters
+import { ActivatedRoute } from '@angular/router';
+
+export class UserDetailComponent implements OnInit {
+  userId: number | null = null;
+  user: User | null = null;
+  
+  constructor(
+    private route: ActivatedRoute,
+    private userService: UserService
+  ) {}
+  
+  ngOnInit() {
+    // Route parameter: /users/5
+    this.route.params.subscribe(params => {
+      this.userId = params['id'];
+      if (this.userId) {
+        this.userService.getUserById(this.userId).subscribe(
+          user => this.user = user
+        );
+      }
+    });
+  }
+}
+```
+
+### Lazy Loading
+
+```typescript
+// Lazy loading module
+const routes: Routes = [
+  { path: '', component: HomeComponent },
+  {
+    path: 'admin',
+    loadChildren: () => import('./admin/admin.module').then(m => m.AdminModule)
+  }
+];
+```
+
+// ========== DETAILED REAL-WORLD EXAMPLE ==========
+
+// Advanced routing with nested routes and resolvers
+@Injectable({ providedIn: 'root' })
+export class UserResolver implements Resolve<User> {
+  constructor(private userService: UserService, private router: Router) {}
+  
+  resolve(
+    route: ActivatedRouteSnapshot,
+    state: RouterStateSnapshot
+  ): Observable<User> {
+    const id = route.params['id'];
+    
+    return this.userService.getUserById(id).pipe(
+      catchError(() => {
+        this.router.navigate(['/users']);
+        return EMPTY;
+      })
+    );
+  }
+}
+
+// Routing configuration with nested routes
+const routes: Routes = [
+  {
+    path: 'users',
+    component: UsersLayoutComponent,
+    children: [
+      {
+        path: '',
+        component: UserListComponent
+      },
+      {
+        path: ':id',
+        component: UserDetailComponent,
+        resolve: { user: UserResolver }
+      },
+      {
+        path: ':id/edit',
+        component: UserEditComponent,
+        canDeactivate: [UnsavedChangesGuard]
+      }
+    ]
+  },
+  {
+    path: 'admin',
+    component: AdminLayoutComponent,
+    canActivate: [AuthGuard],
+    canActivateChild: [AdminGuard],
+    children: [
+      { path: 'dashboard', component: AdminDashboardComponent },
+      { path: 'users', component: AdminUsersComponent },
+      { path: 'reports', component: AdminReportsComponent }
+    ]
+  },
+  {
+    path: 'blog',
+    loadChildren: () => import('./blog/blog.module').then(m => m.BlogModule)
+  }
+];
+
+// Component with routing logic
+@Component({
+  selector: 'app-user-detail',
+  template: `
+    <div *ngIf="user$ | async as user">
+      <h1>{{ user.name }}</h1>
+      <p>{{ user.email }}</p>
+      <button (click)="editUser()">Edit</button>
+      <button (click)="goBack()">Back</button>
+    </div>
+  `
+})
+export class UserDetailComponent implements OnInit {
+  user$: Observable<User>;
+  userId: number = 0;
+  
+  constructor(
+    private route: ActivatedRoute,
+    private router: Router
+  ) {
+    // Access resolved data from resolver
+    this.user$ = this.route.data.pipe(
+      map(data => data['user'])
+    );
+  }
+  
+  ngOnInit() {
+    // Get route parameters
+    this.route.params.subscribe(params => {
+      this.userId = params['id'];
+    });
+  }
+  
+  editUser() {
+    this.router.navigate(['/users', this.userId, 'edit']);
+  }
+  
+  goBack() {
+    this.router.navigate(['/users']);
+  }
+}
+
+// Query parameter handling
+@Component({
+  selector: 'app-products',
+  template: `
+    <div>
+      <label>Sort by:
+        <select (change)="changeSorting($event)">
+          <option value="name">Name</option>
+          <option value="price">Price</option>
+        </select>
+      </label>
+      <label>Filter:
+        <input (input)="changeFilter($event)" />
+      </label>
+      <!-- URL becomes: /products?sort=price&filter=electronics -->
+    </div>
+  `
+})
+export class ProductsComponent implements OnInit {
+  products: Product[] = [];
+  
+  constructor(
+    private route: ActivatedRoute,
+    private productService: ProductService
+  ) {}
+  
+  ngOnInit() {
+    // Listen to query parameters
+    this.route.queryParams.subscribe(params => {
+      const sort = params['sort'] || 'name';
+      const filter = params['filter'] || '';
+      
+      this.loadProducts(sort, filter);
+    });
+  }
+  
+  private loadProducts(sort: string, filter: string) {
+    this.productService.getProducts(sort, filter).subscribe(
+      products => this.products = products
+    );
+  }
+  
+  changeSorting(event: any) {
+    const sort = event.target.value;
+    this.router.navigate(['/products'], {
+      queryParams: { sort }
+    });
+  }
+  
+  changeFilter(event: any) {
+    const filter = event.target.value;
+    this.router.navigate(['/products'], {
+      queryParams: { filter },
+      queryParamsHandling: 'merge'  // Keep existing query params
+    });
+  }
+}
+
+---
+
+## Observables & RxJS
+
+### Understanding Observables
+
+```typescript
+import { Observable, Subject, BehaviorSubject } from 'rxjs';
+import { map, filter, switchMap, takeUntil } from 'rxjs/operators';
+
+// Creating Observables
+const observable1 = new Observable(subscriber => {
+  subscriber.next('Value 1');
+  subscriber.next('Value 2');
+  subscriber.complete();
+});
+
+// Observable from Promise
+const promise = fetch('http://api.example.com/data').then(r => r.json());
+const observable2 = from(promise);
+
+// Observable from array
+const observable3 = of(1, 2, 3, 4, 5);
+
+// Observable from iterable
+const observable4 = from([10, 20, 30]);
+
+// Subscribe to Observable
+observable1.subscribe(
+  value => console.log('Next:', value),
+  error => console.error('Error:', error),
+  () => console.log('Complete')
+);
+```
+
+### Common RxJS Operators
+
+```typescript
+// map: Transform values
+const numbers$ = of(1, 2, 3);
+numbers$.pipe(
+  map(n => n * 2)
+).subscribe(n => console.log(n));  // 2, 4, 6
+
+// filter: Filter values
+numbers$.pipe(
+  filter(n => n > 1)
+).subscribe(n => console.log(n));  // 2, 3
+
+// switchMap: Switch to new observable (unsubscribe from old)
+this.route.params.pipe(
+  switchMap(params => this.userService.getUserById(params['id']))
+).subscribe(user => console.log(user));
+
+// mergeMap: Merge multiple observables
+this.items$.pipe(
+  mergeMap(item => this.getDetails(item.id))
+).subscribe(details => console.log(details));
+
+// combineLatest: Combine latest values
+combineLatest([this.form$.valueChanges, this.settings$]).pipe(
+  switchMap(([form, settings]) => this.saveData(form, settings))
+).subscribe();
+
+// takeUntil: Complete when subject emits
+private destroy$ = new Subject<void>();
+
+ngOnInit() {
+  this.data$.pipe(
+    takeUntil(this.destroy$)
+  ).subscribe(data => this.processData(data));
+}
+
+ngOnDestroy() {
+  this.destroy$.next();
+  this.destroy$.complete();
+}
+
+// debounceTime: Wait before emitting
+this.searchInput$.pipe(
+  debounceTime(300),
+  distinctUntilChanged(),
+  switchMap(query => this.searchService.search(query))
+).subscribe(results => this.displayResults(results));
+
+// ========== DETAILED REAL-WORLD EXAMPLE ==========
+
+// Auto-save form with debounce
+@Component({
+  selector: 'app-document-editor',
+  template: `
+    <textarea [(ngModel)]="content" (ngModelChange)="onContentChange($event)"></textarea>
+    <div class="status">
+      <span *ngIf="isSaving">Saving...</span>
+      <span *ngIf="lastSaved">Last saved: {{ lastSaved | date:'short' }}</span>
+      <span class="error" *ngIf="saveError">{{ saveError }}</span>
+    </div>
+  `
+})
+export class DocumentEditorComponent implements OnInit, OnDestroy {
+  content = '';
+  isSaving = false;
+  lastSaved: Date | null = null;
+  saveError: string | null = null;
+  
+  private contentChange$ = new Subject<string>();
+  private destroy$ = new Subject<void>();
+  
+  constructor(private documentService: DocumentService) {}
+  
+  ngOnInit() {
+    // Auto-save with debounce
+    this.contentChange$
+      .pipe(
+        debounceTime(500),
+        distinctUntilChanged(),
+        tap(() => this.isSaving = true),
+        switchMap(content => 
+          this.documentService.saveDocument(content)
+            .pipe(
+              catchError(error => {
+                this.saveError = 'Save failed: ' + error.message;
+                return throwError(() => error);
+              })
+            )
+        ),
+        tap(() => {
+          this.isSaving = false;
+          this.lastSaved = new Date();
+          this.saveError = null;
+        }),
+        takeUntil(this.destroy$)
+      )
+      .subscribe();
+  }
+  
+  onContentChange(content: string) {
+    this.content = content;
+    this.contentChange$.next(content);
+  }
+  
+  ngOnDestroy() {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+}
+
+// Search with request cancellation
+@Component({
+  selector: 'app-user-search',
+  template: `
+    <input 
+      type="text" 
+      [(ngModel)]="searchQuery"
+      (ngModelChange)="onSearchChange($event)"
+      placeholder="Search users..."
+    />
+    <div class="results">
+      <div *ngFor="let user of (searchResults$ | async)">
+        {{ user.name }} ({{ user.email }})
+      </div>
+      <div *ngIf="isSearching$ | async">Searching...</div>
+    </div>
+  `
+})
+export class UserSearchComponent {
+  searchQuery = '';
+  searchResults$: Observable<User[]>;
+  isSearching$: Observable<boolean>;
+  
+  private searchInput$ = new Subject<string>();
+  
+  constructor(private userService: UserService) {
+    const search$ = this.searchInput$.pipe(
+      debounceTime(300),
+      distinctUntilChanged(),
+      tap(() => console.log('Searching for:', this.searchQuery)),
+      switchMap(query => {
+        if (!query.trim()) {
+          return of([]);
+        }
+        return this.userService.search(query);
+      }),
+      shareReplay(1)
+    );
+    
+    this.searchResults$ = search$;
+    
+    this.isSearching$ = search$.pipe(
+      isLoading(),  // Custom operator
+      startWith(false)
+    );
+  }
+  
+  onSearchChange(query: string) {
+    this.searchInput$.next(query);
+  }
+}
+
+// Complex operator combinations: Request retry with backoff
+export const retryWithBackoff = (
+  maxAttempts: number = 3,
+  delayMs: number = 1000
+) => {
+  return retry({
+    count: maxAttempts,
+    delay: (error, count) => {
+      const backoffDelay = delayMs * Math.pow(2, count - 1);
+      console.log(`Retry attempt ${count}, waiting ${backoffDelay}ms`);
+      return timer(backoffDelay);
+    }
+  });
+};
+
+// Usage
+export class DataService {
+  fetchData(): Observable<Data> {
+    return this.http.get<Data>('/api/data')
+      .pipe(
+        retryWithBackoff(3, 1000),
+        timeout(10000),  // 10 second timeout
+        catchError(error => {
+          console.error('Failed to fetch data:', error);
+          return throwError(() => new Error('Data fetch failed'));
+        })
+      );
+  }
+}
+
+// Combining multiple observables with error handling
+@Component({
+  selector: 'app-dashboard'
+})
+export class DashboardComponent implements OnInit {
+  dashboardData$ = combineLatest([
+    this.userService.getCurrentUser(),
+    this.statisticsService.getStats(),
+    this.newsService.getLatestNews()
+  ]).pipe(
+    map(([user, stats, news]) => ({ user, stats, news })),
+    catchError(error => {
+      console.error('Dashboard load failed:', error);
+      return of({ user: null, stats: null, news: [] });
+    }),
+    shareReplay(1)
+  );
+  
+  constructor(
+    private userService: UserService,
+    private statisticsService: StatisticsService,
+    private newsService: NewsService
+  ) {}
+  
+  ngOnInit() {
+    this.dashboardData$.subscribe(data => {
+      console.log('Dashboard data loaded:', data);
+    });
+  }
+}
+```
+
+**RxJS Operator Cheat Sheet:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              COMMON RxJS OPERATORS                           │
+├─────────────────────────────────────────────────────────────┤
+│ TRANSFORM     │ map, pluck, switchMap, mergeMap, concatMap   │
+│ FILTER        │ filter, take, takeUntil, skip, distinct      │
+│ COMBINE       │ combineLatest, merge, concat, withLatestFrom  │
+│ TIME          │ debounceTime, throttleTime, delay, timeout   │
+│ ERROR         │ catchError, retry, finalize                  │
+│ UTILITY       │ tap, shareReplay, startWith, defaultIfEmpty  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Subject vs BehaviorSubject
+
+```typescript
+// Subject: No initial value, late subscribers miss previous values
+const subject = new Subject<string>();
+subject.next('Value 1');
+subject.next('Value 2');
+subject.subscribe(v => console.log('Sub1:', v));  // Nothing
+
+// BehaviorSubject: Has initial value, late subscribers get last value
+const behaviorSubject = new BehaviorSubject<string>('Initial');
+behaviorSubject.next('Value 1');
+behaviorSubject.next('Value 2');
+behaviorSubject.subscribe(v => console.log('Sub1:', v));  // 'Value 2'
+
+// ReplaySubject: Emits specified number of last values to late subscribers
+const replaySubject = new ReplaySubject<string>(2);
+replaySubject.next('Value 1');
+replaySubject.next('Value 2');
+replaySubject.next('Value 3');
+replaySubject.subscribe(v => console.log('Sub1:', v));  // 'Value 2', 'Value 3'
+```
+
+---
+
+## Pipes
+
+### Built-in Pipes
+
+```html
+<!-- String Pipes -->
+<p>{{ text | uppercase }}</p>           <!-- HELLO WORLD -->
+<p>{{ text | lowercase }}</p>           <!-- hello world -->
+<p>{{ text | titlecase }}</p>           <!-- Hello World -->
+
+<!-- Number Pipes -->
+<p>{{ price | currency }}</p>           <!-- $12.50 -->
+<p>{{ price | currency:'EUR' }}</p>     <!-- €12.50 -->
+<p>{{ decimal | number:'1.2-2' }}</p>   <!-- 12.34 -->
+<p>{{ percent | percent }}</p>          <!-- 50% -->
+
+<!-- Date Pipes -->
+<p>{{ date | date }}</p>                <!-- Jan 1, 2024 -->
+<p>{{ date | date:'short' }}</p>        <!-- 1/1/24 -->
+<p>{{ date | date:'full' }}</p>         <!-- Sunday, January 1, 2024 -->
+<p>{{ date | date:'MM/dd/yyyy' }}</p>   <!-- 01/01/2024 -->
+
+<!-- Array Pipes -->
+<p>{{ items | json }}</p>               <!-- Pretty printed JSON -->
+<p>{{ items | slice:0:3 }}</p>          <!-- First 3 items -->
+
+<!-- Conditional Pipes -->
+<p>{{ value | async }}</p>              <!-- Unwraps Promise/Observable -->
+```
+
+### Creating Custom Pipes
+
+```typescript
+import { Pipe, PipeTransform } from '@angular/core';
+
+@Pipe({
+  name: 'truncate'
+})
+export class TruncatePipe implements PipeTransform {
+  transform(value: string, limit: number = 50): string {
+    if (!value) return value;
+    return value.length > limit ? value.substring(0, limit) + '...' : value;
+  }
+}
+
+// Usage: {{ longText | truncate:20 }}
+
+// Another example: Safe HTML pipe
+@Pipe({
+  name: 'safeHtml'
+})
+export class SafeHtmlPipe implements PipeTransform {
+  constructor(private sanitizer: DomSanitizer) {}
+  
+  transform(html: string): SafeHtml {
+    return this.sanitizer.sanitize(SecurityContext.HTML, html) || '';
+  }
+}
+```
+
+---
+
+## Guards & Interceptors
+
+### Route Guards
+
+```typescript
+import { Injectable } from '@angular/core';
+import { CanActivate, Router, ActivatedRouteSnapshot } from '@angular/router';
+
+// CanActivate: Can enter route
+@Injectable({ providedIn: 'root' })
+export class AuthGuard implements CanActivate {
+  constructor(
+    private authService: AuthService,
+    private router: Router
+  ) {}
+  
+  canActivate(route: ActivatedRouteSnapshot): boolean {
+    if (this.authService.isLoggedIn()) {
+      return true;
+    }
+    this.router.navigate(['/login']);
+    return false;
+  }
+}
+
+// CanDeactivate: Can leave route (prevent data loss)
+@Injectable({ providedIn: 'root' })
+export class UnsavedChangesGuard implements CanDeactivate<any> {
+  canDeactivate(component: any): boolean {
+    if (component.hasUnsavedChanges?.()) {
+      return confirm('You have unsaved changes. Leave anyway?');
+    }
+    return true;
+  }
+}
+
+// Applying Guards
+const routes: Routes = [
+  {
+    path: 'admin',
+    component: AdminComponent,
+    canActivate: [AuthGuard]
+  },
+  {
+    path: 'edit',
+    component: EditComponent,
+    canDeactivate: [UnsavedChangesGuard]
+  }
+];
+```
+
+### HTTP Interceptors
+
+```typescript
+import { HttpInterceptor, HttpRequest, HttpHandler, HttpEvent } from '@angular/common/http';
+import { Observable } from 'rxjs';
+import { tap, catchError } from 'rxjs/operators';
+
+@Injectable()
+export class AuthInterceptor implements HttpInterceptor {
+  constructor(private authService: AuthService) {}
+  
+  intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    // Add auth token to all requests
+    const token = this.authService.getToken();
+    if (token) {
+      req = req.clone({
+        setHeaders: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+    }
+    
+    return next.handle(req).pipe(
+      tap(
+        event => {
+          if (event instanceof HttpResponse) {
+            console.log('Response received:', event.url);
+          }
+        },
+        error => console.error('HTTP Error:', error)
+      ),
+      catchError(error => {
+        if (error.status === 401) {
+          this.authService.logout();
+        }
+        throw error;
+      })
+    );
+  }
+}
+
+// Register Interceptor in Module
+@NgModule({
+  providers: [
+    {
+      provide: HTTP_INTERCEPTORS,
+      useClass: AuthInterceptor,
+      multi: true
+    }
+  ]
+})
+export class AppModule { }
+```
+
+---
+
+## State Management
+
+### Simple State Management with Services
+
+```typescript
+import { Injectable } from '@angular/core';
+import { BehaviorSubject, Observable } from 'rxjs';
+
+interface AppState {
+  user: User | null;
+  loading: boolean;
+  error: string | null;
+}
+
+@Injectable({ providedIn: 'root' })
+export class AppStateService {
+  private initialState: AppState = {
+    user: null,
+    loading: false,
+    error: null
+  };
+  
+  private stateSubject = new BehaviorSubject<AppState>(this.initialState);
+  public state$ = this.stateSubject.asObservable();
+  
+  constructor(private http: HttpClient) {}
+  
+  getUser$(): Observable<User | null> {
+    return this.state$.pipe(map(state => state.user));
+  }
+  
+  loadUser(userId: number) {
+    this.setState({ loading: true });
+    
+    this.http.get<User>(`/api/users/${userId}`)
+      .subscribe(
+        user => this.setState({ user, loading: false }),
+        error => this.setState({ error: error.message, loading: false })
+      );
+  }
+  
+  private setState(newState: Partial<AppState>) {
+    const currentState = this.stateSubject.value;
+    this.stateSubject.next({ ...currentState, ...newState });
+  }
+}
+
+// Usage in component
+export class UserComponent implements OnInit {
+  user$: Observable<User | null>;
+  loading$: Observable<boolean>;
+  
+  constructor(private stateService: AppStateService) {
+    this.user$ = this.stateService.getUser$();
+    this.loading$ = this.stateService.state$.pipe(map(s => s.loading));
+  }
+  
+  ngOnInit() {
+    this.stateService.loadUser(1);
+  }
+}
+```
+
+### NgRx (Redux Pattern)
+
+```typescript
+// actions.ts
+import { createAction, props } from '@ngrx/store';
+
+export const loadUsers = createAction(
+  '[User Page] Load Users'
+);
+
+export const loadUsersSuccess = createAction(
+  '[User API] Load Users Success',
+  props<{ users: User[] }>()
+);
+
+export const loadUsersError = createAction(
+  '[User API] Load Users Error',
+  props<{ error: any }>()
+);
+
+// reducer.ts
+import { createReducer, on } from '@ngrx/store';
+
+export interface UserState {
+  users: User[];
+  loading: boolean;
+  error: any;
+}
+
+const initialState: UserState = {
+  users: [],
+  loading: false,
+  error: null
+};
+
+export const userReducer = createReducer(
+  initialState,
+  on(loadUsers, state => ({ ...state, loading: true })),
+  on(loadUsersSuccess, (state, { users }) => ({
+    ...state,
+    users,
+    loading: false
+  })),
+  on(loadUsersError, (state, { error }) => ({
+    ...state,
+    error,
+    loading: false
+  }))
+);
+
+// effects.ts
+import { Injectable } from '@angular/core';
+import { Actions, createEffect, ofType } from '@ngrx/effects';
+import { switchMap, map, catchError } from 'rxjs/operators';
+import { of } from 'rxjs';
+import * as UserActions from './user.actions';
+
+@Injectable()
+export class UserEffects {
+  loadUsers$ = createEffect(() =>
+    this.actions$.pipe(
+      ofType(UserActions.loadUsers),
+      switchMap(() =>
+        this.userService.getUsers().pipe(
+          map(users => UserActions.loadUsersSuccess({ users })),
+          catchError(error => of(UserActions.loadUsersError({ error })))
+        )
+      )
+    )
+  );
+  
+  constructor(
+    private actions$: Actions,
+    private userService: UserService
+  ) {}
+}
+
+// Component usage
+export class UserListComponent implements OnInit {
+  users$ = this.store.select(state => state.user.users);
+  loading$ = this.store.select(state => state.user.loading);
+  
+  constructor(private store: Store<{ user: UserState }>) {}
+  
+  ngOnInit() {
+    this.store.dispatch(loadUsers());
+  }
+}
+```
+
+---
+
+## Important Questions & Answers
+
+### 1. What's the difference between components and services?
+
+**Q: When should I create a component vs a service?**
+
+A: Components manage UI and user interaction, services contain shared logic:
+
+```typescript
+// ❌ WRONG - Business logic in component
+export class UserListComponent {
+  users: User[] = [];
+  
+  ngOnInit() {
+    fetch('/api/users')
+      .then(r => r.json())
+      .then(data => {
+        this.users = data.filter(u => u.active);
+        this.users.sort((a, b) => a.name.localeCompare(b.name));
+      });
+  }
+}
+
+// ✅ CORRECT - Separate concerns
+@Injectable({ providedIn: 'root' })
+export class UserService {
+  getActiveUsers(): Observable<User[]> {
+    return this.http.get<User[]>('/api/users').pipe(
+      map(users => users.filter(u => u.active)),
+      map(users => users.sort((a, b) => a.name.localeCompare(b.name)))
+    );
+  }
+}
+
+export class UserListComponent implements OnInit {
+  users$: Observable<User[]>;
+  
+  constructor(private userService: UserService) {
+    this.users$ = this.userService.getActiveUsers();
+  }
+}
+```
+
+---
+
+### 2. Why use Observable instead of Promise?
+
+**Q: What's the advantage?**
+
+A: Observables offer more control, cancellation, and piping:
+
+```typescript
+// Promise: Can't cancel, single value
+const promise = fetch('/api/user');
+promise.then(data => console.log(data));
+// Promise already running - can't cancel
+
+// Observable: Can cancel, multiple values, powerful operators
+const observable$ = this.http.get('/api/user');
+const subscription = observable$.subscribe(data => console.log(data));
+subscription.unsubscribe();  // ✅ Can cancel
+
+// Piping with RxJS operators
+this.search$.pipe(
+  debounceTime(300),
+  distinctUntilChanged(),
+  switchMap(query => this.searchService.search(query)),
+  catchError(error => of([]))
+).subscribe(results => this.displayResults(results));
+```
+
+---
+
+### 3. What's OnPush change detection?
+
+**Q: How can I improve performance?**
+
+A: OnPush only checks component when inputs change or events fire:
+
+```typescript
+// ❌ DEFAULT - Checks on every change
+@Component({
+  selector: 'app-user',
+  template: `<div>{{ user.name }}</div>`,
+  changeDetection: ChangeDetectionStrategy.Default  // Default behavior
+})
+export class UserComponent {
+  @Input() user: User;
+}
+
+// ✅ BETTER - Only checks when input changes
+@Component({
+  selector: 'app-user',
+  template: `<div>{{ user.name }}</div>`,
+  changeDetection: ChangeDetectionStrategy.OnPush
+})
+export class UserComponent {
+  @Input() user: User;
+  
+  constructor(private cdr: ChangeDetectorRef) {}
+  
+  // Manually trigger if needed
+  manualCheck() {
+    this.cdr.markForCheck();
+  }
+}
+```
+
+---
+
+### 4. How do I prevent memory leaks?
+
+**Q: What causes subscriptions to leak?**
+
+A: Forgetting to unsubscribe from Observables:
+
+```typescript
+// ❌ WRONG - Memory leak
+export class DataComponent implements OnInit {
+  ngOnInit() {
+    this.dataService.getData().subscribe(data => {
+      this.processData(data);
+    });
+  }
+}
+
+// ✅ CORRECT - Manual unsubscribe
+export class DataComponent implements OnInit, OnDestroy {
+  private subscription: Subscription;
+  
+  ngOnInit() {
+    this.subscription = this.dataService.getData().subscribe(data => {
+      this.processData(data);
+    });
+  }
+  
+  ngOnDestroy() {
+    this.subscription.unsubscribe();
+  }
+}
+
+// ✅ BETTER - Using takeUntil
+export class DataComponent implements OnInit, OnDestroy {
+  private destroy$ = new Subject<void>();
+  
+  ngOnInit() {
+    this.dataService.getData()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(data => this.processData(data));
+  }
+  
+  ngOnDestroy() {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+}
+
+// ✅ BEST - Using async pipe in template
+export class DataComponent {
+  data$ = this.dataService.getData();
+}
+
+// Template
+// <div>{{ data$ | async }}</div>
+```
+
+---
+
+### 5. Template-driven vs Reactive forms?
+
+**Q: Which should I use?**
+
+A: Reactive for complex, template-driven for simple:
+
+```typescript
+// Template-driven: Simple, form state in template
+@Component({
+  template: `
+    <form #form="ngForm" (ngSubmit)="onSubmit(form.value)">
+      <input name="email" [(ngModel)]="email" />
+      <button>Submit</button>
+    </form>
+  `
+})
+export class SimpleFormComponent {
+  email = '';
+  onSubmit(value) { console.log(value); }
+}
+
+// Reactive: Complex, form state in component
+@Component({
+  template: `
+    <form [formGroup]="form" (ngSubmit)="onSubmit()">
+      <input formControlName="email" />
+      <button>Submit</button>
+    </form>
+  `
+})
+export class ComplexFormComponent {
+  form = this.fb.group({
+    email: ['', [Validators.required, Validators.email]],
+    password: ['', Validators.required]
+  });
+  
+  constructor(private fb: FormBuilder) {}
+  
+  onSubmit() {
+    if (this.form.valid) console.log(this.form.value);
+  }
+}
+```
+
+---
+
+### 6. What's the async pipe?
+
+**Q: Why use it?**
+
+A: Automatically subscribes/unsubscribes and handles change detection:
+
+```typescript
+// ❌ WRONG - Manual subscription
+export class UserListComponent implements OnInit, OnDestroy {
+  users: User[] = [];
+  private subscription: Subscription;
+  
+  ngOnInit() {
+    this.subscription = this.userService.getUsers()
+      .subscribe(users => this.users = users);
+  }
+  
+  ngOnDestroy() {
+    this.subscription.unsubscribe();
+  }
+}
+
+// Template
+// <div *ngFor="let user of users">{{ user.name }}</div>
+
+// ✅ CORRECT - Using async pipe
+export class UserListComponent {
+  users$ = this.userService.getUsers();
+}
+
+// Template
+// <div *ngFor="let user of (users$ | async)">{{ user.name }}</div>
+```
+
+---
+
+### 7. How do I share data between components?
+
+**Q: Parent-child, sibling, or unrelated?**
+
+A: Use appropriate pattern for each case:
+
+```typescript
+// Parent to Child: @Input
+@Component({
+  selector: 'app-child',
+  template: `<p>{{ name }}</p>`
+})
+export class ChildComponent {
+  @Input() name: string = '';
+}
+
+// Child to Parent: @Output + EventEmitter
+@Component({
+  selector: 'app-child',
+  template: `<button (click)="notify()">Click</button>`
+})
+export class ChildComponent {
+  @Output() action = new EventEmitter<string>();
+  notify() { this.action.emit('clicked'); }
+}
+
+// Siblings/Global: Service + Observable
+@Injectable({ providedIn: 'root' })
+export class DataService {
+  data$ = new BehaviorSubject<string>('initial');
+}
+
+export class Component1 {
+  constructor(private dataService: DataService) {}
+  updateData() { this.dataService.data$.next('updated'); }
+}
+
+export class Component2 {
+  data$ = this.dataService.data$;
+  constructor(private dataService: DataService) {}
+}
+```
+
+---
+
+### 8. Lazy loading vs Eager loading?
+
+**Q: When use each?**
+
+A: Eager for initial routes, lazy for feature modules:
+
+```typescript
+// Eager: Loaded immediately
+const routes: Routes = [
+  { path: '', component: HomeComponent },
+  { path: 'about', component: AboutComponent }
+];
+
+// Lazy: Loaded only when route accessed
+const routes: Routes = [
+  {
+    path: 'admin',
+    loadChildren: () => import('./admin/admin.module')
+      .then(m => m.AdminModule)
+  }
+];
+```
+
+---
+
+### 9. What's the difference between ngOnInit and constructor?
+
+**Q: Which should I use for initialization?**
+
+A: Constructor for DI, ngOnInit for initialization:
+
+```typescript
+// Constructor: Dependency injection
+export class UserComponent {
+  constructor(
+    private userService: UserService,  // ✅ DI here
+    private route: ActivatedRoute
+  ) {}
+}
+
+// ngOnInit: Actual initialization
+export class UserComponent implements OnInit {
+  ngOnInit() {
+    // ✅ Access @Input, get route params, load data here
+    this.route.params.subscribe(params => {
+      this.userService.getUser(params['id']).subscribe(user => {
+        this.user = user;
+      });
+    });
+  }
+}
+```
+
+---
+
+### 10. How do I implement error handling globally?
+
+**Q: Catch errors in all HTTP requests?**
+
+A: Use HTTP Interceptor + ErrorHandler:
+
+```typescript
+// Global HTTP Error Interceptor
+@Injectable()
+export class ErrorInterceptor implements HttpInterceptor {
+  constructor(private errorService: ErrorService) {}
+  
+  intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    return next.handle(req).pipe(
+      catchError(error => {
+        let errorMsg = 'Unknown error occurred';
+        
+        if (error.error instanceof ErrorEvent) {
+          errorMsg = `Error: ${error.error.message}`;
+        } else {
+          errorMsg = `Status ${error.status}: ${error.message}`;
+        }
+        
+        this.errorService.showError(errorMsg);
+        return throwError(() => new Error(errorMsg));
+      })
+    );
+  }
+}
+
+// Global Error Handler
+@Injectable()
+export class GlobalErrorHandler implements ErrorHandler {
+  constructor(private logger: LoggerService) {}
+  
+  handleError(error: Error | HttpErrorResponse): void {
+    this.logger.logError(error);
+    
+    if (error instanceof HttpErrorResponse) {
+      if (error.status === 401) {
+        // Handle unauthorized
+      } else if (error.status === 403) {
+        // Handle forbidden
+      }
+    }
+  }
+}
+
+// Register in Module
+@NgModule({
+  providers: [
+    {
+      provide: HTTP_INTERCEPTORS,
+      useClass: ErrorInterceptor,
+      multi: true
+    },
+    {
+      provide: ErrorHandler,
+      useClass: GlobalErrorHandler
+    }
+  ]
+})
+export class AppModule { }
+```
+
+---
+
+### 11. What are trackBy functions?
+
+**Q: Why use them in *ngFor?**
+
+A: Optimize performance by tracking item identity:
+
+```typescript
+// ❌ WITHOUT trackBy - Recreates DOM for all items on change
+<div *ngFor="let item of items">{{ item.name }}</div>
+
+// ✅ WITH trackBy - Only updates changed items
+export class ListComponent {
+  items = [
+    { id: 1, name: 'Item 1' },
+    { id: 2, name: 'Item 2' }
+  ];
+  
+  trackByItemId(index: number, item: any): number {
+    return item.id;
+  }
+}
+
+// Template
+<div *ngFor="let item of items; trackBy: trackByItemId">
+  {{ item.name }}
+</div>
+```
+
+---
+
+### 12. How do I test Angular components?
+
+**Q: Unit testing best practices?**
+
+A: Use TestBed for component testing:
+
+```typescript
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { UserComponent } from './user.component';
+import { UserService } from './user.service';
+
+describe('UserComponent', () => {
+  let component: UserComponent;
+  let fixture: ComponentFixture<UserComponent>;
+  let userService: jasmine.SpyObj<UserService>;
+  
+  beforeEach(async () => {
+    const userServiceSpy = jasmine.createSpyObj('UserService', ['getUser']);
+    
+    await TestBed.configureTestingModule({
+      declarations: [UserComponent],
+      providers: [{ provide: UserService, useValue: userServiceSpy }]
+    }).compileComponents();
+    
+    userService = TestBed.inject(UserService) as jasmine.SpyObj<UserService>;
+    fixture = TestBed.createComponent(UserComponent);
+    component = fixture.componentInstance;
+  });
+  
+  it('should display user name', () => {
+    const mockUser = { id: 1, name: 'John', email: 'john@example.com' };
+    userService.getUser.and.returnValue(of(mockUser));
+    
+    fixture.detectChanges();
+    
+    expect(component.user).toEqual(mockUser);
+  });
+});
+```
+
+---
+
+### 13. What's zone.js?
+
+**Q: Why does Angular use it?**
+
+A: Zone.js patches async operations for change detection:
+
+```typescript
+// Zone.js intercepts all async: setTimeout, promises, events, etc.
+// When async completes, Zone notifies Angular to run change detection
+
+// Usually automatic, but sometimes need control:
+export class PerformanceComponent {
+  constructor(private ngZone: NgZone) {}
+  
+  // Run outside Angular zone (no change detection)
+  heavyComputation() {
+    this.ngZone.runOutsideAngular(() => {
+      setInterval(() => {
+        // This won't trigger change detection
+        this.updateChart();
+      }, 100);
+    });
+  }
+  
+  // Run back inside Angular zone
+  updateUI() {
+    this.ngZone.run(() => {
+      this.uiData = 'updated';  // This triggers change detection
+    });
+  }
+}
+```
+
+---
+
+### 14. Dependency Injection best practices?
+
+**Q: How to structure services?**
+
+A: Use providedIn and hierarchical DI:
+
+```typescript
+// ✅ Service provided at root
+@Injectable({ providedIn: 'root' })
+export class GlobalService { }
+
+// ✅ Service for specific module
+@Injectable({ providedIn: ModuleA })
+export class ModuleAService { }
+
+// ✅ Hierarchical services - override at component level
+@Injectable({ providedIn: 'root' })
+export class BaseService { }
+
+@Component({
+  providers: [
+    { provide: BaseService, useClass: CustomService }  // Override
+  ]
+})
+export class CustomComponent { }
+
+// ❌ WRONG - Never do this
+export class MyService {
+  constructor(private anotherService = new AnotherService()) { }
+}
+```
+
+---
+
+### 15. What's change detection strategy?
+
+**Q: OnPush vs Default?**
+
+A: OnPush better for performance with immutable data:
+
+```typescript
+// Default: Checks component on any event/async
+// OnPush: Only checks when @Input changes or events occur
+
+@Component({
+  changeDetection: ChangeDetectionStrategy.OnPush
+})
+export class OptimizedComponent implements OnInit {
+  @Input() data: User;
+  @Output() update = new EventEmitter<User>();
+  
+  updateUser(user: User) {
+    // Event triggers change detection
+    this.update.emit({ ...user, updated: true });
+  }
+  
+  // If data is mutable and changes externally, manual check needed:
+  constructor(private cdr: ChangeDetectorRef) {}
+  
+  detectChangesManually() {
+    this.cdr.markForCheck();
+  }
+}
+```
+
+---
+
+---
+
+## Angular Interview Questions & Answers
+
+### 1. Explain the Angular Application Lifecycle
+
+**Q: What is the complete lifecycle of an Angular application from bootstrap to rendering?**
+
+A: Angular application lifecycle follows these stages:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│          ANGULAR APPLICATION LIFECYCLE                       │
+├─────────────────────────────────────────────────────────────┤
+│ 1. main.ts                                                  │
+│    └─ Platform initializer                                  │
+│    └─ Bootstrap root module                                 │
+│                                                              │
+│ 2. AppModule loaded                                         │
+│    └─ Declarations parsed                                   │
+│    └─ Imports resolved                                      │
+│    └─ Providers injected                                    │
+│                                                              │
+│ 3. Root component (AppComponent) created                    │
+│    └─ Constructor called                                    │
+│    └─ DI tokens resolved                                    │
+│                                                              │
+│ 4. Component initialization                                 │
+│    └─ ngOnChanges (if @Input)                               │
+│    └─ ngOnInit                                              │
+│    └─ ngAfterContentInit                                    │
+│    └─ ngAfterViewInit                                       │
+│                                                              │
+│ 5. Change detection                                         │
+│    └─ Template compiled                                     │
+│    └─ Data binding evaluated                                │
+│    └─ Change detection cycle runs                           │
+│                                                              │
+│ 6. DOM rendered                                             │
+│    └─ Initial page displayed                                │
+│    └─ Listeners attached                                    │
+│                                                              │
+│ 7. Running (event → change detection → render)              │
+│                                                              │
+│ 8. Component destruction                                    │
+│    └─ ngOnDestroy called                                    │
+│    └─ Resources cleaned up                                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Code Example:**
+
+```typescript
+// main.ts - Entry point
+import { platformBrowserDynamic } from '@angular/platform-browser-dynamic';
+import { AppModule } from './app/app.module';
+
+platformBrowserDynamic()
+  .bootstrapModule(AppModule)
+  .catch(err => console.error(err));
+
+// Zone.js patches async operations before app loads
+// Angular runs change detection after each async event
+
+// Bootstrap sequence flow:
+// 1. NgZone initialized (patches async)
+// 2. Module injector created
+// 3. All providers instantiated
+// 4. Root component compiled and created
+// 5. ngOnInit called
+// 6. Template rendered
+// 7. App ready for user interaction
+```
+
+---
+
+### 2. Difference between providedIn: 'root' and providers array
+
+**Q: When should I use each approach for providing services?**
+
+A: Different scopes for different use cases:
+
+```typescript
+// ❌ OLD WAY - Module level (still works but less tree-shakeable)
+@NgModule({
+  providers: [UserService]  // Service instance per module
+})
+export class UserModule { }
+
+// ✅ NEW WAY - Root level (tree-shakeable, recommended)
+@Injectable({
+  providedIn: 'root'  // Single instance for entire application
+})
+export class UserService { }
+
+// ✅ MODULE SPECIFIC - Not tree-shaken if module not used
+@Injectable({
+  providedIn: UserModule
+})
+export class UserModuleService { }
+
+// ✅ COMPONENT LEVEL - New instance per component
+@Component({
+  providers: [UserService]  // Fresh instance for this component
+})
+export class UserComponent { }
+
+// Real-world decision tree
+export class ServiceScopingGuide {
+  // Use providedIn: 'root' for:
+  // - Global state (auth, settings)
+  // - Data services (API calls)
+  // - Utility services (logging, notifications)
+  
+  // Use providedIn: Module for:
+  // - Feature-specific logic
+  // - Module-scoped state
+  
+  // Use component providers for:
+  // - Component-specific state
+  // - Local configurations
+  // - Testing isolation
+}
+
+// Performance difference
+@Injectable({ providedIn: 'root' })
+export class GlobalService { }  // Tree-shaken if not imported
+
+providers: [GlobalService]      // Always bundled (not tree-shaken)
+```
+
+---
+
+### 3. How does Angular's Change Detection work?
+
+**Q: Explain the change detection mechanism and how to optimize it**
+
+A: Angular checks for changes in component properties and updates the view:
+
+```typescript
+// Change Detection Cycle:
+// 1. Event occurs (click, timeout, etc.)
+// 2. Zone.js notifies Angular
+// 3. Change detector runs from root to leaves
+// 4. Detects changes in component properties
+// 5. Updates template if changes found
+// 6. Repeats for child components
+
+// Default strategy: Check everything every time
+@Component({
+  selector: 'app-user',
+  template: `<div>{{ user.name }}</div>`,
+  changeDetection: ChangeDetectionStrategy.Default
+})
+export class UserComponent {
+  @Input() user: User;
+  // Checked on: click, timer, API, input change, etc.
+}
+
+// OnPush: Only check on input change or events
+@Component({
+  selector: 'app-user',
+  template: `<div>{{ user.name }}</div>`,
+  changeDetection: ChangeDetectionStrategy.OnPush
+})
+export class OptimizedUserComponent {
+  @Input() user: User;
+  // Only checked when: @Input changes or events fire
+  
+  constructor(private cdr: ChangeDetectorRef) {}
+  
+  ngOnInit() {
+    // Manual trigger if needed
+    this.cdr.markForCheck();
+  }
+}
+
+// Performance impact example:
+// List of 1000 users with Default: checks all on every event
+// List of 1000 users with OnPush: only checks changed items
+
+@Component({
+  selector: 'app-user-list',
+  template: `
+    <app-user-card 
+      *ngFor="let user of users; trackBy: trackById"
+      [user]="user"
+      changeDetection: ChangeDetectionStrategy.OnPush
+    ></app-user-card>
+  `
+})
+export class UserListOptimizedComponent {
+  @Input() users: User[] = [];
+  
+  trackById(index: number, user: User) {
+    return user.id;  // Prevents unnecessary DOM recreation
+  }
+}
+```
+
+---
+
+### 4. What is a ViewChild and how is it different from ContentChild?
+
+**Q: When should I use @ViewChild vs @ContentChild?**
+
+A: They target different parts of the component:
+
+```typescript
+// @ViewChild: Access template elements (in component's own template)
+@Component({
+  selector: 'app-parent',
+  template: `
+    <input #inputElement />
+    <app-child #childComponent></app-child>
+  `
+})
+export class ParentComponent implements AfterViewInit {
+  @ViewChild('inputElement') inputRef: ElementRef | null = null;
+  @ViewChild('childComponent') childRef: ChildComponent | null = null;
+  
+  ngAfterViewInit() {
+    // NOW safe to access - template fully initialized
+    console.log(this.inputRef?.nativeElement.value);
+    this.childRef?.doSomething();
+  }
+}
+
+// @ContentChild: Access projected content (children passed via <ng-content>)
+@Component({
+  selector: 'app-wrapper',
+  template: `
+    <div class="wrapper">
+      <ng-content></ng-content>
+    </div>
+  `
+})
+export class WrapperComponent implements AfterContentInit {
+  @ContentChild('header') header: TemplateRef<any> | null = null;
+  
+  ngAfterContentInit() {
+    // NOW safe to access - content projected and initialized
+    console.log(this.header);
+  }
+}
+
+// Usage
+@Component({
+  template: `
+    <app-wrapper>
+      <div #header>Projected header content</div>
+    </app-wrapper>
+  `
+})
+export class AppComponent { }
+
+// Real-world example: Tab component
+@Component({
+  selector: 'app-tabs',
+  template: `
+    <div class="tabs">
+      <div class="tab-content">
+        <ng-content></ng-content>
+      </div>
+    </div>
+  `
+})
+export class TabsComponent implements AfterContentInit {
+  @ContentChildren(TabComponent) tabs: QueryList<TabComponent> | null = null;
+  
+  ngAfterContentInit() {
+    // All projected tab components available
+    this.tabs?.forEach(tab => tab.activate());
+  }
+}
+
+@Component({
+  selector: 'app-tab',
+  template: `<div>{{ title }}</div>`
+})
+export class TabComponent {
+  @Input() title = '';
+  activate() { /* ... */ }
+}
+```
+
+**Key Differences:**
+
+```
+┌──────────────────────────────────────────────────────────┐
+│          @ViewChild vs @ContentChild                     │
+├──────────────────────────────────────────────────────────┤
+│ @ViewChild    │ Access own template elements            │
+│ @ContentChild │ Access projected content (ng-content)   │
+│ Access        │ Both available in ngAfterViewInit       │
+│ Use case      │ ViewChild: template refs, child comps   │
+│ Use case      │ ContentChild: flexible container comps  │
+└──────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 5. Explain the difference between ngOnInit and ngAfterViewInit
+
+**Q: What's the timing difference and when to use each?**
+
+A: Different initialization stages for different purposes:
+
+```typescript
+export class LifecycleComponent implements OnInit, AfterViewInit {
+  @ViewChild('myInput') inputRef: ElementRef | null = null;
+  
+  ngOnInit() {
+    // Called: After component created, inputs set
+    // Available: @Input properties, data from services
+    // NOT available: @ViewChild/@ViewChildren (template not initialized)
+    
+    console.log('ngOnInit - after inputs set');
+    console.log(this.inputRef);  // null - template not initialized
+  }
+  
+  ngAfterViewInit() {
+    // Called: After view and child components initialized
+    // Available: @ViewChild/@ViewChildren refs
+    // Use for: DOM access, child component interaction
+    
+    console.log('ngAfterViewInit - view fully initialized');
+    console.log(this.inputRef?.nativeElement);  // Accessible!
+  }
+}
+
+// Real-world timing example:
+@Component({
+  selector: 'app-modal',
+  template: `
+    <div class="modal">
+      <input #focusInput />
+      <p>{{ message }}</p>
+    </div>
+  `
+})
+export class ModalComponent implements OnInit, AfterViewInit {
+  @ViewChild('focusInput') inputRef: ElementRef | null = null;
+  message = 'Loading...';
+  
+  constructor(private dataService: DataService) {}
+  
+  ngOnInit() {
+    // Load data from API
+    this.dataService.getData().subscribe(data => {
+      this.message = data.message;
+    });
+    
+    // ❌ Can't focus input here - not initialized
+    // this.inputRef?.nativeElement.focus();
+  }
+  
+  ngAfterViewInit() {
+    // ✅ Now safe - focus input after rendering
+    this.inputRef?.nativeElement.focus();
+  }
+}
+```
+
+---
+
+### 6. What are RxJS Subjects and when to use each type?
+
+**Q: Subject vs BehaviorSubject vs ReplaySubject - when to use?**
+
+A: Different subject types for different scenarios:
+
+```typescript
+// Subject: No initial value, subscribers miss previous emissions
+const subject = new Subject<string>();
+
+subject.subscribe(v => console.log('Sub1:', v));  // Nothing logged
+
+subject.next('Value 1');  // 'Sub1: Value 1'
+subject.next('Value 2');  // 'Sub1: Value 2'
+
+subject.subscribe(v => console.log('Sub2:', v));  // Nothing (late subscriber)
+subject.next('Value 3');  // 'Sub1: Value 3', 'Sub2: Value 3'
+
+// Use: Event emitters, user actions
+
+// BehaviorSubject: Has initial value, new subscribers get last value
+const behaviorSubject = new BehaviorSubject<string>('Initial');
+
+behaviorSubject.subscribe(v => console.log('Sub1:', v));  // 'Sub1: Initial'
+
+behaviorSubject.next('Value 1');  // 'Sub1: Value 1'
+behaviorSubject.next('Value 2');  // 'Sub1: Value 2'
+
+behaviorSubject.subscribe(v => console.log('Sub2:', v));  // 'Sub2: Value 2' (latest)
+behaviorSubject.next('Value 3');  // 'Sub1: Value 3', 'Sub2: Value 3'
+
+// Use: State management, current user, theme settings
+
+// ReplaySubject: Emits last N values to new subscribers
+const replaySubject = new ReplaySubject<string>(2);
+
+replaySubject.next('Value 1');
+replaySubject.next('Value 2');
+replaySubject.next('Value 3');
+
+replaySubject.subscribe(v => console.log('Sub1:', v));  
+// 'Sub1: Value 2', 'Sub1: Value 3' (last 2)
+
+// Use: History tracking, chat messages, activity logs
+
+// Real-world: State management service
+@Injectable({ providedIn: 'root' })
+export class AppStateService {
+  // BehaviorSubject for current state
+  private currentUserSubject = new BehaviorSubject<User | null>(null);
+  currentUser$ = this.currentUserSubject.asObservable();
+  
+  // ReplaySubject for activity history
+  private activitiesSubject = new ReplaySubject<Activity>(10);  // Last 10
+  activities$ = this.activitiesSubject.asObservable();
+  
+  // Subject for events
+  private logoutSubject = new Subject<void>();
+  logout$ = this.logoutSubject.asObservable();
+  
+  setCurrentUser(user: User) {
+    this.currentUserSubject.next(user);
+  }
+  
+  addActivity(activity: Activity) {
+    this.activitiesSubject.next(activity);
+  }
+  
+  logout() {
+    this.logoutSubject.next();
+  }
+}
+```
+
+---
+
+### 7. Explain Angular Module Resolution and Lazy Loading
+
+**Q: How does Angular resolve module imports and what are lazy loading benefits?**
+
+A: Modules organize related code and lazy loading improves performance:
+
+```typescript
+// Eager Loading - Module loaded at startup
+@NgModule({
+  imports: [CommonModule, FormsModule]
+})
+export class UserModule { }
+
+// App module eagerly imports everything
+@NgModule({
+  imports: [
+    BrowserModule,
+    UserModule,
+    ProductModule,
+    AdminModule  // All loaded immediately
+  ]
+})
+export class AppModule { }
+
+// Lazy Loading - Module loaded on demand
+const routes: Routes = [
+  {
+    path: 'admin',
+    loadChildren: () => import('./admin/admin.module')
+      .then(m => m.AdminModule)
+    // AdminModule only loaded when user navigates to /admin
+  }
+];
+
+// Performance comparison
+// Eager: app.js (500KB) - all modules
+// Lazy:
+//   - app.js (200KB) - core
+//   - admin.js (300KB) - loaded when needed
+
+// Real-world module organization
+@NgModule({
+  declarations: [UserListComponent, UserDetailComponent],
+  imports: [CommonModule, FormsModule],
+  providers: [UserService]
+})
+export class UserModule { }
+
+@NgModule({
+  declarations: [ProductListComponent, ProductDetailComponent],
+  imports: [CommonModule, FormsModule],
+  providers: [ProductService]
+})
+export class ProductModule { }
+
+// Lazy load feature modules
+const routes: Routes = [
+  { path: '', component: HomeComponent },
+  {
+    path: 'users',
+    loadChildren: () => import('./modules/user/user.module')
+      .then(m => m.UserModule)
+  },
+  {
+    path: 'products',
+    loadChildren: () => import('./modules/product/product.module')
+      .then(m => m.ProductModule)
+  }
+];
+```
+
+---
+
+### 8. What are HTTP Interceptors and how do they work?
+
+**Q: How would you implement a global error handler and auth token injection?**
+
+A: Interceptors intercept HTTP requests/responses globally:
+
+```typescript
+// Auth Token Interceptor
+@Injectable()
+export class AuthInterceptor implements HttpInterceptor {
+  constructor(private authService: AuthService) {}
+  
+  intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    // Add auth token to all requests
+    const token = this.authService.getToken();
+    
+    if (token) {
+      // Clone request and add header
+      req = req.clone({
+        setHeaders: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+    }
+    
+    return next.handle(req);
+  }
+}
+
+// Error Handling Interceptor
+@Injectable()
+export class ErrorInterceptor implements HttpInterceptor {
+  constructor(
+    private authService: AuthService,
+    private router: Router
+  ) {}
+  
+  intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    return next.handle(req).pipe(
+      catchError(error => {
+        if (error.status === 401) {
+          // Unauthorized - logout user
+          this.authService.logout();
+          this.router.navigate(['/login']);
+        } else if (error.status === 403) {
+          // Forbidden - redirect to access denied
+          this.router.navigate(['/access-denied']);
+        } else if (error.status >= 500) {
+          // Server error
+          console.error('Server error:', error);
+        }
+        
+        return throwError(() => error);
+      })
+    );
+  }
+}
+
+// Loading Interceptor
+@Injectable()
+export class LoadingInterceptor implements HttpInterceptor {
+  private requestsInProgress = 0;
+  isLoading$ = new BehaviorSubject<boolean>(false);
+  
+  intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    this.requestsInProgress++;
+    this.isLoading$.next(true);
+    
+    return next.handle(req).pipe(
+      finalize(() => {
+        this.requestsInProgress--;
+        if (this.requestsInProgress === 0) {
+          this.isLoading$.next(false);
+        }
+      })
+    );
+  }
+}
+
+// Register interceptors in module
+@NgModule({
+  providers: [
+    {
+      provide: HTTP_INTERCEPTORS,
+      useClass: AuthInterceptor,
+      multi: true
+    },
+    {
+      provide: HTTP_INTERCEPTORS,
+      useClass: ErrorInterceptor,
+      multi: true
+    },
+    {
+      provide: HTTP_INTERCEPTORS,
+      useClass: LoadingInterceptor,
+      multi: true
+    }
+  ]
+})
+export class AppModule { }
+
+// Usage in component
+@Component({
+  template: `
+    <div *ngIf="(loadingService.isLoading$ | async)" class="spinner">
+      Loading...
+    </div>
+  `
+})
+export class AppComponent {
+  constructor(public loadingService: LoadingInterceptor) {}
+}
+```
+
+---
+
+### 9. Explain RxJS Higher-Order Operators: switchMap vs mergeMap vs concatMap
+
+**Q: When should I use switchMap vs mergeMap vs concatMap?**
+
+A: Different operators for different request handling needs:
+
+```typescript
+// switchMap: Cancel previous request on new emission (unsubscribe old)
+// Use: Search, autocomplete, switching contexts
+const searchResults$ = searchInput$.pipe(
+  switchMap(query => searchService.search(query))
+);
+// User types: 'an', 'ang', 'angul', 'angular'
+// Only latest 'angular' request is processed, previous requests cancelled
+
+// mergeMap: Execute all requests concurrently (subscribe to all)
+// Use: Parallel requests, independent operations
+const allRequests$ = itemIds$.pipe(
+  mergeMap(id => dataService.getItem(id))
+);
+// IDs: [1, 2, 3]
+// All 3 requests sent simultaneously
+
+// concatMap: Queue requests (process one at a time in order)
+// Use: Sequential operations, maintaining order
+const sequential$ = itemIds$.pipe(
+  concatMap(id => dataService.saveItem(id))
+);
+// IDs: [1, 2, 3]
+// Request 1 → wait → Request 2 → wait → Request 3
+
+// Real-world comparisons
+
+// Example 1: User Search (switchMap best)
+@Component({
+  template: `
+    <input (keyup)="onSearch($event.target.value)" />
+    <ul>
+      <li *ngFor="let result of (results$ | async)">
+        {{ result.name }}
+      </li>
+    </ul>
+  `
+})
+export class SearchComponent {
+  private searchInput$ = new Subject<string>();
+  results$ = this.searchInput$.pipe(
+    debounceTime(300),
+    switchMap(query => this.searchService.search(query)),
+    // User types faster than API can respond
+    // switchMap cancels old requests, only latest processed
+    startWith([])
+  );
+  
+  onSearch(query: string) {
+    this.searchInput$.next(query);
+  }
+}
+
+// Example 2: Bulk Upload (concatMap best - maintain order)
+@Component({
+  template: `
+    <button (click)="uploadFiles($event)">Upload Files</button>
+  `
+})
+export class UploadComponent {
+  uploadFiles(files: File[]) {
+    from(files).pipe(
+      concatMap(file => this.uploadService.upload(file)),
+      // File 1 uploads → completes → File 2 uploads → etc.
+      // Order maintained, sequential upload
+      toArray()
+    ).subscribe(results => {
+      console.log('All files uploaded:', results);
+    });
+  }
+}
+
+// Example 3: Parallel Data Loading (mergeMap best)
+@Component({
+  template: `
+    <div *ngFor="let item of (items$ | async)">
+      <h3>{{ item.name }}</h3>
+      <p>{{ item.details }}</p>
+    </div>
+  `
+})
+export class ItemsComponent {
+  items$ = this.itemService.getItemIds().pipe(
+    mergeMap(id => 
+      combineLatest([
+        this.itemService.getItem(id),
+        this.itemService.getDetails(id)
+      ]).pipe(
+        map(([item, details]) => ({ ...item, details }))
+      )
+    ),
+    // All items loaded in parallel
+    toArray()
+  );
+}
+```
+
+---
+
+### 10. What is Angular's Renderer2 and why use it instead of direct DOM access?
+
+**Q: When and why should I use Renderer2?**
+
+A: Renderer2 provides safe, abstracted DOM manipulation:
+
+```typescript
+// ❌ WRONG - Direct DOM access (not safe, platform dependent)
+export class BadComponent {
+  constructor(private el: ElementRef) {
+    this.el.nativeElement.style.color = 'red';  // Breaks on server-side rendering
+    this.el.nativeElement.innerHTML = userInput;  // XSS vulnerability
+  }
+}
+
+// ✅ CORRECT - Renderer2 (safe, platform independent)
+@Directive({
+  selector: '[appHighlight]'
+})
+export class HighlightDirective {
+  constructor(
+    private el: ElementRef,
+    private renderer: Renderer2
+  ) {
+    // Safe style manipulation
+    this.renderer.setStyle(this.el.nativeElement, 'background-color', 'yellow');
+    this.renderer.addClass(this.el.nativeElement, 'highlighted');
+  }
+}
+
+// Renderer2 methods
+export class RendererExampleComponent {
+  constructor(
+    private el: ElementRef,
+    private renderer: Renderer2
+  ) {}
+  
+  ngAfterViewInit() {
+    // Create element
+    const div = this.renderer.createElement('div');
+    
+    // Set attributes
+    this.renderer.setAttribute(div, 'id', 'my-div');
+    this.renderer.setAttribute(div, 'class', 'container');
+    
+    // Set properties
+    this.renderer.setProperty(div, 'textContent', 'Hello World');
+    
+    // Set styles
+    this.renderer.setStyle(div, 'color', 'red');
+    this.renderer.setStyle(div, 'font-size', '16px');
+    
+    // Add class
+    this.renderer.addClass(div, 'active');
+    
+    // Remove class
+    this.renderer.removeClass(div, 'inactive');
+    
+    // Listen to events
+    this.renderer.listen(div, 'click', () => {
+      console.log('Clicked!');
+    });
+    
+    // Append to element
+    this.renderer.appendChild(this.el.nativeElement, div);
+    
+    // Insert before
+    this.renderer.insertBefore(parent, newElement, referenceElement);
+    
+    // Remove element
+    this.renderer.removeChild(parent, child);
+  }
+}
+
+// Why Renderer2:
+// 1. Server-side rendering (SSR) compatible
+// 2. Web worker compatible
+// 3. Prevents XSS attacks
+// 4. Platform abstraction (web, mobile, etc.)
+// 5. Better tooling support
+```
+
+---
+
+### 11. What are Directives and the difference between Structural and Attribute directives?
+
+**Q: Explain directive types and provide examples**
+
+A: Directives extend HTML with custom functionality:
+
+```typescript
+// Structural Directives: Modify DOM structure
+// *ngIf: Add/remove elements
+<div *ngIf="isVisible">Content</div>
+
+// *ngFor: Repeat elements
+<div *ngFor="let item of items">{{ item }}</div>
+
+// *ngSwitch: Conditional rendering
+<div [ngSwitch]="status">
+  <div *ngSwitchCase="'active'">Active</div>
+  <div *ngSwitchDefault>Inactive</div>
+</div>
+
+// Attribute Directives: Modify element appearance/behavior
+// ngClass: Add conditional classes
+<div [ngClass]="{ active: isActive, disabled: isDisabled }"></div>
+
+// ngStyle: Add conditional styles
+<div [ngStyle]="{ color: textColor, fontSize: fontSize + 'px' }"></div>
+
+// Custom Structural Directive
+@Directive({
+  selector: '[appUnless]'
+})
+export class UnlessDirective {
+  private hasView = false;
+  
+  constructor(
+    private templateRef: TemplateRef<any>,
+    private viewContainer: ViewContainerRef
+  ) {}
+  
+  @Input()
+  set appUnless(condition: boolean) {
+    if (!condition && !this.hasView) {
+      this.viewContainer.createEmbeddedView(this.templateRef);
+      this.hasView = true;
+    } else if (condition && this.hasView) {
+      this.viewContainer.clear();
+      this.hasView = false;
+    }
+  }
+}
+
+// Usage: <p *appUnless="isVisible">Hidden when visible</p>
+
+// Custom Attribute Directive
+@Directive({
+  selector: '[appHighlight]'
+})
+export class HighlightDirective {
+  @Input() highlightColor = 'yellow';
+  @Input() textColor = 'black';
+  
+  constructor(private el: ElementRef, private renderer: Renderer2) {}
+  
+  @HostListener('mouseenter')
+  onMouseEnter() {
+    this.setHighlight(this.highlightColor, this.textColor);
+  }
+  
+  @HostListener('mouseleave')
+  onMouseLeave() {
+    this.setHighlight('transparent', 'black');
+  }
+  
+  private setHighlight(bgColor: string, textColor: string) {
+    this.renderer.setStyle(this.el.nativeElement, 'background-color', bgColor);
+    this.renderer.setStyle(this.el.nativeElement, 'color', textColor);
+  }
+}
+
+// Usage: <p appHighlight highlightColor="blue">Hover me</p>
+```
+
+---
+
+### 12. Explain Pipes and create a custom pipe
+
+**Q: What are pipes and how would you create a custom one?**
+
+A: Pipes format data for display:
+
+```typescript
+// Built-in pipes
+<p>{{ date | date:'short' }}</p>
+<p>{{ price | currency }}</p>
+<p>{{ percent | percent }}</p>
+
+// Custom Pipe: Truncate text
+import { Pipe, PipeTransform } from '@angular/core';
+
+@Pipe({
+  name: 'truncate'
+})
+export class TruncatePipe implements PipeTransform {
+  transform(value: string, limit: number = 50): string {
+    if (!value) return value;
+    return value.length > limit ? value.substring(0, limit) + '...' : value;
+  }
+}
+
+// Usage: <p>{{ longText | truncate:30 }}</p>
+
+// Custom Pipe: Safe HTML
+@Pipe({
+  name: 'safeHtml'
+})
+export class SafeHtmlPipe implements PipeTransform {
+  constructor(private sanitizer: DomSanitizer) {}
+  
+  transform(value: string): SafeHtml {
+    return this.sanitizer.sanitize(SecurityContext.HTML, value) || '';
+  }
+}
+
+// Custom Pipe: Filter Array
+@Pipe({
+  name: 'filter'
+})
+export class FilterPipe implements PipeTransform {
+  transform<T>(items: T[], filterFn: (item: T) => boolean): T[] {
+    return items?.filter(filterFn) || [];
+  }
+}
+
+// Usage: <div *ngFor="let item of (items | filter:isActive)">
+//   {{ item }}
+// </div>
+
+// In component:
+export class ItemListComponent {
+  items = [
+    { id: 1, name: 'Item 1', active: true },
+    { id: 2, name: 'Item 2', active: false }
+  ];
+  
+  isActive = (item: any) => item.active;
+}
+
+// Async Pipe (handles Observables)
+// Automatically unwraps Observable/Promise
+// Automatically unsubscribes on component destroy
+items$ = this.itemService.getItems();
+
+// <div *ngFor="let item of (items$ | async)">
+//   {{ item.name }}
+// </div>
+```
+
+---
+
+### 13. What is AOT (Ahead-of-Time) Compilation vs JIT?
+
+**Q: Explain the differences and benefits of AOT**
+
+A: Two compilation strategies with different tradeoffs:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│           AOT vs JIT COMPILATION                         │
+├─────────────────────────────────────────────────────────┤
+│ JIT (Just-in-Time)                                      │
+│ - Compiles in browser                                   │
+│ - Larger bundle (includes compiler)                     │
+│ - Slower initial load                                   │
+│ - Errors shown at runtime                               │
+│ - Faster for development                                │
+│                                                          │
+│ AOT (Ahead-of-Time)                                     │
+│ - Compiles before deployment                            │
+│ - Smaller bundle (no compiler)                          │
+│ - Faster initial load                                   │
+│ - Errors caught at build time                           │
+│ - Better security (templates compiled)                  │
+│ - Default in Angular CLI production builds              │
+└─────────────────────────────────────────────────────────┘
+```
+
+```typescript
+// AOT enabled by default in production
+// ng build --prod  (AOT enabled)
+// ng build         (AOT disabled - dev)
+
+// Benefits of AOT:
+// 1. Faster rendering - pre-compiled
+// 2. Smaller bundle size
+// 3. Detect template errors early
+// 4. Security - templates compiled
+
+// Example error caught by AOT:
+@Component({
+  template: `
+    <div>{{ nonExistentProperty }}</div>
+  `
+})
+export class MyComponent {
+  // ❌ AOT compilation fails: property doesn't exist
+  // JIT would only fail at runtime
+}
+
+// AOT requires strict typing
+@Component({
+  template: `
+    <div>{{ user.name }}</div>
+  `
+})
+export class UserComponent {
+  user: User;  // ✅ Typed - AOT can verify
+  
+  // Without type, AOT can't verify property access
+}
+```
+
+---
+
+### 14. How would you implement a reusable, flexible Tab component?
+
+**Q: Design a composable Tab component system**
+
+A: Building a tab component using projection and queries:
+
+```typescript
+// Tab Component
+@Component({
+  selector: 'app-tab',
+  template: `<ng-content></ng-content>`,
+  styles: ['...']
+})
+export class TabComponent {
+  @Input() title = '';
+  @Input() active = false;
+}
+
+// Tabs Container Component
+@Component({
+  selector: 'app-tabs',
+  template: `
+    <div class="tabs-header">
+      <button 
+        *ngFor="let tab of tabs"
+        (click)="selectTab(tab)"
+        [class.active]="tab.active"
+      >
+        {{ tab.title }}
+      </button>
+    </div>
+    <div class="tabs-content">
+      <ng-content></ng-content>
+    </div>
+  `,
+  styles: ['...']
+})
+export class TabsComponent implements AfterContentInit {
+  @ContentChildren(TabComponent) tabs: QueryList<TabComponent> | null = null;
+  
+  ngAfterContentInit() {
+    // Activate first tab by default
+    if (this.tabs && this.tabs.length > 0) {
+      this.selectTab(this.tabs.first);
+    }
+  }
+  
+  selectTab(tab: TabComponent) {
+    // Deactivate all
+    this.tabs?.forEach(t => t.active = false);
+    // Activate selected
+    tab.active = true;
+  }
+}
+
+// Usage
+@Component({
+  template: `
+    <app-tabs>
+      <app-tab title="Tab 1">
+        <p>Content 1</p>
+      </app-tab>
+      <app-tab title="Tab 2">
+        <p>Content 2</p>
+      </app-tab>
+      <app-tab title="Tab 3">
+        <p>Content 3</p>
+      </app-tab>
+    </app-tabs>
+  `
+})
+export class AppComponent { }
+
+// Module
+@NgModule({
+  declarations: [TabsComponent, TabComponent],
+  exports: [TabsComponent, TabComponent]
+})
+export class TabsModule { }
+```
+
+---
+
+### 15. How would you implement a loading guard and error handling strategy?
+
+**Q: Design a comprehensive guards and error handling system**
+
+A: Multi-layered approach to guarding routes and handling errors:
+
+```typescript
+// Auth Guard
+@Injectable({ providedIn: 'root' })
+export class AuthGuard implements CanActivate, CanActivateChild {
+  constructor(
+    private authService: AuthService,
+    private router: Router
+  ) {}
+  
+  canActivate(route: ActivatedRouteSnapshot): boolean {
+    if (this.authService.isLoggedIn()) {
+      return true;
+    }
+    this.router.navigate(['/login']);
+    return false;
+  }
+  
+  canActivateChild(route: ActivatedRouteSnapshot): boolean {
+    return this.canActivate(route);
+  }
+}
+
+// Unsaved Changes Guard
+@Injectable({ providedIn: 'root' })
+export class UnsavedChangesGuard implements CanDeactivate<any> {
+  canDeactivate(component: any): boolean {
+    if (component.hasUnsavedChanges?.()) {
+      return confirm('You have unsaved changes. Leave anyway?');
+    }
+    return true;
+  }
+}
+
+// Resolver for pre-loading data
+@Injectable({ providedIn: 'root' })
+export class UserResolver implements Resolve<User> {
+  constructor(
+    private userService: UserService,
+    private router: Router
+  ) {}
+  
+  resolve(route: ActivatedRouteSnapshot): Observable<User> {
+    const id = route.params['id'];
+    return this.userService.getUserById(id).pipe(
+      catchError(() => {
+        this.router.navigate(['/users']);
+        return EMPTY;
+      })
+    );
+  }
+}
+
+// Global Error Handler
+@Injectable()
+export class GlobalErrorHandler implements ErrorHandler {
+  constructor(
+    private logger: LoggerService,
+    private notifier: NotificationService
+  ) {}
+  
+  handleError(error: Error | HttpErrorResponse): void {
+    let message = 'An error occurred';
+    
+    if (error instanceof HttpErrorResponse) {
+      message = `${error.status}: ${error.message}`;
+      
+      if (error.status === 401) {
+        // Unauthorized
+      } else if (error.status === 403) {
+        // Forbidden
+      } else if (error.status >= 500) {
+        // Server error
+        message = 'Server error. Please try again later.';
+      }
+    } else if (error instanceof Error) {
+      message = error.message;
+    }
+    
+    this.logger.logError(message);
+    this.notifier.showError(message);
+  }
+}
+
+// Routes with guards and resolvers
+const routes: Routes = [
+  {
+    path: 'users',
+    canActivate: [AuthGuard],
+    children: [
+      {
+        path: '',
+        component: UserListComponent
+      },
+      {
+        path: ':id',
+        component: UserDetailComponent,
+        resolve: { user: UserResolver }
+      },
+      {
+        path: ':id/edit',
+        component: UserEditComponent,
+        canDeactivate: [UnsavedChangesGuard]
+      }
+    ]
+  }
+];
+
+// Register in module
+@NgModule({
+  providers: [
+    { provide: ErrorHandler, useClass: GlobalErrorHandler },
+    AuthGuard,
+    UnsavedChangesGuard,
+    UserResolver
+  ]
+})
+export class AppModule { }
+```
+
+---
+
+Angular is a complete framework providing everything needed to build enterprise-grade applications. Master components, services, dependency injection, and reactive programming for scalable, maintainable applications.
