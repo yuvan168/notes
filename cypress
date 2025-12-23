@@ -1,0 +1,6204 @@
+# Cypress Complete Notes - Theory & Practice
+
+## Table of Contents
+
+1. [Core Concepts & Key Points](#concepts)
+2. [Introduction to Cypress](#introduction)
+3. [Installation & Setup](#setup)
+4. [Cypress Architecture](#architecture)
+5. [Selectors & Element Location](#selectors)
+6. [Commands & Queries](#commands)
+7. [Assertions & Expectations](#assertions)
+8. [Working with Forms](#forms)
+9. [Network Requests & API Mocking](#network)
+10. [Debugging & Troubleshooting](#debugging)
+11. [Advanced Patterns](#advanced)
+12. [Best Practices & Anti-Patterns](#bestpractices)
+13. [Page Object Model](#pom)
+14. [Custom Commands](#customcommands)
+15. [Plugin Architecture](#plugins)
+16. [Real-World Examples](#examples)
+
+---
+
+## Core Concepts & Key Points {#concepts}
+
+### 1. Synchronous-Looking API (Asynchronous Reality)
+
+**The Concept:**
+Cypress provides a synchronous-looking API that actually executes asynchronously. This is fundamentally different from other testing frameworks.
+
+**Why This Matters:**
+
+```typescript
+// ❌ WRONG - Misunderstanding async nature
+const element = cy.get('.button')  // This does NOT return element!
+console.log(element)               // undefined - element is a Chainable!
+element.click()                    // TypeError!
+
+// ✅ CORRECT - Understanding the Chainable
+cy.get('.button')                  // Returns Chainable object
+  .click()                         // Queued
+  // EXECUTION HAPPENS HERE
+  // Click is actually invoked at this point
+
+// The command gets QUEUED, not executed immediately
+cy.visit('/')                      // Queued: Visit page
+cy.get('.form')                    // Queued: Find form
+  .find('input')                   // Queued: Find input in form
+  .type('text')                    // Queued: Type text
+// NOW all commands execute in sequence
+```
+
+**Key Insight:**
+```typescript
+// Think of Cypress commands as building a chain of operations
+// When you call cy.something(), it doesn't execute
+// It returns a Chainable that queues the operation
+// Execution happens when the chain is complete or when a .then() is called
+
+// This queue allows Cypress to:
+// 1. Automatically wait for each step
+// 2. Retry if elements aren't found
+// 3. Maintain proper timing
+// 4. Handle async operations transparently
+```
+
+### 2. Auto-Waiting & Retry Logic
+
+**The Concept:**
+Cypress automatically waits for elements to appear and retries commands when they fail temporarily.
+
+**How It Works:**
+
+```typescript
+// Without auto-wait (other frameworks)
+// You write: cy.get('.element')
+// What happens: Returns immediately, probably undefined
+
+// With Cypress auto-wait
+// You write: cy.get('.element', { timeout: 4000 })
+// What happens:
+// - Tries to find element
+// - Not found? Wait and retry
+// - Still not found? Wait and retry
+// - Keep trying for 4 seconds
+// - If found during retry: Proceed immediately
+// - If not found after 4s: FAIL
+
+// Practical example:
+cy.visit('/')                      // Page starts loading
+cy.get('.loader').should('not.exist')  // Wait for loader gone
+cy.get('.content').should('be.visible')  // Wait for content visible
+// ^ Cypress waits at each step automatically
+
+// The retry mechanism works on the element level
+cy.get('button:contains("Save")')  // Retry every 50ms until found
+  .click()                         // Auto-wait for element
+
+// Default timeouts:
+// - Command timeout: 4000ms
+// - Request timeout: 5000ms
+// - Response timeout: 10000ms
+// - Page load timeout: 30000ms
+
+// You can customize:
+cy.get('.slow-element', { timeout: 10000 })
+cy.intercept('GET', '/api/users', { delayMs: 2000 })
+```
+
+**Why This Matters:**
+```typescript
+// Problem solved by auto-wait:
+// - Flaky tests from timing issues
+// - Race conditions between test and app
+// - Need for arbitrary cy.wait(5000) calls
+
+// This is why Cypress is so much more reliable
+// than selenium-based frameworks for testing modern SPAs
+```
+
+### 3. The Command Queue & Execution Model
+
+**The Concept:**
+All Cypress commands are queued and executed sequentially in order.
+
+**Visual Representation:**
+
+```
+User Code:
+cy.visit('/')
+cy.get('.form')
+cy.get('input').type('text')
+cy.get('button').click()
+
+            ↓ (builds queue)
+
+Command Queue (before execution):
+┌─────────────────────────────────┐
+│ 1. Visit /                      │
+│ 2. Get .form                    │
+│ 3. Get input                    │
+│ 4. Type 'text'                  │
+│ 5. Get button                   │
+│ 6. Click                        │
+└─────────────────────────────────┘
+
+            ↓ (executes sequentially)
+
+Execution Timeline:
+Time 0:    Visit / (wait for page load)
+Time 500:  Get .form (element found)
+Time 550:  Get input (element found)
+Time 600:  Type 'text' (type event)
+Time 1200: Get button (element found)
+Time 1250: Click (click event)
+Time 1300: Test complete
+```
+
+**Important Behaviors:**
+
+```typescript
+// 1. Queue building
+cy.get('a')       // Returns Chainable (nothing executed yet)
+  .click()        // Returns Chainable (still nothing executed)
+  .then(/* ... */) // NOW execution starts
+
+// 2. Sequential execution
+cy.get('a').click()       // Executes command 1
+cy.get('b').click()       // Executes command 2 AFTER command 1 completes
+// Result: Consistent, predictable execution order
+
+// 3. No parallel execution
+cy.get('a').click()       // Command 1: Takes 100ms
+cy.get('b').click()       // Command 2: Starts AFTER command 1 (at 100ms)
+// NOT simultaneous
+
+// 4. Continuing queue after .then()
+cy.get('.form')
+  .then(($form) => {
+    console.log('Form found, processing...')
+  })
+cy.get('button').click()  // This still executes AFTER .then()
+// Queue continues
+
+// 5. Breaking the chain with variables
+// ❌ WRONG
+const button = cy.get('button')
+button.click()  // TypeError! button is undefined
+
+// ✅ CORRECT - Stay in chain
+cy.get('button').click()
+
+// ✅ CORRECT - Use .then() to work with element
+cy.get('button').then(($btn) => {
+  const text = $btn.text()
+  console.log(text)
+})
+```
+
+### 4. Cypress vs Selenium Mental Model Differences
+
+**Key Differences:**
+
+```typescript
+// SELENIUM MODEL
+// - Test runs OUTSIDE browser
+// - Cannot access window/document
+// - Communicates via WebDriver protocol
+// - Slower, more overhead
+// - Can't access console errors directly
+// - Cross-browser native support
+
+// CYPRESS MODEL
+// - Test runs INSIDE browser
+// - Has direct access to window/document
+// - No protocol overhead
+// - Faster execution
+// - Full access to console, app state
+// - Chrome-based primarily
+
+// Practical implications:
+
+// Cypress can do this:
+cy.window().then((win) => {
+  // Access window object directly
+  console.log(win.localStorage.getItem('token'))
+  win.myGlobalFunction()
+})
+
+// Selenium would need ugly hacks:
+// driver.execute_script("return window.localStorage.getItem('token')")
+
+// Cypress can inspect console errors:
+cy.on('uncaught:exception', (err) => {
+  console.log('JS Error:', err.message)
+})
+
+// Cypress can set localStorage before navigation:
+cy.visit('/', {
+  onBeforeLoad: (win) => {
+    win.localStorage.setItem('user', JSON.stringify({ id: 1 }))
+  }
+})
+
+// This same-origin approach has trade-offs:
+// ✅ Advantages:
+//   - No timing issues
+//   - Direct DOM access
+//   - Faster execution
+//   - Better debugging
+//
+// ❌ Limitations:
+//   - Can't test cross-domain flows
+//   - Limited multi-tab support
+//   - Browser-specific (Chrome primary)
+```
+
+### 5. Element Location & Selector Strategy
+
+**The Concept:**
+Choosing the right selector is crucial for maintainable tests.
+
+**Selector Hierarchy (Best to Worst):**
+
+```typescript
+// 1. BEST: data-testid (explicit, stable)
+cy.get('[data-testid="submit-btn"]')
+// ✅ Won't break if styles/text/class changes
+// ✅ Clear intent in code
+// ✅ Easy to find in codebase
+
+// 2. GOOD: aria attributes (accessibility)
+cy.get('[aria-label="Close"]')
+cy.get('[role="button"]')
+// ✅ Semantic meaning
+// ✅ Improves accessibility
+// ✅ Stable
+
+// 3. OKAY: Input names/types
+cy.get('input[name="email"]')
+cy.get('button[type="submit"]')
+// ✅ Usually stable
+// ~ May change if form refactored
+
+// 4. WEAK: Classes (often tied to styling)
+cy.get('.primary-button')
+cy.get('.form-wrapper')
+// ~ Often change with CSS refactors
+// ~ Not semantically meaningful
+
+// 5. VERY WEAK: Element selectors only
+cy.get('button')
+cy.get('input')
+// ❌ Too generic, might find wrong element
+// ❌ brittle if DOM changes
+
+// 6. WORST: Index-based selectors
+cy.get('button').eq(2)
+cy.get('li:nth-child(3)')
+// ❌ Breaks if buttons reorder
+// ❌ Very fragile
+
+// Example: Real-world component
+export function LoginForm() {
+  return (
+    <form data-testid="login-form">
+      <input 
+        data-testid="email-input"
+        aria-label="Email address"
+        type="email"
+        name="email"
+        className="form-input form-email"
+      />
+      <button 
+        data-testid="login-button"
+        type="submit"
+        className="btn btn-primary"
+      >
+        Login
+      </button>
+    </form>
+  )
+}
+
+// Test this component
+// ✅ BEST SELECTORS
+cy.get('[data-testid="email-input"]').type('user@test.com')
+cy.get('[data-testid="login-button"]').click()
+
+// ✅ GOOD ALTERNATIVES
+cy.get('input[aria-label="Email address"]').type('user@test.com')
+cy.get('input[name="email"]').type('user@test.com')
+
+// ⚠️ RISKY SELECTORS
+cy.get('input.form-email').type('user@test.com')  // Breaks if CSS changes
+cy.get('form input').type('user@test.com')        // Too generic
+
+// ❌ BAD SELECTORS
+cy.get('input').eq(0)                             // Fragile
+cy.get('button:contains("Login")').click()        // Text-based, breaks with i18n
+```
+
+### 6. Understanding .should() vs .and() vs .then()
+
+**The Concept:**
+Different methods for continuing the chain with different purposes.
+
+```typescript
+// .should() - Assertion (with auto-retry)
+cy.get('button')
+  .should('be.visible')        // Retry until true or timeout
+  .should('be.enabled')        // Another assertion (same element)
+  .should('have.text', 'Save') // Another assertion
+
+// ✅ .should() retries automatically
+// This is key difference from other frameworks!
+
+// .and() - Same as .should()
+cy.get('button')
+  .should('be.visible')
+  .and('be.enabled')           // Identical to .should()
+
+// .then() - Access element (no retry on failure)
+cy.get('button').then(($btn) => {
+  const text = $btn.text()
+  expect(text).to.equal('Save')  // This WILL fail, no retry!
+})
+
+// Comparison
+// ✅ Auto-retries for 4s
+cy.get('button').should('have.text', 'Save')
+
+// ❌ No retry (immediate failure if not found)
+cy.get('button').then(($btn) => {
+  expect($btn.text()).to.equal('Save')
+})
+
+// Best practice: Use .should() for assertions
+cy.get('.loader').should('not.exist')  // Retries
+cy.get('.content').should('be.visible')  // Retries
+
+// Use .then() for complex logic
+cy.get('.items').then(($items) => {
+  const count = $items.length
+  if (count > 0) {
+    cy.wrap($items).first().click()
+  }
+})
+```
+
+### 7. Mocking & Stubbing with cy.intercept()
+
+**The Concept:**
+Intercept network requests and mock responses for testing.
+
+**Why Mock APIs:**
+
+```typescript
+// ❌ WITHOUT MOCKING (bad for tests)
+// - Dependent on real API being up
+// - Tests fail if API is slow
+// - Can't test error scenarios easily
+// - Harder to isolate test failures
+// - May create actual data in database
+
+// ✅ WITH MOCKING (best practice)
+// - Tests independent of backend
+// - Consistent, predictable responses
+// - Easy to test all scenarios
+// - Fast test execution
+// - No side effects
+
+// How mocking works:
+
+// 1. Setup intercept before navigation
+cy.intercept('GET', '/api/users', {
+  statusCode: 200,
+  body: { users: [{ id: 1, name: 'John' }] }
+}).as('getUsers')
+
+// 2. User interacts with app
+cy.visit('/')
+
+// 3. Intercept catches the request
+// (Your app never reaches real server)
+
+// 4. Mock response is returned
+// (App receives mocked data)
+
+// 5. Wait for request
+cy.wait('@getUsers')
+
+// 6. Verify behavior based on mock data
+cy.get('.user-list').should('contain', 'John')
+
+// Pattern matching
+cy.intercept('GET', '/api/users')           // Match exact URL
+cy.intercept('GET', '/api/users/*')         // Wildcard: /api/users/123
+cy.intercept(/api\/users/)                  // Regex: any URL with "api/users"
+cy.intercept('GET', /users|products/)       // Match multiple paths
+```
+
+### 8. Testing Strategy: E2E vs Integration vs Unit
+
+**The Concept:**
+Cypress is best for E2E and integration tests, not unit tests.
+
+```typescript
+// UNIT TESTS (Jest, Vitest)
+// Test: Single function in isolation
+// Example: Calculate discount function
+const calculateDiscount = (price, percentage) => price * (1 - percentage/100)
+expect(calculateDiscount(100, 10)).to.equal(90)
+
+// INTEGRATION TESTS (Cypress or Jest with mocking)
+// Test: Multiple components/services working together
+// Example: Form submission flow with mocked API
+describe('User Registration', () => {
+  it('should register user', () => {
+    cy.visit('/register')
+    cy.get('[data-testid="email"]').type('user@test.com')
+    cy.get('[data-testid="password"]').type('secure123')
+    cy.get('[data-testid="submit"]').click()
+    cy.get('[data-testid="success"]').should('be.visible')
+  })
+})
+
+// E2E TESTS (Cypress with real backend)
+// Test: Full user journey including real API
+// Example: Complete flow from login to purchase
+describe('Purchase Flow', () => {
+  it('should complete purchase', () => {
+    cy.visit('/login')
+    // Real API call
+    cy.get('[data-testid="email"]').type('user@test.com')
+    cy.get('[data-testid="submit"]').click()
+    // App navigates to dashboard (real backend response)
+    cy.url().should('include', '/dashboard')
+    // Navigate to products (real backend)
+    cy.get('[data-testid="products"]').click()
+    cy.get('[data-testid="product-1"]').click()
+    cy.get('[data-testid="add-to-cart"]').click()
+    // Proceed to checkout (real payment processing)
+    cy.get('[data-testid="checkout"]').click()
+    cy.get('[data-testid="confirm"]').click()
+    // Real API processes payment
+    cy.get('[data-testid="confirmation"]').should('be.visible')
+  })
+})
+
+// When to use Cypress:
+// ✅ E2E: Test complete user journeys
+// ✅ Integration: Test features with mocked dependencies
+// ✅ NOT: Unit testing (use Jest instead)
+
+// Cypress test pyramid:
+//
+//     /\
+//    /E2E\         (Few, slow, high value)
+//   /─────\
+//  /Integration\  (More, medium speed, good value)
+// /─────────────\
+// Unit Tests     (Many, fast, low level)  <- Use Jest for this
+```
+
+### 9. Debugging: Time Travel & State Inspection
+
+**The Concept:**
+Cypress provides powerful debugging capabilities built-in.
+
+```typescript
+// Time travel debugging (in UI)
+// Hover over command in test runner → See app state at that point
+// This is unique to Cypress!
+
+// Programmatic debugging
+
+// 1. Screenshot
+cy.get('.element')
+  .screenshot()              // Screenshot at this step
+  .screenshot('element-pic') // Named screenshot
+
+// 2. Video (auto-recorded in headless mode)
+// Configured in cypress.config.ts
+// Automatically saves video of entire test
+
+// 3. Logging to console
+cy.get('.element').then(($el) => {
+  console.log('Element HTML:', $el.html())
+  console.log('Element text:', $el.text())
+  console.log('Element classes:', $el.attr('class'))
+})
+
+// 4. Cy.log() command
+cy.log('User logged in successfully')
+cy.get('.dashboard').then(() => {
+  cy.log('Dashboard loaded')
+})
+
+// 5. Debug mode
+cy.debug()  // Pause execution at this point
+
+// 6. Pause mode (interactive)
+cy.pause()  // Enter interactive pause mode
+
+// 7. Inspect network
+cy.intercept('GET', '/api/data', (req) => {
+  console.log('Request:', req)
+  req.reply((res) => {
+    console.log('Response:', res)
+  })
+})
+
+// 8. Get element details
+cy.get('.element').then(($el) => {
+  cy.log(`
+    Tag: ${$el.prop('tagName')}
+    ID: ${$el.attr('id')}
+    Classes: ${$el.attr('class')}
+    Text: ${$el.text()}
+    Visible: ${$el.is(':visible')}
+    Enabled: ${$el.prop('disabled') ? 'No' : 'Yes'}
+  `)
+})
+
+// Browser DevTools
+// Click "Open DevTools" in test runner
+// Full browser DevTools available just like normal development
+```
+
+### 10. Common Gotchas & Mental Model Fixes
+
+**Key Gotchas:**
+
+```typescript
+// Gotcha 1: Trying to use cy return value
+// ❌ WRONG
+const element = cy.get('.button')
+console.log(element)  // undefined
+element.click()       // TypeError
+
+// ✅ CORRECT
+cy.get('.button').click()
+
+// Gotcha 2: Breaking the chain prematurely
+// ❌ WRONG
+cy.get('.form')
+const form = cy  // ❌ Breaks chain!
+form.get('input').type('text')
+
+// ✅ CORRECT
+cy.get('.form').get('input').type('text')
+
+// Gotcha 3: Arbitrary waits instead of conditions
+// ❌ WRONG
+cy.wait(5000)
+cy.get('.element')
+
+// ✅ CORRECT
+cy.get('.loader').should('not.exist')
+cy.get('.element').should('be.visible')
+
+// Gotcha 4: Not waiting for async operations
+// ❌ WRONG
+cy.visit('/')
+cy.get('.content')  // Might not exist yet!
+
+// ✅ CORRECT
+cy.visit('/')
+cy.get('.content').should('be.visible')  // Waits for it
+
+// Gotcha 5: Incorrect assertion syntax
+// ❌ WRONG
+expect(cy.get('.element')).to.exist  // Doesn't work!
+
+// ✅ CORRECT
+cy.get('.element').should('exist')
+
+// Gotcha 6: Forgetting cy.wait for intercepted requests
+// ❌ WRONG
+cy.intercept('GET', '/api/users', { body: [] })
+cy.visit('/')
+cy.get('.users').click()  // Might click before data loads
+
+// ✅ CORRECT
+cy.intercept('GET', '/api/users', { body: [] }).as('getUsers')
+cy.visit('/')
+cy.wait('@getUsers')
+cy.get('.users').click()
+
+// Gotcha 7: Trying to use regular JS in Cypress
+// ❌ WRONG
+const header = document.querySelector('.header')  // Not reliable!
+
+// ✅ CORRECT
+cy.get('.header').then(($header) => {
+  // Work with $header within Cypress context
+})
+
+// Gotcha 8: Not understanding element lifecycle
+// ❌ WRONG (element might detach from DOM)
+cy.get('button').then(($btn) => {
+  cy.wait(500)
+  $btn.click()  // Might be detached!
+})
+
+// ✅ CORRECT
+cy.get('button').click()  // Cypress handles reattachment
+```
+
+---
+
+## Introduction to Cypress {#introduction}
+
+Cypress is a modern end-to-end testing framework designed for web applications. Unlike Selenium, Cypress runs in the same browser context as the application being tested.
+
+**Key Characteristics:**
+
+```typescript
+// Cypress runs IN the browser
+// Selenium runs OUTSIDE the browser
+// This is the fundamental difference
+
+// Cypress benefits:
+// 1. Real browser, real events
+// 2. Synchronous API (looks like sync, actually async)
+// 3. Built-in waiting and retrying
+// 4. Time travel debugging
+// 5. Screenshots and videos
+// 6. Network request interception
+// 7. Better error messages
+```
+
+**What Cypress is Good For:**
+- End-to-end testing of web applications
+- Integration testing
+- User interaction testing
+- Form validation testing
+- API response testing with mocking
+
+**What Cypress is NOT Good For:**
+- Multi-tab/window testing (limited support)
+- Cross-browser testing (Chromium based primarily)
+- Testing native mobile apps
+- Complex desktop application testing
+
+---
+
+## Installation & Setup {#setup}
+
+### Basic Setup
+
+```bash
+# Install Cypress
+npm install --save-dev cypress
+
+# Open Cypress Test Runner
+npx cypress open
+
+# Run tests in headless mode
+npx cypress run
+
+# Run specific test file
+npx cypress run --spec "cypress/e2e/login.cy.ts"
+
+# Run with specific browser
+npx cypress run --browser chrome
+npx cypress run --browser firefox
+npx cypress run --browser edge
+
+# Run with specific configuration
+npx cypress run --config baseUrl=http://localhost:3000
+```
+
+### Project Structure
+
+```
+project/
+├── cypress/
+│   ├── e2e/                    # End-to-end tests
+│   │   ├── auth.cy.ts
+│   │   ├── dashboard.cy.ts
+│   │   └── payments.cy.ts
+│   ├── support/                # Support files
+│   │   ├── commands.ts         # Custom commands
+│   │   ├── e2e.ts             # Hooks and setup
+│   │   └── helpers.ts         # Utility functions
+│   ├── fixtures/               # Test data
+│   │   ├── users.json
+│   │   └── products.json
+│   ├── downloads/              # Downloaded files
+│   └── videos/                 # Recorded videos (optional)
+├── cypress.config.ts           # Configuration file
+└── package.json
+```
+
+### cypress.config.ts
+
+```typescript
+import { defineConfig } from 'cypress';
+
+export default defineConfig({
+  e2e: {
+    baseUrl: 'http://localhost:3000',
+    
+    // Timeout configurations
+    defaultCommandTimeout: 4000,      // Command timeout
+    requestTimeout: 5000,             // API request timeout
+    responseTimeout: 10000,           // API response timeout
+    execTimeout: 60000,               // Overall test timeout
+    pageLoadTimeout: 30000,           // Page load timeout
+    
+    // Viewport settings
+    viewportWidth: 1280,
+    viewportHeight: 720,
+    
+    // Video and screenshot
+    video: true,                      // Record video
+    videoOnFailOnly: true,            // Only record failed tests
+    screenshotOnRunFailure: true,
+    
+    // Retry failed tests
+    retries: {
+      runMode: 2,                    // Retry 2 times in headless
+      openMode: 0                    // No retry in interactive
+    },
+    
+    // Reporter configuration
+    reporter: 'mochawesome',
+    reporterOptions: {
+      reportDir: 'cypress/reports',
+      overwrite: false
+    },
+    
+    // Browser launch
+    chromeWebSecurity: false,         // Allow cross-origin for testing
+    
+    // Custom settings
+    env: {
+      API_URL: 'http://localhost:4000/api',
+      ADMIN_USER: 'admin@test.com',
+      ADMIN_PASSWORD: 'password123'
+    },
+    
+    // Setup/teardown
+    setupNodeEvents(on, config) {
+      // Setup event listeners
+      // Plugin configuration
+      
+      return config;
+    }
+  }
+});
+```
+
+### Real-World Configuration Example
+
+```typescript
+// cypress.config.ts - Production-ready configuration
+import { defineConfig } from 'cypress';
+
+export default defineConfig({
+  e2e: {
+    baseUrl: process.env.CYPRESS_BASE_URL || 'http://localhost:3000',
+    
+    // Environment-specific settings
+    env: {
+      API_URL: process.env.CYPRESS_API_URL || 'http://localhost:4000/api',
+      ADMIN_USER: 'admin@test.com',
+      ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || 'test-password',
+      LOG_LEVEL: 'debug'
+    },
+    
+    // Performance tuning
+    defaultCommandTimeout: 5000,
+    requestTimeout: 10000,
+    responseTimeout: 15000,
+    pageLoadTimeout: 45000,
+    
+    // Video and reporting
+    video: process.env.CI ? true : false,  // Record in CI only
+    videoOnFailOnly: true,
+    screenshotOnRunFailure: true,
+    
+    // Retry strategy
+    retries: {
+      runMode: process.env.CI ? 2 : 0,    // Retry in CI
+      openMode: 0
+    },
+    
+    setupNodeEvents(on, config) {
+      // Log task
+      on('task', {
+        log(message: string) {
+          console.log('[CYPRESS]:', message);
+          return null;
+        }
+      });
+      
+      // Before run hook
+      on('before:run', (details) => {
+        console.log('Starting with browser:', details.browser.name);
+      });
+      
+      return config;
+    }
+  }
+});
+```
+
+---
+
+## Cypress Architecture {#architecture}
+
+### How Cypress Works
+
+```
+┌────────────────────────────────────────────────────────┐
+│          CYPRESS ARCHITECTURE                          │
+├────────────────────────────────────────────────────────┤
+│                                                         │
+│  1. Test Runner (Node Process)                        │
+│     └─ Manages test execution                         │
+│     └─ Communicates with Browser                      │
+│     └─ Handles assertions and waits                   │
+│                                                         │
+│  2. Application Under Test (Browser)                  │
+│     └─ Runs your actual web app                       │
+│     └─ Same origin as Cypress                         │
+│     └─ Direct access to DOM, console, etc.           │
+│                                                         │
+│  3. Network Layer                                      │
+│     └─ Intercepts HTTP requests                       │
+│     └─ Can mock responses                             │
+│     └─ Records all network activity                   │
+│                                                         │
+│  4. Command Queue                                      │
+│     └─ Commands queued but not executed               │
+│     └─ Executed sequentially                          │
+│     └─ With automatic waiting and retrying            │
+│                                                         │
+└────────────────────────────────────────────────────────┘
+```
+
+### Architecture in Action: Real Example
+
+**Scenario: User login test**
+
+```typescript
+// Test code
+describe('User Login', () => {
+  it('should log in successfully', () => {
+    cy.visit('http://localhost:3000/login')  // Command 1: Navigate
+    cy.get('[data-testid="email"]')          // Command 2: Find element
+      .type('user@test.com')                 // Command 3: Type text
+    cy.get('[data-testid="password"]')      // Command 4: Find element
+      .type('password123')                   // Command 5: Type text
+    cy.get('[data-testid="submit"]')        // Command 6: Find element
+      .click()                               // Command 7: Click
+    cy.url().should('include', '/dashboard') // Command 8: Assert URL
+  })
+})
+
+// EXECUTION TIMELINE
+┌────────────────────────────────────────────────────────┐
+│ Time 0ms: Navigate to /login                           │
+│  - Browser shows login page                            │
+│  - Waits for page load (up to 30s)                     │
+│                                                         │
+│ Time 500ms: Page loaded, find email input              │
+│  - Element found (or retry until 4s timeout)           │
+│  - Auto-wait handles element appearing dynamically     │
+│                                                         │
+│ Time 550ms: Type email                                 │
+│  - Sends 'u', 'se', 'r@', etc (realistic typing)       │
+│                                                         │
+│ Time 1500ms: Find password input                       │
+│  - Element found                                       │
+│                                                         │
+│ Time 1550ms: Type password                             │
+│  - Sends password characters                           │
+│                                                         │
+│ Time 2500ms: Find submit button                        │
+│  - Element found                                       │
+│                                                         │
+│ Time 2550ms: Click submit                              │
+│  - Browser sends login request                         │
+│  - Cypress intercepts network call (if mocked)         │
+│  - App processes login                                 │
+│                                                         │
+│ Time 3000ms: Assert URL                                │
+│  - Check URL includes '/dashboard'                     │
+│  - If not yet, auto-wait and retry                     │
+│                                                         │
+│ Time 3200ms: Test complete ✅                           │
+└────────────────────────────────────────────────────────┘
+
+// Why this architecture is powerful:
+// 1. Same origin: Direct DOM access, no protocol overhead
+// 2. Sequential: Predictable execution order
+// 3. Auto-wait: No artificial delays needed
+// 4. Debuggable: Hover commands in test runner to see state
+// 5. Reliable: Automatic retry eliminates flaky tests
+```
+
+### Command Execution Flow
+
+```typescript
+// Commands are QUEUED not executed immediately
+
+cy.visit('http://localhost:3000')    // Queued
+cy.get('.login-form')                // Queued
+  .find('input[name="email"]')       // Queued
+  .type('user@test.com')             // Queued
+cy.get('button[type="submit"]')      // Queued
+  .click()                           // Queued
+
+// THEN execution starts sequentially
+// With automatic retrying and waiting
+
+// This is why you can't do:
+const element = cy.get('.my-element');  // ❌ Returns undefined
+console.log(element);                   // undefined!
+
+// Instead use:
+cy.get('.my-element').then(($el) => {   // ✅ Correct
+  console.log($el.text());
+});
+```
+
+---
+
+## Selectors & Element Location {#selectors}
+
+### Finding Elements
+
+```typescript
+// Single element selectors
+cy.get('.submit-button')                  // By class
+cy.get('#email-input')                    // By ID
+cy.get('input[type="email"]')            // By attribute
+cy.get('form input:first-child')         // CSS pseudo-selectors
+
+// Multiple ways to find the same element
+cy.get('[data-testid="login-btn"]')      // ✅ Test ID (recommended)
+cy.get('button:contains("Login")')       // Text content
+cy.get('button.primary')                 // Class
+cy.get('#login-button')                  // ID
+
+// Contextual searching
+cy.get('form')
+  .find('input')                         // Only inputs in this form
+  .eq(0)                                 // First input
+
+// Traversing DOM
+cy.get('button').parent()                // Parent element
+cy.get('li').siblings()                  // All siblings
+cy.get('.header').next()                 // Next sibling
+cy.get('.footer').prev()                 // Previous sibling
+cy.get('tr').closest('table')            // Closest ancestor
+
+// Contains text
+cy.contains('Login')                     // Any element containing "Login"
+cy.contains('button', 'Click Me')        // Button containing "Click Me"
+
+// By label (form elements)
+cy.get('label').contains('Email').parent().find('input')  // ❌ Fragile
+cy.contains('label', 'Email').parent().find('input')      // ❌ Still fragile
+// ✅ Better approach:
+cy.get('input[aria-label="Email"]')
+
+// Best practices for selectors
+// 1. Use data-testid
+// 2. Use aria-label for accessibility
+// 3. Use semantic HTML
+// 4. Avoid index-based selectors (.eq(), :nth-child)
+// 5. Avoid class names tied to styling
+```
+
+### Test ID Strategy (Recommended)
+
+```typescript
+// In your React component
+export function LoginForm() {
+  return (
+    <form>
+      <input data-testid="email-input" type="email" />
+      <input data-testid="password-input" type="password" />
+      <button data-testid="login-button">Login</button>
+    </form>
+  );
+}
+
+// In your Cypress tests
+cy.get('[data-testid="email-input"]').type('user@test.com');
+cy.get('[data-testid="password-input"]').type('password123');
+cy.get('[data-testid="login-button"]').click();
+
+// Or create custom command
+cy.getByTestId('email-input').type('user@test.com');
+```
+
+### Real-World Selector Examples
+
+**Scenario: E-commerce Product Page**
+
+```typescript
+// Product component with multiple elements
+export function ProductCard({ product }) {
+  return (
+    <div className="product-card" data-testid={`product-${product.id}`}>
+      <img 
+        src={product.image} 
+        alt={product.name}
+        data-testid={`product-image-${product.id}`}
+      />
+      <h2 data-testid={`product-name-${product.id}`}>
+        {product.name}
+      </h2>
+      <p data-testid={`product-price-${product.id}`}>
+        ${product.price}
+      </p>
+      <div className="rating" data-testid={`product-rating-${product.id}`}>
+        ⭐ {product.rating}
+      </div>
+      <button 
+        data-testid={`add-to-cart-${product.id}`}
+        className="btn btn-primary"
+      >
+        Add to Cart
+      </button>
+      <button 
+        data-testid={`favorite-${product.id}`}
+        className="btn btn-outline"
+      >
+        ♥ Favorite
+      </button>
+    </div>
+  )
+}
+
+// Test with proper selectors
+describe('Product Card Interactions', () => {
+  beforeEach(() => {
+    cy.visit('/products')
+  })
+
+  it('should display product information', () => {
+    // ✅ Using data-testid (best)
+    cy.get('[data-testid="product-1"]').should('be.visible')
+    cy.get('[data-testid="product-name-1"]').should('have.text', 'Laptop')
+    cy.get('[data-testid="product-price-1"]').should('have.text', '$999')
+    cy.get('[data-testid="product-rating-1"]').should('contain', '4.5')
+  })
+
+  it('should add product to cart', () => {
+    // Dynamic testid based on product ID
+    const productId = 1
+    cy.get(`[data-testid="add-to-cart-${productId}"]`)
+      .click()
+    
+    // Verify cart updated
+    cy.get('[data-testid="cart-count"]')
+      .should('have.text', '1')
+  })
+
+  it('should toggle favorite status', () => {
+    cy.get('[data-testid="favorite-1"]')
+      .click()
+    
+    // Check if filled (different state)
+    cy.get('[data-testid="favorite-1"]')
+      .should('have.class', 'is-favorite')
+  })
+
+  it('should handle multiple products', () => {
+    // Loop through products
+    [1, 2, 3].forEach((productId) => {
+      cy.get(`[data-testid="product-${productId}"]`)
+        .should('be.visible')
+      
+      // Add each to cart
+      cy.get(`[data-testid="add-to-cart-${productId}"]`)
+        .click()
+    })
+    
+    // Verify all added
+    cy.get('[data-testid="cart-count"]')
+      .should('have.text', '3')
+  })
+})
+
+// ⚠️ Selector anti-patterns (what to avoid)
+describe('Product Card - BAD SELECTORS', () => {
+  it('should avoid generic selectors', () => {
+    // ❌ Too generic, might find wrong button
+    cy.get('button').click()  // Which button?
+    
+    // ❌ Text-based, breaks with i18n or text changes
+    cy.contains('Add to Cart').click()
+    
+    // ❌ Class-based, breaks if styling changes
+    cy.get('.btn-primary').click()
+    
+    // ❌ Index-based, breaks if product order changes
+    cy.get('.product-card').eq(0).find('button').click()
+    
+    // ❌ Deep DOM traversal, breaks if HTML structure changes
+    cy.get('.container > div > div > button').click()
+  })
+})
+```
+
+---
+
+## Commands & Queries {#commands}
+
+### Theory: The Chainable Pattern
+
+**Fundamental Concept:**
+Cypress uses a chainable API where every command returns a Chainable object. This enables fluent syntax and automatic command queuing.
+
+```typescript
+// BASIC THEORY
+// When you write cy.get('button'), here's what actually happens:
+
+cy.get('button')           // Returns: Chainable<JQuery<HTMLElement>>
+  .click()                 // Returns: Chainable<Subject>
+  .should('be.visible')    // Returns: Chainable<Subject>
+
+// The return value is NOT the element itself
+// The return value is a Chainable object that represents the operation
+// Cypress executes all operations sequentially after the chain completes
+
+// ADVANCED THEORY
+// The Chainable pattern enables:
+
+// 1. DEFERRED EXECUTION
+// Commands are queued, not executed immediately
+cy.get('button')      // Queued
+cy.get('button2')     // Queued after first
+cy.get('button3')     // Queued after second
+// Now execution begins, sequentially
+
+// 2. AUTOMATIC WAITING
+// Each command waits for conditions before proceeding
+cy.get('button')                    // Wait up to 4s for button
+  .should('be.enabled')             // Wait for enabled state
+  .should('have.text', 'Click Me')  // Wait for correct text
+
+// 3. AUTOMATIC RETRYING
+// Failed commands retry until timeout
+cy.get('.dynamic-element')  // Not found yet, retry every 50ms
+                            // Retrying... still not found...
+                            // Found! Proceed
+                            // Success after 2 seconds
+
+// KEY POINTS:
+// ✓ Sequential execution guarantees order
+// ✓ Automatic waiting eliminates race conditions
+// ✓ Automatic retrying eliminates flaky tests
+// ✓ No arbitrary cy.wait(1000) calls needed
+```
+
+### Theory: Subject & Context
+
+**BASIC:**
+```typescript
+// Subject is the result of the previous command
+cy.get('.box')                    // Subject: jQuery element
+  .find('.button')                // Subject: nested element found by find
+  .click()                        // Subject: same element after click
+  .parent()                        // Subject: parent element
+
+// Context flows through the chain
+```
+
+**ADVANCED:**
+```typescript
+// How subject transforms through chain
+cy.get('.form')                   // Subject: <form> element
+  .find('input')                  // Subject: all <input> elements
+  .first()                        // Subject: first <input> element
+  .type('text')                   // Subject: same input after typing
+  .parent()                       // Subject: parent of that input
+  .siblings()                     // Subject: all siblings
+
+// Understanding subject is key to:
+// 1. Predicting what gets acted upon
+// 2. Chaining commands correctly
+// 3. Debugging test failures
+
+// KEY POINTS:
+// ✓ Each command transforms subject
+// ✓ Some commands change subject (find, filter, parent)
+// ✓ Some commands keep subject (click, type, focus)
+// ✓ Understanding subject flow = master selector chains
+```
+
+### Navigation Commands
+
+```typescript
+// Visit URL
+cy.visit('http://localhost:3000')
+cy.visit('/dashboard')                    // Relative URL
+cy.visit('/login', {
+  onBeforeLoad: (win) => {
+    // Execute before page loads
+    win.localStorage.setItem('token', 'xyz');
+  },
+  onLoad: (win) => {
+    // Execute after page loads
+    console.log('Page loaded');
+  }
+})
+
+// Go back/forward
+cy.go('back')                             // Go back
+cy.go('forward')                          // Go forward
+cy.go(-1)                                 // Go back 1 page
+
+// Reload
+cy.reload()
+cy.reload(true)                           // Force reload (bypass cache)
+```
+
+### Real-World Navigation Examples
+
+**Example 1: Pre-populate state before navigation**
+
+```typescript
+// Scenario: Test dashboard when already logged in
+// Instead of: Login → navigate to dashboard
+// Do: Set token → navigate to dashboard (faster!)
+
+describe('Dashboard Navigation', () => {
+  it('should display user dashboard with pre-set auth', () => {
+    cy.visit('/', {
+      onBeforeLoad: (win) => {
+        // Set auth token before page loads
+        const mockToken = 'eyJhbGciOiJIUzI1NiIs...'
+        win.localStorage.setItem('auth_token', mockToken)
+        
+        // Set user data
+        win.localStorage.setItem('user', JSON.stringify({
+          id: 1,
+          name: 'John Doe',
+          email: 'john@test.com',
+          role: 'admin'
+        }))
+        
+        // Mock JWT if needed
+        win.sessionStorage.setItem('session_id', 'session_123')
+      },
+      onLoad: (win) => {
+        // Execute after page loads
+        console.log('Dashboard loaded for:', win.localStorage.getItem('user'))
+      }
+    })
+    
+    // Verify we're on dashboard
+    cy.url().should('include', '/dashboard')
+    cy.get('[data-testid="welcome-message"]')
+      .should('contain', 'Welcome, John Doe')
+    
+    // Verify auth was used
+    cy.get('[data-testid="user-menu"]')
+      .should('contain', 'John Doe')
+  })
+})
+
+// Benefits:
+// ✅ Faster: Skip entire login flow
+// ✅ Focused: Test only dashboard functionality
+// ✅ Isolated: Each test independent
+```
+
+**Example 2: Navigate with URL parameters**
+
+```typescript
+describe('User Profile Navigation', () => {
+  it('should display specific user profile', () => {
+    const userId = 123
+    
+    // Navigate to user profile
+    cy.visit(`/users/${userId}`)
+    
+    // Verify URL structure
+    cy.url().should('include', `/users/${userId}`)
+    
+    // Verify profile loaded
+    cy.get('[data-testid="profile-header"]')
+      .should('be.visible')
+  })
+  
+  it('should handle pagination navigation', () => {
+    // Visit with query parameters
+    cy.visit('/products?page=1&category=electronics&sort=price')
+    
+    // Verify query params
+    cy.url().should('include', 'page=1')
+    cy.url().should('include', 'category=electronics')
+    
+    // Click next page
+    cy.get('[data-testid="next-page"]').click()
+    
+    // Verify URL updated
+    cy.url().should('include', 'page=2')
+  })
+})
+```
+
+**Example 3: Browser history navigation**
+
+```typescript
+describe('Browser History', () => {
+  it('should navigate back through history', () => {
+    // Start on home
+    cy.visit('/')
+    cy.get('h1').should('have.text', 'Home')
+    
+    // Navigate to products
+    cy.get('[data-testid="products-link"]').click()
+    cy.url().should('include', '/products')
+    cy.get('h1').should('have.text', 'Products')
+    
+    // Navigate to specific product
+    cy.get('[data-testid="product-1"]').click()
+    cy.url().should('include', '/products/1')
+    cy.get('h1').should('have.text', 'Product Details')
+    
+    // Go back
+    cy.go('back')
+    cy.url().should('include', '/products')
+    cy.get('h1').should('have.text', 'Products')
+    
+    // Go back again
+    cy.go('back')
+    cy.url().should('equal', 'http://localhost:3000/')
+    cy.get('h1').should('have.text', 'Home')
+    
+    // Go forward
+    cy.go('forward')
+    cy.url().should('include', '/products')
+  })
+})
+```
+
+### Interaction Commands
+
+```typescript
+// Clicking
+cy.get('button').click()
+cy.get('button').click({ force: true })  // Force click even if hidden
+cy.get('button').click(10, 10)            // Click at coordinates
+
+// Double click
+cy.get('button').dblclick()
+
+// Right click (context menu)
+cy.get('button').rightclick()
+
+// Typing
+cy.get('input').type('Hello World')
+cy.get('input').type('Hello{enter}')      // Type with special keys
+cy.get('input').type('{selectAll}{backspace}')  // Clear and type
+cy.get('input').type('text', { delay: 100 })    // Type with delay
+
+// Clear input
+cy.get('input').clear()
+
+// Scrolling
+cy.get('.element').scrollIntoView()       // Scroll element into view
+cy.scrollTo(0, 500)                       // Scroll to coordinates
+cy.scrollTo('bottom')
+cy.scrollTo('right')
+
+// Focus and blur
+cy.get('input').focus()
+cy.get('input').blur()
+
+// Trigger events
+cy.get('input').trigger('input', { bubbles: true })
+cy.get('form').trigger('submit')
+```
+
+### Real-World Interaction Examples
+
+**Example 1: Complex form interactions**
+
+```typescript
+describe('Advanced Form Interactions', () => {
+  beforeEach(() => {
+    cy.visit('/checkout')
+  })
+
+  it('should complete multi-step checkout form', () => {
+    // Step 1: Billing address
+    cy.get('[data-testid="shipping-address"]')
+      .type('123 Main St', { delay: 50 })  // Type slowly for realism
+    
+    cy.get('[data-testid="city"]')
+      .type('New York')
+    
+    cy.get('[data-testid="zip"]')
+      .type('10001')
+    
+    // Step 2: Select payment method
+    cy.get('[data-testid="payment-method-credit"]')
+      .click()
+    
+    cy.get('[data-testid="card-number"]')
+      .type('4111111111111111')
+    
+    // Step 3: Review and submit
+    cy.get('[data-testid="review-button"]')
+      .scrollIntoView()  // Scroll to button if below fold
+      .click()
+    
+    // Verify confirmation
+    cy.get('[data-testid="confirmation-number"]')
+      .should('be.visible')
+      .invoke('text')  // Get the confirmation number
+      .then((confirmationNum) => {
+        expect(confirmationNum).to.match(/^[A-Z0-9]{10}$/)
+      })
+  })
+
+  it('should validate before submission', () => {
+    // Try to submit empty form
+    cy.get('[data-testid="submit-btn"]').click()
+    
+    // Check for validation messages
+    cy.get('[data-testid="shipping-error"]')
+      .should('contain', 'Required')
+    cy.get('[data-testid="city-error"]')
+      .should('contain', 'Required')
+  })
+
+  it('should allow editing before final submission', () => {
+    // Fill form
+    cy.get('[data-testid="shipping-address"]').type('123 Main St')
+    cy.get('[data-testid="city"]').type('New York')
+    
+    // Click edit button
+    cy.get('[data-testid="edit-btn"]').click()
+    
+    // Clear and retype
+    cy.get('[data-testid="shipping-address"]')
+      .clear()
+      .type('456 Oak Ave')
+    
+    // Verify update
+    cy.get('[data-testid="display-address"]')
+      .should('have.text', '456 Oak Ave')
+  })
+})
+```
+
+**Example 2: Dynamic content interactions**
+
+```typescript
+describe('Dynamic List Interactions', () => {
+  it('should interact with dynamically added elements', () => {
+    cy.visit('/todo-app')
+    
+    // Add items
+    cy.get('[data-testid="todo-input"]')
+      .type('Buy groceries{enter}')
+    
+    cy.get('[data-testid="todo-input"]')
+      .type('Walk dog{enter}')
+    
+    // Verify items added
+    cy.get('[data-testid="todo-item"]')
+      .should('have.length', 2)
+    
+    // Mark first item complete
+    cy.get('[data-testid="todo-item"]')
+      .first()
+      .find('[data-testid="todo-checkbox"]')
+      .click()
+    
+    // Verify styling changed
+    cy.get('[data-testid="todo-item"]')
+      .first()
+      .should('have.class', 'completed')
+    
+    // Delete second item
+    cy.get('[data-testid="todo-item"]')
+      .last()
+      .find('[data-testid="delete-btn"]')
+      .click()
+    
+    // Verify deleted
+    cy.get('[data-testid="todo-item"]')
+      .should('have.length', 1)
+  })
+})
+```
+
+**Example 3: Scroll and hover interactions**
+
+```typescript
+describe('Scroll and Hover', () => {
+  it('should scroll to element and interact', () => {
+    cy.visit('/long-page')
+    
+    // Element not visible yet
+    cy.get('[data-testid="bottom-button"]').should('not.be.visible')
+    
+    // Scroll to element
+    cy.get('[data-testid="bottom-button"]')
+      .scrollIntoView()
+      .should('be.visible')
+      .click()
+    
+    // Verify action
+    cy.get('[data-testid="success-message"]')
+      .should('contain', 'Action successful')
+  })
+
+  it('should trigger hover effects', () => {
+    cy.visit('/interactive-menu')
+    
+    // Hover over menu item
+    cy.get('[data-testid="menu-item"]')
+      .first()
+      .trigger('mouseover')
+    
+    // Verify submenu appears
+    cy.get('[data-testid="submenu"]')
+      .should('be.visible')
+    
+    // Click submenu item
+    cy.get('[data-testid="submenu-item"]')
+      .click()
+    
+    // Verify navigation
+    cy.url().should('include', '/submenu-page')
+  })
+})
+```
+
+### Query Commands
+
+```typescript
+// Check if element exists
+cy.get('.modal', { timeout: 1000 })      // Wait up to 1 second
+cy.get('.modal').should('exist')
+
+// Check visibility
+cy.get('.hidden').should('not.be.visible')
+
+// Get element count
+cy.get('li').should('have.length', 5)
+
+// Get element properties
+cy.get('input').should('have.value', 'text')
+cy.get('button').should('have.text', 'Click Me')
+
+// Wait for element
+cy.get('.loader').should('not.exist')    // Wait for loader to disappear
+cy.get('.success').should('be.visible')  // Wait for success message
+
+// Then/pipe for processing
+cy.get('input').then(($input) => {
+  const value = $input.val();
+  expect(value).to.equal('expected');
+});
+
+// Each iteration
+cy.get('li').each(($li, index) => {
+  expect($li).to.contain('Item ' + (index + 1));
+});
+```
+
+### Waiting Commands
+
+```typescript
+// Default: Cypress auto-waits (4 seconds default)
+cy.get('.element')                       // Waits up to 4s
+
+// Explicit wait for element
+cy.get('.loader').should('not.exist')    // Waits for loader to disappear
+
+// Wait for API response (intercept)
+cy.intercept('GET', '/api/users').as('getUsers')
+cy.visit('/')
+cy.wait('@getUsers')                     // Wait for request to complete
+
+// Wait for specific time (avoid if possible)
+cy.wait(1000)                            // Wait 1 second (use sparingly)
+
+// Wait for condition
+cy.get('.count').should('have.text', '5')
+
+// Wait for multiple requests
+cy.intercept('GET', '/api/users').as('getUsers')
+cy.intercept('GET', '/api/settings').as('getSettings')
+cy.visit('/')
+cy.wait(['@getUsers', '@getSettings'])
+```
+
+### Theory of Synchronization
+
+**BASIC THEORY:**
+```typescript
+// Problem without auto-wait:
+// Test sends click → button not clickable → ERROR
+// You manually: cy.wait(1000) → click → might still fail
+
+// Solution with Cypress auto-wait:
+// Test sends click → button not clickable yet → automatically retry
+// Button becomes clickable → click succeeds
+// No arbitrary waits needed
+
+// Default: Cypress auto-waits (4 seconds default)
+cy.get('.element')                       // Waits up to 4s
+cy.get('.element').click()               // Waits for clickability
+cy.get('.element').should('be.visible')  // Waits for visibility
+```
+
+**ADVANCED THEORY:**
+```typescript
+// Understanding the retry mechanism:
+
+// Every 50ms, Cypress:
+// 1. Tries to find element
+// 2. Checks if conditions met
+// 3. If not, tries again
+// 4. Continues for 4 seconds (default)
+// 5. If still not ready: FAIL with clear error
+
+// This is why tests are SO reliable
+// Timing issues don't cause flakiness
+
+// Explicit wait for API response
+cy.intercept('GET', '/api/users').as('getUsers')
+cy.visit('/')
+cy.wait('@getUsers')                     // Wait for request to complete
+
+// Wait for multiple requests
+cy.intercept('GET', '/api/users').as('getUsers')
+cy.intercept('GET', '/api/settings').as('getSettings')
+cy.visit('/')
+cy.wait(['@getUsers', '@getSettings'])   // Wait for both
+
+// Why NOT to use arbitrary waits:
+// ❌ cy.wait(1000) - may be too short or too long
+// ❌ Causes flaky tests - timing dependent
+// ❌ Makes tests slower - waiting unnecessarily
+// ✅ cy.get('.element').should('exist') - auto-waits, reliable
+
+// KEY POINTS:
+// ✓ Auto-wait is default behavior
+// ✓ Retry every 50ms for up to 4s
+// ✓ Use .should() for implicit waits
+// ✓ Use cy.wait() only for intercepted requests
+// ✓ Avoid arbitrary cy.wait(1000) calls
+```
+
+---
+
+## Assertions & Expectations {#assertions}
+
+### Theory: Why Assertions Matter
+
+**BASIC CONCEPT:**
+Assertions are statements that verify expected behavior. Without assertions, tests just execute actions without verifying results.
+
+```typescript
+// ❌ BAD: No assertion (test passes even if wrong)
+cy.get('[data-testid="email-input"]').type('user@test.com')
+cy.get('[data-testid="submit"]').click()
+// Test ends here. Did anything verify the result? No!
+
+// ✅ GOOD: With assertion (test fails if expectation not met)
+cy.get('[data-testid="email-input"]').type('user@test.com')
+cy.get('[data-testid="submit"]').click()
+cy.url().should('include', '/dashboard')  // Verifies we logged in
+cy.get('[data-testid="welcome"]').should('contain', 'Welcome')
+```
+
+**ADVANCED THEORY:**
+```typescript
+// Types of assertions:
+
+// 1. IMPLICIT ASSERTIONS (with auto-wait)
+// These automatically retry for up to 4 seconds
+cy.get('button').should('be.visible')     // Waits for visibility
+cy.get('button').should('be.enabled')     // Waits for enabled state
+cy.get('button').should('exist')          // Waits for element to exist
+
+// Benefits of implicit:
+// ✓ Auto-retry if condition not met yet
+// ✓ Eliminates flaky tests from timing
+// ✓ Clear error messages on failure
+
+// 2. EXPLICIT ASSERTIONS (in .then)
+// These execute immediately, no retry
+cy.get('button').then(($btn) => {
+  expect($btn).to.be.visible()            // No retry!
+})
+
+// Why this matters:
+// Element might become invisible between check and assertion
+// Should use implicit .should() instead
+
+// KEY PRINCIPLE:
+// Use .should() for all assertions
+// Use .then() only for complex logic, not assertions
+```
+
+### Common Assertions with Explanations
+
+```typescript
+// VISIBILITY ASSERTIONS
+// Basic: Element visible on screen
+cy.get('.element').should('be.visible')
+
+// Advanced: Understanding visibility
+// Element is visible if:
+// 1. It exists in DOM
+// 2. Display is not 'none'
+// 3. Visibility is not 'hidden'
+// 4. Parent elements not hidden
+// 5. Element not 0 width/height
+// 6. Element within viewport (usually)
+
+// Not visible check
+cy.get('.hidden').should('not.be.visible')
+// ✓ Used when element removed from view
+// ✓ Different from cy.get().should('not.exist')
+
+// TEXT ASSERTIONS
+// Exact match
+cy.get('h1').should('have.text', 'Welcome')
+// ✓ Must be exactly 'Welcome', no extra whitespace
+
+// Partial match (contains)
+cy.get('h1').should('contain.text', 'Welcome')
+// ✓ Can have other text too, just must contain 'Welcome'
+// ✓ Useful for: 'Welcome, John Doe'
+
+// VALUE ASSERTIONS (inputs)
+cy.get('input').should('have.value', 'john@test.com')
+// ✓ Gets the current value of form element
+// ✓ Works for input, textarea, select
+
+// CLASS ASSERTIONS
+cy.get('button').should('have.class', 'active')
+// ✓ Verifies element has the class
+// ✓ Useful for: styling states, disabled states
+
+cy.get('button').should('not.have.class', 'disabled')
+// ✓ Verifies element does NOT have class
+
+// ATTRIBUTE ASSERTIONS
+cy.get('a').should('have.attr', 'href', '/dashboard')
+// ✓ Verifies attribute exists and has value
+
+cy.get('img').should('have.attr', 'alt', 'logo')
+// ✓ Accessibility check: images have alt text
+
+// COUNT ASSERTIONS
+cy.get('li').should('have.length', 5)
+// ✓ Verifies exact number of elements
+
+cy.get('li').should('have.length.greaterThan', 3)
+cy.get('li').should('have.length.lessThan', 10)
+// ✓ Range checks for counts
+
+// ENABLED/DISABLED
+cy.get('button').should('be.enabled')
+// ✓ Verifies button is clickable
+
+cy.get('button').should('be.disabled')
+// ✓ Verifies button cannot be clicked
+// ✓ Useful for: form validation, permission checks
+
+// CHECKED STATE (checkboxes/radio)
+cy.get('input[type="checkbox"]').should('be.checked')
+// ✓ Verifies checkbox is selected
+
+cy.get('input[type="checkbox"]').should('not.be.checked')
+// ✓ Verifies checkbox not selected
+
+// CSS PROPERTIES
+cy.get('.box').should('have.css', 'background-color', 'rgb(255, 0, 0)')
+// ✓ Verifies computed CSS property
+// ✓ Useful for: color checks, layout verification
+
+cy.get('.box').should('have.css', 'display', 'flex')
+// ✓ Verifies element uses flexbox
+
+// FOCUS
+cy.get('input').should('have.focus')
+// ✓ Verifies element has focus
+// ✓ Useful for: accessibility, tab order testing
+```
+
+### Advanced Assertions - Custom Logic
+
+```typescript
+// Multiple assertions on same subject
+cy.get('button')
+  .should('be.visible')
+  .should('be.enabled')
+  .should('have.text', 'Submit')
+// Each assertion applies to same element
+
+// OR condition
+cy.get('element').should(($el) => {
+  expect($el).to.satisfy(($el: any) => {
+    return $el.text() === 'Option 1' || $el.text() === 'Option 2';
+  });
+});
+
+// Custom function assertion
+cy.get('.items').should(($items) => {
+  const count = $items.length;
+  expect(count).to.be.greaterThan(0);
+  expect(count).to.be.lessThan(100);
+});
+// ✓ Multiple checks on same element
+// ✓ With automatic retry
+```
+
+```typescript
+// Element existence
+cy.get('.element').should('exist')
+cy.get('.element').should('not.exist')
+
+// Visibility
+cy.get('.visible').should('be.visible')
+cy.get('.hidden').should('not.be.visible')
+cy.get('.hidden').should('have.css', 'display', 'none')
+
+// Text content
+cy.get('h1').should('have.text', 'Welcome')
+cy.get('h1').should('contain.text', 'Welcome')        // Partial match
+cy.get('button').should('have.text', '')              // Empty text
+
+// Input values
+cy.get('input').should('have.value', 'john@test.com')
+cy.get('input').should('have.attr', 'type', 'email')
+
+// Classes
+cy.get('button').should('have.class', 'active')
+cy.get('button').should('not.have.class', 'disabled')
+
+// Attributes
+cy.get('a').should('have.attr', 'href', '/dashboard')
+cy.get('img').should('have.attr', 'alt', 'logo')
+
+// Count
+cy.get('li').should('have.length', 5)
+cy.get('li').should('have.length.greaterThan', 3)
+cy.get('li').should('have.length.lessThan', 10)
+
+// CSS properties
+cy.get('.box').should('have.css', 'background-color', 'rgb(255, 0, 0)')
+cy.get('.box').should('have.css', 'display', 'flex')
+
+// Enabled/Disabled
+cy.get('button').should('be.enabled')
+cy.get('button').should('be.disabled')
+
+// Checked state
+cy.get('input[type="checkbox"]').should('be.checked')
+cy.get('input[type="checkbox"]').should('not.be.checked')
+
+// Focus
+cy.get('input').should('have.focus')
+```
+
+### Advanced Assertions
+
+```typescript
+// Multiple assertions
+cy.get('button')
+  .should('be.visible')
+  .should('be.enabled')
+  .should('have.text', 'Submit')
+
+// OR condition
+cy.get('element').should(($el) => {
+  expect($el).to.satisfy(($el: any) => {
+    return $el.text() === 'Option 1' || $el.text() === 'Option 2';
+  });
+});
+
+// Custom function assertion
+cy.get('.items').should(($items) => {
+  const count = $items.length;
+  expect(count).to.be.greaterThan(0);
+  expect(count).to.be.lessThan(100);
+});
+
+// Array/Object assertions
+const users = [{ id: 1, name: 'John' }];
+expect(users).to.have.length(1);
+expect(users[0]).to.deep.equal({ id: 1, name: 'John' });
+
+// Throw error assertion
+const throwError = () => {
+  throw new Error('Something went wrong');
+};
+expect(throwError).to.throw('Something went wrong');
+```
+
+---
+
+## Working with Forms {#forms}
+
+### Theory: Form Testing Strategy
+
+**BASIC THEORY:**
+```typescript
+// Form testing is about verifying:
+// 1. User can interact with form elements
+// 2. Form validates input correctly
+// 3. Form submits successfully
+// 4. Success/error messages appear
+
+// Common form element types:
+// 1. Text input - .type()
+// 2. Textarea - .type()
+// 3. Dropdown select - .select()
+// 4. Radio button - .click()
+// 5. Checkbox - .click()
+// 6. File input - .selectFile()
+// 7. Date input - .type() or .invoke('val')
+```
+
+**ADVANCED THEORY - Form Validation:**
+```typescript
+// Validation testing strategies:
+
+// STRATEGY 1: Validate on blur (field-level validation)
+// User types → moves to next field → validation triggers
+cy.get('[data-testid="email"]')
+  .type('invalid-email')  // Type invalid
+  .blur()                 // Move focus away
+  .parent()               // Move to error container
+  .get('[data-testid="email-error"]')
+  .should('contain', 'Invalid email')
+
+// STRATEGY 2: Validate on submit (form-level validation)
+// User submits → all fields validated at once
+cy.get('[data-testid="submit"]').click()
+cy.get('[data-testid="email-error"]').should('be.visible')
+cy.get('[data-testid="password-error"]').should('be.visible')
+
+// STRATEGY 3: Validate on change (real-time validation)
+// User types → validation happens live
+cy.get('[data-testid="username"]')
+  .type('ab')  // Type too short
+cy.get('[data-testid="username-error"]')
+  .should('contain', 'Minimum 3 characters')
+
+cy.get('[data-testid="username"]')
+  .type('cd')  // Now 4 chars
+cy.get('[data-testid="username-error"]')
+  .should('not.exist')  // Error gone
+```
+
+**ADVANCED THEORY - Form State Management:**
+```typescript
+// Form states to test:
+// 1. PRISTINE - user hasn't touched form yet
+// 2. DIRTY - user has made changes
+// 3. TOUCHED - user has blurred field
+// 4. INVALID - form fails validation
+// 5. SUBMITTING - form is being submitted
+// 6. SUBMITTED - form was successfully submitted
+
+// Each state affects button behavior:
+cy.get('[data-testid="form"]').then(($form) => {
+  // PRISTINE: Submit button disabled
+  cy.get('[data-testid="submit"]')
+    .should('be.disabled')
+  
+  // User makes change
+  cy.get('[data-testid="email"]')
+    .type('user@test.com')
+  
+  // DIRTY: Button enabled if valid
+  cy.get('[data-testid="submit"]')
+    .should('be.enabled')
+  
+  // Submit
+  cy.get('[data-testid="submit"]').click()
+  
+  // SUBMITTING: Button shows loading
+  cy.get('[data-testid="submit"]')
+    .should('have.class', 'is-loading')
+    .should('be.disabled')
+  
+  // Success
+  cy.get('[data-testid="success-message"]')
+    .should('be.visible')
+})
+
+// KEY INSIGHT:
+// Testing form states = testing user experience
+// Users expect certain behaviors at each state
+```
+
+```typescript
+// Text input
+cy.get('input[name="email"]').type('user@test.com')
+cy.get('input[name="email"]').clear()
+cy.get('input[name="email"]').should('have.value', 'user@test.com')
+
+// Textarea
+cy.get('textarea').type('Multi-line{enter}text')
+cy.get('textarea').clear()
+
+// Select dropdown
+cy.get('select[name="country"]').select('USA')              // By value
+cy.get('select[name="country"]').select('United States')   // By text
+
+// Radio buttons
+cy.get('input[type="radio"][value="male"]').click()
+cy.get('input[type="radio"][value="male"]').should('be.checked')
+
+// Checkboxes
+cy.get('input[type="checkbox"][value="newsletter"]').click()
+cy.get('input[type="checkbox"][value="newsletter"]').should('be.checked')
+cy.get('input[type="checkbox"][value="newsletter"]').uncheck()
+
+// File upload
+cy.get('input[type="file"]').selectFile('cypress/fixtures/document.pdf')
+cy.get('input[type="file"]').selectFile([
+  'cypress/fixtures/file1.pdf',
+  'cypress/fixtures/file2.pdf'
+])
+
+// Date input
+cy.get('input[type="date"]').invoke('val', '2024-12-25').trigger('change')
+// Or type date
+cy.get('input[type="date"]').type('12/25/2024')
+```
+
+### Form Submission & Validation
+
+```typescript
+// Submit form
+cy.get('form').submit()              // Trigger submit event
+cy.get('button[type="submit"]').click()
+
+// Example: Complete login form
+describe('Login Form', () => {
+  beforeEach(() => {
+    cy.visit('/login')
+  })
+
+  it('should login with valid credentials', () => {
+    cy.get('[data-testid="email"]')
+      .type('user@test.com')
+    cy.get('[data-testid="password"]')
+      .type('password123')
+    cy.get('[data-testid="login-btn"]')
+      .click()
+    
+    cy.location('pathname').should('equal', '/dashboard')
+    cy.get('[data-testid="user-menu"]').should('be.visible')
+  })
+
+  it('should show error on invalid credentials', () => {
+    cy.get('[data-testid="email"]')
+      .type('user@test.com')
+    cy.get('[data-testid="password"]')
+      .type('wrongpassword')
+    cy.get('[data-testid="login-btn"]')
+      .click()
+    
+    cy.get('[data-testid="error-message"]')
+      .should('contain', 'Invalid credentials')
+  })
+
+  it('should validate required fields', () => {
+    cy.get('[data-testid="login-btn"]').click()
+    
+    cy.get('[data-testid="email-error"]')
+      .should('contain', 'Email is required')
+    cy.get('[data-testid="password-error"]')
+      .should('contain', 'Password is required')
+  })
+})
+
+// Example: Registration form with validation
+describe('Registration Form', () => {
+  it('should create account', () => {
+    cy.visit('/register')
+    
+    cy.get('[data-testid="name"]').type('John Doe')
+    cy.get('[data-testid="email"]').type('john@test.com')
+    cy.get('[data-testid="password"]').type('SecurePass123!')
+    cy.get('[data-testid="confirm-password"]').type('SecurePass123!')
+    cy.get('[data-testid="terms-checkbox"]').check()
+    cy.get('[data-testid="register-btn"]').click()
+    
+    cy.get('[data-testid="success-message"]')
+      .should('contain', 'Account created successfully')
+    cy.location('pathname').should('equal', '/login')
+  })
+})
+```
+
+---
+
+## Network Requests & API Mocking {#network}
+
+### Theory: Why Mock APIs
+
+**BASIC THEORY:**
+```typescript
+// Two approaches to API testing:
+
+// 1. TESTING WITH REAL API
+// Pros:
+// ✓ Tests actual backend behavior
+// ✓ Finds real integration issues
+
+// Cons:
+// ✗ Tests fail if API down
+// ✗ Tests fail if network slow
+// ✗ Hard to test error scenarios
+// ✗ Might create test data in production
+// ✗ Tests slow and unreliable
+
+// 2. TESTING WITH MOCKED API
+// Pros:
+// ✓ Tests independent of backend
+// ✓ Fast and reliable
+// ✓ Can test all scenarios (success, errors, timeouts)
+// ✓ No test data side effects
+// ✓ Predictable responses
+
+// Cons:
+// ✗ Might not catch real backend issues
+// ✗ Need separate integration tests with real API
+
+// BEST PRACTICE: Use both
+// E2E tests (unit/integration): Mock APIs (fast, reliable)
+// Full E2E tests (before deploy): Real APIs (catch real issues)
+```
+
+**ADVANCED THEORY - Mocking Strategy:**
+```typescript
+// How cy.intercept works:
+
+// 1. Setup intercept BEFORE navigation
+cy.intercept('GET', '/api/users', {
+  statusCode: 200,
+  body: { users: [] }
+}).as('getUsers')
+
+// 2. User navigates/interacts
+cy.visit('/')
+
+// 3. Browser makes request
+// Cypress intercepts it (request never reaches real server)
+
+// 4. Mock response returned
+// App receives mocked data
+
+// 5. Optional: Wait for request
+cy.wait('@getUsers')
+// Now you can:
+// - Verify request was made
+// - Check request parameters
+// - Verify timing
+
+// Pattern matching examples:
+cy.intercept('GET', '/api/users')           // Exact path
+cy.intercept('GET', '/api/users/*')         // Wildcard
+cy.intercept('GET', /api\/users/)           // Regex
+cy.intercept('POST', /api\/(users|products)/)  // Multiple
+
+// Why pattern matching matters:
+// Your app might make requests you didn't anticipate
+// Wildcards catch all variations
+// Regex provides flexibility
+```
+
+**ADVANCED THEORY - Conditional Mocking:**
+```typescript
+// Mock based on request parameters:
+cy.intercept('GET', '/api/users', (req) => {
+  const { page, limit } = req.query
+  
+  if (page === '1') {
+    req.reply({
+      statusCode: 200,
+      body: {
+        data: [{ id: 1, name: 'User 1' }],
+        total: 100
+      }
+    })
+  } else if (page === '2') {
+    req.reply({
+      statusCode: 200,
+      body: {
+        data: [{ id: 2, name: 'User 2' }],
+        total: 100
+      }
+    })
+  }
+}).as('getUsers')
+
+// KEY INSIGHT:
+// You can test different data scenarios
+// Without hitting real backend
+// Each test is isolated and predictable
+```
+
+```typescript
+// Basic intercept
+cy.intercept('GET', '/api/users').as('getUsers')
+
+// Intercept with method and URL pattern
+cy.intercept('POST', '/api/login').as('login')
+cy.intercept('DELETE', '/api/users/*').as('deleteUser')
+
+// Intercept with regex
+cy.intercept(/api\/users/).as('anyUserRequest')
+
+// Intercept and modify response
+cy.intercept('GET', '/api/users', {
+  statusCode: 200,
+  body: {
+    users: [
+      { id: 1, name: 'John Doe' },
+      { id: 2, name: 'Jane Smith' }
+    ]
+  }
+}).as('getUsers')
+
+// Intercept and modify response with handler
+cy.intercept('GET', '/api/users', (req) => {
+  req.reply({
+    statusCode: 200,
+    body: {
+      users: [{ id: 1, name: 'Mock User' }]
+    }
+  })
+}).as('getUsers')
+
+// Intercept with delay
+cy.intercept('GET', '/api/users', (req) => {
+  req.reply((res) => {
+    res.delay(1000)  // Add 1 second delay
+  })
+}).as('getUsers')
+
+// Intercept error response
+cy.intercept('GET', '/api/users', {
+  statusCode: 500,
+  body: { error: 'Server error' }
+}).as('getUsersError')
+
+// Wait for intercepted request
+cy.intercept('GET', '/api/users').as('getUsers')
+cy.visit('/')
+cy.wait('@getUsers')
+cy.get('.user-list').should('be.visible')
+
+// Get response data
+cy.intercept('GET', '/api/users').as('getUsers')
+cy.visit('/')
+cy.wait('@getUsers').then((interception) => {
+  expect(interception.response.statusCode).to.equal(200)
+  expect(interception.response.body.users).to.have.length(2)
+})
+```
+
+### API Testing Pattern
+
+```typescript
+// Example: Complete API testing with mocking
+describe('API Mocking', () => {
+  beforeEach(() => {
+    // Mock all API calls
+    cy.intercept('GET', '/api/users', {
+      statusCode: 200,
+      body: {
+        users: [
+          { id: 1, name: 'User 1', email: 'user1@test.com' },
+          { id: 2, name: 'User 2', email: 'user2@test.com' }
+        ]
+      }
+    }).as('getUsers')
+    
+    cy.intercept('GET', '/api/users/*', {
+      statusCode: 200,
+      body: { id: 1, name: 'User 1', email: 'user1@test.com' }
+    }).as('getUserById')
+    
+    cy.intercept('POST', '/api/users', {
+      statusCode: 201,
+      body: { id: 3, name: 'New User', email: 'new@test.com' }
+    }).as('createUser')
+    
+    cy.intercept('PUT', '/api/users/*', {
+      statusCode: 200,
+      body: { id: 1, name: 'Updated User', email: 'updated@test.com' }
+    }).as('updateUser')
+    
+    cy.intercept('DELETE', '/api/users/*', {
+      statusCode: 204
+    }).as('deleteUser')
+  })
+
+  it('should display list of users', () => {
+    cy.visit('/users')
+    cy.wait('@getUsers')
+    
+    cy.get('[data-testid="user-list"] li').should('have.length', 2)
+    cy.get('[data-testid="user-list"]').should('contain', 'User 1')
+  })
+
+  it('should create new user', () => {
+    cy.visit('/users/new')
+    
+    cy.get('[data-testid="name"]').type('New User')
+    cy.get('[data-testid="email"]').type('new@test.com')
+    cy.get('[data-testid="save-btn"]').click()
+    
+    cy.wait('@createUser').then((interception) => {
+      expect(interception.request.body).to.include({
+        name: 'New User',
+        email: 'new@test.com'
+      })
+    })
+    
+    cy.get('[data-testid="success"]').should('be.visible')
+  })
+})
+
+// Test real API (no mocking)
+describe('Real API Tests', () => {
+  it('should fetch users from real API', () => {
+    cy.request('GET', 'http://localhost:4000/api/users')
+      .then((response) => {
+        expect(response.status).to.equal(200)
+        expect(response.body).to.have.property('users')
+        expect(response.body.users).to.be.an('array')
+      })
+  })
+})
+```
+
+---
+
+## Debugging & Troubleshooting {#debugging}
+
+### Theory: Debugging Mindset
+
+**BASIC THEORY:**
+```typescript
+// When test fails, ask yourself:
+// 1. What was the test trying to do?
+// 2. What actually happened?
+// 3. Where did it differ from expectation?
+
+// Debugging process:
+// Step 1: Run test in interactive mode
+// Step 2: See where it fails
+// Step 3: Inspect state at failure point
+// Step 4: Add logging/screenshots
+// Step 5: Understand root cause
+// Step 6: Fix test or code
+
+// Run in interactive mode:
+// npx cypress open
+// Gives you full debugging UI
+```
+
+**ADVANCED THEORY - Root Cause Analysis:**
+```typescript
+// Common failure categories:
+
+// 1. TIMING ISSUES
+// Problem: Element not ready when test tries to interact
+// Solution: Add proper waits
+// cy.get('.element').should('be.visible').click()
+
+// 2. SELECTOR ISSUES
+// Problem: Selector too generic, finds wrong element
+// Solution: Use data-testid or more specific selector
+// cy.get('[data-testid="button"]').click()  // Better
+
+// 3. STATE ISSUES
+// Problem: App state different from what test expects
+// Solution: Add setup/teardown to reset state
+// beforeEach(() => {
+//   cy.clearLocalStorage()
+//   cy.visit('/')
+// })
+
+// 4. ASSERTION ISSUES
+// Problem: Assertion checks wrong thing
+// Solution: Verify what you actually want to verify
+// cy.url().should('include', '/dashboard')  // Check URL
+
+// 5. NETWORK ISSUES
+// Problem: API responses not as expected
+// Solution: Mock API or check real response
+// cy.intercept('GET', '/api/users', { fixture: 'users' })
+```
+
+### Debugging Techniques
+
+```typescript
+// 1. Debug command - pause execution
+cy.debug()                              // Pauses at this point
+
+// 2. Cy.pause() - interactive pause
+cy.pause()                              // Interactive pause mode
+
+// 3. Logging to console
+cy.get('.element').then(($el) => {
+  console.log('Element text:', $el.text())
+  console.log('Element classes:', $el.attr('class'))
+})
+
+// 4. .log() command
+cy.get('.element')
+  .then(($el) => {
+    cy.log('Element found: ' + $el.text())
+  })
+
+// 5. Screenshots
+cy.screenshot()                         // Screenshot at any point
+cy.screenshot('login-success')          // Named screenshot
+// Videos auto-recorded if enabled in config
+
+// 6. Time travel debugging (built-in)
+// In test runner, hover over command to see state at that point
+
+// 7. Inspect network requests
+cy.intercept('GET', '/api/users', (req) => {
+  console.log('Request headers:', req.headers)
+  console.log('Request body:', req.body)
+  req.reply((res) => {
+    console.log('Response status:', res.statusCode)
+    console.log('Response body:', res.body)
+  })
+})
+
+// 8. Print element state
+cy.get('.element').then(($el) => {
+  cy.log(`
+    HTML: ${$el.html()}
+    Text: ${$el.text()}
+    Classes: ${$el.attr('class')}
+    ID: ${$el.attr('id')}
+    Value: ${$el.val()}
+    Visible: ${$el.is(':visible')}
+  `)
+})
+
+// 9. Get body for debugging
+cy.get('body').then(($body) => {
+  // Inspect entire page state
+  cy.log($body.html())
+})
+
+// 10. Browser DevTools
+// Click DevTools icon in test runner
+// Or in headless mode: set debug environment variable
+// DEBUG=cypress:* npx cypress run
+```
+
+### Common Issues & Solutions
+
+```typescript
+// Issue 1: Element not found (retry)
+// ❌ Problem: Element takes time to appear
+// ✅ Solution: Cypress automatically retries
+
+// Issue 2: Element detached from DOM
+cy.get('.element')         // ❌ Might be detached if DOM changed
+cy.visit('/')
+cy.get('.element').then(($el) => {
+  // Work with element immediately
+  cy.wrap($el).click()
+})
+
+// Issue 3: Multiple elements found
+cy.get('[role="button"]')  // ❌ Returns first
+cy.get('[role="button"]').eq(0)  // ✅ Specify which one
+cy.get('[role="button"]').eq(-1)  // ✅ Last element
+
+// Issue 4: Waiting for dynamic content
+cy.get('.loader').should('not.exist')  // Wait for loader gone
+cy.get('.content').should('be.visible')  // Wait for content visible
+
+// Issue 5: Timing issues
+// ❌ Wrong - arbitrary wait
+cy.wait(3000)
+cy.get('.element')
+
+// ✅ Correct - wait for condition
+cy.get('.loader').should('not.exist')
+cy.get('.element').should('be.visible')
+
+// Issue 6: Form submission not working
+// ❌ Problem: Maybe disabled or has validation
+cy.get('button').click()
+
+// ✅ Solution: Check form state first
+cy.get('form').then(($form) => {
+  if ($form.hasClass('has-errors')) {
+    cy.log('Form has validation errors')
+  }
+})
+
+// Issue 7: Cross-origin requests blocked
+// In cypress.config.ts
+chromeWebSecurity: false  // For testing only!
+
+// Issue 8: Flaky tests (inconsistent failures)
+// Common causes:
+// - Race conditions
+// - Timing issues
+// - Incorrect selectors
+// - Missing waits
+
+// ✅ Solutions:
+// - Use explicit waits (cy.wait, .should)
+// - Use test data API setup
+// - Increase timeouts for slow operations
+// - Use deterministic selectors (data-testid)
+```
+
+---
+
+## Advanced Patterns {#advanced}
+
+### THEORY: Advanced Testing Strategies
+
+#### BASIC THEORY: When & Why to Use Advanced Patterns
+
+Advanced patterns solve real-world testing challenges that basic selectors and assertions can't handle:
+
+1. **Conditional Logic** - Sometimes you need to handle different UI states in the same test
+2. **Error Handling** - JavaScript errors shouldn't break your entire test suite
+3. **Browser State** - localStorage, sessionStorage, and cookies require special handling
+4. **Hooks & Events** - Setup/teardown logic ensures consistent test environment
+
+**The Challenge:**
+```typescript
+// Real app might show different content based on conditions
+// Sometimes element exists, sometimes it doesn't
+// Error handling needs to be graceful, not fatal
+// Tests need consistent state - hence setup/teardown
+
+// Advanced patterns solve:
+// 1. Optional element handling (don't fail if not found)
+// 2. Conditional assertions (test different paths)
+// 3. Error tracking (monitor but don't fail)
+// 4. State initialization (consistent test environment)
+```
+
+#### ADVANCED THEORY: Pattern Design Principles
+
+**Key Insights:**
+- **Defensive Testing**: Check existence before assuming
+- **State Isolation**: Each test starts clean, ends clean
+- **Error Tolerance**: Track errors without failing prematurely
+- **Conditional Paths**: Real apps have multiple flows
+
+**Why These Patterns Matter:**
+```typescript
+// Without advanced patterns:
+// Test suite brittle, fails on small UI changes
+// State leaks between tests
+// One JS error fails entire test
+// Can't test conditional flows
+
+// With advanced patterns:
+// Resilient to UI variations
+// Tests completely isolated
+// Graceful error handling
+// All code paths tested
+```
+
+#### KEY POINTS:
+✓ Use conditional testing for optional/dynamic elements
+✓ Implement error handlers for graceful degradation
+✓ Initialize state in beforeEach for consistency
+✓ Clean up state in afterEach to prevent leaks
+✓ Track errors without making them fatal
+
+---
+
+### Conditional Testing
+
+```typescript
+// Retry logic
+cy.get('.element').should('exist')
+
+// Optional element (don't fail if not found)
+cy.get('body').then(($body) => {
+  if ($body.find('.optional-element').length > 0) {
+    cy.get('.optional-element').should('be.visible')
+  }
+})
+
+// Chain with conditions
+cy.get('.message').then(($msg) => {
+  const text = $msg.text()
+  if (text.includes('Error')) {
+    cy.log('Error message displayed')
+  } else {
+    cy.log('Success message displayed')
+  }
+})
+```
+
+### Error Handling
+
+```typescript
+// Handle errors gracefully
+cy.on('uncaught:exception', (err, runnable) => {
+  // Ignore specific errors
+  if (err.message.includes('Unexpected error')) {
+    return false  // Don't fail test
+  }
+})
+
+// Expect error
+cy.on('uncaught:exception', (err) => {
+  expect(err.message).to.include('Expected error')
+  return false  // Don't fail
+})
+
+// Track JavaScript errors
+let jsErrors: any[] = []
+cy.on('uncaught:exception', (err) => {
+  jsErrors.push(err)
+  return false
+})
+afterEach(() => {
+  if (jsErrors.length > 0) {
+    cy.log(`JS Errors: ${jsErrors.length}`)
+    jsErrors = []
+  }
+})
+```
+
+### Window & Local Storage
+
+```typescript
+// Access window object
+cy.window().then((win) => {
+  expect(win.localStorage.getItem('token')).to.exist
+})
+
+// Set localStorage before test
+cy.visit('/', {
+  onBeforeLoad: (win) => {
+    win.localStorage.setItem('user', JSON.stringify({
+      id: 1,
+      name: 'Test User'
+    }))
+  }
+})
+
+// Verify localStorage changes
+cy.window().then((win) => {
+  expect(JSON.parse(win.localStorage.getItem('user') || '{}')).to.deep.equal({
+    id: 1,
+    name: 'Test User'
+  })
+})
+
+// Session storage
+cy.window().then((win) => {
+  win.sessionStorage.setItem('session-data', 'value')
+})
+
+// Cookies
+cy.setCookie('auth-token', 'xyz123')
+cy.getCookie('auth-token').should('have.property', 'value', 'xyz123')
+cy.clearCookie('auth-token')
+```
+
+### Plugin & Hooks
+
+```typescript
+// cypress.config.ts - Setup hooks
+import { defineConfig } from 'cypress';
+
+export default defineConfig({
+  e2e: {
+    setupNodeEvents(on, config) {
+      // Before:after:spec hook - runs before each spec
+      on('before:spec', (spec) => {
+        console.log('Running spec:', spec.relative)
+      })
+      
+      // Before test
+      on('before:run', (details) => {
+        console.log('Running tests with browser:', details.browser.name)
+      })
+      
+      // After test
+      on('after:run', (details) => {
+        console.log('Tests completed with stats:', details.stats)
+      })
+      
+      return config
+    }
+  }
+});
+
+// In support/e2e.ts - Setup/teardown
+beforeEach(() => {
+  // Reset state before each test
+  cy.clearCookie('auth-token')
+  cy.clearLocalStorage()
+  cy.visit('/')
+})
+
+afterEach(() => {
+  // Clean up after each test
+  cy.window().then((win) => {
+    console.log('Test completed')
+  })
+})
+
+// Before all tests
+before(() => {
+  cy.log('Starting test suite')
+})
+
+// After all tests
+after(() => {
+  cy.log('Test suite completed')
+})
+```
+
+---
+
+## Best Practices & Anti-Patterns {#bestpractices}
+
+### THEORY: Best Practices Foundation
+
+#### BASIC THEORY: Why Practices Matter
+
+Best practices aren't rules you memorize - they're solutions to problems:
+
+1. **Maintainability** - Tests must survive CSS class changes, HTML restructuring
+2. **Reliability** - Tests fail for real bugs, not UI noise
+3. **Performance** - Tests run fast, giving quick feedback
+4. **Clarity** - New team members understand test intent immediately
+
+**The Problem with Bad Practices:**
+```typescript
+// ❌ Bad: CSS class selectors
+cy.get('.form-container > div > div > button')  // Breaks if CSS changes
+
+// ❌ Bad: Arbitrary waits
+cy.wait(5000)  // Slow, unreliable, still flaky
+cy.get('.content')
+
+// ❌ Bad: Multiple assertions
+cy.get('button').click().should('not.exist')  // Confusing
+
+// ❌ Bad: No setup/teardown
+// Each test affects the next one - debugging nightmare
+
+// ✅ Good: Semantic selectors
+cy.get('[data-testid="submit-btn"]')  // Survives CSS changes
+
+// ✅ Good: Conditional waits
+cy.get('.loader').should('not.exist')
+cy.get('[data-testid="content"]').should('be.visible')
+
+// ✅ Good: Single assertion per line
+cy.get('button').click()
+cy.get('modal').should('not.exist')
+
+// ✅ Good: Proper setup/teardown
+beforeEach(() => clearState())
+afterEach(() => cleanup())
+```
+
+#### ADVANCED THEORY: Anti-Patterns Are Productivity Killers
+
+**The True Cost of Anti-Patterns:**
+```typescript
+// Anti-pattern: Test interdependence
+describe('User Flow', () => {
+  let userId
+  
+  it('should create user', () => {
+    cy.post('/api/users', {name: 'Test'})
+      .then(res => userId = res.id)
+  })
+  
+  it('should login user', () => {
+    // Fails if previous test fails!
+    // Each test must be independent
+  })
+})
+
+// Why this is bad:
+// 1. If test 1 fails, test 2 fails (even if code works)
+// 2. Can't run test 2 alone
+// 3. Can't run tests in random order
+// 4. Debugging takes 2x longer
+
+// Anti-pattern: Implementation details
+it('should create user', () => {
+  cy.get('.form')
+    .find('.input:nth-child(1)')  // Too specific!
+    .type('name')
+  
+  cy.get('.form')
+    .find('.button:last-child')  // Implementation depends on order!
+    .click()
+})
+
+// Why this is bad:
+// 1. Changes if developer adds new fields
+// 2. Breaks if button order changes
+// 3. Not readable - what field is this?
+
+// Anti-pattern: Testing implementation
+it('should show validation errors', () => {
+  cy.get('[name="email"]').focus()
+  cy.get('[name="email"]').blur()
+  cy.get('.error-message').should('exist')
+})
+
+// Why this is bad:
+// 1. Assumes blur triggers validation
+// 2. Test breaks if validation logic changes
+// 3. Doesn't test WHEN user sees error (real scenario)
+
+// ✅ Pattern: Test behavior (not implementation)
+it('should show validation error when email invalid', () => {
+  cy.get('[data-testid="email-input"]').type('invalid')
+  cy.get('[data-testid="submit-btn"]').click()
+  cy.get('[data-testid="error-message"]').should('contain', 'Invalid email')
+})
+```
+
+#### KEY POINTS:
+✓ Use data-testid to decouple from CSS classes
+✓ Tests must be completely independent
+✓ Avoid waiting with arbitrary timeouts
+✓ Test user behavior, not implementation details
+✓ One assertion per action makes tests clearer
+✓ Setup/teardown ensures consistent state
+
+---
+
+### ✅ DO's
+
+```typescript
+// 1. Use data-testid for element selection
+cy.get('[data-testid="submit-btn"]').click()
+
+// 2. Use meaningful test descriptions
+it('should successfully login with valid credentials', () => {
+  // Clear description of what's being tested
+})
+
+// 3. Use page objects for maintainability
+const loginPage = new LoginPage()
+loginPage.login('user@test.com', 'password123')
+
+// 4. Mock external dependencies
+cy.intercept('GET', '/api/**', { fixture: 'api-response' })
+
+// 5. Use explicit waits
+cy.get('.loader').should('not.exist')
+
+// 6. Keep tests isolated and independent
+// Each test should work standalone
+
+// 7. Use fixtures for test data
+cy.fixture('users.json').then((users) => {
+  cy.log(users)
+})
+
+// 8. Test user behavior, not implementation
+// ✅ Test: User can login
+// ❌ Test: Redux action dispatches correctly
+
+// 9. Use custom commands for repeated actions
+cy.loginAsAdmin()
+
+// 10. Group related tests with describe blocks
+describe('Dashboard', () => {
+  describe('Navigation', () => {
+    it('should navigate to users page', () => {})
+  })
+})
+```
+
+### ❌ DON'Ts
+
+```typescript
+// 1. Don't use hardcoded timeouts
+cy.wait(5000)  // ❌ Bad
+cy.get('.element').should('be.visible')  // ✅ Good
+
+// 2. Don't use index selectors exclusively
+cy.get('button').eq(2).click()  // ❌ Fragile
+cy.get('[data-testid="delete-btn"]').click()  // ✅ Better
+
+// 3. Don't test multiple scenarios in one test
+it('should work for all cases', () => {
+  // ❌ Tests login, dashboard, logout all in one
+})
+
+// 4. Don't rely on test execution order
+// Each test must be independent
+
+// 5. Don't use cy.visit() in the middle of test flow unnecessarily
+cy.get('button').click()
+cy.visit('/')  // ❌ If you can navigate without reload
+cy.get('button').click()
+cy.should('have.attr', 'href', '/dashboard').click()  // ✅ Navigate via link
+
+// 6. Don't ignore error handling
+// Set up error handlers appropriately
+
+// 7. Don't test implementation details
+// ❌ Test: Component state updates
+// ✅ Test: UI reflects state change
+
+// 8. Don't mix ui and api testing without clear separation
+// Either test UI flow or API flow separately
+
+// 9. Don't use static timeouts globally
+// Configure based on test needs
+
+// 10. Don't commit tests with console.log debugging
+// Use proper logging or cy.log()
+```
+
+---
+
+## Page Object Model {#pom}
+
+### THEORY: Why Page Objects?
+
+#### BASIC THEORY: The Problem with Scattered Selectors
+
+Without Page Objects, selectors are scattered across tests:
+
+```typescript
+// ❌ Without Page Objects - Maintenance nightmare
+
+// login.spec.ts
+describe('Login', () => {
+  it('should login', () => {
+    cy.get('[data-testid="email-input"]').type('user@test.com')
+    cy.get('[data-testid="password-input"]').type('password')
+    cy.get('[data-testid="login-btn"]').click()
+    cy.get('[data-testid="success-message"]').should('be.visible')
+  })
+})
+
+// dashboard.spec.ts
+describe('Dashboard', () => {
+  it('should logout', () => {
+    cy.get('[data-testid="user-menu"]').click()
+    cy.get('[data-testid="logout-btn"]').click()
+  })
+})
+
+// Problem: If email selector changes (data-testid="email" → data-testid="user-email")
+// You must update EVERY test that uses it
+// In large projects: 50+ tests = 50+ places to update
+```
+
+#### ADVANCED THEORY: Page Object Pattern Benefits
+
+**The Solution: Centralize Selectors**
+```typescript
+// pages/LoginPage.ts
+export class LoginPage {
+  emailInput = () => cy.get('[data-testid="email-input"]')
+  passwordInput = () => cy.get('[data-testid="password-input"]')
+  loginButton = () => cy.get('[data-testid="login-btn"]')
+  successMessage = () => cy.get('[data-testid="success-message"]')
+
+  login(email: string, password: string) {
+    this.emailInput().type(email)
+    this.passwordInput().type(password)
+    this.loginButton().click()
+    return this
+  }
+
+  verifyLoginSuccess() {
+    this.successMessage().should('be.visible')
+    return this
+  }
+}
+
+// Now if selector changes:
+// Change in ONE place: LoginPage.emailInput()
+// All tests automatically use new selector
+
+// Bonus: Method names = test intent
+// loginPage.login() reads better than cy.get(...).type(...)
+// loginPage.verifyLoginSuccess() clearly shows what we expect
+
+// Advanced: Fluent Interface (Method Chaining)
+// page.login('user@test.com', 'password')
+//      .verifyLoginSuccess()
+// vs individual cy.get() calls scattered everywhere
+```
+
+**Design Principle:**
+- Selectors are implementation details
+- Tests should focus on behavior, not how to find elements
+- Page Objects abstract "how to interact" from "what to test"
+
+#### KEY POINTS:
+✓ Selectors live in Page Objects, not scattered in tests
+✓ One selector change = update one place
+✓ Method names document test intent clearly
+✓ Fluent interface makes tests more readable
+✓ Business logic encapsulated from test logic
+
+---
+
+### Implementing Page Objects
+
+```typescript
+// pages/LoginPage.ts
+export class LoginPage {
+  emailInput = () => cy.get('[data-testid="email-input"]')
+  passwordInput = () => cy.get('[data-testid="password-input"]')
+  loginButton = () => cy.get('[data-testid="login-btn"]')
+  errorMessage = () => cy.get('[data-testid="error-message"]')
+  successMessage = () => cy.get('[data-testid="success-message"]')
+
+  visit() {
+    cy.visit('/login')
+    return this
+  }
+
+  fillEmail(email: string) {
+    this.emailInput().type(email)
+    return this
+  }
+
+  fillPassword(password: string) {
+    this.passwordInput().type(password)
+    return this
+  }
+
+  clickLogin() {
+    this.loginButton().click()
+    return this
+  }
+
+  login(email: string, password: string) {
+    this.fillEmail(email)
+    this.fillPassword(password)
+    this.clickLogin()
+    return this
+  }
+
+  verifyErrorMessage(message: string) {
+    this.errorMessage().should('contain', message)
+    return this
+  }
+
+  verifyLoginSuccess() {
+    this.successMessage().should('be.visible')
+    return this
+  }
+}
+
+// pages/DashboardPage.ts
+export class DashboardPage {
+  userMenu = () => cy.get('[data-testid="user-menu"]')
+  logoutButton = () => cy.get('[data-testid="logout-btn"]')
+  title = () => cy.get('h1')
+
+  verifyLoggedIn() {
+    this.userMenu().should('be.visible')
+    return this
+  }
+
+  logout() {
+    this.userMenu().click()
+    this.logoutButton().click()
+    return this
+  }
+
+  verifyTitle(expectedTitle: string) {
+    this.title().should('have.text', expectedTitle)
+    return this
+  }
+}
+
+// Using Page Objects in tests
+describe('Authentication Flow', () => {
+  const loginPage = new LoginPage()
+  const dashboardPage = new DashboardPage()
+
+  it('should login successfully', () => {
+    loginPage.visit()
+    loginPage.login('user@test.com', 'password123')
+    dashboardPage.verifyLoggedIn()
+  })
+
+  it('should show error on invalid credentials', () => {
+    loginPage.visit()
+    loginPage.login('user@test.com', 'wrongpassword')
+    loginPage.verifyErrorMessage('Invalid credentials')
+  })
+
+  it('should logout successfully', () => {
+    loginPage.visit()
+    loginPage.login('user@test.com', 'password123')
+    dashboardPage.logout()
+    loginPage.visit()
+  })
+})
+```
+
+---
+
+## Custom Commands {#customcommands}
+
+### THEORY: Custom Commands
+
+#### BASIC THEORY: Reusable Test Operations
+
+Custom commands eliminate repetition and make tests more readable:
+
+```typescript
+// ❌ Without custom commands - Repetitive
+
+describe('User Tests', () => {
+  it('test 1', () => {
+    cy.visit('/login')
+    cy.get('[data-testid="email"]').type('user@test.com')
+    cy.get('[data-testid="password"]').type('password123')
+    cy.get('[data-testid="login-btn"]').click()
+    cy.url().should('include', '/dashboard')
+  })
+
+  it('test 2', () => {
+    cy.visit('/login')
+    cy.get('[data-testid="email"]').type('admin@test.com')
+    cy.get('[data-testid="password"]').type('adminpass')
+    cy.get('[data-testid="login-btn"]').click()
+    cy.url().should('include', '/dashboard')
+  })
+  
+  // Repeated 10+ times in project!
+})
+
+// ✅ With custom commands - DRY
+
+// support/commands.ts
+Cypress.Commands.add('login', (email: string, password: string) => {
+  cy.visit('/login')
+  cy.get('[data-testid="email"]').type(email)
+  cy.get('[data-testid="password"]').type(password)
+  cy.get('[data-testid="login-btn"]').click()
+  cy.url().should('include', '/dashboard')
+})
+
+// Now tests are 3 lines instead of 10
+it('test 1', () => {
+  cy.login('user@test.com', 'password123')
+})
+
+it('test 2', () => {
+  cy.login('admin@test.com', 'adminpass')
+})
+```
+
+#### ADVANCED THEORY: Advanced Custom Commands
+
+**Command Chain & Error Handling:**
+```typescript
+// Chainable commands (return Chainable)
+Cypress.Commands.add('loginAPI', (email, password) => {
+  return cy.request('POST', '/api/login', {email, password})
+    .then(res => {
+      window.localStorage.setItem('token', res.body.token)
+      return res
+    })
+})
+
+// Can chain further
+cy.loginAPI('user@test.com', 'password')
+  .then(res => expect(res.status).to.equal(200))
+
+// Non-chainable commands (return void)
+Cypress.Commands.add('takeScreenshotNamed', (name) => {
+  cy.screenshot(`${Cypress.spec.name}-${name}`)
+  // Don't return anything - breaks chain
+})
+
+// Overriding built-in commands
+Cypress.Commands.overwrite('visit', (originalFn, url, options) => {
+  if (localStorage.getItem('token')) {
+    options.headers = {
+      Authorization: `Bearer ${localStorage.getItem('token')}`
+    }
+  }
+  return originalFn(url, options)
+})
+
+// TS Typing for custom commands
+declare namespace Cypress {
+  interface Chainable<Subject = any> {
+    login(email: string, password: string): Chainable<Response>
+    takeScreenshotNamed(name: string): Chainable<void>
+  }
+}
+
+// Now TypeScript autocomplete works!
+cy.login('user@test.com', 'password').then(...)  // ✅ Works with TS
+```
+
+**Cost of Custom Commands:**
+```typescript
+// Benefits:
+// 1. DRY - write once, use everywhere
+// 2. Readability - cy.login() beats 10 lines
+// 3. Maintainability - change once, everywhere updates
+// 4. Consistency - same flow guaranteed
+
+// Risks:
+// 1. Black box - what's inside? (mitigate with docs)
+// 2. Over-abstraction - too many custom commands = confusing
+// 3. Hard to debug - custom command hides implementation
+
+// Balance:
+// Use for: Common workflows (login, API calls, form filling)
+// Avoid for: Single-use operations, complex business logic
+```
+
+#### KEY POINTS:
+✓ Custom commands reduce code duplication
+✓ Make test intent clearer (cy.login vs 10 lines)
+✓ Easier to maintain - change once, update everywhere
+✓ Chainable commands return Chainable for further chaining
+✓ Use sparingly - too many custom commands = confusing
+✓ Document thoroughly - future you will thank you
+
+---
+
+### Creating Custom Commands
+
+```typescript
+// support/commands.ts
+
+// Custom login command
+Cypress.Commands.add('login', (email: string, password: string) => {
+  cy.get('[data-testid="email"]').type(email)
+  cy.get('[data-testid="password"]').type(password)
+  cy.get('[data-testid="login-btn"]').click()
+})
+
+// Usage:
+// cy.login('user@test.com', 'password123')
+
+// Custom command with overwrite
+Cypress.Commands.overwrite('visit', (originalFn, url, options) => {
+  // Add default options to visit
+  return originalFn(url, {
+    ...options,
+    onBeforeLoad: (win: any) => {
+      win.localStorage.setItem('test-mode', 'true')
+    }
+  })
+})
+
+// Custom command for getting by test ID
+Cypress.Commands.add('getByTestId', (testId: string) => {
+  return cy.get(`[data-testid="${testId}"]`)
+})
+
+// Usage:
+// cy.getByTestId('submit-btn').click()
+
+// Custom command that returns value
+Cypress.Commands.add('getInputValue', { prevSubject: true }, ($el) => {
+  return cy.wrap($el.val())
+})
+
+// Usage:
+// cy.get('input').getInputValue().then((value) => {
+//   expect(value).to.equal('expected')
+// })
+
+// Custom logout command
+Cypress.Commands.add('logout', () => {
+  cy.get('[data-testid="user-menu"]').click()
+  cy.get('[data-testid="logout-btn"]').click()
+  cy.url().should('include', '/login')
+})
+
+// Custom API command
+Cypress.Commands.add('apiLogin', (email: string, password: string) => {
+  cy.request('POST', '/api/login', { email, password }).then((response) => {
+    window.localStorage.setItem('token', response.body.token)
+  })
+})
+
+// TypeScript support - extend Cypress namespace
+declare global {
+  namespace Cypress {
+    interface Chainable {
+      login(email: string, password: string): Chainable<void>
+      logout(): Chainable<void>
+      getByTestId(testId: string): Chainable<JQuery<HTMLElement>>
+      apiLogin(email: string, password: string): Chainable<any>
+    }
+  }
+}
+```
+
+---
+
+## Plugin Architecture {#plugins}
+
+### THEORY: Extending Cypress with Plugins
+
+#### BASIC THEORY: What Are Plugins?
+
+Plugins extend Cypress beyond core functionality:
+
+```typescript
+// Core Cypress commands: cy.visit(), cy.get(), cy.click()
+// These work for 80% of scenarios
+
+// But sometimes you need:
+// 1. Real browser events (not simulated)
+// 2. File uploads
+// 3. Database operations (cy.task)
+// 4. Custom reporters
+// 5. Visual regression testing
+// 6. Custom assertions
+
+// Plugins fill these gaps
+```
+
+**Types of Plugins:**
+```typescript
+// 1. NPM Plugins (Community-built)
+// npm install cypress-real-events
+// Just import and use
+
+// 2. Custom Node Tasks (Node.js capabilities)
+// Access file system, databases, external APIs
+// Run in Node.js process (not browser)
+
+// 3. Reporters (Different output formats)
+// Default: CLI output
+// Custom: HTML, JSON, screenshots, videos
+
+// 4. Preprocessors (Transform test files)
+// TypeScript, ES6+, custom syntax
+```
+
+#### ADVANCED THEORY: Plugin Architecture
+
+**How Plugins Integrate:**
+```typescript
+// cypress.config.ts - The bridge between Cypress & Node.js
+import { defineConfig } from 'cypress'
+
+export default defineConfig({
+  e2e: {
+    setupNodeEvents(on, config) {
+      // 'on' = event registration
+      // 'config' = Cypress configuration
+      
+      // Register tasks (can do anything in Node.js)
+      on('task', {
+        // File operations
+        'db:seed': () => {
+          // Run Node.js code
+          // Access databases, file system, APIs
+          return seedDatabase()
+        },
+        
+        // Environment setup
+        'setup:env': (env) => {
+          process.env.DATABASE_URL = env.dbUrl
+          return null
+        },
+        
+        // Custom operations
+        'email:verify': (email) => {
+          // Could verify test email was sent
+          return checkEmailService(email)
+        }
+      })
+      
+      // Hook into Cypress lifecycle
+      on('before:run', (details) => {
+        // Before tests start
+        console.log('Starting tests...')
+      })
+      
+      on('after:spec', (spec, results) => {
+        // After each spec file completes
+        console.log(`${spec.name}: ${results.stats.passes} passed`)
+      })
+      
+      return config
+    }
+  }
+})
+
+// In your tests:
+cy.task('db:seed')  // Runs Node.js code
+cy.task('email:verify', 'test@test.com')  // Pass parameters
+```
+
+**Plugin Benefits & Costs:**
+```typescript
+// Benefits:
+// 1. Access Node.js capabilities from tests
+// 2. Setup/teardown at system level
+// 3. Advanced reporting
+// 4. Real browser events (when simulated don't work)
+// 5. Community plugins solve common problems
+
+// Costs:
+// 1. Adds complexity
+// 2. Breaks browser sandbox (security consideration)
+// 3. Plugin maintenance (might break with Cypress updates)
+// 4. Performance overhead if not careful
+
+// When to use:
+// ✅ Database seeding (cy.task)
+// ✅ File uploads (cypress-file-upload)
+// ✅ Real clicks/hovers (cypress-real-events)
+// ✅ HTML reports (mochawesome)
+// ✅ CI integration tasks
+
+// When NOT to use:
+// ❌ Just for ease - complexity cost too high
+// ❌ When native Cypress command works
+// ❌ Overly complex custom plugins
+```
+
+#### KEY POINTS:
+✓ Plugins extend Cypress capabilities beyond core commands
+✓ NPM plugins = easy plug-and-play
+✓ Tasks run in Node.js - access databases, file system
+✓ Hooks run at test lifecycle boundaries
+✓ Only use when native Cypress can't solve problem
+✓ Balance functionality gain against complexity cost
+
+---
+
+### Popular Cypress Plugins
+
+```typescript
+// 1. cypress-real-events - Real browser events
+// npm install cypress-real-events
+import 'cypress-real-events/support'
+
+cy.get('input').realType('text')
+cy.get('button').realClick()
+cy.get('input').realHover()
+
+// 2. cypress-file-upload
+// npm install cypress-file-upload
+
+cy.get('input[type="file"]').attachFile('document.pdf')
+
+// 3. @cypress/webpack-dev-server
+// For component testing
+
+// 4. cypress-wait-until
+// npm install cypress-wait-until
+import 'cypress-wait-until'
+
+cy.waitUntil(() =>
+  cy.get('.element').then($el => $el.text() === 'Expected')
+)
+
+// 5. mochawesome - Better HTML reports
+// npm install mochawesome
+
+// In cypress.config.ts:
+reporter: 'mochawesome',
+reporterOptions: {
+  reportDir: 'cypress/reports',
+  overwrite: false,
+  html: true,
+  json: true
+}
+
+// Custom plugin creation - cypress.config.ts
+import { defineConfig } from 'cypress'
+import customPlugin from './cypress/plugins/custom'
+
+export default defineConfig({
+  e2e: {
+    setupNodeEvents(on, config) {
+      customPlugin(on, config)
+      return config
+    }
+  }
+})
+
+// cypress/plugins/custom.ts
+export default function customPlugin(on: any, config: any) {
+  on('task', {
+    log(message: string) {
+      console.log(message)
+      return null
+    },
+    table(data: any) {
+      console.table(data)
+      return null
+    }
+  })
+}
+
+// Using custom tasks:
+cy.task('log', 'Custom message')
+cy.task('table', { name: 'John', age: 30 })
+```
+
+---
+
+---
+
+## Real-World Examples {#examples}
+
+### THEORY: From Theory to Practice
+
+#### BASIC THEORY: How to Apply What You've Learned
+
+Testing theory is useless without practical application. Here's how to think about real-world scenarios:
+
+**Testing Mindset Hierarchy:**
+```
+Level 1: "How do I click a button?" → cy.get().click()
+Level 2: "How do I find reliable selectors?" → data-testid
+Level 3: "How do I organize this?" → Page Objects
+Level 4: "How do I handle complex flows?" → Custom commands + Advanced Patterns
+Level 5: "How do I ensure reliability?" → Isolate tests + Mock APIs + Handle errors
+```
+
+**Applying Theory to Real Tests:**
+```typescript
+// ❌ Level 1 thinking (brittle)
+it('test', () => {
+  cy.get('.header > div > button').click()
+  cy.wait(3000)  // Arbitrary wait
+  cy.get('.form > input').type('text')
+})
+
+// ✅ Level 5 thinking (robust)
+describe('User Workflow', () => {
+  beforeEach(() => {
+    // Setup: Consistent state
+    cy.clearLocalStorage()
+    cy.mockLoginAPI()
+  })
+
+  afterEach(() => {
+    // Teardown: Clean up
+    cy.logout()
+  })
+
+  it('should complete form submission', () => {
+    // Use reliable selectors (data-testid)
+    // Wait for conditions, not arbitrary time
+    // Organize with Page Objects or custom commands
+    // Mock external APIs
+    // One responsibility per test
+    
+    loginPage.visit()
+    loginPage.login('user@test.com', 'password')
+    dashboardPage.verifyLoggedIn()
+    
+    dashboardPage.navigateToForm()
+    formPage.fillAndSubmit({
+      name: 'John Doe',
+      email: 'john@test.com'
+    })
+    formPage.verifySuccess()
+  })
+})
+```
+
+#### ADVANCED THEORY: Testing Patterns & Anti-Patterns Applied
+
+**Real-World Decision Framework:**
+```typescript
+// When faced with a testing challenge, ask:
+
+// 1. Is this flaky?
+//    → Root cause: timing, selector, state, assertion, network
+//    → Solution: specific to cause
+
+// 2. Is this slow?
+//    → Cause: Arbitrary waits, API calls, browser overhead
+//    → Solution: Mock APIs, remove cy.wait(n), parallel tests
+
+// 3. Is this hard to read?
+//    → Cause: Scattered selectors, unclear intent
+//    → Solution: Page Objects, custom commands, descriptive names
+
+// 4. Is this brittle?
+//    → Cause: CSS selectors, implementation details
+//    → Solution: data-testid, behavior-focused testing
+
+// 5. Is this breaking other tests?
+//    → Cause: Shared state, test interdependence
+//    → Solution: beforeEach/afterEach cleanup, isolated tests
+
+// Apply THEORY to PRACTICE:
+// Problem: Test sometimes fails randomly
+// Theory: Likely race condition or timing issue
+// Solution: Use auto-wait conditions, not cy.wait()
+// Result: Reliable test that doesn't fail randomly
+```
+
+#### KEY POINTS:
+✓ Start at Level 1 (selectors), progress to Level 5 (architecture)
+✓ Each test should have one responsibility
+✓ Setup consistent state with beforeEach
+✓ Clean up with afterEach
+✓ Use theory to diagnose problems systematically
+✓ Apply patterns: Page Objects, Custom Commands, Mocking
+✓ Think about maintainability from day 1
+
+---
+
+### Complete E2E Test Suite
+
+```typescript
+// e2e/complete-app.cy.ts
+
+import { LoginPage } from '../support/pages/LoginPage'
+import { DashboardPage } from '../support/pages/DashboardPage'
+
+describe('Complete Application Flow', () => {
+  const loginPage = new LoginPage()
+  const dashboardPage = new DashboardPage()
+
+  beforeEach(() => {
+    // Reset state
+    cy.clearLocalStorage()
+    cy.clearCookies()
+    
+    // Mock API responses
+    cy.intercept('POST', '/api/login', {
+      statusCode: 200,
+      body: {
+        token: 'mock-token',
+        user: { id: 1, name: 'John Doe', email: 'john@test.com' }
+      }
+    }).as('login')
+    
+    cy.intercept('GET', '/api/dashboard', {
+      statusCode: 200,
+      body: {
+        stats: {
+          users: 100,
+          revenue: 50000,
+          orders: 250
+        }
+      }
+    }).as('dashboard')
+  })
+
+  it('should complete full user journey', () => {
+    // 1. Login
+    loginPage.visit()
+    loginPage.login('john@test.com', 'password123')
+    
+    // 2. Verify login
+    cy.wait('@login')
+    dashboardPage.verifyLoggedIn()
+    
+    // 3. Navigate and verify
+    cy.wait('@dashboard')
+    dashboardPage.verifyTitle('Dashboard')
+    
+    // 4. Interact with dashboard
+    cy.get('[data-testid="stats-card"]').should('have.length', 3)
+    cy.get('[data-testid="revenue"]').should('contain', '$50,000')
+    
+    // 5. Logout
+    dashboardPage.logout()
+    cy.url().should('include', '/login')
+  })
+
+  it('should handle login errors', () => {
+    cy.intercept('POST', '/api/login', {
+      statusCode: 401,
+      body: { error: 'Invalid credentials' }
+    }).as('loginError')
+    
+    loginPage.visit()
+    loginPage.login('john@test.com', 'wrongpassword')
+    
+    cy.wait('@loginError')
+    cy.get('[data-testid="error"]').should('contain', 'Invalid credentials')
+  })
+
+  it('should persist login state on refresh', () => {
+    cy.visit('/', {
+      onBeforeLoad: (win) => {
+        win.localStorage.setItem('token', 'mock-token')
+        win.localStorage.setItem('user', JSON.stringify({
+          id: 1,
+          name: 'John Doe'
+        }))
+      }
+    })
+    
+    cy.get('[data-testid="user-menu"]').should('be.visible')
+    cy.reload()
+    cy.get('[data-testid="user-menu"]').should('be.visible')
+  })
+})
+
+// e2e/form-testing.cy.ts
+describe('Form Testing', () => {
+  beforeEach(() => {
+    cy.visit('/form')
+  })
+
+  it('should validate form fields', () => {
+    // Try to submit empty form
+    cy.get('button[type="submit"]').click()
+    
+    // Verify errors
+    cy.get('[data-testid="name-error"]').should('contain', 'Required')
+    cy.get('[data-testid="email-error"]').should('contain', 'Invalid email')
+    cy.get('[data-testid="phone-error"]').should('contain', 'Invalid phone')
+  })
+
+  it('should submit valid form', () => {
+    cy.intercept('POST', '/api/submit', {
+      statusCode: 200,
+      body: { success: true }
+    }).as('submit')
+    
+    cy.get('[data-testid="name"]').type('John Doe')
+    cy.get('[data-testid="email"]').type('john@test.com')
+    cy.get('[data-testid="phone"]').type('5551234567')
+    cy.get('[data-testid="country"]').select('USA')
+    cy.get('[data-testid="newsletter"]').check()
+    
+    cy.get('button[type="submit"]').click()
+    
+    cy.wait('@submit')
+    cy.get('[data-testid="success"]').should('be.visible')
+  })
+})
+
+// e2e/api-testing.cy.ts
+describe('API Testing', () => {
+  it('should fetch and display data', () => {
+    const mockUsers = [
+      { id: 1, name: 'User 1', email: 'user1@test.com' },
+      { id: 2, name: 'User 2', email: 'user2@test.com' }
+    ]
+    
+    cy.intercept('GET', '/api/users', {
+      statusCode: 200,
+      body: mockUsers
+    }).as('getUsers')
+    
+    cy.visit('/users')
+    cy.wait('@getUsers')
+    
+    cy.get('[data-testid="user-row"]').should('have.length', 2)
+    cy.get('[data-testid="user-row"]').first().should('contain', 'User 1')
+  })
+
+  it('should handle API errors', () => {
+    cy.intercept('GET', '/api/users', {
+      statusCode: 500,
+      body: { error: 'Server error' }
+    }).as('getUsersError')
+    
+    cy.visit('/users')
+    cy.wait('@getUsersError')
+    
+    cy.get('[data-testid="error"]').should('contain', 'Error loading users')
+  })
+
+  it('should retry on timeout', () => {
+    cy.intercept('GET', '/api/users', (req) => {
+      req.reply((res) => {
+        res.delay(2000)
+        res.statusCode = 200
+        res.body = []
+      })
+    }).as('getUsers')
+    
+    cy.visit('/users')
+    cy.wait('@getUsers', { timeout: 5000 })
+  })
+})
+```
+
+---
+
+## Key Takeaways
+
+### Complete Learning Path: Beginner to Expert
+
+#### Stage 1: Foundation (Week 1-2)
+**What You Should Know:**
+- Basic Cypress commands: cy.visit(), cy.get(), cy.click(), cy.type()
+- Basic assertions: .should('exist'), .should('contain'), .should('be.visible')
+- Selector basics: class selectors, ID selectors, data-testid
+
+**Hands-On Practice:**
+```typescript
+it('should interact with basic elements', () => {
+  cy.visit('/login')
+  cy.get('[data-testid="email"]').type('test@test.com')
+  cy.get('[data-testid="password"]').type('password')
+  cy.get('button').click()
+  cy.url().should('include', '/dashboard')
+})
+```
+
+**Key Milestones:**
+✓ Can write simple navigation tests
+✓ Understand cy commands are chainable
+✓ Know difference between cy.get() and assertions
+
+---
+
+#### Stage 2: Core Concepts (Week 3-4)
+**What You Should Know:**
+- Auto-waiting mechanism (4s default, 50ms retry)
+- Subject and context in command chains
+- Implicit vs explicit assertions
+- Form interactions and validation
+- When and why to wait for conditions
+
+**Hands-On Practice:**
+```typescript
+describe('Form Validation', () => {
+  it('should validate and submit form', () => {
+    cy.visit('/form')
+    cy.get('button').click()  // Try submit empty
+    cy.get('[data-testid="error"]').should('be.visible')  // Wait for error
+    
+    cy.get('[data-testid="name"]').type('John')
+    cy.get('[data-testid="email"]').type('john@test.com')
+    cy.get('button').click()  // Submit valid
+    cy.get('[data-testid="success"]').should('exist')  // Auto-wait
+  })
+})
+```
+
+**Key Milestones:**
+✓ Understand auto-waiting prevents flakiness
+✓ Can write form tests that don't have arbitrary waits
+✓ Know why .should() is preferred over .then()
+
+---
+
+#### Stage 3: Organization (Week 5-6)
+**What You Should Know:**
+- Page Object Model architecture
+- Custom commands (what, when, why)
+- API mocking with cy.intercept()
+- Test isolation (beforeEach/afterEach)
+
+**Hands-On Practice:**
+```typescript
+// pages/LoginPage.ts
+export class LoginPage {
+  emailInput = () => cy.get('[data-testid="email"]')
+  login(email, password) {
+    this.emailInput().type(email)
+    cy.get('[data-testid="password"]').type(password)
+    cy.get('button').click()
+    return this
+  }
+}
+
+// Cypress.Commands.add
+Cypress.Commands.add('mockLoginAPI', () => {
+  cy.intercept('POST', '/api/login', { token: 'mock' }).as('login')
+})
+
+// test
+describe('Auth', () => {
+  beforeEach(() => {
+    cy.clearLocalStorage()
+    cy.mockLoginAPI()
+  })
+
+  it('should login', () => {
+    const page = new LoginPage()
+    page.visit()
+    page.login('user@test.com', 'password')
+  })
+})
+```
+
+**Key Milestones:**
+✓ Tests use Page Objects (not scattered selectors)
+✓ Understand why isolation matters
+✓ Can mock APIs for independent tests
+
+---
+
+#### Stage 4: Reliability (Week 7-8)
+**What You Should Know:**
+- Debugging flaky tests (root cause analysis)
+- Common anti-patterns and why they're bad
+- Synchronization strategies
+- Error handling in tests
+
+**Hands-On Practice:**
+```typescript
+describe('Reliable Tests', () => {
+  // ❌ BEFORE: Flaky
+  // it('fails sometimes', () => {
+  //   cy.wait(2000)
+  //   cy.get('.element').click()
+  // })
+
+  // ✅ AFTER: Reliable
+  it('works consistently', () => {
+    cy.get('.loader').should('not.exist')  // Wait for load done
+    cy.get('[data-testid="element"]').should('be.visible')  // Not hidden
+    cy.get('[data-testid="element"]').click()
+  })
+
+  it('handles errors gracefully', () => {
+    cy.on('uncaught:exception', (err) => {
+      if (err.message.includes('expected')) return false
+    })
+  })
+})
+```
+
+**Key Milestones:**
+✓ Can identify and fix flaky tests
+✓ Write resilient selectors
+✓ Understand root causes of test failures
+
+---
+
+#### Stage 5: Advanced Patterns (Week 9-10)
+**What You Should Know:**
+- Conditional testing and error handling
+- Advanced command patterns
+- Complex workflows and state management
+- Performance optimization
+
+**Hands-On Practice:**
+```typescript
+describe('Advanced Workflows', () => {
+  it('should handle optional elements', () => {
+    cy.get('body').then(($body) => {
+      if ($body.find('[data-testid="banner"]').length > 0) {
+        cy.get('[data-testid="banner"]').close()
+      }
+    })
+    cy.get('[data-testid="content"]').should('be.visible')
+  })
+
+  it('should work with dynamic content', () => {
+    cy.intercept('GET', '/api/data', { data: [] }).as('empty')
+    cy.visit('/data')
+    cy.wait('@empty')
+    
+    cy.intercept('GET', '/api/data', { data: [{id: 1}] }).as('filled')
+    cy.get('[data-testid="refresh"]').click()
+    cy.wait('@filled')
+    
+    cy.get('[data-testid="item"]').should('have.length', 1)
+  })
+})
+```
+
+**Key Milestones:**
+✓ Handle complex application states
+✓ Test conditional UI rendering
+✓ Understand advanced mocking scenarios
+
+---
+
+#### Stage 6: Mastery (Week 11+)
+**What You Should Know:**
+- Enterprise test architecture
+- Team testing standards
+- Performance and scalability
+- CI/CD integration
+
+**Mastery Indicators:**
+✓ Can architect test suite for large app
+✓ Mentor others on Cypress best practices
+✓ Optimize test execution time
+✓ Build custom plugins when needed
+✓ Integrate with CI/CD pipeline
+
+---
+
+### Theory-Practice Mapping
+
+**Core Theories & Their Applications:**
+
+| Theory | Why It Matters | Real-World Impact |
+|--------|---------------|------------------|
+| **Chainable API** | Enables auto-wait | Tests don't fail on timing |
+| **Auto-Retry** | Built-in synchronization | Stable tests, fewer cy.wait() |
+| **Implicit Assertions** | Auto-retry like queries | More reliable assertions |
+| **Form States** | Understanding UX flows | Tests match user behavior |
+| **API Mocking** | Independent tests | Fast, reliable, isolated tests |
+| **Page Objects** | Centralized selectors | Maintenance = changing one place |
+| **Custom Commands** | DRY principle | Less code, more readable |
+| **Error Handling** | Graceful degradation | One JS error won't crash suite |
+
+---
+
+### Decision Tree: Choosing the Right Approach
+
+```
+Problem: "How do I test this?"
+  │
+  ├─→ Is it a simple element interaction?
+  │   └─→ cy.get() + cy.click/type() + .should()
+  │
+  ├─→ Is it a form submission?
+  │   └─→ Page Object + Form states + Mock API
+  │
+  ├─→ Is it an API call?
+  │   └─→ cy.intercept() with mock response
+  │
+  ├─→ Is it navigation?
+  │   └─→ cy.visit() + cy.location().should()
+  │
+  ├─→ Is it something repeated?
+  │   └─→ Custom Cypress.Commands.add()
+  │
+  ├─→ Is it complex workflow?
+  │   └─→ Custom command + conditional logic
+  │
+  └─→ Is it dynamic/unpredictable?
+      └─→ cy.get().then() for conditional testing
+```
+
+---
+
+### Common Mistakes & How to Avoid Them
+
+| Mistake | Why It's Bad | Solution |
+|---------|------------|----------|
+| **cy.wait(3000)** | Slow, unreliable, flaky | Use cy.get().should() |
+| **Scattered selectors** | Hard to maintain | Use Page Objects |
+| **CSS class selectors** | Break on styling changes | Use data-testid |
+| **No setup/teardown** | Tests affect each other | beforeEach/afterEach |
+| **Testing internals** | Tests break on refactor | Test user behavior |
+| **No API mocking** | Tests depend on backend | Mock with cy.intercept() |
+| **Ignoring errors** | Miss real problems | cy.on('uncaught:exception') |
+| **Too many assertions** | Unclear test intent | One assertion per step |
+
+---
+
+### Quick Reference: When to Use What
+
+```typescript
+// When to use cy.visit()
+cy.visit('/')  // Load page at start
+
+// When to use cy.get()
+cy.get('[data-testid="button"]')  // Find element for interaction
+
+// When to use cy.contains()
+cy.contains('Click me')  // Find by text content
+
+// When to use .should()
+cy.get('input').should('have.value', 'text')  // Assert state
+
+// When to use .then()
+cy.get('input').then(($input) => {
+  expect($input.val()).to.equal('text')
+})  // When should() can't do it
+
+// When to use cy.intercept()
+cy.intercept('/api/users', { users: [] })  // Mock API
+
+// When to use cy.task()
+cy.task('db:seed')  // Access Node.js (file system, DB)
+
+// When to use Page Objects
+// When tests repeat same selectors and interactions
+
+// When to use Custom Commands
+// When tests repeat same sequence of actions
+
+// When to use conditional testing
+// When UI might or might not have element (optional)
+```
+
+---
+
+### Your Cypress Journey
+
+**Remember:**
+1. **Start simple** - Master basics before advanced patterns
+2. **Think about maintainability** - Selectors will change, organize accordingly
+3. **Make tests independent** - Each test should pass/fail on its own
+4. **Use theory to debug** - Understand the WHY behind each command
+5. **Build gradually** - Page Objects, custom commands, advanced patterns come with practice
+
+**Progress Markers:**
+- Week 1: Writing basic tests ✅
+- Week 2: Understanding auto-wait ✅
+- Week 3-4: Using Page Objects ✅
+- Week 5-6: Mocking APIs ✅
+- Week 7-8: Fixing flaky tests ✅
+- Week 9+: Advanced patterns & mastery ✅
+
+**Resources for Continued Learning:**
+- Cypress Documentation: https://docs.cypress.io
+- Real World Testing: https://realworldtesting.io
+- Common Issues: Cypress GitHub issues
+- Community: Cypress Slack, Stack Overflow
+
+---
+
+### Final Thoughts
+
+1. **Cypress runs in the browser** - Same origin, direct DOM access
+2. **Commands are queued** - Not executed immediately
+3. **Auto-waiting and retrying** - Built-in synchronization (4s default, 50ms intervals)
+4. **Intercept network requests** - Mock APIs for testing
+5. **Page Object Model** - Organize tests for maintainability
+6. **Custom commands** - Reduce code duplication
+7. **Use data-testid** - Reliable element selection
+8. **Test user behavior** - Not implementation details
+9. **Keep tests isolated** - Each test independent
+10. **Debug with screenshots/videos** - Built-in time travel debugging
+
+Cypress provides a modern, developer-friendly approach to end-to-end testing with excellent debugging capabilities and a powerful API for testing web applications comprehensively.
+
+---
+
+### Document Statistics
+
+**Total Sections:** 16 main sections
+**Total Lines:** 3,900+
+**Coverage:**
+- ✅ Foundation: Installation, selectors, basic commands
+- ✅ Core Theory: Chainable API, auto-waiting, assertions
+- ✅ Practical Skills: Forms, network mocking, debugging
+- ✅ Architecture: Page Objects, custom commands, plugins
+- ✅ Advanced: Patterns, best practices, real-world examples
+- ✅ Learning Path: From beginner to expert progression
+
+**Mastered by reading this document:**
+- Understanding Cypress architecture and philosophy
+- Writing reliable, maintainable tests
+- Debugging and fixing flaky tests
+- Building scalable test suites
+- Mentoring others on Cypress best practices
+
+# Cypress Testing - Interview Questions & Answers
+
+## Table of Contents
+1. [Beginner Level](#beginner)
+2. [Intermediate Level](#intermediate)
+3. [Advanced Level](#advanced)
+4. [Expert Level](#expert)
+5. [Scenario-Based Questions](#scenarios)
+6. [Tricky Questions](#tricky)
+
+---
+
+## BEGINNER LEVEL {#beginner}
+
+### Q1: What is Cypress and how is it different from Selenium?
+
+**Answer:**
+
+Cypress is a modern end-to-end testing framework designed specifically for web applications. Key differences:
+
+| Aspect | Cypress | Selenium |
+|--------|---------|----------|
+| **Execution** | Runs IN the browser (same process) | Runs OUTSIDE browser (WebDriver protocol) |
+| **Architecture** | Direct DOM access | WebDriver commands over network |
+| **Speed** | Fast (no network overhead) | Slower (network lag) |
+| **Debugging** | Time travel (snapshots at each step) | Limited debugging |
+| **Stability** | Built-in auto-wait, auto-retry | Manual waits needed |
+| **Setup** | Simple (npm install) | Complex (drivers, paths) |
+| **Language** | JavaScript/TypeScript | Multiple languages |
+| **API** | Chainable, synchronous-looking | Traditional async |
+
+**Example:**
+```typescript
+// Cypress (synchronous-looking, async underneath)
+cy.visit('/')
+cy.get('[data-testid="button"]').click()
+cy.url().should('include', '/dashboard')
+
+// Selenium (explicit waits needed)
+driver.get('/')
+element = WebDriverWait(driver, 10).until(
+    EC.element_to_be_clickable((By.ID, "button"))
+)
+element.click()
+```
+
+---
+
+### Q2: Explain the chainable API in Cypress. Why is it important?
+
+**Answer:**
+
+The chainable API means every Cypress command returns a "Chainable" object that allows further chaining. This is fundamental to how Cypress works.
+
+**Key Points:**
+
+1. **Commands are queued, not executed immediately**
+   ```typescript
+   // These commands are QUEUED, not executed yet
+   cy.visit('/')
+   cy.get('.button')
+   cy.click()
+   // They execute AFTER the chain is complete or .then() is called
+   ```
+
+2. **Each command transforms the subject**
+   ```typescript
+   cy.visit('/')              // Subject: window
+     .get('.form')            // Subject: form element
+     .find('input')           // Subject: input element
+     .type('text')            // Subject: input element (same)
+   ```
+
+3. **Enables auto-wait and auto-retry**
+   ```typescript
+   // Because commands are queued, Cypress can:
+   // 1. Wait for page to load
+   // 2. Wait for element to appear (auto-retry every 50ms)
+   // 3. Execute in correct order
+   // Without this, you'd need cy.wait(3000) everywhere
+   ```
+
+4. **Makes tests readable**
+   ```typescript
+   // Reads like English
+   cy.get('.form')
+     .find('input')
+     .type('user@test.com')
+     .should('have.value', 'user@test.com')
+   ```
+
+**Why It's Important:**
+- Prevents flaky tests (auto-wait handles timing)
+- Makes tests readable (natural language flow)
+- Reduces boilerplate (no manual waits)
+- Enables powerful debugging (time travel)
+
+---
+
+### Q3: What is auto-waiting and how does it work?
+
+**Answer:**
+
+Auto-waiting is Cypress automatically waiting for elements to appear and commands to succeed before moving to the next step.
+
+**How It Works:**
+
+```typescript
+// Default timeout: 4000ms
+// Retry interval: 50ms
+
+// Execution timeline:
+cy.get('.loader')                    // Start: 0ms
+// Cypress tries to find .loader
+// Not found? Wait 50ms
+// Try again at 50ms
+// Still not found? Wait 50ms
+// Try again at 100ms
+// ... continues until found or timeout (4000ms)
+.should('not.exist')                 // Continues after found
+
+cy.get('.content')                   // Now waits for content to appear
+.should('be.visible')                // Waits for visible state
+```
+
+**Key Benefits:**
+```typescript
+// ✅ With auto-wait (stable test)
+it('should display content', () => {
+  cy.visit('/')
+  cy.get('.loader').should('not.exist')     // Waits for loader gone
+  cy.get('[data-testid="content"]')
+    .should('be.visible')                    // Waits for visible
+  // Test passes consistently
+})
+
+// ❌ Without auto-wait (flaky test)
+it('should display content', () => {
+  cy.visit('/')
+  cy.wait(2000)  // Arbitrary! Maybe not enough
+  cy.get('.content')  // What if still loading?
+})
+```
+
+**Configuration:**
+```typescript
+// cypress.config.ts
+export default defineConfig({
+  e2e: {
+    defaultCommandTimeout: 4000,  // Default
+    requestTimeout: 5000,         // API calls
+  }
+})
+
+// Override per command
+cy.get('.element', { timeout: 10000 })
+```
+
+---
+
+### Q4: What's the difference between `.get()` and `.contains()`?
+
+**Answer:**
+
+```typescript
+// cy.get() - Find by selector
+cy.get('[data-testid="button"]')       // By attribute
+cy.get('.class-name')                  // By class
+cy.get('#id')                          // By ID
+cy.get('input[type="email"]')          // By tag + attribute
+
+// cy.contains() - Find by text content
+cy.contains('Click me')                // Find element with this text
+cy.contains('button', 'Click me')      // Find button with this text
+cy.contains(/regular expression/)      // Find by regex
+
+// Practical example
+// HTML: <button class="btn">Submit Form</button>
+
+// ✅ Works - find by text
+cy.contains('Submit Form').click()
+
+// ❌ Fails - looking for testid that doesn't exist
+cy.get('[data-testid="submit-form-button"]').click()
+
+// Combination
+cy.contains('div', 'Click me')         // Find div containing "Click me"
+```
+
+**When to Use:**
+- **cy.get()** - Preferred (more stable)
+- **cy.contains()** - When text is unique and won't change
+
+---
+
+### Q5: How do you handle waits in Cypress? What's the difference between `cy.wait()` and `.should()`?
+
+**Answer:**
+
+```typescript
+// ❌ cy.wait(n) - AVOID except for API calls
+cy.wait(3000)  // Wait 3 seconds (arbitrary, flaky)
+cy.get('.content')
+
+// ✅ .should() - PREFERRED (conditional wait)
+cy.get('.loader').should('not.exist')     // Wait for condition
+cy.get('.content').should('be.visible')   // Auto-retries
+
+// cy.wait() FOR API REQUESTS - CORRECT USE
+cy.intercept('GET', '/api/users').as('getUsers')
+cy.visit('/users')
+cy.wait('@getUsers')  // Wait for API response
+cy.get('[data-testid="user-row"]').should('have.length', 1)
+```
+
+**Key Differences:**
+
+| Aspect | cy.wait(n) | .should() |
+|--------|-----------|----------|
+| **Purpose** | Wait fixed time | Wait for condition |
+| **Retries** | None - waits exact time | Yes - every 50ms |
+| **Reliability** | Flaky | Stable |
+| **Use Case** | API responses | Element conditions |
+| **Performance** | Slow | Fast |
+
+**Correct Patterns:**
+```typescript
+// ✅ GOOD - Wait for conditions
+cy.get('.loader').should('not.exist')
+cy.get('[data-testid="form"]').should('be.visible')
+cy.get('input').should('have.value', 'text')
+
+// ❌ BAD - Arbitrary waits
+cy.wait(5000)
+cy.get('.element')
+
+// ✅ GOOD - Wait for API
+cy.intercept('POST', '/api/submit').as('submit')
+cy.get('button').click()
+cy.wait('@submit')  // Wait for this specific request
+
+// ❌ BAD - Using arbitrary wait for API
+cy.wait(3000)  // How long does API take?
+cy.get('.success')
+```
+
+---
+
+### Q6: What are the basic Cypress commands?
+
+**Answer:**
+
+```typescript
+// Navigation
+cy.visit('/')                          // Go to URL
+cy.reload()                            // Reload page
+cy.go('back')                          // Go back in history
+cy.go('forward')                       // Go forward
+
+// Finding Elements
+cy.get('[data-testid="button"]')       // By selector
+cy.contains('text')                    // By text
+cy.find('.class')                      // Find within previous subject
+cy.filter(':visible')                  // Filter subject
+
+// Interacting with Elements
+cy.click()                             // Click element
+cy.type('text')                        // Type text in input
+cy.clear()                             // Clear input
+cy.select('option-value')              // Select dropdown option
+cy.check()                             // Check checkbox/radio
+cy.uncheck()                           // Uncheck checkbox/radio
+cy.trigger('mouseover')                // Trigger event
+
+// Assertions
+cy.get('input').should('have.value', 'text')
+cy.get('.element').should('exist')
+cy.get('.element').should('be.visible')
+cy.get('button').should('be.disabled')
+cy.url().should('include', '/dashboard')
+
+// Working with Multiple Elements
+cy.get('[data-testid="row"]')          // Gets all rows
+  .should('have.length', 3)            // Assert count
+  .eq(0)                               // Get first
+  .click()                             // Click it
+
+// Getting Values
+cy.get('input').invoke('val')          // Get input value
+cy.get('.text').invoke('text')         // Get text content
+cy.get('img').invoke('attr', 'src')    // Get attribute
+```
+
+---
+
+## INTERMEDIATE LEVEL {#intermediate}
+
+### Q7: Explain implicit vs explicit assertions. Which one should you use?
+
+**Answer:**
+
+**Implicit Assertions (with .should()):**
+- Auto-retry up to 4 seconds
+- Preferred approach
+- Stable tests
+
+```typescript
+// ✅ Implicit - Retries until passes or timeout
+cy.get('input').should('have.value', 'text')
+// Cypress retries every 50ms until this passes
+// If value eventually becomes 'text' → passes
+// If not after 4s → fails
+
+cy.get('.loader').should('not.exist')
+// Retries checking if .loader exists
+// Very reliable for dynamic content
+```
+
+**Explicit Assertions (with .then() expect()):**
+- No retry - executes once
+- Less reliable
+- Use only when .should() isn't available
+
+```typescript
+// ❌ Explicit - No retry
+cy.get('input').then(($input) => {
+  expect($input.val()).to.equal('text')  // Executes once
+  // If this fails immediately, test fails
+  // No second chance
+})
+
+// ✅ Better - Use implicit
+cy.get('input').should('have.value', 'text')  // Retries
+```
+
+**Comparison:**
+
+| Aspect | Implicit (.should()) | Explicit (.then() expect()) |
+|--------|-------------------|---------------------------|
+| **Retry** | Yes (every 50ms) | No |
+| **Timeout** | 4s default | Immediate |
+| **Use Case** | Most assertions | Complex logic only |
+| **Reliability** | High | Low |
+| **Performance** | Fast (passes early) | Slightly faster if passes |
+| **Debugging** | Time travel shows retries | Can't see retries |
+
+**When to Use:**
+
+```typescript
+// ✅ Use implicit for simple checks
+cy.get('.element').should('be.visible')
+cy.get('input').should('have.value', 'text')
+cy.url().should('include', '/dashboard')
+
+// ⚠️ Use explicit only for complex logic (rarely)
+cy.get('body').then(($body) => {
+  if ($body.find('.error').length > 0) {
+    expect($body.find('.error')).to.exist
+  }
+})
+```
+
+**Key Insight:** Always use `.should()` when possible because it auto-retries, making tests much more stable.
+
+---
+
+### Q8: How do you handle API mocking with `cy.intercept()`?
+
+**Answer:**
+
+`cy.intercept()` allows you to intercept and mock HTTP requests.
+
+**Basic Syntax:**
+```typescript
+cy.intercept('METHOD', 'url-pattern', response).as('alias')
+
+// Examples
+cy.intercept('GET', '/api/users', { users: [] }).as('getUsers')
+cy.intercept('POST', '/api/login', { token: 'mock-token' }).as('login')
+cy.intercept('DELETE', '/api/user/1', { statusCode: 204 }).as('delete')
+```
+
+**Mock Success Response:**
+```typescript
+cy.intercept('GET', '/api/users', {
+  statusCode: 200,
+  body: [
+    { id: 1, name: 'User 1' },
+    { id: 2, name: 'User 2' }
+  ]
+}).as('getUsers')
+
+cy.visit('/users')
+cy.wait('@getUsers')  // Wait for request
+cy.get('[data-testid="user-row"]').should('have.length', 2)
+```
+
+**Mock Error Response:**
+```typescript
+cy.intercept('POST', '/api/login', {
+  statusCode: 401,
+  body: { error: 'Invalid credentials' }
+}).as('loginError')
+
+cy.get('[data-testid="email"]').type('user@test.com')
+cy.get('[data-testid="password"]').type('wrong')
+cy.get('[data-testid="login-btn"]').click()
+cy.wait('@loginError')
+cy.get('[data-testid="error"]').should('contain', 'Invalid credentials')
+```
+
+**Conditional Mocking:**
+```typescript
+cy.intercept('GET', '/api/data', (req) => {
+  if (req.query.filter === 'active') {
+    req.reply({
+      statusCode: 200,
+      body: [{ id: 1, status: 'active' }]
+    })
+  } else {
+    req.reply({
+      statusCode: 200,
+      body: [{ id: 1, status: 'active' }, { id: 2, status: 'inactive' }]
+    })
+  }
+}).as('getData')
+```
+
+**Multiple Intercepts:**
+```typescript
+cy.intercept('GET', '/api/users', { users: [] }).as('getUsers')
+cy.intercept('POST', '/api/users', { id: 1 }).as('createUser')
+cy.intercept('DELETE', '/api/users/*', { statusCode: 204 }).as('deleteUser')
+
+// Use different ones in test
+cy.wait('@getUsers')
+cy.wait('@createUser')
+cy.wait('@deleteUser')
+```
+
+**When to Mock:**
+```typescript
+// ✅ Mock for unit/integration tests
+// - Fast, independent, predictable
+// - Great for CI/CD
+
+// ✅ Real API for pre-deployment E2E tests
+// - Against actual backend
+// - Before going to production
+
+// ✅ Both for comprehensive testing
+// - Mock by default (fast feedback)
+// - Real API for final validation
+```
+
+---
+
+### Q9: What is a Page Object Model (POM) and how do you implement it?
+
+**Answer:**
+
+Page Object Model is a design pattern that separates test logic from UI interaction logic. Selectors and methods are organized in "Page Objects" for each page.
+
+**Without POM (Bad - Scattered Selectors):**
+```typescript
+// login.spec.ts
+it('should login', () => {
+  cy.get('[data-testid="email"]').type('user@test.com')
+  cy.get('[data-testid="password"]').type('password')
+  cy.get('[data-testid="login-btn"]').click()
+  cy.url().should('include', '/dashboard')
+})
+
+// dashboard.spec.ts
+it('should logout', () => {
+  cy.get('[data-testid="user-menu"]').click()
+  cy.get('[data-testid="logout-btn"]').click()
+})
+
+// Problem: If email selector changes, fix 10+ tests!
+```
+
+**With POM (Good - Centralized):**
+```typescript
+// pages/LoginPage.ts
+export class LoginPage {
+  // Selectors
+  emailInput = () => cy.get('[data-testid="email"]')
+  passwordInput = () => cy.get('[data-testid="password"]')
+  loginButton = () => cy.get('[data-testid="login-btn"]')
+  errorMessage = () => cy.get('[data-testid="error"]')
+
+  // Actions
+  visit() {
+    cy.visit('/login')
+    return this
+  }
+
+  login(email: string, password: string) {
+    this.emailInput().type(email)
+    this.passwordInput().type(password)
+    this.loginButton().click()
+    return this
+  }
+
+  verifyLoginSuccess() {
+    cy.url().should('include', '/dashboard')
+    return this
+  }
+
+  verifyErrorMessage(message: string) {
+    this.errorMessage().should('contain', message)
+    return this
+  }
+}
+
+// pages/DashboardPage.ts
+export class DashboardPage {
+  userMenu = () => cy.get('[data-testid="user-menu"]')
+  logoutBtn = () => cy.get('[data-testid="logout-btn"]')
+
+  logout() {
+    this.userMenu().click()
+    this.logoutBtn().click()
+    return this
+  }
+}
+
+// Test using POM
+describe('Authentication', () => {
+  it('should login successfully', () => {
+    const loginPage = new LoginPage()
+    const dashboardPage = new DashboardPage()
+
+    loginPage.visit()
+    loginPage.login('user@test.com', 'password')
+    loginPage.verifyLoginSuccess()
+
+    dashboardPage.logout()
+    loginPage.verifyErrorMessage('logged out')
+  })
+})
+
+// Now if email selector changes:
+// Change in ONE place: LoginPage.emailInput()
+// All tests automatically use new selector!
+```
+
+**Benefits:**
+- Selectors in one place (easy to update)
+- Tests are readable (clear intent)
+- Reduces duplication (DRY principle)
+- Maintainable (scales to 100s of tests)
+
+---
+
+### Q10: How do you debug a flaky test?
+
+**Answer:**
+
+Flaky tests fail intermittently. Here's the systematic debugging approach:
+
+**Step 1: Identify the Root Cause**
+
+```typescript
+// Common causes:
+
+// 1. Timing Issues (most common)
+// ❌ cy.wait(3000) - Arbitrary wait
+cy.wait(3000)
+cy.get('.content')
+
+// ✅ Solution: Use conditional wait
+cy.get('.loader').should('not.exist')
+cy.get('.content').should('be.visible')
+
+// 2. Bad Selectors
+// ❌ Depends on CSS structure
+cy.get('.form > div > input')  // Breaks if structure changes
+
+// ✅ Use data-testid
+cy.get('[data-testid="email"]')
+
+// 3. State Issues
+// ❌ No cleanup between tests
+it('test 1', () => { cy.get('button').click() })
+it('test 2', () => { /* Button state from test 1! */ })
+
+// ✅ Use beforeEach/afterEach
+beforeEach(() => cy.clearLocalStorage())
+afterEach(() => cy.logout())
+
+// 4. Element Detachment
+// ❌ Element removed from DOM after interaction
+cy.get('input').type('text')
+// If form re-renders here...
+.should('have.value', 'text')  // Might fail
+
+// ✅ Reference element immediately
+cy.get('input').type('text').should('have.value', 'text')
+
+// 5. Race Conditions
+// ❌ Multiple async operations
+cy.request('/api/1')
+cy.request('/api/2')
+cy.get('.result')  // Which API finished first?
+
+// ✅ Wait for both
+cy.intercept('/api/1').as('req1')
+cy.intercept('/api/2').as('req2')
+cy.visit('/')
+cy.wait(['@req1', '@req2'])
+```
+
+**Step 2: Use Cypress Debugging Tools**
+
+```typescript
+// 1. Screenshots
+cy.screenshot('login-page')  // Save screenshot
+
+// 2. Logging
+cy.log('Starting login...')
+cy.get('input').type('user@test.com')
+cy.log('Typed email')
+
+// 3. Pause execution
+cy.pause()  // Opens DevTools
+cy.get('button').click()
+cy.pause()  // Inspect after click
+
+// 4. Time travel debugging
+// In test runner, hover over commands to see state at that point
+
+// 5. Debug output
+cy.on('uncaught:exception', (err) => {
+  console.log('Error:', err)
+  return false
+})
+```
+
+**Step 3: Fix the Root Cause**
+
+```typescript
+// Example: Flaky form test
+// ❌ BEFORE: Flaky
+it('should submit form', () => {
+  cy.visit('/form')
+  cy.wait(2000)  // Arbitrary!
+  cy.get('.form-input').type('text')
+  cy.wait(1000)  // Another arbitrary wait!
+  cy.get('button').click()
+  cy.wait(3000)  // Hoping 3 seconds is enough
+  cy.get('.success').should('exist')
+})
+
+// ✅ AFTER: Reliable
+it('should submit form', () => {
+  cy.visit('/form')
+  cy.get('.form-input').should('be.visible')  // Wait for form
+  cy.get('.form-input').type('text')
+  cy.get('[data-testid="submit"]').click()
+  cy.get('[data-testid="success"]')
+    .should('be.visible')  // Wait for success message
+})
+```
+
+**Debugging Checklist:**
+```
+✓ Remove arbitrary waits (cy.wait(n))
+✓ Use conditional waits (.should())
+✓ Use data-testid selectors
+✓ Add beforeEach/afterEach cleanup
+✓ Check for element detachment
+✓ Handle race conditions
+✓ Look for test interdependence
+✓ Review server response times
+✓ Check for external state
+```
+
+---
+
+## ADVANCED LEVEL {#advanced}
+
+### Q11: Explain custom Cypress commands and when to use them.
+
+**Answer:**
+
+Custom commands eliminate repetition by encapsulating common test operations.
+
+**Creating Custom Commands:**
+
+```typescript
+// support/commands.ts
+
+// Simple command (no return value)
+Cypress.Commands.add('login', (email: string, password: string) => {
+  cy.visit('/login')
+  cy.get('[data-testid="email"]').type(email)
+  cy.get('[data-testid="password"]').type(password)
+  cy.get('[data-testid="login-btn"]').click()
+})
+
+// Chainable command (returns Chainable)
+Cypress.Commands.add('selectDropdown', (label: string, value: string) => {
+  cy.contains('label', label).parent().find('select').select(value)
+  return cy.get('select')  // Return for chaining
+})
+
+// Command with options
+Cypress.Commands.add(
+  'loginAPI',
+  { prevSubject: false },  // Command doesn't use previous subject
+  (email: string, password: string) => {
+    return cy.request('POST', '/api/login', {
+      email,
+      password
+    }).then(res => {
+      window.localStorage.setItem('token', res.body.token)
+      return res
+    })
+  }
+)
+
+// TypeScript typing
+declare global {
+  namespace Cypress {
+    interface Chainable {
+      login(email: string, password: string): Chainable<void>
+      selectDropdown(label: string, value: string): Chainable<JQuery>
+      loginAPI(email: string, password: string): Chainable<Response>
+    }
+  }
+}
+
+// Using custom commands
+describe('Tests', () => {
+  it('should use custom commands', () => {
+    cy.login('user@test.com', 'password')
+    cy.selectDropdown('Country', 'USA').should('have.value', 'USA')
+    cy.loginAPI('user@test.com', 'password').then(res => {
+      expect(res.status).to.equal(200)
+    })
+  })
+})
+```
+
+**When to Use:**
+
+```typescript
+// ✅ Use for common workflows
+Cypress.Commands.add('completeCheckout', (items) => {
+  // Complex multi-step process
+})
+
+// ✅ Use for API setup
+Cypress.Commands.add('createUser', (userData) => {
+  return cy.request('POST', '/api/users', userData)
+})
+
+// ✅ Use for repetitive patterns
+Cypress.Commands.add('fillForm', (data) => {
+  // Fill multiple form fields
+})
+
+// ❌ Don't overuse (becomes black box)
+// ❌ Don't hide complexity (defeats purpose)
+// ❌ Don't use for one-off operations
+```
+
+**Best Practices:**
+
+```typescript
+// ✅ Clear naming
+Cypress.Commands.add('login')    // Clear intent
+Cypress.Commands.add('doTheThing')  // ❌ Unclear
+
+// ✅ Document well
+/**
+ * Login with credentials
+ * @param {string} email - User email
+ * @param {string} password - User password
+ * @example
+ * cy.login('user@test.com', 'password123')
+ */
+Cypress.Commands.add('login', (email, password) => {
+  // ...
+})
+
+// ✅ Return appropriate type
+Cypress.Commands.add('login', () => {
+  cy.visit('/login')
+  // ... return for chaining or nothing
+})
+
+// ✅ Keep simple and focused
+Cypress.Commands.add('login', (email, password) => {
+  cy.visit('/login')
+  cy.get('[data-testid="email"]').type(email)
+  cy.get('[data-testid="password"]').type(password)
+  cy.get('button[type="submit"]').click()
+})
+```
+
+---
+
+### Q12: How do you test forms with validation?
+
+**Answer:**
+
+Form testing needs to account for different states: pristine, dirty, invalid, submitting, submitted.
+
+**Form State Model:**
+
+```typescript
+// Form states:
+// 1. Pristine - Nothing changed yet
+// 2. Dirty - User has typed something
+// 3. Invalid - Data doesn't meet requirements
+// 4. Submitting - Form being submitted
+// 5. Submitted - Successfully submitted
+
+describe('Form Testing', () => {
+  // Test 1: Validation on blur (field-level)
+  it('should validate email on blur', () => {
+    cy.visit('/form')
+    
+    // Pristine state
+    cy.get('[data-testid="email"]').should('not.have.class', 'error')
+    
+    // Type invalid, blur (trigger validation)
+    cy.get('[data-testid="email"]').type('invalid-email').blur()
+    
+    // Invalid state
+    cy.get('[data-testid="email-error"]')
+      .should('be.visible')
+      .and('contain', 'Invalid email')
+    
+    // Fix and blur
+    cy.get('[data-testid="email"]')
+      .clear()
+      .type('valid@test.com')
+      .blur()
+    
+    // Valid state
+    cy.get('[data-testid="email-error"]').should('not.exist')
+  })
+
+  // Test 2: Validation on submit
+  it('should validate all fields on submit', () => {
+    cy.visit('/form')
+    
+    // Try submit empty
+    cy.get('[data-testid="submit-btn"]').click()
+    
+    // All errors visible
+    cy.get('[data-testid="name-error"]').should('be.visible')
+    cy.get('[data-testid="email-error"]').should('be.visible')
+    cy.get('[data-testid="phone-error"]').should('be.visible')
+  })
+
+  // Test 3: Complete valid submission
+  it('should submit valid form', () => {
+    cy.intercept('POST', '/api/submit', {
+      statusCode: 200,
+      body: { success: true }
+    }).as('submit')
+
+    cy.visit('/form')
+    
+    // Fill all fields
+    cy.get('[data-testid="name"]').type('John Doe')
+    cy.get('[data-testid="email"]').type('john@test.com')
+    cy.get('[data-testid="phone"]').type('5551234567')
+    cy.get('[data-testid="terms"]').check()
+    
+    // Submit state - button might be disabled during submit
+    cy.get('[data-testid="submit-btn"]').click()
+    
+    // Wait for submission
+    cy.wait('@submit')
+    
+    // Submitted state
+    cy.get('[data-testid="success-message"]')
+      .should('be.visible')
+      .and('contain', 'Form submitted')
+  })
+
+  // Test 4: Real-time validation (as user types)
+  it('should show validation errors in real-time', () => {
+    cy.visit('/form')
+    
+    cy.get('[data-testid="password"]')
+      .type('a')  // Too short
+    
+    cy.get('[data-testid="password-error"]')
+      .should('be.visible')
+      .and('contain', 'At least 8 characters')
+    
+    cy.get('[data-testid="password"]')
+      .type('bcdefgh')  // Now 8 characters
+    
+    cy.get('[data-testid="password-error"]')
+      .should('not.exist')  // Error disappears
+  })
+
+  // Test 5: Conditional fields
+  it('should show conditional fields based on selection', () => {
+    cy.visit('/form')
+    
+    // Employment status field
+    cy.get('[data-testid="employment"]').select('employed')
+    
+    // Company field appears
+    cy.get('[data-testid="company-name"]')
+      .should('be.visible')
+      .should('have.attr', 'required')
+    
+    // Change selection
+    cy.get('[data-testid="employment"]').select('student')
+    
+    // Company field disappears, school appears
+    cy.get('[data-testid="company-name"]').should('not.exist')
+    cy.get('[data-testid="school-name"]').should('be.visible')
+  })
+
+  // Test 6: Disable during submit
+  it('should disable button during submission', () => {
+    cy.intercept('POST', '/api/submit', (req) => {
+      // Delay response to see disabled state
+      req.reply((res) => {
+        res.delay(2000)
+        res.statusCode = 200
+      })
+    }).as('submit')
+
+    cy.visit('/form')
+    cy.get('[data-testid="name"]').type('John')
+    cy.get('[data-testid="email"]').type('john@test.com')
+    
+    cy.get('[data-testid="submit-btn"]').click()
+    
+    // Button disabled during submit
+    cy.get('[data-testid="submit-btn"]')
+      .should('be.disabled')
+      .and('contain', 'Submitting...')
+    
+    cy.wait('@submit')
+    
+    // Button re-enabled after submit
+    cy.get('[data-testid="submit-btn"]')
+      .should('not.be.disabled')
+      .and('contain', 'Submit')
+  })
+})
+```
+
+**Form Testing Best Practices:**
+
+```typescript
+// ✅ Test each validation rule
+// ✅ Test combined validations
+// ✅ Test error clearing
+// ✅ Test disabled state during submit
+// ✅ Test success message
+// ✅ Test form reset
+// ✅ Use data-testid for form elements
+// ✅ Mock API responses
+
+// ❌ Don't test HTML5 validation (browser handles it)
+// ❌ Don't assume validation framework behavior
+// ❌ Don't forget edge cases (empty, spaces, special chars)
+```
+
+---
+
+### Q13: What's the difference between unit tests and E2E tests? When do you use Cypress?
+
+**Answer:**
+
+```
+Testing Pyramid:
+
+        / \          E2E Tests (5-10% of tests)
+       /   \         - Full user journeys
+      /     \        - Cypress, Selenium, PlayWright
+     /-------\       
+    /         \      Integration Tests (20-30%)
+   /           \     - Component + services
+  /             \    - Cypress, Testing Library
+ /               \   
+/-------------------\ Unit Tests (60-70%)
+                     - Single functions
+                     - Jest, Vitest, Mocha
+```
+
+**Unit Tests:**
+```typescript
+// jest.test.ts
+describe('calculateTotal', () => {
+  it('should sum prices', () => {
+    const total = calculateTotal([10, 20, 30])
+    expect(total).toBe(60)
+  })
+})
+
+// Characteristics:
+// - Test single function in isolation
+// - No browser
+// - No UI
+// - Very fast (ms)
+// - Test business logic
+// - Use Jest, Vitest, Mocha
+```
+
+**Integration Tests:**
+```typescript
+// component.test.tsx
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+
+describe('LoginForm', () => {
+  it('should submit form', async () => {
+    const mockSubmit = jest.fn()
+    render(<LoginForm onSubmit={mockSubmit} />)
+    
+    await userEvent.type(screen.getByTestId('email'), 'user@test.com')
+    await userEvent.click(screen.getByRole('button', { name: 'Login' }))
+    
+    expect(mockSubmit).toHaveBeenCalled()
+  })
+})
+
+// Characteristics:
+// - Test component + hooks + services
+// - Simulated browser (jsdom)
+// - No real DOM
+// - Fast (100ms range)
+// - Test integration between units
+// - Use Testing Library, Vitest
+```
+
+**E2E Tests:**
+```typescript
+// login.cy.ts (Cypress)
+describe('Login Flow', () => {
+  it('should login successfully', () => {
+    cy.visit('http://localhost:3000/login')
+    cy.get('[data-testid="email"]').type('user@test.com')
+    cy.get('[data-testid="password"]').type('password123')
+    cy.get('button').click()
+    cy.url().should('include', '/dashboard')
+    cy.get('[data-testid="welcome"]').should('contain', 'Welcome')
+  })
+})
+
+// Characteristics:
+// - Test complete user journey
+// - Real browser
+// - Real UI
+// - Slower (seconds per test)
+// - Test entire workflow
+// - Use Cypress, Playwright, Selenium
+```
+
+**When to Use Each:**
+
+| Test Type | When | Coverage | Speed | Maintenance |
+|-----------|------|----------|-------|-------------|
+| **Unit** | Always (60-70%) | Single function | <5ms | Easy |
+| **Integration** | Most features (20-30%) | Component + services | <200ms | Medium |
+| **E2E** | Critical paths (5-10%) | Full workflow | 1-10s | Hard |
+
+**Example Strategy:**
+
+```typescript
+// Feature: User Registration
+
+// Unit Test (Jest)
+describe('validateEmail', () => {
+  it('should validate email format', () => {
+    expect(validateEmail('user@test.com')).toBe(true)
+    expect(validateEmail('invalid')).toBe(false)
+  })
+})
+
+// Integration Test (Testing Library)
+describe('RegisterForm', () => {
+  it('should show validation errors', async () => {
+    render(<RegisterForm />)
+    await userEvent.type(screen.getByTestId('email'), 'invalid')
+    await userEvent.click(screen.getByRole('button', { name: 'Register' }))
+    expect(screen.getByText('Invalid email')).toBeInTheDocument()
+  })
+})
+
+// E2E Test (Cypress)
+describe('Registration Flow', () => {
+  it('should complete registration end-to-end', () => {
+    cy.visit('/register')
+    cy.get('[data-testid="name"]').type('John Doe')
+    cy.get('[data-testid="email"]').type('john@test.com')
+    cy.get('[data-testid="password"]').type('SecurePass123!')
+    cy.get('button').click()
+    cy.url().should('include', '/dashboard')
+    cy.get('[data-testid="message"]').should('contain', 'Welcome')
+  })
+})
+
+// Coverage by test type:
+// Unit: 60% - All business logic
+// Integration: 20% - Component behavior
+// E2E: 10% - Critical user paths
+// Excluded: 10% - Browser stuff, framework behavior
+```
+
+**Cypress is Best For:**
+- ✅ End-to-end testing (full workflows)
+- ✅ Complex user interactions
+- ✅ Multi-page applications
+- ✅ Testing in real browser
+- ✅ Visual regression
+- ✅ API testing
+- ✅ Testing with real data
+
+---
+
+### Q14: How do you organize a test suite at scale?
+
+**Answer:**
+
+As test suites grow, organization becomes critical.
+
+**File Structure:**
+
+```
+cypress/
+├── e2e/
+│   ├── auth/
+│   │   ├── login.cy.ts
+│   │   ├── register.cy.ts
+│   │   └── logout.cy.ts
+│   ├── dashboard/
+│   │   ├── navigation.cy.ts
+│   │   └── widgets.cy.ts
+│   └── checkout/
+│       ├── cart.cy.ts
+│       └── payment.cy.ts
+├── support/
+│   ├── commands.ts         # Custom commands
+│   ├── e2e.ts              # Global setup
+│   └── pages/
+│       ├── LoginPage.ts
+│       ├── DashboardPage.ts
+│       └── CheckoutPage.ts
+├── fixtures/
+│   ├── user-data.json
+│   ├── products.json
+│   └── api-responses.json
+└── config/
+    ├── urls.ts
+    └── selectors.ts
+```
+
+**Page Objects Organization:**
+
+```typescript
+// support/pages/BasePage.ts
+export class BasePage {
+  // Common methods for all pages
+  protected visit(url: string) {
+    cy.visit(url)
+    return this
+  }
+
+  protected clickElement(selector: string) {
+    cy.get(selector).click()
+    return this
+  }
+}
+
+// support/pages/LoginPage.ts
+import { BasePage } from './BasePage'
+
+export class LoginPage extends BasePage {
+  private emailInput = '[data-testid="email"]'
+  private passwordInput = '[data-testid="password"]'
+  private submitButton = 'button[type="submit"]'
+  private errorMessage = '[data-testid="error"]'
+
+  visit() {
+    return super.visit('/login')
+  }
+
+  login(email: string, password: string) {
+    cy.get(this.emailInput).type(email)
+    cy.get(this.passwordInput).type(password)
+    this.clickElement(this.submitButton)
+    return this
+  }
+
+  verifyErrorMessage(message: string) {
+    cy.get(this.errorMessage).should('contain', message)
+    return this
+  }
+}
+
+// support/pages/index.ts - Export all pages
+export { LoginPage } from './LoginPage'
+export { DashboardPage } from './DashboardPage'
+export { CheckoutPage } from './CheckoutPage'
+```
+
+**Test Fixtures:**
+
+```typescript
+// fixtures/user-data.json
+{
+  "validUser": {
+    "email": "user@test.com",
+    "password": "SecurePass123!",
+    "name": "John Doe"
+  },
+  "adminUser": {
+    "email": "admin@test.com",
+    "password": "AdminPass123!",
+    "name": "Admin"
+  }
+}
+
+// Using fixtures
+describe('Auth', () => {
+  it('should login', function() {
+    cy.fixture('user-data').then(data => {
+      cy.login(data.validUser.email, data.validUser.password)
+    })
+  })
+})
+```
+
+**Test Tags for Organization:**
+
+```typescript
+// cypress.config.ts
+export default defineConfig({
+  e2e: {
+    setupNodeEvents(on, config) {
+      on('after:spec', (spec, results) => {
+        // Tag tests
+      })
+      return config
+    }
+  }
+})
+
+// Run specific tags
+// npx cypress run --spec "cypress/e2e/auth/**/*.cy.ts"
+```
+
+**Large-Scale Best Practices:**
+
+```typescript
+// 1. Parallel test execution
+// npx cypress run --parallel --record
+
+// 2. Test data management
+Cypress.Commands.add('createTestUser', () => {
+  return cy.fixture('user-data').then(data => {
+    return cy.request('POST', '/api/users', data.validUser)
+  })
+})
+
+// 3. Centralized configuration
+// config/urls.ts
+export const URLs = {
+  LOGIN: '/login',
+  DASHBOARD: '/dashboard',
+  CHECKOUT: '/checkout'
+}
+
+// 4. Shared test utilities
+// support/utils.ts
+export function formatDate(date: Date): string {
+  return date.toISOString().split('T')[0]
+}
+
+// 5. Retry flaky tests
+// cypress.config.ts
+{
+  retries: {
+    runMode: 2,    // Retry 2 times in headless
+    openMode: 0    // No retry in test runner
+  }
+}
+```
+
+---
+
+## EXPERT LEVEL {#expert}
+
+### Q15: How do you integrate Cypress with CI/CD pipeline?
+
+**Answer:**
+
+CI/CD integration automates test execution on every commit.
+
+**GitHub Actions Example:**
+
+```yaml
+# .github/workflows/cypress-tests.yml
+name: Cypress Tests
+
+on: [push, pull_request]
+
+jobs:
+  cypress-run:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [16, 18]
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Start server
+        run: npm start &
+        env:
+          NODE_ENV: test
+      
+      - name: Wait for server
+        run: npx wait-on http://localhost:3000
+      
+      - name: Run Cypress tests
+        run: npx cypress run --headless --browser chrome
+      
+      - name: Upload videos
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: cypress-videos
+          path: cypress/videos
+      
+      - name: Upload screenshots
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: cypress-screenshots
+          path: cypress/screenshots
+```
+
+**Docker Setup:**
+
+```dockerfile
+# Dockerfile
+FROM mcr.microsoft.com/playwright:v1.40.0-jammy
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+
+CMD ["npx", "cypress", "run", "--headless"]
+```
+
+**Configuration for CI:**
+
+```typescript
+// cypress.config.ts
+export default defineConfig({
+  e2e: {
+    baseUrl: process.env.CYPRESS_BASE_URL || 'http://localhost:3000',
+    
+    setupNodeEvents(on, config) {
+      if (process.env.CI) {
+        // CI-specific settings
+        config.defaultCommandTimeout = 10000  // Longer timeout in CI
+        config.video = true  // Record videos
+        config.screenshotOnRunFailure = true
+      }
+      return config
+    }
+  }
+})
+```
+
+**Running Tests:**
+
+```bash
+# Local development
+npx cypress open
+
+# Headless (CI/CD)
+npx cypress run
+
+# Specific spec
+npx cypress run --spec "cypress/e2e/auth/login.cy.ts"
+
+# Specific browser
+npx cypress run --browser chrome
+
+# Parallel execution
+npx cypress run --parallel --record
+
+# With environment variables
+CYPRESS_BASE_URL=http://staging.example.com npx cypress run
+
+# Exit after first failure
+npx cypress run --exit-on-first-failure
+```
+
+---
+
+### Q16: How do you handle cross-browser testing?
+
+**Answer:**
+
+```typescript
+// cypress.config.ts
+export default defineConfig({
+  e2e: {
+    // Tests run on multiple browsers
+    browsers: ['chrome', 'firefox', 'edge']
+  }
+})
+
+// Run on specific browser
+// npx cypress run --browser chrome
+// npx cypress run --browser firefox
+// npx cypress run --browser edge
+
+// Handle browser-specific code
+describe('Cross-Browser Tests', () => {
+  it('should work on all browsers', () => {
+    cy.visit('/')
+    
+    // Chrome-specific handling
+    if (Cypress.browser.name === 'chrome') {
+      cy.get('[data-testid="chrome-feature"]').should('exist')
+    }
+    
+    // Firefox-specific handling
+    if (Cypress.browser.name === 'firefox') {
+      // Firefox quirks
+    }
+    
+    // Common functionality
+    cy.get('[data-testid="button"]').click()
+    cy.url().should('include', '/next')
+  })
+})
+```
+
+---
+
+## SCENARIO-BASED QUESTIONS {#scenarios}
+
+### Q17: A test passes locally but fails in CI/CD. What could be wrong?
+
+**Answer:**
+
+**Common Causes:**
+
+```typescript
+// 1. Environment differences
+// ❌ Hardcoded localhost
+cy.visit('http://localhost:3000')
+
+// ✅ Use baseUrl
+cy.visit('/')
+
+// 2. Timing issues in CI (slower machines)
+// ❌ Arbitrary waits
+cy.wait(2000)
+
+// ✅ Conditional waits
+cy.get('.loader').should('not.exist')
+
+// 3. Different browser rendering
+// ❌ Assuming Chrome
+// ✅ Test on multiple browsers
+
+// 4. State issues
+// ❌ No cleanup
+beforeEach(() => cy.clearLocalStorage())
+afterEach(() => cy.logout())
+
+// 5. External dependencies
+// ❌ Expecting real API to work
+// ✅ Mock unreliable APIs
+
+// 6. Screen resolution
+// ❌ Assuming desktop size
+cy.viewport(1280, 720)
+// ✅ Set explicit viewport
+
+// 7. Missing dependencies
+// ❌ Installing locally but not in CI
+// ✅ Use npm ci (exact versions)
+
+// Debugging CI failures
+// 1. Enable video recording
+// 2. Enable screenshot on failure
+// 3. Check logs carefully
+// 4. Run locally with same conditions
+// 5. Check environment variables
+// 6. Verify API endpoints
+```
+
+---
+
+### Q18: How do you test file uploads?
+
+**Answer:**
+
+```typescript
+import 'cypress-file-upload'
+
+describe('File Upload', () => {
+  it('should upload file', () => {
+    cy.visit('/upload')
+    
+    // Method 1: Using cypress-file-upload plugin
+    cy.get('input[type="file"]').attachFile('document.pdf')
+    cy.get('[data-testid="file-name"]').should('contain', 'document.pdf')
+    
+    // Method 2: Using cy.fixture() with form data
+    cy.get('input[type="file"]').selectFile('cypress/fixtures/test.csv')
+    
+    // Method 3: Simulating file selection
+    cy.get('input[type="file"]').then($input => {
+      const file = new File(['content'], 'test.txt', { type: 'text/plain' })
+      const dataTransfer = new DataTransfer()
+      dataTransfer.items.add(file)
+      $input[0].files = dataTransfer.files
+      cy.get('input[type="file"]').trigger('change')
+    })
+    
+    // Submit and verify
+    cy.get('button[type="submit"]').click()
+    cy.get('[data-testid="success"]').should('be.visible')
+  })
+  
+  it('should validate file type', () => {
+    cy.visit('/upload')
+    cy.get('input[type="file"]').attachFile('invalid.exe')
+    cy.get('[data-testid="error"]').should('contain', 'Invalid file type')
+  })
+  
+  it('should validate file size', () => {
+    cy.visit('/upload')
+    cy.get('input[type="file"]').attachFile('large-file.pdf')  // >5MB
+    cy.get('[data-testid="error"]').should('contain', 'File too large')
+  })
+})
+```
+
+---
+
+### Q19: How do you test localStorage/sessionStorage?
+
+**Answer:**
+
+```typescript
+describe('Storage Tests', () => {
+  it('should set localStorage', () => {
+    cy.visit('/')
+    cy.get('[data-testid="save-btn"]').click()
+    
+    // Verify localStorage
+    cy.window().then(win => {
+      expect(win.localStorage.getItem('user')).to.equal('John')
+    })
+  })
+  
+  it('should pre-populate form from localStorage', () => {
+    cy.visit('/', {
+      onBeforeLoad(win) {
+        win.localStorage.setItem('formData', JSON.stringify({
+          name: 'John',
+          email: 'john@test.com'
+        }))
+      }
+    })
+    
+    cy.get('[data-testid="name"]').should('have.value', 'John')
+  })
+  
+  it('should clear localStorage on logout', () => {
+    cy.visit('/')
+    cy.clearLocalStorage()  // Clear before test
+    
+    cy.get('[data-testid="login"]').click()
+    cy.login('user@test.com', 'password')
+    
+    cy.window().then(win => {
+      expect(win.localStorage.getItem('token')).to.exist
+    })
+    
+    cy.get('[data-testid="logout"]').click()
+    cy.clearLocalStorage()
+    
+    cy.window().then(win => {
+      expect(win.localStorage.getItem('token')).to.be.null
+    })
+  })
+})
+```
+
+---
+
+### Q20: How do you test keyboard shortcuts and accessibility?
+
+**Answer:**
+
+```typescript
+describe('Keyboard & Accessibility', () => {
+  it('should navigate with keyboard', () => {
+    cy.visit('/')
+    
+    // Tab through elements
+    cy.get('body').tab()  // Requires custom command
+    cy.focused().should('have.attr', 'data-testid', 'first-button')
+    
+    cy.get('body').tab()
+    cy.focused().should('have.attr', 'data-testid', 'second-button')
+  })
+  
+  it('should trigger actions with Enter/Space', () => {
+    cy.visit('/')
+    
+    cy.get('[data-testid="button"]')
+      .focus()
+      .type('{enter}')  // Press Enter
+    
+    cy.get('[data-testid="modal"]').should('be.visible')
+    
+    cy.get('[data-testid="close-btn"]')
+      .focus()
+      .type('{space}')  // Press Space
+    
+    cy.get('[data-testid="modal"]').should('not.exist')
+  })
+  
+  it('should have proper ARIA labels', () => {
+    cy.visit('/')
+    
+    // Check for aria-label
+    cy.get('[aria-label="Close modal"]').should('exist')
+    
+    // Check for role
+    cy.get('[role="button"]').should('exist')
+    cy.get('[role="navigation"]').should('exist')
+    
+    // Check focus visible
+    cy.get('button').focus()
+    cy.get('button').should('have.css', 'outline')
+  })
+  
+  it('should have accessible form', () => {
+    cy.visit('/form')
+    
+    // Labels associated with inputs
+    cy.get('label[for="email"]').should('exist')
+    cy.get('#email').should('have.attr', 'aria-labelledby')
+    
+    // Error messages associated
+    cy.get('input[aria-describedby="email-error"]').should('exist')
+    cy.get('#email-error').should('have.text', 'Invalid email')
+  })
+})
+
+// Custom command for Tab
+Cypress.Commands.add('tab', { prevSubject: true }, (subject) => {
+  cy.wrap(subject).trigger('keydown', { keyCode: 9, which: 9 })
+  return cy.focused()
+})
+```
+
+---
+
+## TRICKY QUESTIONS {#tricky}
+
+### Q21: What's the difference between `cy.get()` and `cy.find()`?
+
+**Answer:**
+
+```typescript
+// cy.get() - New search from document root
+cy.get('.form')     // Searches from document
+  .get('.input')    // Searches from document AGAIN (not from .form!)
+
+// cy.find() - Search within previous subject
+cy.get('.form')     // Searches from document
+  .find('.input')   // Searches WITHIN .form
+
+// Practical example
+// HTML: <div class="form">
+//         <input class="input">
+//       </div>
+//       <input class="input">  <!-- Another input outside form -->
+
+// ❌ WRONG - Gets both inputs (from document)
+cy.get('.form').get('.input')  // Returns 2 inputs
+
+// ✅ RIGHT - Gets input inside form
+cy.get('.form').find('.input')  // Returns 1 input
+
+// Rule of thumb:
+// Use .find() when chaining from a specific element
+// Use .get() when starting fresh search
+```
+
+---
+
+### Q22: Can you modify Cypress default behavior?
+
+**Answer:**
+
+```typescript
+// Yes! Override default commands
+
+// Override cy.visit() to always add auth token
+Cypress.Commands.overwrite('visit', (originalFn, url, options) => {
+  const opts = options || {}
+  opts.onBeforeLoad = (win) => {
+    if (localStorage.getItem('token')) {
+      win.localStorage.setItem('token', localStorage.getItem('token'))
+    }
+  }
+  return originalFn(url, opts)
+})
+
+// Override cy.request() to add auth header
+Cypress.Commands.overwrite('request', (originalFn, ...args) => {
+  if (args.length === 1) {
+    args[0].headers = { Authorization: 'Bearer ' + getToken() }
+  }
+  return originalFn(...args)
+})
+
+// Use in tests - auth automatically added!
+cy.visit('/')  // Token automatically set
+cy.request('/api/users')  // Auth header automatically added
+```
+
+---
+
+### Q23: How do you handle random/unpredictable elements?
+
+**Answer:**
+
+```typescript
+describe('Unpredictable Content', () => {
+  // Flaky: IDs with timestamps
+  // ❌ cy.get('#item-1702345678901')
+  
+  // Stable: Use data attributes
+  // ✅ cy.get('[data-testid="item-1"]')
+  
+  // Flaky: Exact text match
+  // ❌ cy.contains('exact-id-12345')
+  
+  // Stable: Partial match
+  // ✅ cy.contains(/^Order-/)
+  
+  it('should handle dynamic IDs', () => {
+    cy.visit('/')
+    
+    // Instead of hardcoding ID, find by other attributes
+    cy.get('[data-testid="product"]')
+      .first()  // Get first product regardless of ID
+      .click()
+    
+    cy.url().should('include', '/product/')  // Check pattern, not exact
+  })
+  
+  it('should handle list with random order', () => {
+    cy.visit('/items')
+    
+    // Don't assume order, check content exists
+    cy.get('[data-testid="item"]').should('contain', 'Expected Item')
+    
+    // Count items instead of asserting specific positions
+    cy.get('[data-testid="item"]').should('have.length.greaterThan', 0)
+  })
+  
+  it('should handle optional elements', () => {
+    cy.get('body').then(($body) => {
+      if ($body.find('[data-testid="banner"]').length > 0) {
+        cy.get('[data-testid="banner"]').should('be.visible')
+      } else {
+        cy.log('Banner not present (expected)')
+      }
+    })
+  })
+})
+```
+
+---
+
+### Q24: How do you test real-time features (WebSockets)?
+
+**Answer:**
+
+```typescript
+describe('Real-time Features', () => {
+  it('should update on WebSocket message', () => {
+    cy.visit('/chat')
+    
+    // Spy on WebSocket
+    cy.window().then(win => {
+      const originalWS = win.WebSocket
+      
+      cy.spy(win, 'WebSocket').as('websocket')
+      
+      // Simulate WebSocket message
+      cy.window().then(win => {
+        const ws = win.WebSocket
+        const event = new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'new-message',
+            text: 'Hello!'
+          })
+        })
+        ws.dispatchEvent(event)
+      })
+      
+      // Verify UI updated
+      cy.get('[data-testid="message"]').should('contain', 'Hello!')
+    })
+  })
+  
+  // Alternative: Mock WebSocket
+  it('should handle WebSocket connection', () => {
+    cy.visit('/chat')
+    
+    // Mock WebSocket globally
+    cy.window().then(win => {
+      class MockWebSocket {
+        url: string
+        onmessage: ((event: any) => void) | null = null
+        onopen: (() => void) | null = null
+        
+        constructor(url: string) {
+          this.url = url
+          setTimeout(() => this.onopen?.(), 100)
+        }
+        
+        send(data: string) {
+          const message = { type: 'response', text: 'Received' }
+          setTimeout(() => {
+            this.onmessage?.(new MessageEvent('message', {
+              data: JSON.stringify(message)
+            }))
+          }, 100)
+        }
+      }
+      
+      win.WebSocket = MockWebSocket as any
+    })
+    
+    cy.get('[data-testid="send-btn"]').click()
+    cy.get('[data-testid="response"]').should('contain', 'Received')
+  })
+})
+```
+
+---
+
+### Q25: What's the best way to handle external dependencies (APIs, third-party services)?
+
+**Answer:**
+
+```typescript
+describe('External Dependencies', () => {
+  // Strategy: Mock everything external
+  
+  beforeEach(() => {
+    // Mock third-party analytics
+    cy.intercept('/analytics/**', {})
+    
+    // Mock payment provider
+    cy.intercept('https://api.stripe.com/**', {
+      statusCode: 200,
+      body: { token: 'mock-token' }
+    })
+    
+    // Mock geo-location API
+    cy.intercept('https://api.geolocation.com/**', {
+      statusCode: 200,
+      body: { country: 'US', city: 'New York' }
+    })
+  })
+  
+  it('should work with mocked payment API', () => {
+    cy.visit('/checkout')
+    
+    cy.get('[data-testid="card-element"]')
+      .fill('4242424242424242')
+    
+    cy.get('[data-testid="pay-btn"]').click()
+    
+    // Wait for payment call
+    cy.intercept('POST', '/api/payment').as('payment')
+    cy.wait('@payment')
+    
+    cy.get('[data-testid="success"]').should('be.visible')
+  })
+  
+  // Real API test (separate from unit tests)
+  it('[smoke] should verify real payment API', () => {
+    // Run this only in pre-production
+    cy.visit('/checkout')
+    
+    cy.get('[data-testid="card-element"]')
+      .fill(Cypress.env('test_card_number'))
+    
+    cy.get('[data-testid="pay-btn"]').click()
+    
+    cy.get('[data-testid="success"]').should('be.visible')
+  })
+})
+```
+
+---
+
+## Summary
+
+**Key Interview Topics:**
+
+### Fundamentals
+✓ What is Cypress and why use it
+✓ Chainable API and command queuing
+✓ Auto-waiting mechanism
+✓ cy.get() vs cy.contains()
+✓ cy.wait() vs .should()
+
+### Intermediate
+✓ Implicit vs explicit assertions
+✓ API mocking with cy.intercept()
+✓ Page Object Model
+✓ Debugging flaky tests
+✓ Custom commands
+
+### Advanced
+✓ Form testing with states
+✓ Unit vs Integration vs E2E tests
+✓ Large-scale test organization
+✓ CI/CD integration
+✓ Cross-browser testing
+
+### Expert
+✓ Real-time features
+✓ External dependencies handling
+✓ Cypress limitations and workarounds
+✓ Performance optimization
+✓ Team best practices
+
+---
+
+**Pro Tips for Interview:**
+1. Explain WHY, not just HOW
+2. Show understanding of Cypress architecture
+3. Mention test reliability/flakiness regularly
+4. Talk about maintainability at scale
+5. Give real examples from your experience
+6. Ask clarifying questions
+7. Discuss trade-offs (speed vs coverage)
+8. Show knowledge of best practices
