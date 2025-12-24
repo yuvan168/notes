@@ -1,0 +1,5189 @@
+# Unit and Integration Testing - Complete Notes and Theory
+
+## Table of Contents
+
+1. [Testing Overview](#testing-overview)
+2. [Core Testing Concepts: Basic to Advanced](#core-testing-concepts-basic-to-advanced)
+3. [Unit Testing Fundamentals](#unit-testing-fundamentals)
+4. [Integration Testing Fundamentals](#integration-testing-fundamentals)
+5. [Comparison: Unit vs Integration Testing](#comparison-unit-vs-integration-testing)
+6. [Unit Testing Deep Dive](#unit-testing-deep-dive)
+7. [Integration Testing Deep Dive](#integration-testing-deep-dive)
+8. [Testing Pyramid and Strategy](#testing-pyramid-and-strategy)
+9. [Test Organization and Structure](#test-organization-and-structure)
+10. [Mocking, Stubbing, and Fakes](#mocking-stubbing-and-fakes)
+11. [Real-World Scenarios](#real-world-scenarios)
+12. [Best Practices](#best-practices)
+13. [Anti-Patterns and Pitfalls](#anti-patterns-and-pitfalls)
+
+---
+
+## Testing Overview
+
+### Software Testing Definition
+
+**Software Testing** is a systematic process of evaluating software to detect defects, verify functionality, and ensure the product meets specified requirements.
+
+### Goals of Testing
+
+```
+1. VERIFICATION: "Are we building it right?"
+   └─ Does software conform to specifications?
+   └─ Does it behave as designed?
+   └─ Does it meet technical requirements?
+
+2. VALIDATION: "Are we building the right thing?"
+   └─ Does software meet user needs?
+   └─ Does it solve business problems?
+   └─ Does it match user expectations?
+
+3. QUALITY ASSURANCE
+   └─ Consistent functionality
+   └─ Performance standards
+   └─ Security compliance
+   └─ Maintainability
+
+4. RISK REDUCTION
+   └─ Prevent production failures
+   └─ Catch bugs early (cheaper to fix)
+   └─ Build confidence in code
+   └─ Enable safe refactoring
+```
+
+### Testing Levels
+
+```
+SYSTEM TESTING
+  ↑ Test entire system as a whole
+  │ End-to-end workflows
+  │ Performance, security, usability
+  │ Done by QA/Testing team
+  │
+INTEGRATION TESTING
+  ↑ Test multiple components working together
+  │ Database + Service
+  │ API + Frontend
+  │ Service + External API
+  │ Done by developers or testers
+  │
+UNIT TESTING
+  ↓ Test individual components (units)
+    Methods, functions, classes in isolation
+    No external dependencies
+    Done by developers during development
+```
+
+### Testing Pyramid (Google)
+
+```
+        ╱╲           E2E Tests (10%)
+       ╱  ╲          - Full workflow
+      ╱    ╲         - Selenium, Cypress
+     ╱──────╲        - Expensive, slow
+    ╱        ╲
+   ╱          ╲      Integration Tests (30%)
+  ╱            ╲     - Multiple components
+ ╱──────────────╲    - Database + API
+╱                ╲   - Moderate cost
+                 
+Unit Tests (60%)
+- Individual methods
+- Fast, cheap, isolated
+- No external dependencies
+```
+
+**Key Principle:** Invest most in unit tests (fast, cheap), fewer in integration tests, minimal in E2E tests.
+
+---
+
+## Core Testing Concepts: Basic to Advanced
+
+### Level 1: Absolute Beginner - What is a Test?
+
+#### The Simplest Test
+
+A test is just a piece of code that:
+1. **Does something** (calls a function/method)
+2. **Checks the result** (verifies the output)
+3. **Reports if it passed or failed**
+
+```java
+// EXAMPLE 1: Manual testing (what NOT to do)
+Calculator calc = new Calculator();
+int result = calc.add(2, 3);
+System.out.println("Result: " + result);  // Manual verification
+if (result == 5) {
+    System.out.println("Test passed!");
+} else {
+    System.out.println("Test failed!");
+}
+```
+
+#### The Same Test with JUnit (What TO do)
+
+```java
+@Test
+void testAddition() {
+    Calculator calc = new Calculator();
+    int result = calc.add(2, 3);
+    assertEquals(5, result);  // Automatic verification
+}
+```
+
+**KEY POINTS:**
+- ✓ Automatic checking (no manual verification)
+- ✓ Clear pass/fail reporting
+- ✓ Can run thousands of tests instantly
+- ✓ Repeatable - runs same way every time
+
+#### Why This Matters
+
+```
+Manual Testing:
+─────────────
+Day 1: Run all 100 tests manually                     → 2 hours
+Day 2: Need to retest after bug fix                   → 2 hours
+Day 3: Retest again after new feature                 → 2 hours
+TOTAL: 6 hours of manual work per day = EXPENSIVE
+
+Automated Testing:
+──────────────────
+Day 1: Write 100 tests (1 hour)
+Day 2: Run all tests with 1 command                   → 0.5 seconds
+Day 3: Run all tests with 1 command                   → 0.5 seconds
+TOTAL: Always < 1 second = EFFICIENT
+```
+
+---
+
+### Level 2: Beginner - Understanding Test Structure
+
+#### The AAA Pattern (Most Important Pattern)
+
+Every test follows this structure:
+
+```java
+@Test
+void testCalculatorSubtraction() {
+    // 1. ARRANGE - Prepare test data
+    Calculator calculator = new Calculator();
+    int firstNumber = 10;
+    int secondNumber = 3;
+    int expectedResult = 7;
+    
+    // 2. ACT - Execute the code being tested
+    int actualResult = calculator.subtract(firstNumber, secondNumber);
+    
+    // 3. ASSERT - Verify the result
+    assertEquals(expectedResult, actualResult);
+}
+```
+
+**Breaking Down Each Part:**
+
+```
+ARRANGE (Setup):
+├─ Create objects needed for test
+├─ Initialize test data
+├─ Set up any mocks or stubs
+└─ Prepare the "known state"
+
+Example:
+    User user = new User("John", "john@email.com");
+    int expectedAge = 30;
+
+ACT (Execute):
+├─ Call the method/function being tested
+├─ Pass the test data
+├─ Get the result
+└─ This is what you're actually testing
+
+Example:
+    int actualAge = user.calculateAge(birthDate);
+
+ASSERT (Verify):
+├─ Compare expected vs actual
+├─ Check if the result is correct
+├─ Fail the test if wrong
+└─ Pass the test if correct
+
+Example:
+    assertEquals(expectedAge, actualAge);
+```
+
+**KEY POINTS:**
+- ✓ ARRANGE: About 50% of test code
+- ✓ ACT: About 10% of test code (should be small!)
+- ✓ ASSERT: About 40% of test code
+- ✓ If ACT section is large, your code isn't testable
+
+#### Real-World Example
+
+```java
+@Test
+void testBankAccountWithdrawal() {
+    // ARRANGE
+    BankAccount account = new BankAccount();
+    account.deposit(1000);  // Start with $1000
+    
+    // ACT
+    account.withdraw(250);  // Withdraw $250
+    
+    // ASSERT
+    assertEquals(750, account.getBalance());  // Should have $750 left
+}
+```
+
+---
+
+### Level 3: Beginner - Basic Assertions
+
+#### What Are Assertions?
+
+Assertions are checks that verify if something is true or false. If the assertion fails, the test fails.
+
+```java
+// MOST COMMON ASSERTIONS:
+
+// 1. Equality check
+assertEquals(expected, actual);
+assertEquals(5, 2 + 3);                    // ✓ Pass
+assertEquals(5, 2 + 2);                    // ✗ Fail
+
+// 2. Check if null
+assertNull(object);                        // Fails if not null
+assertNotNull(object);                     // Fails if null
+
+// 3. Check boolean conditions
+assertTrue(condition);                     // Fails if false
+assertFalse(condition);                    // Fails if true
+
+// 4. Check if same object (same reference)
+assertSame(expected, actual);              // Same memory address
+assertNotSame(expected, actual);           // Different memory address
+
+// 5. Check if two arrays are equal
+assertArrayEquals(expected, actual);       // All elements equal
+```
+
+**Practical Examples:**
+
+```java
+@Test
+void demonstrateAssertions() {
+    // Equality
+    assertEquals(10, 5 + 5);
+    
+    // Null checks
+    String name = "John";
+    assertNotNull(name);
+    
+    String nullValue = null;
+    assertNull(nullValue);
+    
+    // Boolean
+    assertTrue(5 > 3);
+    assertFalse(5 < 3);
+    
+    // Arrays
+    int[] expected = {1, 2, 3};
+    int[] actual = {1, 2, 3};
+    assertArrayEquals(expected, actual);
+}
+```
+
+**KEY POINTS:**
+- ✓ `assertEquals(expected, actual)` - Most important assertion
+- ✓ Order matters: `assertEquals(EXPECTED, ACTUAL)` not the other way
+- ✓ Use specific assertions (not just `assertTrue`)
+- ✓ Add message: `assertEquals(5, result, "Result should be 5")`
+
+---
+
+### Level 4: Intermediate - Test Independence & Isolation
+
+#### What is Test Independence?
+
+Tests must be **completely independent** - they shouldn't affect each other.
+
+```java
+// ✗ BAD: Tests are dependent (coupled)
+public class BadUserTest {
+    private static List<User> allUsers = new ArrayList<>();  // Shared state!
+    
+    @Test
+    void testCreateUser() {
+        User user = new User("John");
+        allUsers.add(user);
+        assertEquals(1, allUsers.size());
+    }
+    
+    @Test
+    void testListUsers() {
+        // DEPENDS on testCreateUser running first!
+        assertEquals(1, allUsers.size());  // Fails if run alone
+    }
+    
+    @Test
+    void testDeleteUser() {
+        // DEPENDS on both previous tests!
+        allUsers.clear();
+        assertTrue(allUsers.isEmpty());
+    }
+}
+// Problem: Tests fail if you run testDeleteUser first!
+// Problem: Tests fail if you run them in different order!
+// Problem: Tests interfere with each other!
+
+// ✓ GOOD: Tests are independent (isolated)
+public class GoodUserTest {
+    @Test
+    void testCreateUser() {
+        User user = new User("John");
+        assertNotNull(user);  // Just test creation, not storage
+    }
+    
+    @Test
+    void testListUsers() {
+        List<User> users = new ArrayList<>();  // Fresh list, not shared!
+        users.add(new User("John"));           // Create fresh data
+        assertEquals(1, users.size());
+    }
+    
+    @Test
+    void testDeleteUser() {
+        List<User> users = new ArrayList<>();  // Fresh list
+        users.add(new User("John"));           // Create fresh data
+        users.remove(0);
+        assertTrue(users.isEmpty());
+    }
+}
+// Good: Each test creates its own data
+// Good: Tests can run in any order
+// Good: Tests don't interfere with each other
+// Good: Each test can run alone and pass
+```
+
+**The Problem with Dependent Tests:**
+
+```
+If test order is: test1 → test2 → test3
+├─ All tests pass ✓
+
+If test order is: test3 → test1 → test2
+├─ test3 might fail ✗
+├─ test2 might fail ✗
+└─ Problem: Tests are coupled to execution order!
+
+Solution: Each test must be able to run alone and pass!
+```
+
+**KEY POINTS:**
+- ✓ Each test gets fresh objects
+- ✓ Don't share state between tests
+- ✓ Use `@BeforeEach` to set up fresh data for each test
+- ✓ Tests must run in any order
+- ✓ Tests must run multiple times with same result
+
+---
+
+### Level 5: Intermediate - What is Mocking?
+
+#### Why We Need Mocks
+
+When testing code that depends on other systems, we need **fake objects** (mocks) instead of real ones:
+
+```java
+// EXAMPLE: UserService depends on EmailService
+
+// Real EmailService - Too slow and has side effects!
+public class EmailService {
+    public void sendEmail(String email, String message) {
+        // Connects to email server
+        // Takes 5 seconds
+        // Really sends email!
+        // SMTP.sendEmail(email, message);
+    }
+}
+
+public class UserService {
+    private EmailService emailService;
+    
+    public UserService(EmailService emailService) {
+        this.emailService = emailService;
+    }
+    
+    public void registerUser(String email, String password) {
+        // Create user...
+        emailService.sendEmail(email, "Welcome!");  // Calls EmailService
+    }
+}
+
+// ✗ BAD TEST: Uses real EmailService (too slow!)
+@Test
+void testUserRegistration() throws Exception {
+    EmailService realEmail = new EmailService();  // Real, slow service!
+    UserService userService = new UserService(realEmail);
+    
+    userService.registerUser("user@example.com", "password");
+    // Test takes 5+ seconds because it really sends an email
+    // Test might fail if email server is down
+    // Test might accidentally send real emails!
+}
+
+// ✓ GOOD TEST: Uses fake/mock EmailService (fast!)
+@Test
+void testUserRegistration() {
+    EmailService mockEmail = mock(EmailService.class);  // Fake object
+    UserService userService = new UserService(mockEmail);
+    
+    userService.registerUser("user@example.com", "password");
+    
+    // Test completes instantly (no real email sent)
+    // Can verify the email was called
+    verify(mockEmail).sendEmail("user@example.com", "Welcome!");
+}
+```
+
+**What is a Mock?**
+
+```
+A mock is a fake object that:
+├─ Looks like the real object
+├─ But does nothing (fast)
+├─ Can record what methods were called
+└─ Can be programmed to return specific values
+
+Think of it like a movie prop:
+├─ Real gun: Takes time, dangerous
+├─ Fake gun (prop): Instant, safe
+└─ We use the fake during testing
+```
+
+**Basic Mock Example:**
+
+```java
+@Test
+void testWithMock() {
+    // Create mock object
+    Calculator mockCalc = mock(Calculator.class);
+    
+    // Program it to return 5 when add(2,3) is called
+    when(mockCalc.add(2, 3)).thenReturn(5);
+    
+    // Use the mock
+    int result = mockCalc.add(2, 3);
+    
+    // Verify it worked
+    assertEquals(5, result);
+    verify(mockCalc).add(2, 3);  // Verify it was called
+}
+```
+
+**KEY POINTS:**
+- ✓ Mocks replace slow/external dependencies
+- ✓ Mocks are fast (no real I/O)
+- ✓ Mocks allow you to test error scenarios
+- ✓ `when(...).thenReturn(...)` - set return value
+- ✓ `verify(mock).method()` - check if called
+
+---
+
+### Level 6: Intermediate - Test Fixtures & Setup/Teardown
+
+#### What is a Test Fixture?
+
+A **test fixture** is the setup needed to run a test. It's the "known state" before the test runs.
+
+```java
+// ✗ REPETITIVE: Each test repeats setup
+@Test
+void testUserNameIsSet() {
+    User user = new User("John");
+    assertEquals("John", user.getName());
+}
+
+@Test
+void testUserEmailIsSet() {
+    User user = new User("John");  // Repeated setup!
+    assertEquals("john@example.com", user.getEmail());
+}
+
+@Test
+void testUserAgeIsSet() {
+    User user = new User("John");  // Repeated setup!
+    assertEquals(30, user.getAge());
+}
+
+// ✓ CLEAN: Shared setup (fixture)
+public class UserTest {
+    private User user;  // Fixture object
+    
+    @BeforeEach  // Runs before EACH test
+    void setUp() {
+        user = new User("John");  // Setup happens once per test
+    }
+    
+    @Test
+    void testUserNameIsSet() {
+        assertEquals("John", user.getName());
+    }
+    
+    @Test
+    void testUserEmailIsSet() {
+        assertEquals("john@example.com", user.getEmail());
+    }
+    
+    @Test
+    void testUserAgeIsSet() {
+        assertEquals(30, user.getAge());
+    }
+    
+    @AfterEach  // Runs after EACH test (cleanup)
+    void tearDown() {
+        user = null;  // Clean up resources
+    }
+}
+```
+
+**When Fixtures Run:**
+
+```
+Execution sequence:
+
+@BeforeAll (static method)  ← Runs ONCE before all tests
+    ↓
+@BeforeEach
+    ↓
+@Test 1
+    ↓
+@AfterEach
+    ↓
+@BeforeEach
+    ↓
+@Test 2
+    ↓
+@AfterEach
+    ↓
+... more tests ...
+    ↓
+@AfterAll (static method)  ← Runs ONCE after all tests
+```
+
+**When to Use Each:**
+
+```java
+@BeforeAll
+static void expensiveSetup() {
+    // Start database (takes 5 seconds)
+    // Open server connection
+    // Runs ONCE, before all tests
+}
+
+@BeforeEach
+void freshSetup() {
+    // Create test data
+    // Clear caches
+    // Runs BEFORE EACH test
+}
+
+@AfterEach
+void cleanup() {
+    // Delete test data from database
+    // Clear resources
+    // Runs AFTER EACH test
+}
+
+@AfterAll
+static void expensiveCleanup() {
+    // Stop database
+    // Close server connection
+    // Runs ONCE, after all tests
+}
+```
+
+**KEY POINTS:**
+- ✓ `@BeforeEach` - Setup before each test
+- ✓ `@AfterEach` - Cleanup after each test
+- ✓ `@BeforeAll` - One-time setup (expensive operations)
+- ✓ `@AfterAll` - One-time cleanup (expensive operations)
+- ✓ Never share state between tests!
+
+---
+
+### Level 7: Advanced - Parameterized Tests
+
+#### What Are Parameterized Tests?
+
+Instead of writing the same test 10 times with different data, you write it **once** and run it with **multiple data sets**.
+
+```java
+// ✗ REPETITIVE: Same test, copied 10 times
+@Test
+void testAdd1() {
+    assertEquals(5, calculator.add(2, 3));
+}
+
+@Test
+void testAdd2() {
+    assertEquals(0, calculator.add(0, 0));
+}
+
+@Test
+void testAdd3() {
+    assertEquals(-5, calculator.add(-2, -3));
+}
+
+// THOUSANDS of duplicate tests...
+
+// ✓ SMART: One test, many data sets
+@ParameterizedTest
+@CsvSource({
+    "2, 3, 5",
+    "0, 0, 0",
+    "-2, -3, -5",
+    "100, 200, 300",
+    "1, -1, 0"
+})
+void testAddition(int a, int b, int expected) {
+    assertEquals(expected, calculator.add(a, b));
+}
+// Runs test 5 times with 5 different data sets!
+```
+
+**Different Ways to Provide Test Data:**
+
+```java
+// 1. Individual values
+@ParameterizedTest
+@ValueSource(ints = {1, 2, 3, 4, 5})
+void testIsPrime(int number) {
+    assertTrue(isPrime(number));
+}
+
+// 2. CSV (comma-separated values)
+@ParameterizedTest
+@CsvSource({
+    "2, 3, 5",
+    "0, 0, 0",
+    "-1, 1, 0"
+})
+void testAdd(int a, int b, int expected) {
+    assertEquals(expected, calculator.add(a, b));
+}
+
+// 3. CSV file (load from file)
+@ParameterizedTest
+@CsvFileSource(resources = "/test-data.csv")
+void testFromFile(int a, int b, int expected) {
+    assertEquals(expected, calculator.add(a, b));
+}
+
+// 4. Method source (dynamic data)
+@ParameterizedTest
+@MethodSource("provideNumbers")
+void testWithMethodSource(int number) {
+    assertTrue(number > 0);
+}
+
+static Stream<Arguments> provideNumbers() {
+    return Stream.of(
+        Arguments.of(1),
+        Arguments.of(2),
+        Arguments.of(3)
+    );
+}
+```
+
+**KEY POINTS:**
+- ✓ Reduces code duplication
+- ✓ Tests multiple scenarios in one test method
+- ✓ Easier to add new test cases
+- ✓ Clear what data is being tested
+- ✓ Better test coverage with less code
+
+---
+
+### Level 8: Advanced - Test-Driven Development (TDD)
+
+#### What is TDD?
+
+**Test-Driven Development (TDD)** means writing tests BEFORE writing the code!
+
+**The TDD Cycle:**
+
+```
+1. RED PHASE
+   └─ Write a test for a feature that doesn't exist yet
+      Test FAILS because code doesn't exist
+      ✗ Test: red (failing)
+
+2. GREEN PHASE
+   └─ Write minimal code to make the test pass
+      Code doesn't need to be perfect
+      ✓ Test: green (passing)
+
+3. REFACTOR PHASE
+   └─ Improve the code while keeping tests passing
+      Make it cleaner, faster, better
+      ✓ Test: still green
+
+Then repeat for next feature...
+```
+
+**Real TDD Example:**
+
+```java
+// PHASE 1: RED - Write test for non-existent feature
+@Test
+void testUserCanWithdraw() {
+    BankAccount account = new BankAccount(1000);
+    account.withdraw(250);
+    assertEquals(750, account.getBalance());
+}
+// ✗ TEST FAILS - withdraw() method doesn't exist yet!
+
+// PHASE 2: GREEN - Write minimal code
+public class BankAccount {
+    private double balance;
+    
+    public BankAccount(double initialBalance) {
+        this.balance = initialBalance;
+    }
+    
+    public void withdraw(double amount) {
+        balance -= amount;  // Minimal implementation
+    }
+    
+    public double getBalance() {
+        return balance;
+    }
+}
+// ✓ TEST PASSES!
+
+// But wait, this implementation has problems...
+// - No validation (what if amount is negative?)
+// - No check (what if insufficient funds?)
+
+// PHASE 3: REFACTOR - Improve while keeping tests passing
+public class BankAccount {
+    private double balance;
+    
+    public BankAccount(double initialBalance) {
+        if (initialBalance < 0) {
+            throw new IllegalArgumentException("Balance cannot be negative");
+        }
+        this.balance = initialBalance;
+    }
+    
+    public void withdraw(double amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("Withdrawal must be positive");
+        }
+        if (amount > balance) {
+            throw new IllegalArgumentException("Insufficient funds");
+        }
+        balance -= amount;
+    }
+    
+    public double getBalance() {
+        return balance;
+    }
+}
+// ✓ TEST STILL PASSES! But code is much better!
+
+// PHASE 1 AGAIN: Write test for new feature
+@Test
+void testCannotWithdrawMoreThanBalance() {
+    BankAccount account = new BankAccount(100);
+    assertThrows(IllegalArgumentException.class, 
+        () -> account.withdraw(200));
+}
+// ✓ TEST PASSES (already handled in refactor phase)
+
+// Continue with more tests...
+```
+
+**Benefits of TDD:**
+
+```
+✓ Forces good design (you think about interfaces first)
+✓ Fewer bugs (comprehensive tests from start)
+✓ Confidence (can refactor safely)
+✓ Documentation (tests show how to use code)
+✓ Reduced debugging (catch issues early)
+✓ Safe refactoring (tests verify nothing broke)
+```
+
+**KEY POINTS:**
+- ✓ Write test first
+- ✓ Test fails (RED)
+- ✓ Write minimal code to pass (GREEN)
+- ✓ Improve code (REFACTOR)
+- ✓ Repeat for next feature
+
+---
+
+### Level 9: Advanced - Integration Points
+
+#### What is an Integration Point?
+
+An **integration point** is where your code connects with:
+- Databases
+- External APIs
+- File systems
+- Message queues
+- Other services
+
+```java
+// Integration points example:
+
+public class OrderService {
+    private PaymentAPI paymentAPI;           // ← Integration point 1
+    private InventoryDatabase database;      // ← Integration point 2
+    private EmailService emailService;       // ← Integration point 3
+    
+    public Order processOrder(OrderRequest request) {
+        // Check inventory in database
+        Inventory inventory = database.checkStock(request.getProductId());
+        
+        // Call external payment service
+        PaymentResult payment = paymentAPI.charge(request.getAmount());
+        
+        // Send email
+        emailService.sendConfirmation(request.getEmail());
+        
+        return new Order(...);
+    }
+}
+
+// UNIT TEST: Mock all integration points
+@Test
+void testOrderProcessing() {
+    PaymentAPI mockPayment = mock(PaymentAPI.class);
+    InventoryDatabase mockDB = mock(InventoryDatabase.class);
+    EmailService mockEmail = mock(EmailService.class);
+    
+    when(mockPayment.charge(100)).thenReturn(SUCCESS);
+    when(mockDB.checkStock(1)).thenReturn(new Inventory(10));
+    
+    OrderService service = new OrderService(mockPayment, mockDB, mockEmail);
+    Order order = service.processOrder(new OrderRequest(...));
+    
+    assertNotNull(order);
+    verify(mockPayment).charge(100);
+    verify(mockEmail).sendConfirmation(anyString());
+}
+
+// INTEGRATION TEST: Use real database, mock external API
+@SpringBootTest
+@Test
+void testOrderProcessingWithRealDatabase() {
+    PaymentAPI mockPayment = mock(PaymentAPI.class);  // Still mock external
+    when(mockPayment.charge(100)).thenReturn(SUCCESS);
+    
+    OrderService service = new OrderService(mockPayment, realDatabase, emailService);
+    Order order = service.processOrder(new OrderRequest(...));
+    
+    // Verify it was saved to real database
+    Order fromDB = orderRepository.findById(order.getId()).get();
+    assertNotNull(fromDB);
+}
+```
+
+**KEY POINTS:**
+- ✓ Unit tests: Mock all integration points
+- ✓ Integration tests: Use real for some, mock for others
+- ✓ E2E tests: Use real for everything
+- ✓ Test each integration point separately
+
+---
+
+## Unit Testing Fundamentals
+
+### What is Unit Testing?
+
+**Unit Testing** is testing individual units of code in isolation, typically:
+- Single method
+- Single class
+- Single function
+- Small, focused component
+
+### Unit Test Characteristics
+
+```
+✓ ISOLATION
+  - No external dependencies (database, APIs, files)
+  - Uses mocks/stubs for dependencies
+  - Tests only the code under test
+
+✓ SPEED
+  - Executes in milliseconds
+  - No I/O operations
+  - Can run thousands per minute
+
+✓ REPEATABILITY
+  - Always produces same results
+  - No random failures
+  - No environmental dependencies
+
+✓ INDEPENDENCE
+  - Can run in any order
+  - No shared state
+  - Doesn't depend on other tests
+
+✓ CLARITY
+  - Test purpose is obvious from name
+  - Setup is minimal and clear
+  - Single assertion or related assertions
+
+✓ MAINTAINABILITY
+  - Easy to update when code changes
+  - Not brittle to refactoring
+  - Clear failure messages
+```
+
+### Unit Test Structure (AAA Pattern)
+
+```java
+@Test
+void testCalculateDiscount() {
+    // ARRANGE - Setup test data and objects
+    double price = 100.0;
+    double expectedDiscount = 10.0;
+    DiscountCalculator calculator = new DiscountCalculator();
+    
+    // ACT - Execute the unit under test
+    double actualDiscount = calculator.calculateDiscount(price);
+    
+    // ASSERT - Verify the results
+    assertEquals(expectedDiscount, actualDiscount);
+}
+```
+
+### Unit Test Example
+
+```java
+// Class to test
+public class Calculator {
+    public int add(int a, int b) {
+        return a + b;
+    }
+    
+    public int subtract(int a, int b) {
+        return a - b;
+    }
+    
+    public int divide(int a, int b) {
+        if (b == 0) {
+            throw new IllegalArgumentException("Cannot divide by zero");
+        }
+        return a / b;
+    }
+}
+
+// Unit tests
+public class CalculatorTest {
+    private Calculator calculator;
+    
+    @BeforeEach
+    void setUp() {
+        calculator = new Calculator();
+    }
+    
+    @Test
+    void testAddPositiveNumbers() {
+        int result = calculator.add(2, 3);
+        assertEquals(5, result);
+    }
+    
+    @Test
+    void testAddNegativeNumbers() {
+        int result = calculator.add(-2, -3);
+        assertEquals(-5, result);
+    }
+    
+    @Test
+    void testDivideByZero() {
+        assertThrows(IllegalArgumentException.class, 
+            () -> calculator.divide(10, 0));
+    }
+}
+```
+
+### Benefits of Unit Testing
+
+```
+1. EARLY BUG DETECTION
+   - Catch bugs during development
+   - Faster feedback loop
+   - Easier to fix when writing code
+
+2. CODE QUALITY
+   - Forces better design
+   - Encourages small, focused methods
+   - Promotes loose coupling
+
+3. REFACTORING CONFIDENCE
+   - Safely improve code
+   - Verify behavior doesn't change
+   - Tests act as safety net
+
+4. DOCUMENTATION
+   - Tests show how code should be used
+   - Examples of method behavior
+   - Living documentation
+
+5. REDUCED DEBUGGING TIME
+   - Pinpoint failures quickly
+   - Know exactly what broke
+   - Don't need debugger as much
+
+6. LOWER COSTS
+   - Fix bugs early (cheaper)
+   - Prevent production issues
+   - Less time in debugging/QA
+```
+
+### Unit Test Scope
+
+```java
+// ✓ GOOD: Units (single responsibility)
+@Test
+void testEmailValidation() { }
+
+@Test
+void testPasswordHashing() { }
+
+@Test
+void testJwtTokenGeneration() { }
+
+// ✗ BAD: Too broad (multiple responsibilities)
+@Test
+void testUserAuthentication() {
+    // Tests email validation, password hashing,
+    // token generation, database storage
+    // Too many things!
+}
+```
+
+---
+
+## Integration Testing Fundamentals
+
+### What is Integration Testing?
+
+**Integration Testing** verifies that multiple components or services work together correctly:
+- Service + Database
+- Service + External API
+- Frontend + Backend
+- Multiple services
+- Real dependencies (not mocked)
+
+### Integration Test Characteristics
+
+```
+✓ MULTIPLE COMPONENTS
+  - Tests interaction between parts
+  - Uses real implementations
+  - Verifies contracts between components
+
+⚠ SLOWER THAN UNIT TESTS
+  - May involve I/O (database, network)
+  - Takes seconds to complete
+  - Not suitable for thousands of tests
+
+✓ MORE REALISTIC
+  - Tests actual system behavior
+  - Uses real dependencies
+  - Catches integration issues
+
+⚠ MORE COMPLEX TO SETUP
+  - Requires test database
+  - May need test server
+  - More maintenance needed
+
+✓ FINDS INTEGRATION BUGS
+  - Interface mismatches
+  - Data format incompatibilities
+  - Configuration issues
+```
+
+### Integration Test Example
+
+```java
+// Components to test together
+public interface UserRepository {
+    User save(User user);
+    User findById(long id);
+}
+
+public class UserRepositoryImpl implements UserRepository {
+    private Database database;
+    
+    public UserRepositoryImpl(Database database) {
+        this.database = database;
+    }
+    
+    @Override
+    public User save(User user) {
+        return database.insert("users", user);
+    }
+    
+    @Override
+    public User findById(long id) {
+        return database.query("SELECT * FROM users WHERE id = ?", id);
+    }
+}
+
+public class UserService {
+    private UserRepository repository;
+    
+    public UserService(UserRepository repository) {
+        this.repository = repository;
+    }
+    
+    public User createUser(String name, String email) {
+        User user = new User(name, email);
+        return repository.save(user);
+    }
+    
+    public User getUser(long id) {
+        return repository.findById(id);
+    }
+}
+
+// Integration test (multiple components working together)
+@SpringBootTest
+public class UserServiceIntegrationTest {
+    @Autowired
+    private UserRepository userRepository;
+    
+    @Autowired
+    private UserService userService;
+    
+    private static final GenericContainer<?> postgres = 
+        new GenericContainer<>("postgres:13")
+            .withExposedPorts(5432)
+            .withEnv("POSTGRES_PASSWORD", "password");
+    
+    @BeforeAll
+    static void setUp() {
+        postgres.start();
+    }
+    
+    @Test
+    void testCreateAndRetrieveUser() {
+        // ARRANGE - Setup test data
+        String name = "John Doe";
+        String email = "john@example.com";
+        
+        // ACT - Call service which uses repository which uses database
+        User createdUser = userService.createUser(name, email);
+        
+        // ASSERT - Verify integration worked
+        assertNotNull(createdUser.getId());
+        
+        // Additional verification from database
+        User retrievedUser = userService.getUser(createdUser.getId());
+        assertEquals(name, retrievedUser.getName());
+        assertEquals(email, retrievedUser.getEmail());
+    }
+    
+    @AfterAll
+    static void tearDown() {
+        postgres.stop();
+    }
+}
+```
+
+### Types of Integration Testing
+
+```
+1. BIG BANG INTEGRATION
+   └─ Integrate all components at once
+   └─ Test everything together
+   └─ Pro: Tests real system behavior
+   └─ Con: Hard to isolate failures
+   
+2. INCREMENTAL INTEGRATION
+   └─ Integrate one component at a time
+   └─ Top-Down: Start with UI, stub lower layers
+   └─ Bottom-Up: Start with database, build up
+   └─ Pro: Easier to isolate issues
+   └─ Con: More complex test setup
+   
+3. SANDWICH/LAYER INTEGRATION
+   └─ Start with middle layer (business logic)
+   └─ Combine UI and database layers
+   └─ Pro: Balanced approach
+   └─ Con: Requires careful planning
+```
+
+### Integration Test Scope
+
+```java
+// Integration tests focus on component boundaries
+
+// ✓ GOOD: Testing integration points
+@Test
+void testUserServiceWithDatabase() {
+    // Service ← Repository ← Database
+}
+
+@Test
+void testUserServiceWithUserController() {
+    // Controller → Service → Repository
+}
+
+@Test
+void testProductServiceWithExternalAPI() {
+    // Service ← ExternalPricingAPI
+}
+
+// ✗ AVOID: Too broad (use E2E test instead)
+@Test
+void testCompleteUserWorkflow() {
+    // UI → Controller → Service → Repository → Database
+    // AND → Email Service AND → Payment Service
+    // This is E2E, not integration
+}
+```
+
+### Benefits of Integration Testing
+
+```
+1. DETECTS INTEGRATION ISSUES
+   - Interface mismatches
+   - Data format incompatibilities
+   - Protocol errors
+   - Serialization problems
+
+2. VERIFIES SYSTEM BEHAVIOR
+   - Real components working together
+   - Configuration correctness
+   - Dependency injection setup
+
+3. CATCHES ENVIRONMENT ISSUES
+   - Database connectivity
+   - File system access
+   - Network communication
+   - Resource management
+
+4. BUILDS CONFIDENCE
+   - Knows components work together
+   - Validates contracts between layers
+   - Reduces production surprises
+
+5. DOCUMENTS COMPONENT INTERACTIONS
+   - Shows how parts connect
+   - Illustrates data flow
+   - Demonstrates expected contracts
+```
+
+---
+
+## Comparison: Unit vs Integration Testing
+
+### Side-by-Side Comparison
+
+| Aspect | Unit Testing | Integration Testing |
+|--------|--------------|-------------------|
+| **Scope** | Single method/class | Multiple components |
+| **Dependencies** | Mocked/stubbed | Real components |
+| **Speed** | Very fast (< 100ms) | Slower (seconds) |
+| **Setup** | Minimal | Complex (databases, servers) |
+| **Failure Diagnosis** | Easy (isolated) | Harder (multiple parts) |
+| **Cost** | Low (quick to write/maintain) | Higher (infrastructure needed) |
+| **Quantity** | Many (60-80% of tests) | Fewer (15-25% of tests) |
+| **When** | During development | After unit tests pass |
+| **Tool** | JUnit, Mockito | TestContainers, Spring Boot Test |
+| **Example** | `add(2, 3)` returns `5` | `UserService` saves to database |
+
+### When to Use Each
+
+```
+UNIT TESTING - Use When:
+✓ Testing business logic
+✓ Testing utility functions
+✓ Testing algorithms
+✓ Testing single class behavior
+✓ You need fast feedback
+✓ Dependencies are expensive (DB, API)
+
+INTEGRATION TESTING - Use When:
+✓ Testing component interactions
+✓ Testing database operations
+✓ Testing API endpoints
+✓ Testing configuration
+✓ Verifying end-to-end workflows
+✓ Testing real dependencies is important
+```
+
+### Example: User Authentication
+
+```java
+// UNIT TEST - Just the logic
+@Test
+void testPasswordValidation() {
+    String password = "SecurePass123!";
+    assertTrue(PasswordValidator.isValid(password));
+}
+
+// UNIT TEST - Just the token generation
+@Test
+void testJwtTokenGeneration() {
+    JwtTokenGenerator generator = new JwtTokenGenerator();
+    String token = generator.generateToken("user@example.com");
+    assertNotNull(token);
+    assertTrue(token.contains("."));
+}
+
+// INTEGRATION TEST - Everything together
+@Test
+void testCompleteAuthentication() {
+    // User submits credentials
+    LoginRequest request = new LoginRequest("user@example.com", "password");
+    
+    // AuthService coordinates the flow
+    AuthService authService = new AuthService(
+        userRepository,      // Real repository
+        passwordValidator,   // Real validator
+        jwtTokenGenerator    // Real generator
+    );
+    
+    // Integration test verifies the whole flow
+    AuthResponse response = authService.authenticate(request);
+    
+    assertNotNull(response.getToken());
+    assertNotNull(response.getUser());
+    assertEquals("user@example.com", response.getUser().getEmail());
+}
+```
+
+---
+
+## Unit Testing Deep Dive
+
+### Unit Testing Patterns and Techniques
+
+#### 1. Arrange-Act-Assert Pattern
+
+```java
+@Test
+void testBankAccountWithdrawal() {
+    // ARRANGE - Setup objects in known state
+    BankAccount account = new BankAccount(1000);
+    
+    // ACT - Perform the action being tested
+    account.withdraw(250);
+    
+    // ASSERT - Verify the outcome
+    assertEquals(750, account.getBalance());
+}
+```
+
+#### 2. Given-When-Then Pattern (BDD)
+
+```java
+@Test
+void givenAccountWith1000Dollars_whenWithdraw250_thenBalanceIs750() {
+    // GIVEN - Initial state
+    BankAccount account = new BankAccount(1000);
+    
+    // WHEN - Action
+    account.withdraw(250);
+    
+    // THEN - Expected outcome
+    assertEquals(750, account.getBalance());
+}
+```
+
+#### 3. Builder Pattern for Test Data
+
+```java
+public class UserBuilder {
+    private String name = "John";
+    private String email = "john@example.com";
+    private boolean active = true;
+    
+    public UserBuilder withName(String name) {
+        this.name = name;
+        return this;
+    }
+    
+    public UserBuilder withEmail(String email) {
+        this.email = email;
+        return this;
+    }
+    
+    public User build() {
+        return new User(name, email, active);
+    }
+}
+
+// Usage
+@Test
+void testActiveUserCanLogin() {
+    User user = new UserBuilder()
+        .withEmail("admin@example.com")
+        .build();
+    
+    assertTrue(authService.canLogin(user));
+}
+```
+
+#### 4. Parameterized Testing
+
+```java
+@ParameterizedTest
+@CsvSource({
+    "2, 3, 5",
+    "0, 0, 0",
+    "-1, 1, 0",
+    "100, 200, 300"
+})
+void testAddition(int a, int b, int expected) {
+    Calculator calc = new Calculator();
+    assertEquals(expected, calc.add(a, b));
+}
+```
+
+#### 5. Test Fixtures
+
+```java
+public abstract class DatabaseTestBase {
+    protected Database database;
+    protected UserRepository userRepository;
+    
+    @BeforeEach
+    void setUp() {
+        database = new InMemoryDatabase();
+        userRepository = new UserRepository(database);
+    }
+    
+    @AfterEach
+    void tearDown() {
+        database.clear();
+    }
+}
+
+// Subclass inherits setup/teardown
+public class UserRepositoryTest extends DatabaseTestBase {
+    @Test
+    void testSaveUser() {
+        // database and userRepository already initialized
+    }
+}
+```
+
+### Mocking in Unit Tests
+
+```java
+// Service to test
+public class OrderService {
+    private PaymentProcessor paymentProcessor;
+    private EmailService emailService;
+    
+    public OrderService(PaymentProcessor processor, EmailService email) {
+        this.paymentProcessor = processor;
+        this.emailService = email;
+    }
+    
+    public void processOrder(Order order) {
+        paymentProcessor.charge(order.getTotal());
+        emailService.sendConfirmation(order.getId());
+    }
+}
+
+// Unit test with mocks
+@Test
+void testOrderProcessing() {
+    // Mock dependencies
+    PaymentProcessor mockPayment = mock(PaymentProcessor.class);
+    EmailService mockEmail = mock(EmailService.class);
+    
+    // Create service with mocks
+    OrderService service = new OrderService(mockPayment, mockEmail);
+    
+    // Create test data
+    Order order = new Order("ORD123", 99.99);
+    
+    // Execute
+    service.processOrder(order);
+    
+    // Verify interactions
+    verify(mockPayment).charge(99.99);
+    verify(mockEmail).sendConfirmation("ORD123");
+}
+```
+
+### Test Isolation and Independence
+
+```java
+// ✗ BAD: Tests are dependent on each other
+public class UserTest {
+    private static List<User> users = new ArrayList<>();
+    
+    @Test
+    void test1_createUser() {
+        User user = new User("John");
+        users.add(user);
+        assertNotNull(user);
+    }
+    
+    @Test
+    void test2_listUsers() {
+        // Depends on test1 running first!
+        assertEquals(1, users.size());
+    }
+    
+    @Test
+    void test3_deleteUser() {
+        // Depends on test1 and test2!
+        users.clear();
+        assertTrue(users.isEmpty());
+    }
+}
+// Tests fail if run in different order!
+
+// ✓ GOOD: Tests are independent
+public class UserTest {
+    @Test
+    void testCreateUser() {
+        User user = new User("John");
+        assertNotNull(user);
+    }
+    
+    @Test
+    void testListUsersWithOneUser() {
+        List<User> users = new ArrayList<>();
+        users.add(new User("John"));
+        assertEquals(1, users.size());
+    }
+    
+    @Test
+    void testClearUsers() {
+        List<User> users = new ArrayList<>();
+        users.add(new User("John"));
+        users.clear();
+        assertTrue(users.isEmpty());
+    }
+}
+// Tests run independently in any order
+```
+
+### Edge Cases and Boundary Testing
+
+```java
+@Test
+void testEdgeCases() {
+    Calculator calc = new Calculator();
+    
+    // Boundary: Zero
+    assertEquals(0, calc.add(0, 0));
+    
+    // Boundary: Negative
+    assertEquals(-10, calc.add(-5, -5));
+    
+    // Boundary: Maximum
+    assertEquals(Integer.MAX_VALUE, 
+        calc.add(Integer.MAX_VALUE / 2, Integer.MAX_VALUE / 2));
+    
+    // Boundary: Minimum
+    assertEquals(Integer.MIN_VALUE, 
+        calc.add(Integer.MIN_VALUE, 0));
+    
+    // Null input
+    assertThrows(NullPointerException.class, 
+        () -> calc.add(null, 5));
+}
+```
+
+---
+
+## Integration Testing Deep Dive
+
+### Integration Test Setup
+
+#### 1. Using TestContainers
+
+```xml
+<!-- pom.xml -->
+<dependency>
+    <groupId>org.testcontainers</groupId>
+    <artifactId>testcontainers</artifactId>
+    <version>1.17.3</version>
+    <scope>test</scope>
+</dependency>
+<dependency>
+    <groupId>org.testcontainers</groupId>
+    <artifactId>postgresql</artifactId>
+    <version>1.17.3</version>
+    <scope>test</scope>
+</dependency>
+```
+
+```java
+@Testcontainers
+public class UserRepositoryIntegrationTest {
+    
+    @Container
+    static PostgreSQLContainer<?> postgres = 
+        new PostgreSQLContainer<>("postgres:13")
+            .withDatabaseName("testdb")
+            .withUsername("test")
+            .withPassword("test");
+    
+    @BeforeAll
+    static void setUpDatabase() {
+        // Database started automatically by @Testcontainers
+    }
+    
+    @Test
+    void testSaveAndRetrieveUser() {
+        // Test with real database
+        User user = new User("John", "john@example.com");
+        userRepository.save(user);
+        
+        User retrieved = userRepository.findByEmail("john@example.com");
+        assertEquals("John", retrieved.getName());
+    }
+}
+```
+
+#### 2. Using Spring Boot Test
+
+```java
+@SpringBootTest
+@AutoConfigureMockMvc
+public class UserControllerIntegrationTest {
+    
+    @Autowired
+    private MockMvc mockMvc;
+    
+    @Autowired
+    private UserRepository userRepository;
+    
+    @BeforeEach
+    void setUp() {
+        userRepository.deleteAll();
+    }
+    
+    @Test
+    void testGetUserEndpoint() throws Exception {
+        // Create test data
+        User user = new User("John", "john@example.com");
+        User saved = userRepository.save(user);
+        
+        // Test the endpoint
+        mockMvc.perform(get("/api/users/" + saved.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("John"))
+            .andExpect(jsonPath("$.email").value("john@example.com"));
+    }
+}
+```
+
+#### 3. Using H2 In-Memory Database for Tests
+
+```java
+@SpringBootTest
+@ActiveProfiles("test")  // Uses application-test.properties
+public class ProductRepositoryTest {
+    
+    @Autowired
+    private ProductRepository productRepository;
+    
+    @Test
+    void testSaveProduct() {
+        Product product = new Product("Laptop", 999.99);
+        Product saved = productRepository.save(product);
+        
+        assertNotNull(saved.getId());
+        assertEquals("Laptop", saved.getName());
+    }
+}
+
+// application-test.properties
+spring.datasource.url=jdbc:h2:mem:testdb
+spring.datasource.driverClassName=org.h2.Driver
+spring.jpa.database-platform=org.hibernate.dialect.H2Dialect
+```
+
+### Integration Test Scenarios
+
+#### 1. Database Integration
+
+```java
+@SpringBootTest
+public class OrderRepositoryIntegrationTest {
+    
+    @Autowired
+    private OrderRepository orderRepository;
+    
+    @Autowired
+    private UserRepository userRepository;
+    
+    @Test
+    void testOrderWithUserRelationship() {
+        // Create user
+        User user = new User("John", "john@example.com");
+        User savedUser = userRepository.save(user);
+        
+        // Create order with user
+        Order order = new Order("ORD123", 99.99, savedUser);
+        Order savedOrder = orderRepository.save(order);
+        
+        // Retrieve and verify relationship
+        Order retrieved = orderRepository.findById(savedOrder.getId()).get();
+        assertEquals(savedUser.getId(), retrieved.getUser().getId());
+        assertEquals("John", retrieved.getUser().getName());
+    }
+}
+```
+
+#### 2. Service + Repository Integration
+
+```java
+@SpringBootTest
+public class UserServiceIntegrationTest {
+    
+    @Autowired
+    private UserService userService;
+    
+    @Autowired
+    private UserRepository userRepository;
+    
+    @BeforeEach
+    void setUp() {
+        userRepository.deleteAll();
+    }
+    
+    @Test
+    void testCreateUserThroughService() {
+        // Service logic uses repository
+        UserCreateRequest request = new UserCreateRequest(
+            "John", "john@example.com");
+        
+        User created = userService.createUser(request);
+        
+        // Verify it was saved to database
+        User dbUser = userRepository.findById(created.getId()).get();
+        assertEquals("John", dbUser.getName());
+    }
+    
+    @Test
+    void testUserWithDuplicateEmail() {
+        userService.createUser(new UserCreateRequest("John", "john@example.com"));
+        
+        // Second user with same email should fail
+        assertThrows(DuplicateEmailException.class, 
+            () -> userService.createUser(
+                new UserCreateRequest("Jane", "john@example.com")));
+    }
+}
+```
+
+#### 3. API Integration
+
+```java
+@SpringBootTest
+@AutoConfigureMockMvc
+public class UserControllerIntegrationTest {
+    
+    @Autowired
+    private MockMvc mockMvc;
+    
+    @Autowired
+    private UserRepository userRepository;
+    
+    @Test
+    void testCreateUserAPI() throws Exception {
+        String json = """
+            {
+                "name": "John",
+                "email": "john@example.com"
+            }
+            """;
+        
+        mockMvc.perform(post("/api/users")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.id").exists())
+            .andExpect(jsonPath("$.name").value("John"));
+        
+        // Verify saved to database
+        assertEquals(1, userRepository.count());
+    }
+    
+    @Test
+    void testGetUserAPI() throws Exception {
+        User user = new User("John", "john@example.com");
+        User saved = userRepository.save(user);
+        
+        mockMvc.perform(get("/api/users/" + saved.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("John"))
+            .andExpect(jsonPath("$.email").value("john@example.com"));
+    }
+}
+```
+
+#### 4. External API Integration
+
+```java
+@SpringBootTest
+public class WeatherServiceIntegrationTest {
+    
+    @Autowired
+    private WeatherService weatherService;
+    
+    // Mock external API
+    @MockBean
+    private WeatherAPI weatherAPI;
+    
+    @Test
+    void testWeatherService_WithRealIntegration() {
+        // When: Call external API returns data
+        WeatherData data = new WeatherData("NYC", 75, "Sunny");
+        when(weatherAPI.getWeather("NYC")).thenReturn(data);
+        
+        // Then: Service correctly processes it
+        String forecast = weatherService.getForecast("NYC");
+        assertEquals("NYC is 75°F and Sunny", forecast);
+    }
+}
+```
+
+### Integration Test Best Practices
+
+```java
+// 1. Use test-specific configuration
+@SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
+@ActiveProfiles("test")
+class IntegrationTest { }
+
+// 2. Clean up test data
+@BeforeEach
+void setUp() {
+    repository.deleteAll();
+}
+
+@AfterEach
+void tearDown() {
+    repository.deleteAll();
+}
+
+// 3. Use meaningful test data
+@Test
+void testWithRealisticData() {
+    User user = new User("john.doe@company.com", "John", "Doe");
+    Order order = new Order("2024-12-24", user, 150.00);
+    // Real-world scenario
+}
+
+// 4. Test at component boundaries
+@Test
+void testControllerToRepository() {
+    // Controller → Service → Repository → Database
+}
+
+// 5. Verify both success and failure paths
+@Test
+void testSuccessPath() { }
+
+@Test
+void testFailurePath() { }
+```
+
+---
+
+## Testing Pyramid and Strategy
+
+### The Testing Pyramid
+
+```
+                    /\
+                   /  \          E2E Tests
+                  /    \         - 5-10% of tests
+                 /──────\        - Selenium, Cypress
+                /        \       - Expensive, slow
+               /          \
+              /            \     Integration Tests
+             /              \    - 20-30% of tests
+            /                \   - MockMvc, TestContainers
+           /                  \  - Medium cost
+          /                    \
+         /──────────────────────\
+        Unit Tests
+        - 60-80% of tests
+        - Fast, cheap, isolated
+```
+
+### Why This Pyramid?
+
+```
+1. COST
+   Unit: $1 (fast to write/maintain)
+   Integration: $10 (setup infrastructure)
+   E2E: $100 (slow, fragile, expensive to maintain)
+
+2. SPEED
+   Unit: 1 ms
+   Integration: 1 second
+   E2E: 10 seconds
+
+3. FEEDBACK LOOP
+   Unit: Immediate (during development)
+   Integration: Minutes (after unit tests)
+   E2E: Hours (after integration tests)
+
+4. MAINTENANCE
+   Unit: Easy (change code, run tests)
+   Integration: Medium (setup required)
+   E2E: Hard (fragile, environment-dependent)
+```
+
+### Test Strategy Recommendation
+
+```
+For a typical project:
+────────────────────────
+
+Unit Tests (60%)
+├─ Business logic
+├─ Utility functions
+├─ Algorithms
+├─ Data validation
+└─ Mocked dependencies
+
+Integration Tests (30%)
+├─ Database operations
+├─ API endpoints
+├─ Service interactions
+├─ Configuration
+└─ Real dependencies
+
+E2E Tests (10%)
+├─ Critical workflows
+├─ User scenarios
+├─ Full system flow
+└─ Browser automation
+```
+
+### Automation Pyramid vs Reality
+
+```
+IDEAL (Pyramid)          REALITY (Common)
+────────────────────────────────────────
+
+     /\                        /\
+    /E2E\                      /UI\
+   /─────\                    /────\
+  /Int.   \        vs.      /API  \
+ /─────────\              /────────\
+/Unit Tests \            /Unit Tests \
+
+What we should target:   What many projects have:
+- Fast feedback          - Slow tests
+- Maintainable           - Brittle tests
+- Safe refactoring       - Can't refactor
+```
+
+---
+
+## Test Organization and Structure
+
+### Project Structure
+
+```
+src/
+├─ main/java/
+│  └─ com/example/
+│     ├─ controller/
+│     │  └─ UserController.java
+│     ├─ service/
+│     │  └─ UserService.java
+│     ├─ repository/
+│     │  └─ UserRepository.java
+│     └─ model/
+│        └─ User.java
+└─ test/java/
+   └─ com/example/
+      ├─ unit/
+      │  ├─ service/
+      │  │  └─ UserServiceUnitTest.java
+      │  ├─ model/
+      │  │  └─ UserTest.java
+      │  └─ util/
+      │     └─ ValidatorTest.java
+      ├─ integration/
+      │  ├─ repository/
+      │  │  └─ UserRepositoryIntegrationTest.java
+      │  ├─ api/
+      │  │  └─ UserControllerIntegrationTest.java
+      │  └─ service/
+      │     └─ UserServiceIntegrationTest.java
+      ├─ e2e/
+      │  └─ UserWorkflowE2ETest.java
+      └─ fixture/
+         ├─ UserFixture.java
+         └─ OrderFixture.java
+```
+
+### Naming Conventions
+
+```java
+// UNIT TESTS - Test implementation details
+UserServiceUnitTest          // Or UserServiceTest
+testCalculateDiscountAmount  // Or test_should_calculate_discount
+testValidEmailAddress        // Or test_valid_email
+
+// INTEGRATION TESTS - Test component interactions
+UserRepositoryIntegrationTest
+UserControllerIntegrationTest
+testSaveUserToDatabase       // Or testPersistenceWithRealDB
+testGetUserEndpoint          // Or testAPIReturnsUser
+
+// E2E TESTS - Test complete workflows
+UserAuthenticationE2ETest
+testUserRegistrationFlow
+testCompleteCheckoutProcess
+```
+
+### Test Class Organization
+
+```java
+@DisplayName("UserService Tests")
+class UserServiceTest {
+    
+    private UserService userService;
+    private UserRepository mockRepository;
+    
+    // Setup and teardown
+    @BeforeEach
+    void setUp() {
+        mockRepository = mock(UserRepository.class);
+        userService = new UserService(mockRepository);
+    }
+    
+    // Happy path tests
+    @Nested
+    @DisplayName("Creating Users")
+    class CreateUserTests {
+        @Test
+        void testCreateValidUser() { }
+        
+        @Test
+        void testUserIdIsGenerated() { }
+    }
+    
+    // Error case tests
+    @Nested
+    @DisplayName("Error Handling")
+    class ErrorHandlingTests {
+        @Test
+        void testNullNameThrowsException() { }
+        
+        @Test
+        void testDuplicateEmailThrowsException() { }
+    }
+    
+    // Edge case tests
+    @Nested
+    @DisplayName("Edge Cases")
+    class EdgeCaseTests {
+        @Test
+        void testEmptyNameIsRejected() { }
+        
+        @Test
+        void testVeryLongNameIsHandled() { }
+    }
+}
+```
+
+---
+
+## Mocking, Stubbing, and Fakes
+
+### Terminology
+
+```
+MOCK
+├─ Fake object that records method calls
+├─ Allows verification of interactions
+├─ Example: verify(mockRepo).save(user)
+└─ Usage: Unit testing with Mockito
+
+STUB
+├─ Fake object that returns fixed responses
+├─ Provides canned data
+├─ Example: when(mockRepo.find(1)).thenReturn(user)
+└─ Usage: Isolating dependencies
+
+FAKE
+├─ Simplified working implementation
+├─ Example: InMemoryDatabase instead of real DB
+├─ Useful for integration tests
+└─ Usage: Testing without external dependencies
+
+SPY
+├─ Real object with selective mocking
+├─ Calls real methods by default
+├─ Example: spy(userService)
+└─ Usage: Partial mocking of real objects
+```
+
+### Mocking Patterns
+
+#### 1. Basic Mocking
+
+```java
+@Test
+void testWithMockedDependency() {
+    // Create mock
+    UserRepository mockRepo = mock(UserRepository.class);
+    
+    // Configure stub responses
+    User expectedUser = new User(1, "John");
+    when(mockRepo.findById(1)).thenReturn(expectedUser);
+    
+    // Use mock in code
+    UserService service = new UserService(mockRepo);
+    User result = service.getUser(1);
+    
+    // Verify interaction
+    assertEquals("John", result.getName());
+    verify(mockRepo).findById(1);
+}
+```
+
+#### 2. Mocking with Annotations
+
+```java
+@ExtendWith(MockitoExtension.class)
+class UserServiceTest {
+    
+    @Mock
+    private UserRepository userRepository;
+    
+    @InjectMocks
+    private UserService userService;
+    
+    @Test
+    void testUserService() {
+        when(userRepository.findById(1))
+            .thenReturn(new User(1, "John"));
+        
+        User user = userService.getUser(1);
+        
+        verify(userRepository).findById(1);
+    }
+}
+```
+
+#### 3. Mock Verification
+
+```java
+@Test
+void testMockVerification() {
+    UserRepository mockRepo = mock(UserRepository.class);
+    UserService service = new UserService(mockRepo);
+    
+    // Call service method
+    service.createUser("John", "john@example.com");
+    
+    // Verify was called
+    verify(mockRepo).save(any(User.class));
+    
+    // Verify called exactly 1 time
+    verify(mockRepo, times(1)).save(any(User.class));
+    
+    // Verify never called
+    verify(mockRepo, never()).delete(any(User.class));
+    
+    // Verify call order
+    InOrder inOrder = inOrder(mockRepo);
+    inOrder.verify(mockRepo).findByEmail("john@example.com");
+    inOrder.verify(mockRepo).save(any(User.class));
+}
+```
+
+#### 4. Spy (Partial Mocking)
+
+```java
+@Test
+void testWithSpy() {
+    // Real object
+    List<String> realList = new ArrayList<>();
+    
+    // Spy on it
+    List<String> spyList = spy(realList);
+    
+    // Real method called
+    spyList.add("Item1");
+    assertEquals(1, spyList.size());  // Real method worked
+    
+    // But you can still stub some methods
+    when(spyList.size()).thenReturn(100);
+    assertEquals(100, spyList.size());  // Stubbed method
+    
+    // And verify interactions
+    verify(spyList).add("Item1");
+}
+```
+
+---
+
+## Real-World Scenarios
+
+### Scenario 1: E-Commerce Order Processing
+
+```java
+// UNIT TESTS - Individual components
+public class OrderValidatorUnitTest {
+    @Test
+    void testOrderWithValidData() {
+        Order order = new Order(100, "user@example.com");
+        assertTrue(OrderValidator.validate(order));
+    }
+    
+    @Test
+    void testOrderWithNegativePrice() {
+        Order order = new Order(-100, "user@example.com");
+        assertFalse(OrderValidator.validate(order));
+    }
+}
+
+// INTEGRATION TESTS - Components working together
+@SpringBootTest
+public class OrderServiceIntegrationTest {
+    @Autowired
+    private OrderService orderService;
+    
+    @Autowired
+    private OrderRepository orderRepository;
+    
+    @Autowired
+    private UserRepository userRepository;
+    
+    @Test
+    void testCompleteOrderCreation() {
+        // Create user
+        User user = userRepository.save(new User("user@example.com"));
+        
+        // Create order through service
+        Order order = new Order(100, user);
+        Order saved = orderService.createOrder(order);
+        
+        // Verify in database
+        Order retrieved = orderRepository.findById(saved.getId()).get();
+        assertEquals(100, retrieved.getPrice());
+    }
+}
+```
+
+### Scenario 2: User Authentication
+
+```java
+// UNIT TEST - Password validation
+public class PasswordValidatorUnitTest {
+    @Test
+    void testStrongPassword() {
+        String password = "SecurePass123!";
+        assertTrue(PasswordValidator.isStrong(password));
+    }
+    
+    @Test
+    void testWeakPassword() {
+        String password = "weak";
+        assertFalse(PasswordValidator.isStrong(password));
+    }
+}
+
+// UNIT TEST - JWT generation (mocked)
+public class JwtGeneratorUnitTest {
+    @Test
+    void testTokenGeneration() {
+        JwtGenerator generator = new JwtGenerator("secret");
+        String token = generator.generateToken("user@example.com");
+        
+        assertNotNull(token);
+        assertTrue(token.split("\\.").length == 3);
+    }
+}
+
+// INTEGRATION TEST - Full authentication flow
+@SpringBootTest
+public class AuthenticationIntegrationTest {
+    @Autowired
+    private UserRepository userRepository;
+    
+    @Autowired
+    private AuthService authService;
+    
+    @Test
+    void testCompleteLoginFlow() {
+        // Create user
+        User user = new User("user@example.com");
+        userRepository.save(user);
+        
+        // Login
+        String token = authService.login("user@example.com", "password");
+        
+        // Verify token
+        assertNotNull(token);
+    }
+}
+```
+
+### Scenario 3: External API Integration
+
+```java
+// UNIT TEST - API client with mock
+public class WeatherAPIClientUnitTest {
+    @Test
+    void testParsesWeatherResponse() {
+        // Mock HTTP response
+        HttpClient mockClient = mock(HttpClient.class);
+        String response = """
+            {
+                "temperature": 75,
+                "condition": "Sunny"
+            }
+            """;
+        when(mockClient.get("weather/NYC")).thenReturn(response);
+        
+        // Parse it
+        WeatherData data = WeatherAPIClient.parse(response);
+        assertEquals(75, data.getTemperature());
+    }
+}
+
+// INTEGRATION TEST - Real or mock external API
+@SpringBootTest
+public class WeatherServiceIntegrationTest {
+    @Autowired
+    private WeatherService weatherService;
+    
+    @MockBean
+    private ExternalWeatherAPI externalAPI;
+    
+    @Test
+    void testWeatherForecast() {
+        // Mock external API response
+        WeatherData mockData = new WeatherData(75, "Sunny");
+        when(externalAPI.getWeather("NYC")).thenReturn(mockData);
+        
+        // Service calls external API
+        String forecast = weatherService.getForecast("NYC");
+        
+        assertEquals("NYC: 75°F, Sunny", forecast);
+        verify(externalAPI).getWeather("NYC");
+    }
+}
+```
+
+---
+
+## Best Practices
+
+### Writing Effective Unit Tests
+
+```java
+// 1. One responsibility per test
+✓ GOOD
+@Test void testValidUserEmail() { }
+@Test void testPasswordIsHashed() { }
+
+✗ BAD
+@Test void testUserValidation() {
+    // Tests email, password, name, everything
+}
+
+// 2. Clear, descriptive names
+✓ GOOD: testWithdrawalReducesBalanceByWithdrawnAmount
+✓ GOOD: testLoginFailsWithInvalidCredentials
+✗ BAD: test1, testLogin, testIt
+
+// 3. Minimal setup
+✓ GOOD
+@Test
+void testAdd() {
+    assertEquals(5, calculator.add(2, 3));
+}
+
+✗ BAD
+@Test
+void testAdd() {
+    // Unnecessary setup
+    System.out.println("Starting test");
+    Logger logger = Logger.getLogger("Test");
+    Calculator calculator = createCalculatorWithLogging(logger);
+    assertEquals(5, calculator.add(2, 3));
+}
+
+// 4. One assertion or related group
+✓ GOOD
+@Test
+void testUserProperties() {
+    User user = new User("John", 30);
+    assertEquals("John", user.getName());
+    assertEquals(30, user.getAge());
+    assertTrue(user.isActive());
+}
+
+✗ BAD
+@Test
+void testEverything() {
+    // Test user, order, payment, email all in one test
+}
+
+// 5. No hidden test data
+✓ GOOD
+@Test
+void testDiscount() {
+    Order order = new Order(100);
+    assertEquals(90, order.applyDiscount(0.10));
+}
+
+✗ BAD
+@Test
+void testDiscount() {
+    // Where did 100 come from?
+    Order order = getTestOrder();
+    assertEquals(90, order.applyDiscount(getDiscountRate()));
+}
+
+// 6. Deterministic (no random data)
+✓ GOOD
+@Test
+void testUserWithFixedEmail() {
+    User user = new User("john@example.com");
+    assertEquals("john@example.com", user.getEmail());
+}
+
+✗ BAD
+@Test
+void testUserWithRandomEmail() {
+    User user = new User(generateRandomEmail());
+    assertEquals(user.email, user.email);  // Meaningless
+}
+```
+
+### Writing Effective Integration Tests
+
+```java
+// 1. Test component boundaries
+✓ GOOD - Testing how Service talks to Repository
+@Test
+void testServiceSavesUserToRepository() { }
+
+✗ BAD - Testing internal logic (that's for unit test)
+@Test
+void testServiceProcessesUserData() { }
+
+// 2. Use realistic data
+✓ GOOD
+User user = new User("john.doe@company.com", "John", "Doe");
+Order order = new Order("2024-12-24", user, 150.00);
+
+✗ BAD
+User user = new User("a", "b", "c");
+Order order = new Order("1", null, 0);
+
+// 3. Clean up properly
+✓ GOOD
+@BeforeEach
+void setUp() {
+    userRepository.deleteAll();
+}
+
+// 4. Test both success and failure
+✓ GOOD
+@Test void testSuccessfulUserCreation() { }
+@Test void testDuplicateUserRejected() { }
+@Test void testInvalidEmailRejected() { }
+
+✗ BAD - Only tests happy path
+@Test void testCreateUser() { }
+
+// 5. Verify interactions with real components
+✓ GOOD
+User created = userService.createUser(request);
+User fromDB = userRepository.findById(created.getId()).get();
+assertEquals("John", fromDB.getName());
+
+✗ BAD
+User created = userService.createUser(request);
+assertNotNull(created);
+```
+
+### Common Anti-Patterns to Avoid
+
+```java
+// ✗ ANTI-PATTERN 1: Test interdependence
+static int userId;
+
+@Test void testCreateUser() {
+    userId = userService.createUser("John");  // Sets global!
+}
+
+@Test void testUpdateUser() {
+    userService.updateUser(userId, "Jane");   // Depends on testCreateUser!
+}
+
+// ✓ SOLUTION: Independent tests
+@Test void testCreateUser() {
+    int id = userService.createUser("John");
+    assertNotNull(id);
+}
+
+@Test void testUpdateUser() {
+    int id = userService.createUser("John");  // Create fresh data
+    userService.updateUser(id, "Jane");
+    User updated = userService.getUser(id);
+    assertEquals("Jane", updated.getName());
+}
+
+// ✗ ANTI-PATTERN 2: Testing private methods
+private int calculate() { return 42; }
+
+@Test void testCalculate() {
+    // Can't call private method!
+}
+
+// ✓ SOLUTION: Test through public interface
+public int getResult() {
+    return calculate();
+}
+
+@Test void testGetResult() {
+    assertEquals(42, getResult());
+}
+
+// ✗ ANTI-PATTERN 3: Over-mocking (mocking everything)
+@Test
+void testService() {
+    Calculator mockCalc = mock(Calculator.class);
+    when(mockCalc.add(2, 3)).thenReturn(5);
+    assertEquals(5, mockCalc.add(2, 3));
+    // Tests the mock, not the service!
+}
+
+// ✓ SOLUTION: Mock only external dependencies
+@Test
+void testService() {
+    UserRepository mockRepo = mock(UserRepository.class);
+    when(mockRepo.findById(1)).thenReturn(new User(1, "John"));
+    
+    UserService service = new UserService(mockRepo);  // Real service!
+    User user = service.getUser(1);
+    
+    assertEquals("John", user.getName());
+}
+
+// ✗ ANTI-PATTERN 4: Unclear test names
+@Test void test1() { }
+@Test void testIt() { }
+@Test void testDataProcessing() { }
+
+// ✓ SOLUTION: Descriptive names
+@Test void testWithdrawalReducesBalanceCorrectly() { }
+@Test void testNegativeWithdrawalThrowsException() { }
+@Test void testInsufficientFundsRejected() { }
+
+// ✗ ANTI-PATTERN 5: Sleeping in tests
+@Test
+void testAsync() throws Exception {
+    Thread.sleep(5000);  // Bad! Slow and flaky!
+    assertTrue(operation.isComplete());
+}
+
+// ✓ SOLUTION: Use Awaitility
+@Test
+void testAsync() {
+    await()
+        .atMost(Duration.ofSeconds(5))
+        .until(() -> operation.isComplete());
+    assertTrue(operation.isComplete());
+}
+```
+
+---
+
+## Anti-Patterns and Pitfalls
+
+### Common Mistakes
+
+```
+1. FLAKY TESTS
+   Problem: Tests pass sometimes, fail other times
+   Cause: Race conditions, random data, timing issues
+   Solution: Remove randomness, use deterministic data, proper waits
+
+2. SLOW TESTS
+   Problem: Tests take too long to run
+   Cause: Real I/O, complex setup, no parallelization
+   Solution: Mock dependencies, use in-memory DB, run in parallel
+
+3. BRITTLE TESTS
+   Problem: Tests break when code is refactored
+   Cause: Testing implementation details, tight coupling
+   Solution: Test behavior, not implementation; use interfaces
+
+4. MASSIVE TEST SETUP
+   Problem: 90% setup, 10% actual test
+   Cause: Complex fixtures, inadequate base classes
+   Solution: Use builders, inheritance, factories
+
+5. ASSERTION OVERLOAD
+   Problem: One test asserts 50+ things
+   Cause: Trying to test too much
+   Solution: One logical concern per test
+
+6. NO NEGATIVE TESTS
+   Problem: Only test happy path
+   Cause: Lazy testing
+   Solution: Test error cases, edge cases, boundaries
+
+7. MOCKING LIBRARY CLASSES
+   Problem: Mocking ArrayList, String, etc.
+   Cause: Misunderstanding mocking purpose
+   Solution: Only mock external dependencies
+
+8. TESTS THAT TEST TESTS
+   Problem: Testing the test framework
+   Cause: Over-engineering
+   Solution: Trust the framework, test your code
+
+9. IGNORING FAILED TESTS
+   Problem: Tests marked @Ignore, never fixed
+   Cause: Laziness, unclear failure
+   Solution: Fix tests immediately or remove them
+
+10. TESTS THAT DON'T TEST
+    Problem: assertEquals(value, value) meaningless
+    Cause: Copy-paste, not thinking about what to test
+    Solution: Write tests that verify behavior
+```
+
+### Performance Optimization
+
+```java
+// SLOW TEST - Every annotation creates new instance
+@Test void test1() { }
+@Test void test2() { }
+@Test void test3() { }
+// Result: 3x database connects
+
+// FAST TEST - Setup once for all tests
+@BeforeAll
+static void setUpOnce() {
+    database.connect();
+}
+
+@BeforeEach
+void setUpEach() {
+    database.transaction.begin();
+}
+
+@Test void test1() { }
+@Test void test2() { }
+@Test void test3() { }
+
+@AfterEach
+void tearDownEach() {
+    database.transaction.rollback();
+}
+
+// PARALLEL EXECUTION (Maven)
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-surefire-plugin</artifactId>
+    <configuration>
+        <parallel>methods</parallel>
+        <threadCount>4</threadCount>
+    </configuration>
+</plugin>
+
+// Result: Tests run 4x faster
+```
+
+---
+
+## Advanced Testing Concepts
+
+### Concept 1: Test Doubles (Mock, Stub, Fake, Spy)
+
+#### Understanding Test Doubles
+
+A **Test Double** is any replacement for a real object in testing:
+
+```
+Real Object:
+├─ Database connection (slow)
+├─ External API call (slow, unreliable)
+├─ File system (slow, has side effects)
+├─ Random number generator (non-deterministic)
+└─ Current date/time (changes)
+
+Test Doubles:
+├─ Mock: Record calls, verify interactions
+├─ Stub: Return fixed values
+├─ Fake: Working implementation (simplified)
+├─ Spy: Real object + selective stubbing
+└─ Dummy: Placeholder (not actually used)
+```
+
+**Detailed Comparison:**
+
+```java
+// 1. MOCK - Verifies calls were made
+@Test
+void mockExample() {
+    List<String> mockList = mock(List.class);
+    when(mockList.size()).thenReturn(5);
+    
+    MyClass obj = new MyClass(mockList);
+    obj.processTheList();
+    
+    // Most important: VERIFY the method was called
+    verify(mockList).add("item");
+    verify(mockList, times(2)).get(anyInt());
+}
+
+// 2. STUB - Returns fixed values
+@Test
+void stubExample() {
+    UserRepository stubRepo = mock(UserRepository.class);
+    when(stubRepo.findById(1)).thenReturn(new User(1, "John"));
+    
+    UserService service = new UserService(stubRepo);
+    User user = service.getUser(1);
+    
+    assertEquals("John", user.getName());
+    // Don't care about verifying calls, just need data
+}
+
+// 3. FAKE - Working but simplified implementation
+public class FakeUserRepository implements UserRepository {
+    private Map<Integer, User> users = new HashMap<>();
+    
+    @Override
+    public User save(User user) {
+        users.put(user.getId(), user);
+        return user;
+    }
+    
+    @Override
+    public User findById(int id) {
+        return users.get(id);
+    }
+}
+
+@Test
+void fakeExample() {
+    UserRepository fakeRepo = new FakeUserRepository();
+    UserService service = new UserService(fakeRepo);
+    
+    User created = service.createUser("John", "john@email.com");
+    User retrieved = service.getUser(created.getId());
+    
+    assertEquals("John", retrieved.getName());
+}
+
+// 4. SPY - Real object + selective stubbing
+@Test
+void spyExample() {
+    // Real ArrayList
+    List<String> list = new ArrayList<>();
+    list.add("Original");
+    
+    // Spy on it
+    List<String> spyList = spy(list);
+    
+    // Can still use real methods
+    spyList.add("Item2");
+    assertEquals(2, spyList.size());  // Real behavior
+    
+    // But can stub some methods
+    when(spyList.size()).thenReturn(100);
+    assertEquals(100, spyList.size());  // Stubbed behavior
+    
+    // Can verify real calls
+    verify(spyList).add("Item2");
+}
+```
+
+**When to Use Each:**
+
+```
+MOCK
+├─ When: Need to verify method calls
+├─ Use: Interaction testing
+└─ Example: Email service, payment processor
+
+STUB
+├─ When: Need predictable return values
+├─ Use: State testing
+└─ Example: User repository, database
+
+FAKE
+├─ When: Need working implementation without side effects
+├─ Use: Integration tests without external deps
+└─ Example: In-memory database, test file system
+
+SPY
+├─ When: Need to partially mock real object
+├─ Use: Verify real method + stub some methods
+└─ Example: Real service with external call stubbed
+```
+
+**KEY POINTS:**
+- ✓ Use test doubles to isolate the code under test
+- ✓ Mock for interaction verification
+- ✓ Stub for state verification
+- ✓ Fake for integration without dependencies
+- ✓ Spy for partial mocking
+
+---
+
+### Concept 2: Code Coverage and Mutation Testing
+
+#### Understanding Code Coverage
+
+**Code Coverage** measures what percentage of your code is executed by tests.
+
+```java
+public class PaymentProcessor {
+    public double calculateFinalPrice(double basePrice, boolean isPremium) {
+        if (basePrice < 0) {                    // Line 1: Never executed?
+            throw new IllegalArgumentException();
+        }
+        
+        double discount = 0;
+        if (isPremium) {                        // Line 2: Condition 1
+            discount = 0.20;
+        } else {                                // Line 3: Condition 2
+            discount = 0.10;
+        }
+        
+        return basePrice * (1 - discount);      // Line 4: Always executed
+    }
+}
+
+// Test 1: Only test positive path
+@Test
+void testPremiumDiscount() {
+    double result = processor.calculateFinalPrice(100, true);
+    assertEquals(80, result);  // 100 * (1 - 0.20)
+}
+
+// Coverage Analysis:
+// ├─ Line 1: NOT covered (0%) ✗
+// ├─ Line 2: COVERED (100%) ✓
+// ├─ Line 3: NOT covered (0%) ✗
+// ├─ Line 4: COVERED (100%) ✓
+// ├─ Overall: 50% line coverage
+// └─ Branch coverage: 50% (only tested one branch of if)
+
+// Test 2: Add test for regular (non-premium)
+@Test
+void testRegularDiscount() {
+    double result = processor.calculateFinalPrice(100, false);
+    assertEquals(90, result);  // 100 * (1 - 0.10)
+}
+
+// Coverage Analysis: Now 75% line, 100% branch!
+
+// Test 3: Add test for invalid input
+@Test
+void testNegativePrice() {
+    assertThrows(IllegalArgumentException.class,
+        () -> processor.calculateFinalPrice(-100, true));
+}
+
+// Coverage Analysis: Now 100% line, 100% branch!
+```
+
+#### Coverage Targets
+
+```
+95%+ : Excellence (but often overkill)
+85%  : Good target (realistic)
+75%  : Acceptable (but improve)
+50%  : Poor (major gaps)
+<50% : Very poor (untested code)
+```
+
+**Important:** High coverage ≠ Good tests!
+
+```java
+// ✗ BAD: High coverage, low quality
+@Test
+void badQualityButHighCoverage() {
+    assertEquals(1, 1);  // 100% line coverage, meaningless test
+}
+
+// ✓ GOOD: Lower coverage, high quality
+@Test
+void goodQualityTest() {
+    Result result = complexAlgorithm.calculate(-100);
+    assertTrue(result.isValid());
+    assertEquals(ExpectedType.ERROR, result.getType());
+}
+```
+
+**KEY POINTS:**
+- ✓ Use coverage as a guide, not a goal
+- ✓ Aim for 85% coverage on important code
+- ✓ Don't test getters/setters/generated code
+- ✓ Coverage measures quantity, not quality
+- ✓ Combine with mutation testing for real quality
+
+---
+
+### Concept 3: Test Naming Strategies
+
+#### Effective Test Naming
+
+Test names should describe **exactly what is being tested**:
+
+```java
+// ✗ BAD NAMES (meaningless)
+@Test void test1() { }
+@Test void testMethod() { }
+@Test void testLogic() { }
+@Test void test_ok() { }
+
+// ✓ GOOD NAMES (descriptive, clear intent)
+@Test void withdrawalReducesBalanceByWithdrawnAmount() { }
+@Test void negativeWithdrawalThrowsException() { }
+@Test void insufficientFundsPreventWithdrawal() { }
+@Test void zeroWithdrawalThrowsException() { }
+
+// Pattern 1: Given-When-Then style
+void givenAccountWith1000_whenWithdraw250_thenBalanceIs750() { }
+void givenNegativeWithdrawal_whenAttemptWithdraw_thenThrowException() { }
+void givenInsufficientFunds_whenAttemptWithdraw_thenFail() { }
+
+// Pattern 2: Behavior-focused style
+void userCanWithdrawMoneySuccessfully() { }
+void systemRejectWithdrawalOfNegativeAmount() { }
+void systemRejectsWithdrawalWhenInsufficientFunds() { }
+
+// Pattern 3: Should/When style
+void shouldWithdrawMoneySuccessfully() { }
+void shouldThrowExceptionWhenWithdrawalIsNegative() { }
+void shouldFailWhenInsufficientFunds() { }
+
+// Using @DisplayName for complex scenarios
+@Test
+@DisplayName("When user withdraws $250 from account with $1000, balance should be $750")
+void complexScenarioWithLongName() {
+    // Test code
+}
+```
+
+**Test Naming Convention Pattern:**
+
+```
+[Method/Feature]_[Condition]_[Expected Result]
+
+Examples:
+├─ testAdd_TwoPositiveNumbers_ReturnsSum()
+├─ testAdd_WithNegativeNumber_ReturnsCorrectSum()
+├─ testLogin_WithInvalidPassword_ThrowsException()
+├─ testLogin_WithValidCredentials_ReturnsToken()
+├─ testEmail_WithInvalidFormat_ReturnsFalse()
+└─ testEmail_WithValidFormat_ReturnsTrue()
+```
+
+**KEY POINTS:**
+- ✓ Name should describe test scenario
+- ✓ Use descriptive, complete names
+- ✓ Avoid abbreviations
+- ✓ Use consistent naming pattern
+- ✓ Use @DisplayName for complex descriptions
+
+---
+
+### Concept 4: Assertion Best Practices
+
+#### Smart Assertion Strategies
+
+```java
+// ✗ WEAK: Generic assertions
+@Test void testUserCreation() {
+    User user = createUser("John");
+    assertTrue(user != null);  // Too generic
+}
+
+// ✓ STRONG: Specific assertions
+@Test void testUserCreation() {
+    User user = createUser("John");
+    assertNotNull(user);                    // Specific
+    assertEquals("John", user.getName());   // Clear
+    assertTrue(user.isActive());            // Meaningful
+}
+
+// ✗ WEAK: No error message
+@Test void testCalculation() {
+    int result = calculate(5, 3);
+    assertEquals(8, result);  // If fails, unclear why
+}
+
+// ✓ STRONG: Error message provided
+@Test void testCalculation() {
+    int result = calculate(5, 3);
+    assertEquals(8, result, "Result should be sum of inputs");
+}
+
+// ✗ BAD: Multiple unrelated assertions
+@Test void testEverything() {
+    User user = createUser("John");
+    assertEquals("John", user.getName());
+    assertEquals(30, user.getAge());
+    assertTrue(user.isActive());
+    assertNotNull(user.getEmail());
+    // And 50 more assertions...
+}
+
+// ✓ GOOD: Focused assertions per concern
+@Test void testUserNameIsSet() {
+    User user = createUser("John");
+    assertEquals("John", user.getName());
+}
+
+@Test void testUserIsActiveByDefault() {
+    User user = createUser("John");
+    assertTrue(user.isActive());
+}
+
+@Test void testUserEmailIsNotNull() {
+    User user = createUser("John");
+    assertNotNull(user.getEmail());
+}
+
+// ADVANCED: AssertJ for fluent assertions
+@Test void testWithAssertJ() {
+    User user = createUser("John");
+    
+    assertThat(user)
+        .isNotNull()
+        .extracting(User::getName)
+        .isEqualTo("John");
+    
+    assertThat(user.getOrders())
+        .hasSize(3)
+        .allMatch(order -> order.getTotal() > 0)
+        .contains(expectedOrder);
+}
+```
+
+**Assertion Cheat Sheet:**
+
+```java
+// Equality
+assertEquals(expected, actual);
+assertNotEquals(unexpected, actual);
+
+// Null checks
+assertNull(object);
+assertNotNull(object);
+
+// Boolean
+assertTrue(condition);
+assertFalse(condition);
+
+// Identity
+assertSame(obj1, obj2);           // Same reference
+assertNotSame(obj1, obj2);        // Different reference
+
+// Collections
+assertIterableEquals(expected, actual);
+assertTrue(list.contains(item));
+assertEquals(5, list.size());
+
+// Exceptions
+assertThrows(ExceptionType.class, () -> code());
+assertDoesNotThrow(() -> code());
+
+// Arrays
+assertArrayEquals(expected, actual);
+
+// Timeouts
+assertTimeout(Duration, () -> code());
+assertTimeoutPreemptively(Duration, () -> code());
+
+// Custom messages
+assertEquals(expected, actual, "Meaningful message");
+assertEquals(expected, actual, 
+    () -> "Lazy message: " + computeExpensive());
+```
+
+**KEY POINTS:**
+- ✓ Use specific assertions
+- ✓ Add meaningful error messages
+- ✓ One logical concern per test
+- ✓ Use AssertJ for complex assertions
+- ✓ Verify both positive and negative cases
+
+---
+
+### Concept 5: Boundary Value Analysis
+
+#### Testing Edge Cases
+
+```java
+// EXAMPLE: Test discount calculation for orders
+
+public class DiscountCalculator {
+    public double calculateDiscount(double orderTotal) {
+        if (orderTotal < 50) return 0;           // No discount
+        if (orderTotal < 100) return 0.05;       // 5% discount
+        if (orderTotal < 200) return 0.10;       // 10% discount
+        return 0.15;                              // 15% discount
+    }
+}
+
+// ✗ INADEQUATE: Only normal cases
+@Test void testDiscount() {
+    assertEquals(0, calculateDiscount(75));      // Normal case
+    assertEquals(0.05, calculateDiscount(75));   // Normal case
+}
+
+// ✓ COMPREHENSIVE: Test boundaries
+@ParameterizedTest
+@CsvSource({
+    // Below first boundary
+    "49.99,   0",     // Just below $50
+    // At first boundary (transition point)
+    "50,      0.05",  // Exactly $50
+    "99.99,   0.05",  // Just below $100
+    // At second boundary
+    "100,     0.10",  // Exactly $100
+    "199.99,  0.10",  // Just below $200
+    // At final boundary
+    "200,     0.15",  // Exactly $200
+    "300,     0.15",  // Well above all boundaries
+    // Edge cases
+    "0,       0",     // Minimum
+    "999999,  0.15"   // Maximum
+})
+void testDiscountBoundaries(double orderTotal, double expectedDiscount) {
+    assertEquals(expectedDiscount, 
+        calculateDiscount(orderTotal), 0.01);
+}
+```
+
+**Boundary Analysis Principles:**
+
+```
+For a range [50, 100]:
+├─ Below: 49, 49.99
+├─ At boundary: 50, 50.01
+├─ Inside: 60, 70, 80, 90
+├─ At other boundary: 99.99, 100, 100.01
+└─ Above: 101, 200
+
+Test each:
+✓ Just before lower boundary
+✓ At lower boundary
+✓ Just after lower boundary
+✓ In the middle
+✓ Just before upper boundary
+✓ At upper boundary
+✓ Just after upper boundary
+```
+
+**KEY POINTS:**
+- ✓ Test boundary values
+- ✓ Test values just inside and outside boundaries
+- ✓ Test extreme values (0, -1, max, min)
+- ✓ Test transitions between categories
+- ✓ Use parameterized tests for boundary testing
+
+---
+
+### Concept 6: Performance Testing Basics
+
+#### When and How to Test Performance
+
+```java
+// 1. TIMEOUT TESTS - Ensure code completes in time
+@Test
+void shouldCompleteInUnderOneSecond() {
+    assertTimeout(Duration.ofSeconds(1), () -> {
+        // Code that should complete fast
+        quickOperation();
+    });
+}
+
+@Test
+void shouldCompleteInTime() {
+    assertTimeoutPreemptively(Duration.ofSeconds(1), () -> {
+        // Will be interrupted if takes > 1 second
+        potentiallySlowOperation();
+    });
+}
+
+// 2. REPEATED EXECUTION - Test consistency
+@RepeatedTest(1000)
+void shouldCompleteConsistentlyFast() {
+    long startTime = System.nanoTime();
+    
+    operation();
+    
+    long duration = System.nanoTime() - startTime;
+    assertTrue(duration < 1_000_000_000);  // < 1 second
+}
+
+// 3. BENCHMARK COMPARISON
+@Test
+void newAlgorithmShouldBeFaster() {
+    List<Integer> testData = createLargeDataSet(10000);
+    
+    // Time old algorithm
+    long oldTime = measureTime(() -> oldAlgorithm(testData));
+    
+    // Time new algorithm
+    long newTime = measureTime(() -> newAlgorithm(testData));
+    
+    // New should be at least 2x faster
+    assertTrue(newTime < oldTime / 2, 
+        "New algorithm should be 2x faster");
+}
+
+// 4. MEMORY USAGE TEST
+@Test
+void shouldNotLeakMemory() {
+    long initialMemory = Runtime.getRuntime().totalMemory();
+    
+    // Run operation multiple times
+    for (int i = 0; i < 10000; i++) {
+        operation();
+    }
+    
+    long finalMemory = Runtime.getRuntime().totalMemory();
+    long increase = finalMemory - initialMemory;
+    
+    assertTrue(increase < 1_000_000, "Memory increase < 1MB");
+}
+
+private static long measureTime(Runnable operation) {
+    long start = System.nanoTime();
+    operation.run();
+    return System.nanoTime() - start;
+}
+```
+
+**When to Optimize Performance Tests:**
+
+```
+Before performance testing:
+├─ Get baseline measurements
+├─ Know acceptable thresholds
+├─ Identify critical paths
+└─ Have realistic test data
+
+During performance testing:
+├─ Warm up JVM (run operation first)
+├─ Measure multiple times
+├─ Account for GC pauses
+└─ Test with realistic data sizes
+
+Performance test framework:
+├─ JMH (Java Microbenchmark Harness) for accurate benchmarks
+├─ Gatling for load testing
+├─ JUnit for simple timeout tests
+└─ Custom harness for specific needs
+```
+
+**KEY POINTS:**
+- ✓ Use @Test(timeout=...) for JUnit 4
+- ✓ Use assertTimeout() for JUnit 5
+- ✓ Test with realistic data volumes
+- ✓ Warm up JVM before measuring
+- ✓ Use JMH for accurate microbenchmarks
+
+---
+
+---
+
+# TESTING QUICK REFERENCE GUIDE
+
+## Bookmark This Section for Instant Reference!
+
+---
+
+## Quick Reference: Test Structure Template
+
+```java
+@Test
+@DisplayName("Should [expected behavior] when [condition]")
+void shouldDoSomethingWhenCondition() {
+    // ARRANGE - Setup
+    Object testObject = new Object();
+    String expectedResult = "value";
+    
+    // ACT - Execute
+    String actualResult = testObject.doSomething();
+    
+    // ASSERT - Verify
+    assertEquals(expectedResult, actualResult);
+}
+```
+
+---
+
+## Quick Reference: Common Assertions Cheat Sheet
+
+```java
+// Equality
+assertEquals(expected, actual);
+assertNotEquals(unexpected, actual);
+
+// Null checks
+assertNull(object);
+assertNotNull(object);
+
+// Boolean
+assertTrue(condition);
+assertFalse(condition);
+
+// Collections
+assertEquals(expectedList, actualList);
+assertTrue(list.contains(item));
+assertEquals(5, list.size());
+assertArrayEquals(expected, actual);
+
+// Exceptions
+assertThrows(ExceptionType.class, () -> code());
+assertDoesNotThrow(() -> code());
+
+// Timeout
+assertTimeout(Duration.ofSeconds(1), () -> code());
+
+// Custom message
+assertEquals(expected, actual, "Error message");
+```
+
+---
+
+## Quick Reference: Mocking Patterns
+
+```java
+// Create mock
+MyService mock = mock(MyService.class);
+
+// Setup return value
+when(mock.doSomething()).thenReturn("result");
+when(mock.getValue(anyInt())).thenReturn(5);
+
+// Setup exception
+when(mock.riskyMethod()).thenThrow(new Exception("error"));
+
+// Verify was called
+verify(mock).doSomething();
+verify(mock, times(2)).doSomething();
+verify(mock, never()).doSomething();
+
+// Verify call order
+InOrder inOrder = inOrder(mock);
+inOrder.verify(mock).firstCall();
+inOrder.verify(mock).secondCall();
+
+// Verify with arguments
+verify(mock).doSomething("expected");
+verify(mock).doSomething(eq("exact"), anyInt());
+
+// Spy on real object
+List<String> realList = new ArrayList<>();
+List<String> spyList = spy(realList);
+```
+
+---
+
+## Quick Reference: Test Lifecycle (JUnit 5)
+
+```java
+@BeforeAll
+static void setupOnce() {
+    // Runs ONCE before all tests (must be static)
+}
+
+@BeforeEach
+void setupBeforeEach() {
+    // Runs BEFORE each @Test
+}
+
+@Test
+void testSomething() {
+    // Actual test
+}
+
+@AfterEach
+void cleanupAfterEach() {
+    // Runs AFTER each @Test
+}
+
+@AfterAll
+static void cleanupOnce() {
+    // Runs ONCE after all tests (must be static)
+}
+```
+
+---
+
+## Quick Reference: Parameterized Tests
+
+```java
+// Individual values
+@ParameterizedTest
+@ValueSource(ints = {1, 2, 3, 4, 5})
+void testWithIntegers(int number) { }
+
+// CSV values
+@ParameterizedTest
+@CsvSource({"2, 3, 5", "0, 0, 0", "-1, 1, 0"})
+void testAddition(int a, int b, int expected) { }
+
+// CSV file
+@ParameterizedTest
+@CsvFileSource(resources = "/test-data.csv")
+void testFromFile(String input, String expected) { }
+
+// Method source
+@ParameterizedTest
+@MethodSource("provideNumbers")
+void testWithMethod(int number) { }
+
+static Stream<Arguments> provideNumbers() {
+    return Stream.of(Arguments.of(1), Arguments.of(2));
+}
+```
+
+---
+
+## Quick Reference: Mock vs Stub vs Fake vs Spy
+
+```
+Do you need to verify method calls?
+├─ YES → Use MOCK
+├─ NO → Do you need a working implementation?
+│       ├─ YES → Use FAKE
+│       └─ NO → Use STUB or SPY
+```
+
+---
+
+## Quick Reference: Test Naming Convention
+
+```
+[Method/Feature]_[Condition]_[Expected Result]
+
+Examples:
+testAdd_TwoPositiveNumbers_ReturnsSum()
+testLogin_WithInvalidPassword_ThrowsException()
+testEmail_WithValidFormat_ReturnsTrue()
+testWithdraw_InsufficientFunds_ThrowsException()
+```
+
+---
+
+## Quick Reference: Code Coverage Targets
+
+```
+95%+  ─── Excellence (overkill)
+85%   ─── GOOD TARGET ← Aim here
+75%   ─── Acceptable
+50%   ─── Poor
+<50%  ─── Very poor
+```
+
+---
+
+## Quick Reference: Pre-Commit Checklist
+
+```
+✓ All unit tests pass
+✓ All integration tests pass
+✓ No @Ignore tests
+✓ Code coverage ≥ 85%
+✓ No System.out.println
+✓ Test names are clear
+✓ Both success and failure paths tested
+✓ Mocks used for external deps
+✓ Tests run independently
+✓ Tests complete in < 5 minutes
+```
+
+---
+
+## Quick Reference: Maven POM Configuration
+
+```xml
+<dependency>
+    <groupId>org.junit.jupiter</groupId>
+    <artifactId>junit-jupiter</artifactId>
+    <version>5.9.2</version>
+    <scope>test</scope>
+</dependency>
+
+<dependency>
+    <groupId>org.mockito</groupId>
+    <artifactId>mockito-core</artifactId>
+    <version>5.2.0</version>
+    <scope>test</scope>
+</dependency>
+
+<dependency>
+    <groupId>org.assertj</groupId>
+    <artifactId>assertj-core</artifactId>
+    <version>3.24.1</version>
+    <scope>test</scope>
+</dependency>
+
+<dependency>
+    <groupId>org.testcontainers</groupId>
+    <artifactId>testcontainers</artifactId>
+    <version>1.17.6</version>
+    <scope>test</scope>
+</dependency>
+```
+
+---
+
+# INTERVIEW QUESTIONS & ANSWERS
+
+Complete guide from Beginner to Advanced
+
+---
+
+## Beginner Level Questions
+
+### Q1: What is Unit Testing and why is it important?
+
+**Answer:**
+
+Unit testing is the practice of testing individual components (units) of code in isolation, typically a single method or class.
+
+**Why it's important:**
+1. Early Bug Detection
+2. Code Quality Improvement
+3. Refactoring Safety
+4. Documentation
+5. Regression Prevention
+6. Speed (instant feedback)
+
+---
+
+### Q2: What is the AAA Pattern and why should I use it?
+
+**Answer:**
+
+The AAA Pattern (Arrange-Act-Assert) structures every test:
+- **ARRANGE** (~50%): Setup test data
+- **ACT** (~10%): Execute code being tested
+- **ASSERT** (~40%): Verify results
+
+Benefits: Consistency, clarity, maintainability, readability
+
+---
+
+### Q3: What's the difference between assertEquals and assertTrue?
+
+**Answer:**
+
+**assertEquals**: Specific equality check (better, clearer error messages)
+**assertTrue**: Generic boolean check (less informative)
+
+Use specific assertions: `assertEquals`, `assertNull`, `assertTrue` - not generic checks
+
+---
+
+### Q4: What is test independence and why does it matter?
+
+**Answer:**
+
+Test independence means:
+- Each test stands alone
+- No shared state
+- Can run in any order
+- Pass when run independently
+
+Benefits: Reliability, parallel execution, easier debugging, maintainability
+
+---
+
+### Q5: What is a mock and when should I use it?
+
+**Answer:**
+
+A mock is a fake object that:
+- Replaces a real dependency
+- Records method calls
+- Allows verification of interactions
+- Runs fast (no actual I/O)
+
+Use when: Testing external APIs, databases, file systems, payment processors
+
+---
+
+### Q6: What is a test fixture?
+
+**Answer:**
+
+A test fixture is the setup/state needed before running a test.
+
+Use `@BeforeEach` for per-test setup and `@AfterEach` for cleanup.
+Use `@BeforeAll` for expensive one-time setup (static method).
+
+---
+
+## Intermediate Level Questions
+
+### Q7: What is Integration Testing and how is it different from Unit Testing?
+
+**Answer:**
+
+| Aspect | Unit | Integration |
+|--------|------|-------------|
+| Scope | Single method/class | Multiple components |
+| Dependencies | Mocked | Real |
+| Speed | Very fast | Slower |
+| Quantity | 60-80% | 15-30% |
+
+Unit: Isolated, fast. Integration: Component interactions, realistic.
+
+---
+
+### Q8: What is parameterized testing and why is it useful?
+
+**Answer:**
+
+Parameterized testing runs the same test with different data sets:
+
+```java
+@ParameterizedTest
+@CsvSource({"2, 3, 5", "0, 0, 0", "-2, -3, -5"})
+void testAddition(int a, int b, int expected) {
+    assertEquals(expected, add(a, b));
+}
+```
+
+Benefits: Reduces duplication, tests multiple scenarios, easier to add cases
+
+---
+
+### Q9: Explain the Testing Pyramid and why it matters.
+
+**Answer:**
+
+```
+      /\          E2E (5-10%)
+     /  \         Integration (20-30%)
+    /────\
+   /      \       Unit Tests (60-80%)
+  /________\
+```
+
+Why: Unit tests are cheaper/faster. Investment focuses on where ROI is highest.
+
+---
+
+### Q10: What are test doubles (Mock, Stub, Fake, Spy)?
+
+**Answer:**
+
+- **Mock**: Verifies interactions (verify calls were made)
+- **Stub**: Returns fixed values (when-thenReturn)
+- **Fake**: Working simplified implementation
+- **Spy**: Real object + selective stubbing
+
+Decision: Verify calls? → Mock. Need values? → Stub. Need working impl? → Fake.
+
+---
+
+## Advanced Level Questions
+
+### Q11: What is Test-Driven Development (TDD)?
+
+**Answer:**
+
+TDD is writing tests BEFORE writing code. Red-Green-Refactor cycle:
+
+1. **RED**: Write failing test
+2. **GREEN**: Write minimal code to pass
+3. **REFACTOR**: Improve code while keeping tests passing
+
+Benefits: Better design, fewer bugs, documentation, refactoring confidence
+
+---
+
+### Q12: How do you test asynchronous code?
+
+**Answer:**
+
+Methods (best to worst):
+
+1. **Awaitility** (BEST): Flexible polling
+   ```java
+   await().atMost(Duration.ofSeconds(2)).until(() -> flag.get());
+   ```
+
+2. **CompletableFuture**: `future.get(5, TimeUnit.SECONDS)`
+3. **Timeout**: `assertTimeout(Duration.ofSeconds(1), () -> ...)`
+4. **Thread.sleep()** (AVOID): Slow, flaky, unreliable
+
+---
+
+### Q13: What is code coverage and what's a good target?
+
+**Answer:**
+
+Code coverage measures % of code executed by tests.
+
+**Target: 85%** (realistic for important code)
+- 95%+ = overkill
+- Quality > Quantity (high coverage ≠ good tests)
+
+Don't test: getters, setters, generated code
+
+---
+
+### Q14: What are common testing mistakes?
+
+**Answer:**
+
+1. Shared state between tests
+2. Over-mocking (mock business logic)
+3. Too many assertions per test
+4. Unclear test names
+5. Testing private methods
+6. Slow tests (use mocks for I/O)
+7. No error path testing
+8. Flaky tests (non-deterministic)
+
+---
+
+### Q15: How do you organize a large test suite?
+
+**Answer:**
+
+1. **Package structure**: Mirror main package structure
+2. **Nested classes**: @Nested for organizing test groups
+3. **Base classes**: Share common setup
+4. **Builder pattern**: Reusable test data
+5. **Tags**: @Tag for filtering tests
+
+Keep 1 test class per main class (usually)
+
+---
+
+## Expert Level Questions
+
+### Q16: How do you handle test data cleanup in integration tests?
+
+**Answer:**
+
+**Method 1: @Transactional (Auto-rollback)**
+```java
+@SpringBootTest
+@Transactional
+public class UserRepositoryTest {
+    @Test
+    void testSaveUser() {
+        User user = new User("John", "john@example.com");
+        User saved = userRepository.save(user);
+        assertNotNull(saved.getId());
+        // Auto-rollback after test - no cleanup needed!
+    }
+}
+```
+
+**Method 2: Manual cleanup in @AfterEach**
+```java
+@SpringBootTest
+public class OrderRepositoryTest {
+    @Autowired
+    private OrderRepository orderRepository;
+    
+    @BeforeEach
+    void setUp() {
+        orderRepository.deleteAll();  // Clean start
+    }
+    
+    @AfterEach
+    void tearDown() {
+        orderRepository.deleteAll();  // Clean end
+    }
+    
+    @Test
+    void testCreateOrder() {
+        Order order = new Order(99.99);
+        Order saved = orderRepository.save(order);
+        assertNotNull(saved.getId());
+    }
+}
+```
+
+**Method 3: Database reset per test (H2)**
+```java
+@SpringBootTest
+@ActiveProfiles("test")  // Uses in-memory H2
+public class UserServiceTest {
+    @Autowired
+    private UserRepository userRepository;
+    
+    @BeforeEach
+    void setUp() {
+        userRepository.deleteAll();
+    }
+    
+    @Test
+    void testUserCreation() { }
+}
+```
+
+**Best Practices:**
+- ✓ Use `@Transactional` for auto-rollback (simplest)
+- ✓ Use `@BeforeEach` for clean state
+- ✓ Use `@AfterEach` for guaranteed cleanup
+- ✓ Use in-memory database for speed
+- ✓ Avoid test data interference
+
+---
+
+### Q17: What's the difference between @Mock and @MockBean?
+
+**Answer:**
+
+**@Mock (Mockito)**
+- Creates a mock for unit tests
+- Part of Mockito framework
+- Used with `@ExtendWith(MockitoExtension.class)`
+- Doesn't integrate with Spring
+- Lighter weight
+
+```java
+@ExtendWith(MockitoExtension.class)
+class UserServiceTest {
+    @Mock
+    private UserRepository userRepository;
+    
+    @InjectMocks
+    private UserService userService;
+    
+    @Test
+    void testGetUser() {
+        when(userRepository.findById(1))
+            .thenReturn(new User(1, "John"));
+        
+        User user = userService.getUser(1);
+        assertEquals("John", user.getName());
+    }
+}
+```
+
+**@MockBean (Spring Boot)**
+- Creates a mock managed by Spring
+- Part of Spring Test framework
+- Used with `@SpringBootTest`
+- Integrates with Spring application context
+- Replaces real bean in the container
+
+```java
+@SpringBootTest
+class UserServiceIntegrationTest {
+    @MockBean
+    private UserRepository userRepository;
+    
+    @Autowired
+    private UserService userService;
+    
+    @Test
+    void testGetUser() {
+        when(userRepository.findById(1))
+            .thenReturn(new User(1, "John"));
+        
+        User user = userService.getUser(1);
+        assertEquals("John", user.getName());
+    }
+}
+```
+
+**When to use:**
+- Use `@Mock`: Unit tests, fast, isolated
+- Use `@MockBean`: Integration tests, Spring context
+
+---
+
+### Q18: How do you test Spring Boot controllers?
+
+**Answer:**
+
+**Method 1: @AutoConfigureMockMvc (Recommended)**
+```java
+@SpringBootTest
+@AutoConfigureMockMvc
+public class UserControllerTest {
+    @Autowired
+    private MockMvc mockMvc;
+    
+    @MockBean
+    private UserService userService;
+    
+    @Test
+    void testGetUserEndpoint() throws Exception {
+        User user = new User(1, "John", "john@example.com");
+        when(userService.getUser(1)).thenReturn(user);
+        
+        mockMvc.perform(get("/api/users/1"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("John"))
+            .andExpect(jsonPath("$.email").value("john@example.com"));
+    }
+    
+    @Test
+    void testCreateUserEndpoint() throws Exception {
+        User user = new User(1, "John", "john@example.com");
+        when(userService.createUser(any())).thenReturn(user);
+        
+        String json = """
+            {
+                "name": "John",
+                "email": "john@example.com"
+            }
+            """;
+        
+        mockMvc.perform(post("/api/users")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.id").exists());
+    }
+}
+```
+
+**Method 2: @WebMvcTest (Faster, Unit-style)**
+```java
+@WebMvcTest(UserController.class)  // Only loads controller layer
+public class UserControllerUnitTest {
+    @Autowired
+    private MockMvc mockMvc;
+    
+    @MockBean
+    private UserService userService;
+    
+    @Test
+    void testGetUser() throws Exception {
+        when(userService.getUser(1))
+            .thenReturn(new User(1, "John", "john@example.com"));
+        
+        mockMvc.perform(get("/api/users/1"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("John"));
+    }
+}
+```
+
+**Key Testing Patterns:**
+```java
+// Different HTTP methods
+mockMvc.perform(get("/api/users/1"))
+mockMvc.perform(post("/api/users").content(...))
+mockMvc.perform(put("/api/users/1").content(...))
+mockMvc.perform(delete("/api/users/1"))
+
+// Assertions
+.andExpect(status().isOk())
+.andExpect(status().isCreated())
+.andExpect(status().isBadRequest())
+.andExpect(jsonPath("$.field").value("value"))
+.andExpect(jsonPath("$.list[0].id").exists())
+```
+
+---
+
+### Q19: How do you test database transactions and rollback behavior?
+
+**Answer:**
+
+**Method 1: @Transactional with @Commit**
+```java
+@SpringBootTest
+@Transactional
+public class TransactionTest {
+    @Autowired
+    private UserRepository userRepository;
+    
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void testRollback() {
+        // Create user in separate transaction
+        User user = new User("John");
+        userRepository.save(user);
+        
+        // This transaction rolls back after test
+        // User should still be in database (separate transaction)
+    }
+    
+    @Test
+    @Commit  // Explicitly commit (instead of default rollback)
+    void testCommit() {
+        User user = new User("Jane");
+        userRepository.save(user);
+        // Committed to database, not rolled back
+    }
+}
+```
+
+**Method 2: Nested transactions**
+```java
+@SpringBootTest
+public class NestedTransactionTest {
+    @Autowired
+    private UserRepository userRepository;
+    
+    @Autowired
+    private OrderRepository orderRepository;
+    
+    @Test
+    @Transactional
+    void testNestedTransaction() {
+        User user = userRepository.save(new User("John"));
+        
+        // Nested transaction
+        try {
+            Order order = new Order(user);
+            orderRepository.save(order);
+            throw new RuntimeException("Force rollback");
+        } catch (RuntimeException e) {
+            // Order is rolled back, but user might remain
+            // depending on propagation
+        }
+    }
+}
+```
+
+**Method 3: Testing transaction failure**
+```java
+@SpringBootTest
+public class TransactionFailureTest {
+    @Autowired
+    private UserService userService;
+    
+    @Test
+    void testTransactionRollbackOnException() {
+        assertThrows(RuntimeException.class, () -> {
+            userService.createUserAndOrder(new UserRequest(...));
+        });
+        
+        // Verify both user and order were NOT created (rolled back)
+        assertEquals(0, userRepository.count());
+        assertEquals(0, orderRepository.count());
+    }
+}
+```
+
+**Key Transaction Concepts:**
+```
+@Transactional: Wraps method in transaction (auto-rollback after test)
+@Commit: Override default rollback behavior
+Propagation: REQUIRED, REQUIRES_NEW, NOT_SUPPORTED
+Isolation: DEFAULT, READ_COMMITTED, SERIALIZABLE
+readOnly: true (optimization for read-only operations)
+```
+
+---
+
+### Q20: How do you test code that uses external APIs?
+
+**Answer:**
+
+**Method 1: Mock the API client**
+```java
+public class WeatherService {
+    private WeatherAPI weatherAPI;
+    
+    public WeatherService(WeatherAPI weatherAPI) {
+        this.weatherAPI = weatherAPI;
+    }
+    
+    public String getForecast(String city) {
+        WeatherData data = weatherAPI.getWeather(city);
+        return formatWeatherData(data);
+    }
+}
+
+@Test
+void testWeatherServiceWithMockedAPI() {
+    WeatherAPI mockAPI = mock(WeatherAPI.class);
+    WeatherData mockData = new WeatherData("NYC", 75, "Sunny");
+    when(mockAPI.getWeather("NYC")).thenReturn(mockData);
+    
+    WeatherService service = new WeatherService(mockAPI);
+    String forecast = service.getForecast("NYC");
+    
+    assertEquals("NYC is 75°F and Sunny", forecast);
+    verify(mockAPI).getWeather("NYC");
+}
+```
+
+**Method 2: @MockBean in integration tests**
+```java
+@SpringBootTest
+public class WeatherServiceIntegrationTest {
+    @Autowired
+    private WeatherService weatherService;
+    
+    @MockBean
+    private WeatherAPI weatherAPI;
+    
+    @Test
+    void testWeatherForecast() {
+        WeatherData data = new WeatherData("NYC", 75, "Sunny");
+        when(weatherAPI.getWeather("NYC")).thenReturn(data);
+        
+        String forecast = weatherService.getForecast("NYC");
+        assertEquals("NYC is 75°F and Sunny", forecast);
+    }
+}
+```
+
+**Method 3: WireMock (Mock HTTP server)**
+```java
+@SpringBootTest
+public class ExternalAPITest {
+    @Autowired
+    private RestTemplate restTemplate;
+    
+    private static WireMockServer wireMockServer = new WireMockServer(8089);
+    
+    @BeforeAll
+    static void setUp() {
+        wireMockServer.start();
+        wireMockServer.stubFor(
+            get(urlEqualTo("/weather?city=NYC"))
+                .willReturn(aResponse()
+                    .withStatus(200)
+                    .withBody("""
+                        {"temperature": 75, "condition": "Sunny"}
+                        """)
+                    .withHeader("Content-Type", "application/json")));
+    }
+    
+    @Test
+    void testRealHTTPCalls() {
+        String response = restTemplate.getForObject(
+            "http://localhost:8089/weather?city=NYC", String.class);
+        assertNotNull(response);
+    }
+    
+    @AfterAll
+    static void tearDown() {
+        wireMockServer.stop();
+    }
+}
+```
+
+**Method 4: TestContainers for external services**
+```java
+@SpringBootTest
+@Testcontainers
+public class DatabaseAPITest {
+    @Container
+    static PostgreSQLContainer<?> postgres = 
+        new PostgreSQLContainer<>("postgres:13")
+            .withDatabaseName("testdb")
+            .withUsername("test")
+            .withPassword("test");
+    
+    @Test
+    void testWithRealDatabase() {
+        // Test against real PostgreSQL container
+    }
+}
+```
+
+**Best Practices:**
+- ✓ Mock external APIs in unit tests
+- ✓ Use @MockBean in integration tests
+- ✓ Use WireMock for realistic HTTP mocking
+- ✓ Use TestContainers for real services
+- ✓ Test error scenarios (API timeouts, failures)
+
+---
+
+### Q21: What's the best strategy for testing legacy code with poor design?
+
+**Answer:**
+
+**Challenge**: Old code wasn't designed to be testable (tight coupling, hard dependencies, etc.)
+
+**Strategy 1: Approval/Characterization Tests**
+```java
+// Document existing behavior, even if wrong
+@Test
+void characterizationTest() {
+    LegacyClass legacy = new LegacyClass();
+    // Don't change behavior, just document it
+    assertEquals("legacy behavior", legacy.weirdMethod());
+}
+```
+
+**Strategy 2: Introduce Seams**
+```java
+// Before: Can't mock dependency
+public class LegacyService {
+    public void process() {
+        Database.getInstance().save(...);  // Hard dependency!
+    }
+}
+
+// After: Add overridable method
+public class LegacyService {
+    public void process() {
+        getDatabase().save(...);  // Now overridable
+    }
+    
+    protected Database getDatabase() {
+        return Database.getInstance();
+    }
+}
+
+// Test: Override the seam
+@Test
+void testLegacyWithSeam() {
+    LegacyService service = new LegacyService() {
+        @Override
+        protected Database getDatabase() {
+            return mockDatabase;
+        }
+    };
+    // Now testable
+}
+```
+
+**Strategy 3: Extract and Test**
+```java
+// Before: Everything tightly coupled
+public class LegacyService {
+    public void complexMethod() {
+        // 500 lines of hard-to-test code
+    }
+}
+
+// After: Extract business logic
+public class LegacyLogic {
+    public void processCoreLogic() {
+        // Extract testable part
+    }
+}
+
+@Test
+void testExtractedLogic() {
+    LegacyLogic logic = new LegacyLogic();
+    logic.processCoreLogic();
+    // Now testable!
+}
+```
+
+**Strategy 4: Wrap and Adapt**
+```java
+// Create new interface
+public interface ModernUserService {
+    User getUser(String id);
+}
+
+// Wrap legacy implementation
+public class LegacyUserServiceAdapter implements ModernUserService {
+    private LegacyUserService legacy;
+    
+    @Override
+    public User getUser(String id) {
+        // Adapt legacy API to new interface
+        return legacy.findUser(id);
+    }
+}
+
+@Test
+void testAdapterWithMocks() {
+    LegacyUserService mockLegacy = mock(LegacyUserService.class);
+    ModernUserService adapter = new LegacyUserServiceAdapter(mockLegacy);
+    // Now testable through adapter!
+}
+```
+
+**Strategy 5: Parameterize Hard Dependencies**
+```java
+// Before: Hard to test
+public class LegacyService {
+    Database db = new Database();
+}
+
+// After: Accept as parameter
+public class LegacyService {
+    private Database db;
+    
+    public LegacyService(Database db) {  // Now injectable!
+        this.db = db;
+    }
+}
+
+@Test
+void testWithMockDatabase() {
+    Database mockDb = mock(Database.class);
+    LegacyService service = new LegacyService(mockDb);
+    // Testable!
+}
+```
+
+**Key Strategies for Legacy Code:**
+- ✓ Characterization tests: Document existing behavior
+- ✓ Seams: Add extension points
+- ✓ Extract: Isolate testable parts
+- ✓ Wrap: Create adapters
+- ✓ Parameterize: Make dependencies injectable
+- ✓ Small, incremental improvements
+- ✓ Don't try to fix everything at once
+
+---
+
+### Q22: How do you measure test quality beyond code coverage?
+
+**Answer:**
+
+**Metric 1: Mutation Score**
+```
+Original code:
+    if (age > 18) return "Adult";
+    else return "Minor";
+
+Mutated code 1:
+    if (age >= 18) return "Adult";  // Mutation: > to >=
+    
+Mutated code 2:
+    if (age < 18) return "Adult";   // Mutation: > to <
+
+Good tests catch these mutations!
+If tests catch 85% of mutations → 85% mutation score
+```
+
+**Metric 2: Branch Coverage**
+```java
+public String getStatus(int age) {
+    if (age < 0) return "Invalid";       // Branch 1
+    if (age < 18) return "Minor";        // Branch 2
+    if (age < 65) return "Adult";        // Branch 3
+    return "Senior";                     // Branch 4
+}
+
+Test 1: age = -5  (covers branch 1)
+Test 2: age = 10  (covers branch 2)
+Test 3: age = 30  (covers branch 3)
+Test 4: age = 70  (covers branch 4)
+→ 100% branch coverage
+```
+
+**Metric 3: Cyclomatic Complexity**
+```
+Complexity = Number of independent paths through code
+
+Simple if/else: Complexity = 2
+Multiple if/else: Complexity = N+1
+Recursive: Complexity = depends on depth
+
+Lower complexity = easier to test
+```
+
+**Metric 4: Test Execution Time**
+```
+Unit tests: < 1 second
+Integration tests: < 10 seconds
+E2E tests: < 60 seconds
+
+Total test suite should run in minutes, not hours
+```
+
+**Metric 5: Test Failure Analysis**
+```
+✓ Good: Tests fail pointing to actual bugs
+✗ Bad: Tests fail because of test infrastructure
+✗ Bad: Flaky tests that fail randomly
+✗ Bad: Tests that never fail
+
+Metric: Ratio of "real failures" to "false positives"
+```
+
+**Metric 6: Test Maintainability**
+```
+How easy is it to modify tests when code changes?
+
+✓ Good: Tests are readable, DRY, well-organized
+✗ Bad: Tests are brittle, duplicated, scattered
+
+Metric: Time to update tests after code change
+```
+
+**Metric 7: Defect Detection Ratio**
+```
+How many production bugs did tests catch before release?
+
+Defects caught by tests / Total defects = Quality ratio
+
+High ratio → Tests are valuable
+Low ratio → Missing test coverage
+```
+
+**Measuring Quality:**
+```
+Code Coverage: 85% (minimum target)
+Mutation Score: 75%+ (catches subtle bugs)
+Branch Coverage: > 80% (covers edge cases)
+Test Execution: < 5 minutes (stays fast)
+Defect Detection: > 80% (catches real bugs)
+Maintainability: < 5 min to update tests (not brittle)
+```
+
+---
+
+### Q23: How do you implement contract testing between services?
+
+**Answer:**
+
+Contract testing verifies that services can communicate correctly without running them together.
+
+**Problem**: Service A expects data format X from Service B. If B changes format, integration breaks.
+
+**Solution: Contract Tests**
+
+```java
+// Service A (Consumer)
+public class OrderService {
+    private UserServiceClient userServiceClient;
+    
+    public Order createOrder(String userId, OrderRequest request) {
+        User user = userServiceClient.getUser(userId);  // Calls Service B
+        Order order = new Order(user, request);
+        return order;
+    }
+}
+
+// Service B (Provider)
+@RestController
+@RequestMapping("/api/users")
+public class UserController {
+    @GetMapping("/{id}")
+    public User getUser(@PathVariable String id) {
+        return new User(id, "John");
+    }
+}
+
+// CONTRACT TEST: Consumer side (Service A tests expected format)
+@PactTestFor(providerName = "UserService", port = "8080")
+public class UserServiceConsumerPactTest {
+    @Pact(consumer = "OrderService")
+    public RequestResponsePact createPact(PactBuilder builder) {
+        return builder
+            .given("user 123 exists")
+            .uponReceiving("a request for user 123")
+            .path("/api/users/123")
+            .method("GET")
+            .willRespondWith()
+            .status(200)
+            .body("""
+                {
+                    "id": "123",
+                    "name": "John",
+                    "email": "john@example.com"
+                }
+                """)
+            .toPact();
+    }
+    
+    @Test
+    void testGetUser() {
+        String userId = "123";
+        User user = userServiceClient.getUser(userId);
+        
+        assertEquals("123", user.getId());
+        assertEquals("John", user.getName());
+    }
+}
+
+// CONTRACT TEST: Provider side (Service B verifies it meets contract)
+@SpringBootTest
+@Provider("UserService")
+public class UserServiceProviderPactTest {
+    @Autowired
+    private UserController userController;
+    
+    @State("user 123 exists")
+    public void userExists() {
+        // Setup state for test
+    }
+    
+    @TestTarget
+    public HttpTestTarget target() {
+        return new HttpTestTarget("http", "localhost", 8080);
+    }
+    
+    @Test
+    @PactVerificationTest
+    void verifyPact() {
+        // Pact framework verifies provider meets contract
+    }
+}
+```
+
+**Benefits:**
+- ✓ Services can test independently
+- ✓ Catch integration issues early
+- ✓ Faster than full integration tests
+- ✓ Documents service contracts
+
+**Tools**: Pact, Spring Cloud Contract
+
+---
+
+### Q24: How do you handle timeouts and retries in tests?
+
+**Answer:**
+
+**Method 1: Timeout Testing**
+```java
+@Test
+void shouldCompleteQuickly() {
+    assertTimeout(Duration.ofMillis(500), () -> {
+        quickOperation();
+    });
+}
+
+@Test
+void shouldFailIfSlow() {
+    assertThrows(AssertionFailedError.class, () -> {
+        assertTimeout(Duration.ofMillis(100), () -> {
+            Thread.sleep(200);  // Will fail
+        });
+    });
+}
+```
+
+**Method 2: Preemptive Timeout (Interrupt)**
+```java
+@Test
+void shouldBeInterruptedIfSlow() {
+    assertTimeoutPreemptively(Duration.ofSeconds(1), () -> {
+        potentiallySlowOperation();
+        // Will be interrupted if takes > 1 second
+    });
+}
+```
+
+**Method 3: Retry Logic**
+```java
+@Test
+void testWithRetry() {
+    int maxRetries = 3;
+    int attempts = 0;
+    boolean success = false;
+    
+    while (attempts < maxRetries && !success) {
+        try {
+            flakeyAsyncOperation();
+            success = true;
+        } catch (Exception e) {
+            attempts++;
+            if (attempts >= maxRetries) throw e;
+            Thread.sleep(100 * attempts);  // Exponential backoff
+        }
+    }
+    
+    assertTrue(success);
+}
+```
+
+**Method 4: Awaitility for Async**
+```java
+@Test
+void testAsyncWithAwaitility() {
+    AtomicBoolean done = new AtomicBoolean(false);
+    
+    new Thread(() -> {
+        try {
+            Thread.sleep(100);
+            done.set(true);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }).start();
+    
+    await()
+        .atMost(Duration.ofSeconds(2))
+        .pollInterval(Duration.ofMillis(50))
+        .until(() -> done.get());
+    
+    assertTrue(done.get());
+}
+```
+
+**Method 5: @RepeatedTest**
+```java
+@RepeatedTest(5)
+void testFlakeyOperation() {
+    flakeyAsyncOperation();
+}
+// Runs 5 times, needs to pass all 5 times
+```
+
+**Best Practices:**
+```java
+// ✓ Good: Reasonable timeouts
+assertTimeout(Duration.ofSeconds(2), () -> operation());
+
+// ✓ Good: Awaitility for proper async testing
+await().atMost(Duration.ofSeconds(2)).until(() -> condition);
+
+// ✓ Good: Exponential backoff for retries
+Thread.sleep(100 * attemptNumber);
+
+// ✗ Avoid: Thread.sleep() without timeout
+Thread.sleep(5000);  // Hangs if operation never completes
+
+// ✗ Avoid: Infinite loops
+while (true) { }  // Can hang forever
+```
+
+---
+
+### Q25: How do you test Spring Security and authorization?
+
+**Answer:**
+
+**Unit Test with @WithMockUser**
+```java
+@SpringBootTest
+@AutoConfigureMockMvc
+public class SecureControllerTest {
+    @Autowired
+    private MockMvc mockMvc;
+    
+    @Test
+    @WithMockUser(username = "john", roles = "USER")
+    void testUserCanAccessResource() throws Exception {
+        mockMvc.perform(get("/api/users/profile"))
+            .andExpect(status().isOk());
+    }
+    
+    @Test
+    @WithMockUser(roles = "USER")
+    void testUnauthorizedAccess() throws Exception {
+        mockMvc.perform(get("/api/admin/dashboard"))
+            .andExpect(status().isForbidden());
+    }
+    
+    @Test
+    void testUnauthenticatedAccess() throws Exception {
+        mockMvc.perform(get("/api/users/profile"))
+            .andExpect(status().isUnauthorized());
+    }
+}
+```
+
+**Custom SecurityContext**
+```java
+@Test
+void testWithCustomPrincipal() throws Exception {
+    UserDetails userDetails = User.builder()
+        .username("john")
+        .password("password")
+        .roles("USER", "ADMIN")
+        .build();
+    
+    mockMvc.perform(
+        get("/api/users/profile")
+            .with(user(userDetails)))
+        .andExpect(status().isOk());
+}
+```
+
+**Test Specific Permissions**
+```java
+@Test
+@WithMockUser(username = "john", roles = "USER")
+void testAccessControl() throws Exception {
+    // User can read their own data
+    mockMvc.perform(get("/api/users/john/data"))
+        .andExpect(status().isOk());
+    
+    // User cannot read other's data
+    mockMvc.perform(get("/api/users/jane/data"))
+        .andExpect(status().isForbidden());
+}
+```
+
+**JWT Token Testing**
+```java
+@SpringBootTest
+@AutoConfigureMockMvc
+public class JwtSecurityTest {
+    @Autowired
+    private MockMvc mockMvc;
+    
+    @Autowired
+    private JwtProvider jwtProvider;
+    
+    @Test
+    void testValidJwtToken() throws Exception {
+        String token = jwtProvider.generateToken("john", "ROLE_USER");
+        
+        mockMvc.perform(
+            get("/api/protected")
+                .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk());
+    }
+    
+    @Test
+    void testInvalidJwtToken() throws Exception {
+        mockMvc.perform(
+            get("/api/protected")
+                .header("Authorization", "Bearer invalid_token"))
+            .andExpect(status().isUnauthorized());
+    }
+    
+    @Test
+    void testExpiredToken() throws Exception {
+        String expiredToken = jwtProvider.generateExpiredToken("john");
+        
+        mockMvc.perform(
+            get("/api/protected")
+                .header("Authorization", "Bearer " + expiredToken))
+            .andExpect(status().isUnauthorized());
+    }
+}
+```
+
+**Test Method-Level Security**
+```java
+@Configuration
+@EnableGlobalMethodSecurity(prePostEnabled = true)
+public class SecurityConfig { }
+
+// In service
+public class UserService {
+    @PreAuthorize("hasRole('ADMIN')")
+    public void deleteUser(String id) {
+        // Only admins can delete
+    }
+}
+
+// Test
+@SpringBootTest
+public class MethodSecurityTest {
+    @Autowired
+    private UserService userService;
+    
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void testAdminCanDelete() {
+        assertDoesNotThrow(() -> userService.deleteUser("123"));
+    }
+    
+    @Test
+    @WithMockUser(roles = "USER")
+    void testUserCannotDelete() {
+        assertThrows(AccessDeniedException.class, 
+            () -> userService.deleteUser("123"));
+    }
+}
+```
+
+**Key Spring Security Test Annotations:**
+```
+@WithMockUser: Mock authenticated user
+@WithUserDetails: Load user from UserDetailsService
+@WithSecurityContext: Custom security context
+@EnableWebSecurity: Enable web security in tests
+```
+
+---
+
+## Summary
+
+### Complete Learning Path (Basic → Advanced)
+
+```
+LEVEL 1: BEGINNER
+├─ What is a test?
+├─ Why tests matter?
+├─ Simple unit test structure
+└─ Basic assertions (assertEquals, assertNull, assertTrue)
+
+LEVEL 2: BEGINNER
+├─ AAA Pattern (Arrange-Act-Assert)
+├─ Test structure organization
+├─ Common assertions
+└─ Running and understanding test results
+
+LEVEL 3: BEGINNER
+├─ Test independence and isolation
+├─ Avoiding test coupling
+├─ Setup and teardown (@BeforeEach, @AfterEach)
+└─ Test fixtures
+
+LEVEL 4: INTERMEDIATE
+├─ What is mocking?
+├─ Why mock external dependencies?
+├─ Basic mock creation and usage
+├─ Verification of mock calls (verify)
+└─ When to mock vs when to use real objects
+
+LEVEL 5: INTERMEDIATE
+├─ Parameterized tests
+├─ Multiple test scenarios with one method
+├─ CSV and method-based data providers
+└─ Reducing test code duplication
+
+LEVEL 6: INTERMEDIATE
+├─ Test doubles (Mock, Stub, Fake, Spy)
+├─ Choosing appropriate test double
+├─ Advanced mocking patterns
+└─ Interaction vs state testing
+
+LEVEL 7: ADVANCED
+├─ Test-Driven Development (TDD)
+├─ Red-Green-Refactor cycle
+├─ Benefits of TDD
+└─ Writing tests before code
+
+LEVEL 8: ADVANCED
+├─ Integration testing
+├─ Component boundaries
+├─ TestContainers and Spring Boot Test
+├─ Testing with real dependencies
+└─ Multiple integration scenarios
+
+LEVEL 9: ADVANCED
+├─ Code coverage analysis
+├─ Boundary value analysis
+├─ Performance testing
+├─ Test naming strategies
+└─ Advanced assertion techniques
+```
+
+### Key Concepts Quick Reference
+
+**Test Structure:**
+```
+✓ ARRANGE: Setup (50% of test)
+✓ ACT: Execute (10% of test)
+✓ ASSERT: Verify (40% of test)
+```
+
+**Test Independence:**
+```
+✓ Each test: Independent
+✓ Can run: In any order
+✓ No shared: State between tests
+✓ Must pass: When run alone
+```
+
+**Mocking Strategy:**
+```
+✓ Unit tests: Mock all external dependencies
+✓ Integration tests: Real databases, mock external APIs
+✓ E2E tests: Real everything
+✓ Test Pyramid: 60% unit, 30% integration, 10% E2E
+```
+
+**Naming Convention:**
+```
+✓ Describe what is tested
+✓ Include scenario and expectation
+✓ Format: [Feature]_[Condition]_[Expected Result]
+✓ Example: testWithdrawal_InsufficientFunds_ThrowsException
+```
+
+**Assertion Best Practices:**
+```
+✓ Specific assertions (not generic)
+✓ One logical concern per test
+✓ Meaningful error messages
+✓ Verify both success and failure paths
+```
+
+**Code Coverage Targets:**
+```
+✓ 85% for important code (realistic goal)
+✓ 95%+ is overkill (diminishing returns)
+✓ Don't test: getters, setters, generated code
+✓ Quantity ≠ Quality (high coverage ≠ good tests)
+```
+
+### Essential Tools and Dependencies
+
+```xml
+<!-- JUnit 5 (testing framework) -->
+<dependency>
+    <groupId>org.junit.jupiter</groupId>
+    <artifactId>junit-jupiter</artifactId>
+    <version>5.9.2</version>
+    <scope>test</scope>
+</dependency>
+
+<!-- Mockito (mocking framework) -->
+<dependency>
+    <groupId>org.mockito</groupId>
+    <artifactId>mockito-core</artifactId>
+    <version>5.2.0</version>
+    <scope>test</scope>
+</dependency>
+
+<!-- AssertJ (fluent assertions) -->
+<dependency>
+    <groupId>org.assertj</groupId>
+    <artifactId>assertj-core</artifactId>
+    <version>3.24.1</version>
+    <scope>test</scope>
+</dependency>
+
+<!-- TestContainers (for integration tests) -->
+<dependency>
+    <groupId>org.testcontainers</groupId>
+    <artifactId>testcontainers</artifactId>
+    <version>1.17.6</version>
+    <scope>test</scope>
+</dependency>
+
+<!-- Spring Boot Test (for Spring applications) -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-test</artifactId>
+    <version>3.1.0</version>
+    <scope>test</scope>
+</dependency>
+```
+
+### Common Testing Mistakes and Solutions
+
+```
+MISTAKE 1: Testing implementation details
+├─ Problem: Tests break on refactoring
+├─ Solution: Test behavior, not implementation
+└─ Example: Test public interface, not private methods
+
+MISTAKE 2: Shared state between tests
+├─ Problem: Tests fail when run in different order
+├─ Solution: Each test gets fresh objects
+└─ Example: Create new objects in @BeforeEach
+
+MISTAKE 3: Over-mocking
+├─ Problem: Not testing real interactions
+├─ Solution: Only mock external dependencies
+└─ Example: Mock APIs, not business logic
+
+MISTAKE 4: Too many assertions
+├─ Problem: Hard to identify what failed
+├─ Solution: One logical concern per test
+└─ Example: Separate tests for each behavior
+
+MISTAKE 5: Slow tests
+├─ Problem: Slow feedback, don't run often
+├─ Solution: Mock slow dependencies, use in-memory DB
+└─ Example: Mock database, use H2 for integration tests
+
+MISTAKE 6: Unclear test names
+├─ Problem: Hard to understand what test does
+├─ Solution: Descriptive names with scenario
+└─ Example: testWithdrawal_InsufficientFunds_ThrowsException
+
+MISTAKE 7: No error path testing
+├─ Problem: Catch errors in production
+├─ Solution: Test error cases explicitly
+└─ Example: Test null input, negative values, exceptions
+
+MISTAKE 8: Ignoring failed tests
+├─ Problem: Tests become unreliable
+├─ Solution: Fix or remove broken tests immediately
+└─ Example: Don't use @Ignore, fix the test
+```
+
+### Testing Checklist
+
+Before committing code:
+```
+✓ Unit tests written for new logic
+✓ Tests are independent (no shared state)
+✓ Tests can run in any order
+✓ All tests pass
+✓ Code coverage > 85%
+✓ No @Ignore tests
+✓ No System.out.println in tests
+✓ Test names are clear and descriptive
+✓ Both success and failure paths tested
+✓ Mocks used for external dependencies
+```
+
+Before deploying to production:
+```
+✓ All unit tests pass
+✓ Integration tests pass
+✓ E2E tests pass (for critical workflows)
+✓ Code coverage ≥ 85%
+✓ Performance tests pass
+✓ No memory leaks
+✓ No known flaky tests
+✓ Security tests pass
+```
+
+### When Each Testing Type is Most Valuable
+
+```
+UNIT TESTING:
+├─ Catches: Logic errors, calculation mistakes
+├─ Timeline: Immediate (milliseconds)
+├─ Cost: Low (fast to write/run)
+├─ ROI: Very high (best return on investment)
+└─ Use: Every method should have unit tests
+
+INTEGRATION TESTING:
+├─ Catches: Component interaction issues
+├─ Timeline: Moderate (seconds)
+├─ Cost: Medium (infrastructure needed)
+├─ ROI: High (catches real issues)
+└─ Use: For all components that interact
+
+E2E TESTING:
+├─ Catches: User workflow issues
+├─ Timeline: Slow (minutes)
+├─ Cost: High (fragile, maintenance)
+├─ ROI: Moderate (important for critical paths)
+└─ Use: Only for critical user workflows
+```
+
+### Final Keypoints to Remember
+
+```
+1. TEST EARLY AND OFTEN
+   ├─ Write tests before code (TDD)
+   ├─ Run tests constantly
+   └─ Fix failures immediately
+
+2. KEEP TESTS SIMPLE
+   ├─ One responsibility per test
+   ├─ Simple, clear names
+   └─ Minimal setup
+
+3. ISOLATE THE CODE UNDER TEST
+   ├─ Mock external dependencies
+   ├─ No shared state
+   └─ Each test independent
+
+4. TEST BEHAVIORS, NOT IMPLEMENTATION
+   ├─ Test what it does
+   ├─ Not how it does it
+   └─ Refactoring should not break tests
+
+5. MAINTAIN YOUR TESTS
+   ├─ Treat tests as production code
+   ├─ Keep them clean and organized
+   └─ Delete or fix broken tests
+
+6. BALANCE TEST TYPES
+   ├─ 60%: Unit tests (fast)
+   ├─ 30%: Integration tests (real)
+   ├─ 10%: E2E tests (critical paths)
+   └─ Adapt to your project needs
+
+7. USE APPROPRIATE TOOLS
+   ├─ JUnit: Test framework
+   ├─ Mockito: Mocking
+   ├─ AssertJ: Better assertions
+   ├─ TestContainers: Real infrastructure
+   └─ Spring Boot Test: Full application context
+
+8. CONTINUOUS IMPROVEMENT
+   ├─ Measure code coverage
+   ├─ Identify gaps
+   ├─ Add tests for bugs
+   ├─ Refactor old tests
+   └─ Learn from production issues
+
+9. DON'T CHASE COVERAGE %
+   ├─ Focus on meaningful tests
+   ├─ 85% is a good target
+   ├─ Quality > Quantity
+   └─ Coverage is a guide, not a goal
+
+10. PRACTICE DELIBERATELY
+    ├─ Write one test at a time
+    ├─ Understand each concept
+    ├─ Build patterns gradually
+    └─ Learn from real projects
+```
+
+---
+
+### Key Takeaways
+
+**UNIT TESTING**
+- ✓ Test individual methods in isolation
+- ✓ Mock external dependencies
+- ✓ Fast execution (milliseconds)
+- ✓ Write 60-80% of tests
+- ✓ First line of defense against bugs
+
+**INTEGRATION TESTING**
+- ✓ Test component interactions
+- ✓ Use real dependencies or containers
+- ✓ Moderate speed (seconds)
+- ✓ Write 15-30% of tests
+- ✓ Verify system behavior
+
+**TESTING PYRAMID**
+- ✓ Most: Unit tests (fast, cheap, isolated)
+- ✓ Medium: Integration tests (real interactions)
+- ✓ Least: E2E tests (slow, expensive)
+
+**BEST PRACTICES**
+- ✓ Write tests first (TDD) or immediately after code
+- ✓ One responsibility per test
+- ✓ Use clear, descriptive names
+- ✓ Keep tests independent
+- ✓ Clean up after tests
+- ✓ Mock external dependencies
+- ✓ Test edge cases and error paths
+- ✓ Maintain tests like production code
+
+**WHEN TO USE WHAT**
+
+```
+UNIT TEST
+- Testing business logic
+- Testing algorithms
+- Testing utility functions
+- Testing error handling
+- Testing single class/method
+
+INTEGRATION TEST
+- Testing database operations
+- Testing API endpoints
+- Testing service interactions
+- Testing configuration
+- Testing component contracts
+
+E2E TEST
+- Testing critical user workflows
+- Testing full system flows
+- Testing across multiple systems
+- Testing real user scenarios
+```
+
+This comprehensive guide provides the theoretical foundation, progressive learning path from basic to advanced, practical examples, and key takeaways needed to master both unit and integration testing in Java applications.
+
