@@ -1,0 +1,4804 @@
+# AWS (Amazon Web Services) - Complete Notes
+
+## Table of Contents
+1. [AWS Fundamentals](#aws-fundamentals)
+2. [Key Concepts & Terminology](#key-concepts--terminology)
+3. [Core Services](#core-services)
+4. [Compute Services](#compute-services)
+5. [Storage Services](#storage-services)
+6. [Database Services](#database-services)
+7. [Networking Services](#networking-services)
+8. [Security & IAM](#security--iam)
+9. [Monitoring & Logging](#monitoring--logging)
+10. [DevOps & Deployment](#devops--deployment)
+11. [Practical Implementation Scenarios](#practical-implementation-scenarios)
+12. [Best Practices](#best-practices)
+13. [Interview Q&A](#interview-qa)
+14. [AWS CLI Cheat Sheet](#aws-cli-cheat-sheet)
+
+---
+
+## AWS Fundamentals
+
+### What is AWS?
+- **Definition**: Amazon Web Services - Cloud computing platform providing on-demand computing resources
+- **Founded**: 2006
+- **Market Leader**: ~32% market share (as of 2024)
+- **Global**: 30+ regions, 99+ availability zones
+
+### Cloud Computing Models
+```
+┌─────────────────────────────────────────────────────────┐
+│ Cloud Service Models                                    │
+├─────────────────────────────────────────────────────────┤
+│ IaaS (Infrastructure as a Service)                      │
+│ - EC2, S3, VPC, EBS                                     │
+│ - You manage: Applications, Data, Runtime, Middleware   │
+│ - AWS manages: OS, Virtualization, Servers              │
+│                                                          │
+│ PaaS (Platform as a Service)                            │
+│ - Elastic Beanstalk, RDS, DynamoDB                      │
+│ - You manage: Applications, Data                        │
+│ - AWS manages: Everything else                          │
+│                                                          │
+│ SaaS (Software as a Service)                            │
+│ - Salesforce, Office 365                               │
+│ - AWS manages: Everything                              │
+└─────────────────────────────────────────────────────────┘
+```
+
+### AWS Global Infrastructure
+```
+Region: geographically separate data centers
+├─ Availability Zone (AZ): isolated data centers within region
+│  └─ Ensures high availability & disaster recovery
+├─ Edge Locations: cache content closer to users
+└─ Local Zones: ultra-low latency for specific use cases
+```
+
+### Shared Responsibility Model
+```
+┌──────────────────────────────────────────────────────┐
+│ AWS Responsibility                                   │
+│ - Infrastructure                                     │
+│ - Network & connectivity                             │
+│ - Virtualization                                     │
+│ - Physical security                                  │
+├──────────────────────────────────────────────────────┤
+│ Customer Responsibility                              │
+│ - Access management (IAM)                            │
+│ - Encryption                                         │
+│ - Data classification                                │
+│ - Firewall/network settings                          │
+└──────────────────────────────────────────────────────┘
+```
+
+---
+
+## Key Concepts & Terminology
+
+### Essential AWS Concepts
+
+**1. Regions & Availability Zones**
+```
+Region: Geographic area (us-east-1, eu-west-1)
+├─ Independent from other regions
+├─ Complete isolation
+├─ Different pricing tiers
+└─ Choose based on: latency, compliance, data residency
+
+Availability Zone (AZ): Isolated data center within region
+├─ Connected by low-latency links
+├─ Independent power, cooling, networking
+├─ Failures in one AZ don't affect others
+└─ Example: us-east-1a, us-east-1b, us-east-1c
+
+Multi-AZ = High Availability
+├─ Deploy across 2+ AZs
+├─ Failover capability
+├─ Recommended for production
+└─ Additional cost (~2x for databases)
+
+Multi-Region = Disaster Recovery
+├─ Complete backup in different region
+├─ Handles regional outages
+├─ Higher cost, more complexity
+└─ Good for critical applications
+```
+
+**2. Resource Tagging & Organization**
+
+```
+Tag Format: Key=Value
+├─ Key: max 128 characters
+├─ Value: max 256 characters
+└─ Up to 50 tags per resource
+
+Common Tags:
+├─ Environment: dev, staging, prod
+├─ Owner: team name, email
+├─ Project: project name
+├─ CostCenter: billing code
+├─ Application: app name
+└─ Backup: true/false
+
+Tag Benefits:
+✓ Cost allocation (track spend by project)
+✓ Automation (stop/start tagged instances)
+✓ Organization (group related resources)
+✓ Access control (IAM policies based on tags)
+```
+
+**3. ARN (Amazon Resource Name)**
+
+```
+Format: arn:partition:service:region:account-id:resource
+
+Examples:
+- arn:aws:iam::123456789012:user/john
+- arn:aws:s3:::mybucket/myfile.pdf
+- arn:aws:ec2:us-east-1:123456789012:instance/i-1234567890abcdef0
+
+ARN Wildcards:
+* = Match any string
+? = Match single character
+
+Usage:
+- IAM policies
+- Resource-based policies
+- CloudTrail
+- Lambda resource policies
+```
+
+**4. Resource Lifecycle**
+
+```
+Planning → Creation → Configuration → Monitoring → Scaling → Termination
+
+Key Metrics:
+├─ Availability: % time service operational
+├─ Reliability: ability to recover from failure
+├─ Performance: response time, throughput
+└─ Durability: data remains intact
+
+RTO (Recovery Time Objective)
+├─ Target time to recover after outage
+├─ Example: RTO 1 hour
+├─ How quickly can you restore?
+└─ Shorter RTO = Higher cost
+
+RPO (Recovery Point Objective)
+├─ Maximum acceptable data loss
+├─ Example: RPO 15 minutes
+├─ How much data can you lose?
+└─ Shorter RPO = Higher cost (more backups)
+```
+
+**5. Service Quotas & Limits**
+
+```
+Service-Level Limits (AWS-enforced):
+├─ Account limits: 5 VPCs per region
+├─ EC2 limits: 20 on-demand instances (default)
+├─ RDS: 40 DB instances per account
+└─ Request increase through console
+
+Soft Limits: Can request increase
+├─ Send request to AWS Support
+├─ Usually granted in 24-48 hours
+└─ Example: EC2 instance limit increase
+
+Hard Limits: Cannot be changed
+├─ Lambda: 15-minute execution timeout
+├─ EC2: max 1024 security groups per VPC
+└─ S3: max 100 bucket policy statements
+```
+
+**6. Cost Optimization Framework**
+
+```
+Right-Sizing
+├─ Monitor actual usage
+├─ Don't over-provision
+├─ Match instance type to workload
+└─ Potential savings: 30-50%
+
+Commitment Discounts
+├─ Reserved Instances: 30-72% discount
+├─ Savings Plans: up to 72% discount
+├─ Pay upfront (1-3 years)
+└─ Good for predictable, stable workloads
+
+Spot Instances
+├─ 90% discount vs on-demand
+├─ Can be interrupted
+├─ Good for: batch jobs, CI/CD, non-critical
+└─ Potential savings: huge, risk moderate
+
+Unused Resource Cleanup
+├─ Unattached EBS volumes: $0.10/GB-month
+├─ Unused Elastic IPs: $0.005/hour
+├─ Abandoned RDS snapshots: storage cost
+└─ Regular audits: check for waste
+```
+
+**7. High Availability Patterns**
+
+```
+Single Instance (No HA)
+├─ One AZ
+├─ No redundancy
+├─ Failure = downtime
+└─ Risk: Very High
+
+Multi-AZ (HA)
+├─ Two+ AZs
+├─ Synchronous replication
+├─ Automatic failover
+├─ Downtime: minutes
+└─ Risk: Low
+
+Multi-Region (DR)
+├─ Complete backup in different region
+├─ Asynchronous replication
+├─ Manual or automatic failover
+├─ Downtime: hours
+└─ Risk: Minimal
+
+Strategy Selection:
+- Dev/Test: Single instance (cheapest)
+- Production: Multi-AZ (HA)
+- Critical/Mission-Critical: Multi-Region (DR)
+```
+
+**8. Security Layering (Defense in Depth)**
+
+```
+Layer 1: Edge (DDoS Protection)
+├─ AWS Shield (standard)
+├─ CloudFront (edge location caching)
+└─ Route 53 (DNS security)
+
+Layer 2: Network (VPC)
+├─ VPC isolation
+├─ Security Groups (stateful)
+├─ NACLs (stateless)
+└─ VPN/Direct Connect
+
+Layer 3: Access (IAM)
+├─ Users, roles, policies
+├─ MFA
+├─ Temporary credentials
+└─ Audit logging
+
+Layer 4: Encryption
+├─ At-rest: KMS, S3 encryption
+├─ In-transit: SSL/TLS
+├─ Key management: KMS, Secrets Manager
+└─ Key rotation: automatic
+
+Layer 5: Application
+├─ Input validation
+├─ Error handling
+├─ Secure coding practices
+└─ Dependency management
+
+Layer 6: Monitoring
+├─ CloudTrail (who did what)
+├─ CloudWatch (metrics & alarms)
+├─ VPC Flow Logs (network traffic)
+└─ X-Ray (distributed tracing)
+```
+
+---
+
+## Core Services
+
+### EC2 (Elastic Compute Cloud)
+**Theory:**
+- Virtual servers in the cloud
+- Scalable computing capacity on demand
+- Pay for what you use (on-demand, reserved, spot instances)
+- Runs on hypervisor technology (Xen)
+- Provides compute, memory, and storage resources
+
+**Key Concepts:**
+
+1. **AMI (Amazon Machine Image)**
+   - Template for instance creation
+   - Contains: OS, preinstalled software, configurations
+   - Types: AWS-provided, community, marketplace, custom
+   - Can be region-specific (need to copy to other regions)
+   
+   ```
+   AMI Selection Impact:
+   ├─ OS Type → Linux (cheaper), Windows (expensive)
+   ├─ Preinstalled Software → Faster deployment
+   ├─ Architecture → x86, ARM, GPU support
+   └─ License Model → Pay as you go, BYOL (Bring Your Own License)
+   ```
+
+2. **Instance Placement Groups**
+   - **Cluster:** Low-latency, tight coupling (HPC, big data)
+   - **Spread:** Distributed across hardware, reduces risk
+   - **Partition:** Partitioned for Hadoop, Cassandra
+   
+3. **Tenancy Models**
+   - **Default:** Shared hardware with other customers
+   - **Dedicated Host:** Physical server for single customer
+   - **Dedicated Instance:** Isolated hardware but shared within account
+
+**Instance State Diagram:**
+```
+┌─────────┐
+│ Pending │ ─→ ┌─────────┐
+└─────────┘    │ Running │ ←─ ┌─────────────┐
+               └─────────┘    │ Rebooting   │
+                    ↓          └─────────────┘
+               ┌─────────┐
+               │Stopping │ ─→ ┌─────────┐
+               └─────────┘    │ Stopped │
+                              └─────────┘
+                                  ↓
+                           ┌──────────────┐
+                           │ Terminating  │
+                           └──────────────┘
+```
+
+**Instance Lifecycle:**
+- Pending → Running → (Reboot) → Stopped → Terminated
+- **Stop:** Preserves EBS volumes, data remains
+- **Terminate:** Deletes instance, loses all data (unless backed up)
+- **Reboot:** Doesn't change state, just restarts
+
+**Instance Metadata & User Data:**
+```python
+# EC2 Instance Metadata (available from within instance)
+curl http://169.254.169.254/latest/meta-data/
+# Returns: ami-id, instance-id, instance-type, public-ipv4, security-groups, etc.
+
+# User Data (runs on first launch)
+#!/bin/bash
+yum update -y
+yum install -y httpd
+systemctl start httpd
+echo "<h1>Hello World</h1>" > /var/www/html/index.html
+```
+
+**Instance Store vs EBS:**
+```
+Instance Store (Ephemeral)
+├─ Temporary block storage
+├─ Data lost on stop/termination
+├─ High IOPS performance
+└─ Free (included in hourly cost)
+
+EBS (Persistent)
+├─ Network-attached storage
+├─ Survives stop/termination
+├─ Incremental snapshots
+└─ Pay per GB-month
+```
+
+**Instance Type Selection Logic:**
+```python
+# Memory-intensive: r5 (Redis, Memcached)
+# CPU-intensive: c5 (Batch processing, analytics)
+# Burstable: t3 (Web servers, dev/test)
+# GPU: g4 (ML training, graphics rendering)
+# Storage: i3 (NoSQL, data warehousing)
+
+# Calculation:
+# Cost = Hourly_Rate × Hours × Utilization_Factor
+# Optimize by: Right-sizing, Reserved Instances, Spot
+```
+
+**Instance Types:**
+```
+t3 (burstable)     → Dev/test, low traffic
+m5 (general)       → Web apps, small databases
+c5 (compute)       → Batch processing, analytics
+r5 (memory)        → In-memory databases, caching
+i3 (storage)       → NoSQL, data warehousing
+g4 (GPU)           → ML, graphics rendering
+```
+
+**Pricing Models:**
+```
+On-Demand      → Pay per hour, no commitment
+Reserved       → 1-3 years, 30-72% discount
+Spot           → 90% discount, can be interrupted
+Savings Plan   → Flexible, 1-3 years
+Dedicated      → Single tenant servers
+```
+
+**Example: Launch EC2 Instance (Step-by-Step)**
+
+*Step 1: Create Security Group*
+```bash
+aws ec2 create-security-group \
+  --group-name web-sg \
+  --description "Web server security group"
+
+# Allow HTTP and HTTPS
+aws ec2 authorize-security-group-ingress \
+  --group-id sg-xxxxxxxx \
+  --protocol tcp --port 80 --cidr 0.0.0.0/0
+
+aws ec2 authorize-security-group-ingress \
+  --group-id sg-xxxxxxxx \
+  --protocol tcp --port 443 --cidr 0.0.0.0/0
+```
+
+*Step 2: Create Key Pair for SSH Access*
+```bash
+aws ec2 create-key-pair --key-name MyKey --query 'KeyMaterial' --output text > MyKey.pem
+chmod 400 MyKey.pem
+```
+
+*Step 3: Launch EC2 Instance*
+```bash
+aws ec2 run-instances \
+  --image-id ami-0c55b159cbfafe1f0 \
+  --instance-type t3.micro \
+  --key-name MyKey \
+  --security-groups web-sg \
+  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=WebServer}]'
+```
+
+*Step 4: Get Instance Details*
+```bash
+aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=WebServer" \
+  --query 'Reservations[0].Instances[0].[PublicIpAddress,PrivateIpAddress,State.Name]' \
+  --output table
+```
+
+*Step 5: Connect via SSH*
+```bash
+ssh -i MyKey.pem ec2-user@<public-ip>
+```
+
+**Theory:** EC2 instances are virtual machines. Security groups act as virtual firewalls controlling inbound/outbound traffic. Key pairs enable secure SSH access.
+
+### S3 (Simple Storage Service)
+**Theory:**
+- Object storage service (not block storage)
+- Unlimited scalability
+- 11 nines of durability (99.999999999%)
+- Key-value pair: bucket/key/object
+
+**Storage Classes:**
+```
+Standard       → Frequently accessed data
+Intelligent    → Auto tier based on access patterns
+Standard-IA    → Infrequent access, 30-day minimum
+Glacier        → Long-term archival, retrieval in hours
+Deep Archive   → Rarely accessed, retrieval in 12+ hours
+```
+
+**Pricing Considerations:**
+```
+Storage cost       → Per GB per month
+Data transfer out  → Egress costs apply
+Request pricing    → GET/PUT/DELETE operations
+```
+
+**Example: S3 Implementation (Complete Workflow)**
+
+*Step 1: Create S3 Bucket*
+```bash
+aws s3 mb s3://my-app-bucket-$(date +%s)
+# Bucket names must be globally unique
+```
+
+*Step 2: Configure Versioning*
+```bash
+aws s3api put-bucket-versioning \
+  --bucket my-app-bucket \
+  --versioning-configuration Status=Enabled
+```
+
+*Step 3: Block Public Access (Security)*
+```bash
+aws s3api put-public-access-block \
+  --bucket my-app-bucket \
+  --public-access-block-configuration \
+  "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+```
+
+*Step 4: Upload Files*
+```bash
+# Single file
+aws s3 cp file.txt s3://my-app-bucket/uploads/
+
+# Entire directory with sync (only uploads changed files)
+aws s3 sync ./local-dir s3://my-app-bucket/backup/ --delete
+
+# With metadata & encryption
+aws s3 cp document.pdf s3://my-app-bucket/docs/ \
+  --sse AES256 \
+  --metadata "author=john,date=2024-12-24"
+```
+
+*Step 5: Retrieve Files*
+```bash
+# Download file
+aws s3 cp s3://my-app-bucket/uploads/file.txt ./
+
+# Sync from S3 to local
+aws s3 sync s3://my-app-bucket/backup/ ./local-backup/
+
+# List all objects
+aws s3 ls s3://my-app-bucket --recursive
+```
+
+*Step 6: Setup Lifecycle Policy*
+```bash
+cat > lifecycle.json << 'EOF'
+{
+  "Rules": [
+    {
+      "Id": "Archive old files",
+      "Status": "Enabled",
+      "Prefix": "logs/",
+      "Transitions": [
+        {
+          "Days": 30,
+          "StorageClass": "STANDARD_IA"
+        },
+        {
+          "Days": 90,
+          "StorageClass": "GLACIER"
+        }
+      ],
+      "Expiration": {
+        "Days": 365
+      }
+    }
+  ]
+}
+EOF
+
+aws s3api put-bucket-lifecycle-configuration \
+  --bucket my-app-bucket \
+  --lifecycle-configuration file://lifecycle.json
+```
+
+*Step 7: Generate Pre-signed URLs (Share Files Securely)*
+```bash
+# Generate URL valid for 1 hour
+aws s3 presign s3://my-app-bucket/document.pdf --expires-in 3600
+
+# Share with others without AWS credentials
+# URL: https://my-app-bucket.s3.amazonaws.com/document.pdf?X-Amz-Algorithm=...
+```
+
+**Python Implementation:**
+```python
+import boto3
+from botocore.exceptions import ClientError
+
+s3_client = boto3.client('s3')
+s3_resource = boto3.resource('s3')
+
+# Upload file
+def upload_file(file_path, bucket, key):
+    try:
+        s3_client.upload_file(file_path, bucket, key)
+        print(f"Uploaded {file_path} to s3://{bucket}/{key}")
+    except ClientError as e:
+        print(f"Error: {e}")
+
+# Download file
+def download_file(bucket, key, file_path):
+    try:
+        s3_client.download_file(bucket, key, file_path)
+        print(f"Downloaded s3://{bucket}/{key} to {file_path}")
+    except ClientError as e:
+        print(f"Error: {e}")
+
+# List objects
+def list_objects(bucket):
+    response = s3_client.list_objects_v2(Bucket=bucket)
+    for obj in response.get('Contents', []):
+        print(f"Key: {obj['Key']}, Size: {obj['Size']} bytes")
+
+# Generate presigned URL
+def get_presigned_url(bucket, key, expiration=3600):
+    url = s3_client.generate_presigned_url(
+        'get_object',
+        Params={'Bucket': bucket, 'Key': key},
+        ExpiresIn=expiration
+    )
+    return url
+
+# Usage
+upload_file('local-file.txt', 'my-bucket', 'uploads/file.txt')
+download_file('my-bucket', 'uploads/file.txt', 'downloaded.txt')
+list_objects('my-bucket')
+url = get_presigned_url('my-bucket', 'document.pdf')
+print(f"Presigned URL: {url}")
+```
+
+**Theory:** S3 is object storage for any file type. It provides 11 nines durability, versioning, lifecycle policies, and pre-signed URLs for secure sharing without credentials.
+
+### VPC (Virtual Private Cloud)
+**Theory:**
+- Isolated network environment in AWS
+- CIDR blocks define IP address ranges
+- Subnets divide VPC into smaller networks
+- Enables hybrid cloud and multi-tier architecture
+- Region-specific (cannot span regions)
+
+**CIDR Notation Deep Dive:**
+```
+CIDR: Classless Inter-Domain Routing
+Format: 10.0.0.0/16
+        └─ /16 = First 16 bits are network, remaining 16 bits for hosts
+        
+10.0.0.0/16 → 65,536 IP addresses (10.0.0.0 to 10.0.255.255)
+10.0.0.0/24 → 256 IP addresses (10.0.0.0 to 10.0.0.255)
+10.0.0.0/32 → 1 IP address (single host)
+
+Subnet Planning:
+VPC (10.0.0.0/16) = 65,536 IPs
+├─ Public Subnet (10.0.1.0/24) = 256 IPs
+├─ Private Subnet (10.0.2.0/24) = 256 IPs
+├─ Database Subnet (10.0.3.0/24) = 256 IPs
+└─ Spare capacity = 65,024 IPs
+```
+
+**Key Network Components:**
+
+1. **Internet Gateway (IGW)**
+   - Enables bidirectional communication with internet
+   - Attached to VPC (not subnet)
+   - Required for public subnets
+   - Provides NAT for instances with public IPs
+   
+2. **NAT Gateway (Network Address Translation)**
+   - Allows private instances to access internet
+   - Only outbound communication
+   - Must be placed in public subnet
+   - Elastic IP required
+   - Pay for hourly usage + data processed
+   
+3. **Route Tables**
+   - Define traffic routing rules
+   - Associated with subnets
+   - First match wins
+   - Local routes always take precedence
+   
+   ```
+   Route Table Example:
+   Destination      | Target       | Use Case
+   ────────────────────────────────────────────────
+   10.0.0.0/16      | Local        | Internal VPC traffic
+   0.0.0.0/0        | IGW          | Internet from public subnet
+   0.0.0.0/0        | NAT Gateway  | Internet from private subnet
+   192.168.0.0/16   | VPN Gateway  | On-premises network
+   ```
+
+4. **Security Groups vs NACLs**
+   ```
+   Security Group (Stateful)      NACL (Stateless)
+   ├─ Instance level               ├─ Subnet level
+   ├─ Allow/Deny rules             ├─ Allow/Deny rules
+   ├─ Stateful (return allowed)    ├─ Stateless (explicit rules)
+   ├─ Processed together           ├─ Processed by rule number
+   └─ Default: all deny inbound    └─ Default: allow all
+   ```
+
+5. **VPC Flow Logs**
+   - Capture network traffic metadata
+   - Helpful for troubleshooting
+   - Can send to CloudWatch or S3
+   - Format: version account-id interface-id srcaddr dstaddr srcport dstport protocol packets bytes
+
+**VPC Connectivity Options:**
+
+```
+VPN Connection (encrypted)
+├─ Site-to-Site VPN
+├─ Client VPN
+└─ Slower but cheaper
+
+Direct Connect (dedicated network)
+├─ 1 Gbps to 100 Gbps
+├─ Lower latency
+└─ Higher cost
+
+VPC Peering
+├─ Direct connection between VPCs
+├─ CIDR blocks cannot overlap
+└─ Non-transitive (A→B, B→C, but not A→C)
+
+Transit Gateway
+├─ Hub for connecting multiple VPCs/on-premises
+├─ Supports transitive peering
+└─ Centralized routing
+```
+
+**Public vs Private Subnets:**
+
+```
+Public Subnet (10.0.1.0/24)
+├─ Has Internet Gateway
+├─ Route Table: 0.0.0.0/0 → IGW
+├─ Instances can have public IPs
+├─ Examples: ALB, NAT Gateway, Bastion hosts
+└─ Cost: Free (pay for data transfer)
+
+Private Subnet (10.0.2.0/24)
+├─ No direct internet access
+├─ Route Table: 0.0.0.0/0 → NAT Gateway
+├─ Instances only have private IPs
+├─ Examples: Application servers, databases
+└─ Cost: NAT Gateway charges apply
+
+Isolated Subnet (10.0.3.0/24)
+├─ No internet or NAT gateway
+├─ Local routing only
+├─ Examples: RDS, ElastiCache
+└─ Most secure for databases
+```
+
+**Components:**
+```
+VPC (10.0.0.0/16)
+├─ Public Subnet (10.0.1.0/24)
+│  ├─ Internet Gateway → allows internet access
+│  └─ Route Table: 0.0.0.0/0 → IGW
+├─ Private Subnet (10.0.2.0/24)
+│  ├─ NAT Gateway (in public subnet)
+│  └─ Route Table: 0.0.0.0/0 → NAT
+└─ Database Subnet (10.0.3.0/24)
+   └─ No internet access
+```
+
+---
+
+## Compute Services
+
+### Auto Scaling & Load Balancing
+
+**Theory:**
+- Auto Scaling: Automatically adds/removes instances based on demand
+- Load Balancing: Distributes incoming traffic across instances
+- Combined: High availability + cost optimization
+- Works across multiple AZs for fault tolerance
+
+**Auto Scaling Group (ASG) Lifecycle:**
+
+```
+Desired Capacity: 3, Min: 2, Max: 6
+
+Scaling-Up (CPU > 70%):
+├─ Add instances
+├─ Distribute across AZs
+└─ Added to load balancer
+
+Scaling-Down (CPU < 30%):
+├─ Connection draining (300 sec default)
+├─ Graceful termination
+└─ Reduced cost
+```
+
+**Load Balancer Types:**
+
+```
+ALB (Application Load Balancer)
+├─ Layer 7, content-based routing
+├─ Path: /api → TG-A, /images → TG-B
+└─ Best for microservices
+
+NLB (Network Load Balancer)
+├─ Layer 4, extreme performance
+├─ Millions reqs/sec, <1ms latency
+└─ Best for real-time, IoT, gaming
+```
+
+**Scaling Policies:**
+```
+Target Tracking: Keep metric at target value
+Step Scaling: Graduated response
+Scheduled: Time-based (weekday/weekend)
+```
+
+### Lambda
+**Theory:**
+- Serverless compute: run code without managing servers
+- Event-driven: triggered by various AWS services
+- Auto-scaling: handles concurrency automatically
+- Pay per invocation + duration (1M free invocations/month)
+- 15-minute execution timeout
+- Ephemeral storage: 512 MB to 10 GB
+- Memory: 128 MB to 10,240 MB (CPU scales with memory)
+
+**Lambda Concurrency:**
+
+```
+Unreserved: Shared, account limit 1000
+Reserved: Dedicated to function, cost applies
+Provisioned: Keep warm, eliminate cold start
+```
+
+**Use Cases:**
+```
+- API endpoints (API Gateway + Lambda)
+- Event processing (S3, SNS, SQS)
+- Scheduled tasks (CloudWatch Events)
+- Data processing (ETL workflows)
+- Microservices
+```
+
+**Example: Lambda Implementation (Complete Setup)**
+
+*Step 1: Create Lambda Execution Role*
+```bash
+aws iam create-role \
+  --role-name lambda-execution-role \
+  --assume-role-policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Principal": {"Service": "lambda.amazonaws.com"},
+      "Action": "sts:AssumeRole"
+    }]
+  }'
+
+# Attach policy for CloudWatch Logs
+aws iam attach-role-policy \
+  --role-name lambda-execution-role \
+  --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+```
+
+*Step 2: Create Lambda Function (Python)*
+
+**handler.py:**
+```python
+import json
+import boto3
+import os
+from datetime import datetime
+
+# Initialize AWS clients
+s3_client = boto3.client('s3')
+dynamodb = boto3.resource('dynamodb')
+
+def lambda_handler(event, context):
+    """
+    Lambda handler function
+    event: triggered event data
+    context: runtime information
+    """
+    print(f"Event received: {json.dumps(event)}")
+    print(f"Function name: {context.function_name}")
+    print(f"Request ID: {context.request_id}")
+    
+    try:
+        # Extract data from event
+        name = event.get('name', 'World')
+        action = event.get('action', 'hello')
+        
+        if action == 'hello':
+            message = f'Hello {name}!'
+            status_code = 200
+        else:
+            message = 'Unknown action'
+            status_code = 400
+        
+        return {
+            'statusCode': status_code,
+            'body': json.dumps({
+                'message': message,
+                'timestamp': datetime.now().isoformat()
+            })
+        }
+    
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': str(e)})
+        }
+```
+
+*Step 3: Package and Deploy Function*
+```bash
+# Create deployment package
+zip function.zip handler.py
+
+# Create Lambda function
+aws lambda create-function \
+  --function-name my-function \
+  --runtime python3.11 \
+  --role arn:aws:iam::ACCOUNT_ID:role/lambda-execution-role \
+  --handler handler.lambda_handler \
+  --zip-file fileb://function.zip \
+  --timeout 30 \
+  --memory-size 256 \
+  --environment Variables="{LOG_LEVEL=INFO,TABLE_NAME=Users}"
+```
+
+*Step 4: Create API Gateway Integration*
+```bash
+# Create API Gateway
+api_id=$(aws apigateway create-rest-api \
+  --name my-api \
+  --description "My Lambda API" \
+  --query 'id' --output text)
+
+# Get root resource
+resource_id=$(aws apigateway get-resources --rest-api-id $api_id --query 'items[0].id' --output text)
+
+# Create resource
+resource=$(aws apigateway create-resource \
+  --rest-api-id $api_id \
+  --parent-id $resource_id \
+  --path-part greet \
+  --query 'id' --output text)
+
+# Create POST method
+aws apigateway put-method \
+  --rest-api-id $api_id \
+  --resource-id $resource \
+  --http-method POST \
+  --authorization-type NONE
+
+# Integrate with Lambda
+aws apigateway put-integration \
+  --rest-api-id $api_id \
+  --resource-id $resource \
+  --http-method POST \
+  --type AWS_PROXY \
+  --integration-http-method POST \
+  --uri arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:ACCOUNT:function:my-function/invocations
+```
+
+*Step 5: Invoke Lambda Function*
+```bash
+# Direct invocation
+aws lambda invoke \
+  --function-name my-function \
+  --payload '{\"name\": \"John\", \"action\": \"hello\"}' \
+  response.json
+
+cat response.json
+```
+
+**Example: Lambda Reading from S3**
+```python
+import json
+import boto3
+
+s3 = boto3.client('s3')
+
+def lambda_handler(event, context):
+    # S3 event triggered when file uploaded
+    bucket = event['Records'][0]['s3']['bucket']['name']
+    key = event['Records'][0]['s3']['object']['key']
+    
+    try:
+        # Read file from S3
+        response = s3.get_object(Bucket=bucket, Key=key)
+        file_content = response['Body'].read().decode('utf-8')
+        
+        # Process file
+        lines = file_content.split('\n')
+        processed_data = [line.upper() for line in lines]
+        
+        # Write processed file back to S3
+        output_key = f"processed/{key}"
+        s3.put_object(
+            Bucket=bucket,
+            Key=output_key,
+            Body='\n'.join(processed_data)
+        )
+        
+        return {
+            'statusCode': 200,
+            'body': json.dumps(f"Processed {key}")
+        }
+    
+    except Exception as e:
+        print(f"Error: {e}")
+        return {
+            'statusCode': 500,
+            'body': json.dumps(f"Error: {str(e)}")
+        }
+```
+
+**Example: Lambda with DynamoDB**
+```python
+import json
+import boto3
+from decimal import Decimal
+
+dynamodb = boto3.resource('dynamodb')
+table = dynamodb.Table('Users')
+
+def lambda_handler(event, context):
+    action = event.get('action')
+    
+    if action == 'create':
+        item = {
+            'userId': event['userId'],
+            'name': event['name'],
+            'email': event['email']
+        }
+        table.put_item(Item=item)
+        return {'statusCode': 201, 'body': 'User created'}
+    
+    elif action == 'get':
+        response = table.get_item(Key={'userId': event['userId']})
+        return {'statusCode': 200, 'body': json.dumps(response['Item'])}
+    
+    elif action == 'update':
+        table.update_item(
+            Key={'userId': event['userId']},
+            UpdateExpression='SET #name = :name',
+            ExpressionAttributeNames={'#name': 'name'},
+            ExpressionAttributeValues={':name': event['name']}
+        )
+        return {'statusCode': 200, 'body': 'User updated'}
+    
+    elif action == 'delete':
+        table.delete_item(Key={'userId': event['userId']})
+        return {'statusCode': 200, 'body': 'User deleted'}
+```
+
+**Theory:** Lambda functions are event-driven. Event sources (S3, API Gateway, DynamoDB, SNS, SQS) trigger execution. Logs automatically go to CloudWatch. Cold starts add latency on first invocation after inactivity.
+
+**Advantages:**
+```
+✓ No infrastructure management
+✓ Auto-scaling
+✓ Cost-effective (pay per use)
+✓ Quick deployment
+✓ Integrates with 200+ AWS services
+```
+
+**Limitations:**
+```
+✗ Max execution time: 15 minutes
+✗ Ephemeral storage: 512 MB
+✗ Cold start latency
+✗ Memory limit: 10,240 MB
+```
+
+### Elastic Beanstalk
+**Theory:**
+- Platform as a Service (PaaS)
+- Simplifies web app deployment
+- Automatically handles capacity provisioning, load balancing, scaling
+- Supports: Java, .NET, PHP, Python, Node.js, Go, Ruby
+
+**Architecture:**
+```
+Application
+├─ Environment (dev, staging, prod)
+│  ├─ EC2 instances
+│  ├─ Auto Scaling Group
+│  ├─ Load Balancer
+│  └─ RDS (optional)
+└─ Configuration & versioning
+```
+
+---
+
+## Storage Services
+
+### EBS (Elastic Block Store)
+**Theory:**
+- Block storage for EC2 instances
+- Persistent: survives instance termination (if configured)
+- Snapshots: point-in-time backups
+
+**Volume Types:**
+```
+gp3/gp2        → General purpose (default)
+io1/io2        → High IOPS (databases, NoSQL)
+st1            → Throughput optimized (big data, logs)
+sc1            → Cold storage
+```
+
+**Example: EBS Implementation (Complete Setup)**
+
+*Step 1: Create Volume*
+```bash
+aws ec2 create-volume \
+  --size 100 \
+  --availability-zone us-east-1a \
+  --volume-type gp3 \
+  --iops 3000 \
+  --throughput 125 \
+  --tag-specifications 'ResourceType=volume,Tags=[{Key=Name,Value=DataVolume}]'
+```
+
+*Step 2: Attach to EC2 Instance*
+```bash
+aws ec2 attach-volume \
+  --volume-id vol-xxxxxxxx \
+  --instance-id i-xxxxxxxx \
+  --device /dev/sdf
+```
+
+*Step 3: SSH to Instance and Mount Volume*
+```bash
+ssh -i key.pem ec2-user@<ip>
+
+# Check attached volumes
+lsblk
+
+# Create filesystem (if new volume)
+sudo mkfs.ext4 /dev/nvme1n1
+
+# Create mount point
+sudo mkdir /data
+
+# Mount volume
+sudo mount /dev/nvme1n1 /data
+
+# Verify
+df -h
+```
+
+*Step 4: Make Mount Persistent (Auto-mount after reboot)*
+```bash
+# Get UUID
+sudo blkid
+
+# Edit fstab
+sudo nano /etc/fstab
+# Add: UUID=xxxx /data ext4 defaults,nofail 0 2
+
+# Verify
+sudo mount -a
+```
+
+*Step 5: Create Snapshot for Backup*
+```bash
+aws ec2 create-snapshot \
+  --volume-id vol-xxxxxxxx \
+  --description "Backup of data volume" \
+  --tag-specifications 'ResourceType=snapshot,Tags=[{Key=Name,Value=DataBackup}]'
+```
+
+*Step 6: Create Volume from Snapshot*
+```bash
+aws ec2 create-volume \
+  --snapshot-id snap-xxxxxxxx \
+  --availability-zone us-east-1a \
+  --volume-type gp3
+```
+
+**Theory:** EBS provides persistent block storage. Unlike ephemeral storage, EBS survives instance termination. Snapshots enable point-in-time recovery and disaster recovery.
+
+### EFS (Elastic File System)
+**Theory:**
+- Managed NFS (Network File System)
+- Shared across multiple EC2 instances
+- Auto-scaling: grows/shrinks as needed
+- Use case: shared application data, content management
+
+---
+
+## Database Services
+
+### RDS (Relational Database Service)
+**Theory:**
+- Managed relational database service
+- AWS handles: backups, patches, replication, failover
+- Supports: MySQL, PostgreSQL, Oracle, SQL Server, MariaDB, Aurora
+- No SSH access (managed infrastructure)
+- Automatic minor version upgrades
+- Automatic backups (1-35 days retention)
+- Scales with minimal downtime
+
+**Key Deployment Options:**
+
+```
+1. Single-AZ Deployment
+   ├─ Single database instance
+   ├─ No automated failover
+   ├─ No redundancy
+   └─ Cheaper but risky for production
+
+2. Multi-AZ Deployment (High Availability)
+   ├─ Primary + Standby (different AZ)
+   ├─ Synchronous replication (zero data loss)
+   ├─ Automatic failover (~1-2 minutes)
+   ├─ Same endpoint (no app changes needed)
+   ├─ ~2x cost (two instances)
+   └─ RTO ≈ 1-2 min, RPO ≈ 0 seconds
+
+3. Read Replicas (Read Scaling)
+   ├─ Asynchronous replication (slight lag)
+   ├─ Separate endpoints (app changes needed)
+   ├─ Can span regions (cross-region DR)
+   ├─ Promoted to standalone if needed
+   └─ Pay for storage/bandwidth
+```
+
+**High Availability Architecture:**
+
+```
+Route 53 (DNS)
+    ↓
+Application
+    ↓
+RDS Multi-AZ
+├─ Primary (AZ-1)
+│  └─ Active, accepts writes
+│
+└─ Standby (AZ-2)
+   ├─ Sync replica
+   ├─ Not accessible during normal operation
+   └─ Promoted on primary failure
+   
+If Primary fails:
+1. Detection (~10-30 sec)
+2. Failover initiated
+3. Standby promoted to primary
+4. DNS updated
+5. Application reconnects
+```
+
+**Backup and Recovery:**
+
+```
+Automated Backups
+├─ Daily snapshot + transaction logs
+├─ Retention: 1-35 days (default 7)
+├─ Free (within retention period)
+├─ Point-in-time recovery (to any second)
+└─ Automatic deletion after retention expires
+
+Manual Snapshots
+├─ User-initiated backup
+├─ No automatic deletion
+├─ Can copy to another region
+└─ Stored in S3 (encrypted)
+
+Restore Options:
+1. Restore to new instance (different name)
+2. Cannot restore over existing instance
+3. Restoration time: depends on snapshot size
+4. Restored instance starts in Single-AZ mode
+```
+
+**Features:**
+```
+Multi-AZ        → Synchronous replication for HA
+Read Replicas   → Async replication for read scaling
+Automated backups → Daily backups, 35-day retention
+Encryption      → At-rest (KMS) and in-transit (SSL/TLS)
+Performance Insights → Database performance monitoring
+Parameter Groups → Configuration management
+```
+
+**Example: RDS Implementation (Complete Setup)**
+
+*Step 1: Create RDS Instance*
+```bash
+aws rds create-db-instance \
+  --db-instance-identifier mydb \
+  --db-instance-class db.t3.micro \
+  --engine mysql \
+  --engine-version 8.0.35 \
+  --master-username admin \
+  --master-user-password MySecurePassword123! \
+  --allocated-storage 20 \
+  --storage-type gp3 \
+  --backup-retention-period 7 \
+  --multi-az \
+  --publicly-accessible false \
+  --db-subnet-group-name default \
+  --vpc-security-group-ids sg-xxxxxxxx \
+  --tags Key=Environment,Value=Production
+```
+
+*Step 2: Wait for Instance to be Available*
+```bash
+aws rds wait db-instance-available --db-instance-identifier mydb
+
+# Get endpoint
+aws rds describe-db-instances \
+  --db-instance-identifier mydb \
+  --query 'DBInstances[0].Endpoint.Address' \
+  --output text
+```
+
+*Step 3: Connect to RDS Database*
+```bash
+mysql -h mydb.xxxxxxxxx.us-east-1.rds.amazonaws.com -u admin -p
+# Enter password when prompted
+```
+
+*Step 4: Create Read Replica for Scaling*
+```bash
+aws rds create-db-instance-read-replica \
+  --db-instance-identifier mydb-replica \
+  --source-db-instance-identifier mydb \
+  --db-instance-class db.t3.micro
+```
+
+*Step 5: Enable Automated Backups & Point-in-Time Recovery*
+```bash
+aws rds modify-db-instance \
+  --db-instance-identifier mydb \
+  --backup-retention-period 35 \
+  --preferred-backup-window "03:00-04:00" \
+  --apply-immediately
+```
+
+*Step 6: Create Manual Snapshot*
+```bash
+aws rds create-db-snapshot \
+  --db-instance-identifier mydb \
+  --db-snapshot-identifier mydb-backup-2024-12-24
+```
+
+**Python Implementation:**
+```python
+import boto3
+import pymysql
+from pymysql.err import OperationalError
+
+rds = boto3.client('rds')
+
+# Get RDS endpoint
+def get_rds_endpoint(db_instance_id):
+    response = rds.describe_db_instances(DBInstanceIdentifier=db_instance_id)
+    return response['DBInstances'][0]['Endpoint']['Address']
+
+# Connect to database
+def connect_db(host, user, password, database):
+    try:
+        conn = pymysql.connect(
+            host=host,
+            user=user,
+            password=password,
+            database=database
+        )
+        return conn
+    except OperationalError as e:
+        print(f"Connection error: {e}")
+        return None
+
+# Execute query
+def execute_query(conn, query):
+    cursor = conn.cursor()
+    cursor.execute(query)
+    conn.commit()
+    cursor.close()
+
+# Fetch data
+def fetch_data(conn, query):
+    cursor = conn.cursor()
+    cursor.execute(query)
+    results = cursor.fetchall()
+    cursor.close()
+    return results
+
+# Usage
+endpoint = get_rds_endpoint('mydb')
+conn = connect_db(endpoint, 'admin', 'password', 'mydatabase')
+
+if conn:
+    execute_query(conn, "CREATE TABLE users (id INT, name VARCHAR(100))")
+    execute_query(conn, "INSERT INTO users VALUES (1, 'John')")
+    
+    data = fetch_data(conn, "SELECT * FROM users")
+    for row in data:
+        print(row)
+    
+    conn.close()
+```
+
+**Theory:** RDS is managed database service. AWS handles backups, patches, replication. Multi-AZ ensures high availability with automatic failover. Read replicas enable horizontal scaling for read-heavy workloads.
+
+### DynamoDB
+**Theory:**
+- Fully managed NoSQL database
+- Millisecond latency
+- Serverless: auto-scaling
+- Key-value and document data model
+
+**Pricing Model:**
+```
+Provisioned Mode    → Pay for reserved capacity
+On-Demand Mode      → Pay per request (auto-scaling)
+```
+
+**Example: DynamoDB Implementation (Complete Workflow)**
+
+*Step 1: Create Table*
+```bash
+aws dynamodb create-table \
+  --table-name Users \
+  --attribute-definitions \
+    AttributeName=userId,AttributeType=S \
+    AttributeName=createdAt,AttributeType=N \
+  --key-schema \
+    AttributeName=userId,KeyType=HASH \
+    AttributeName=createdAt,KeyType=RANGE \
+  --billing-mode PAY_PER_REQUEST
+```
+
+*Step 2: Wait for Table to be Active*
+```bash
+aws dynamodb wait table-exists --table-name Users
+```
+
+*Step 3: Enable Point-in-Time Recovery*
+```bash
+aws dynamodb update-continuous-backups \
+  --table-name Users \
+  --point-in-time-recovery-specification PointInTimeRecoveryEnabled=true
+```
+
+**Python Implementation (Complete CRUD):**
+```python
+import boto3
+from boto3.dynamodb.conditions import Key, Attr
+from decimal import Decimal
+import time
+
+# Connect to DynamoDB
+dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+table = dynamodb.Table('Users')
+
+# CREATE - Put item
+def create_user(user_id, name, email, age):
+    item = {
+        'userId': user_id,
+        'createdAt': Decimal(str(time.time())),
+        'name': name,
+        'email': email,
+        'age': age
+    }
+    table.put_item(Item=item)
+    print(f"Created user: {user_id}")
+
+# READ - Get single item
+def get_user(user_id, created_at):
+    response = table.get_item(
+        Key={
+            'userId': user_id,
+            'createdAt': Decimal(str(created_at))
+        }
+    )
+    return response.get('Item')
+
+# READ - Query with sort key
+def get_user_history(user_id):
+    response = table.query(
+        KeyConditionExpression=Key('userId').eq(user_id)
+    )
+    return response['Items']
+
+# READ - Scan with filter
+def find_users_by_age(min_age, max_age):
+    response = table.scan(
+        FilterExpression=Attr('age').between(min_age, max_age)
+    )
+    return response['Items']
+
+# UPDATE - Update item
+def update_user(user_id, created_at, **attributes):
+    update_expr = 'SET ' + ', '.join([f'{k} = :{k}' for k in attributes.keys()])
+    expr_values = {f':{k}': v for k, v in attributes.items()}
+    
+    response = table.update_item(
+        Key={'userId': user_id, 'createdAt': Decimal(str(created_at))},
+        UpdateExpression=update_expr,
+        ExpressionAttributeValues=expr_values,
+        ReturnValues='ALL_NEW'
+    )
+    return response['Attributes']
+
+# DELETE - Delete item
+def delete_user(user_id, created_at):
+    table.delete_item(
+        Key={
+            'userId': user_id,
+            'createdAt': Decimal(str(created_at))
+        }
+    )
+    print(f"Deleted user: {user_id}")
+
+# BATCH WRITE - Insert multiple items
+def batch_create_users(users_list):
+    with table.batch_writer(batch_size=25) as batch:
+        for user in users_list:
+            batch.put_item(Item=user)
+    print(f"Batch inserted {len(users_list)} users")
+
+# Usage example
+if __name__ == "__main__":
+    # Create
+    create_user('user1', 'John Doe', 'john@example.com', 30)
+    create_user('user2', 'Jane Smith', 'jane@example.com', 28)
+    
+    # Read
+    user = get_user('user1', time.time())
+    print(f"User: {user}")
+    
+    # Update
+    updated = update_user('user1', time.time(), age=31)
+    print(f"Updated: {updated}")
+    
+    # Query
+    users = find_users_by_age(25, 35)
+    print(f"Found {len(users)} users")
+    
+    # Delete
+    delete_user('user1', time.time())
+```
+
+**Advanced: Global Secondary Index (GSI)**
+```bash
+aws dynamodb update-table \
+  --table-name Users \
+  --attribute-definitions AttributeName=email,AttributeType=S \
+  --global-secondary-index-updates \
+    '[{
+      "Create": {
+        "IndexName": "EmailIndex",
+        "Keys": [
+          {"AttributeName": "email", "KeyType": "HASH"}
+        ],
+        "Projection": {"ProjectionType": "ALL"},
+        "BillingMode": "PAY_PER_REQUEST"
+      }
+    }]'
+```
+
+**Theory:** DynamoDB is NoSQL database with millisecond latency. It scales automatically and is serverless. GSI enables querying by alternate keys. Partition key (HASH) determines item distribution; sort key (RANGE) enables range queries.
+
+### ElastiCache
+**Theory:**
+- Managed in-memory caching
+- Redis or Memcached
+- Sub-millisecond latency
+- Use case: sessions, caching, real-time analytics
+
+---
+
+## Networking Services
+
+### Route 53
+**Theory:**
+- Managed DNS service
+- Domain registration
+- Health checks and failover
+- Routing policies: simple, weighted, latency-based, geolocation
+
+**Example: Weighted Routing**
+```
+User Request
+    ↓
+Route 53 (DNS Query)
+    ├─ 70% → Server-A (us-east-1)
+    └─ 30% → Server-B (eu-west-1)
+```
+
+### CloudFront
+**Theory:**
+- Content Delivery Network (CDN)
+- Caches content at 500+ edge locations
+- Reduces latency
+- DDoS protection
+
+**Use Cases:**
+```
+- Static content (HTML, CSS, JS, images)
+- Video streaming
+- API acceleration
+- Application acceleration
+```
+
+### API Gateway
+**Theory:**
+- Create, publish, manage APIs
+- RESTful APIs and WebSocket APIs
+- Authentication & authorization
+- Rate limiting, throttling
+
+**Architecture:**
+```
+Client
+  ↓
+API Gateway
+  ├─ Authentication (Cognito, custom authorizer)
+  ├─ Validation
+  ├─ Rate limiting
+  └─ Request/Response transformation
+  ↓
+Backend (Lambda, EC2, etc.)
+```
+
+---
+
+## Security & IAM
+
+### IAM (Identity & Access Management)
+**Theory:**
+- Centralized access management
+- Principle of least privilege: grant minimum permissions needed
+- No additional cost (free service)
+- Global service (not region-specific)
+- 5000 IAM users per account (default limit)
+- Credentials can be programmatic (access key) or console (password)
+
+**Key Concepts:**
+
+1. **IAM Policy Evaluation Logic**
+   ```
+   Access Decision Tree:
+   ┌─ Explicit Deny exists? ───→ DENY (end of story)
+   │
+   ├─ Permissions Boundary denies? ───→ DENY
+   │
+   ├─ Resource-based policy allows? ───→ ALLOW
+   │
+   ├─ Identity-based policy allows? ───→ ALLOW
+   │
+   ├─ Service Control Policy (SCP) allows? ───→ Allow
+   │
+   └─ DEFAULT ───→ DENY (implicit deny)
+   
+   Rules:
+   • One explicit DENY overrides all ALLOWs
+   • Permissions Boundary acts as max ceiling
+   • Both identity-based AND resource-based must allow
+   ```
+
+2. **ARN (Amazon Resource Name) Format**
+   ```
+   arn:partition:service:region:account-id:resource-type/resource-id
+   
+   Examples:
+   ├─ arn:aws:iam::123456789012:user/john
+   ├─ arn:aws:s3:::mybucket/*
+   ├─ arn:aws:ec2:us-east-1:123456789012:instance/i-1234567890abcdef0
+   └─ arn:aws:rds:us-east-1:123456789012:db:mydb
+   
+   Wildcards:
+   * = any string
+   ? = any single character
+   ```
+
+3. **Trust Relationships (AssumeRole)**
+   ```python
+   # What entity can assume this role?
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Principal": {
+           "Service": "lambda.amazonaws.com"
+         },
+         "Action": "sts:AssumeRole"
+       }
+     ]
+   }
+   ```
+
+4. **Policy Conditions**
+   ```
+   Restricting access based on:
+   ├─ IP address: aws:SourceIp
+   ├─ Time: aws:CurrentTime
+   ├─ Request source: aws:SourceVpc
+   ├─ MFA: aws:MultiFactorAuthPresent
+   └─ Username: aws:username
+   ```
+
+**Components:**
+```
+User        → Individual person with credentials
+Group       → Collection of users (inherit policies)
+Role        → Set of permissions (assumed by users/services)
+Policy      → JSON document defining permissions
+```
+
+**Policy Structure:**
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject"],
+      "Resource": "arn:aws:s3:::mybucket/*",
+      "Condition": {
+        "IpAddress": {
+          "aws:SourceIp": "192.0.2.0/24"
+        }
+      }
+    }
+  ]
+}
+```
+
+**Policy Types:**
+```
+Identity-Based      → Attached to users/roles (most common)
+Resource-Based      → Attached to resources (S3 bucket, SQS)
+Permissions Boundary → Maximum permissions limit (ceiling)
+Service Control Policy → Organization-level policies
+```
+
+**Best Practices:**
+```
+✓ Enable MFA on root account
+✓ Create IAM users for each person
+✓ Use groups for easier permission management
+✓ Apply principle of least privilege
+✓ Enable CloudTrail for audit
+✓ Use roles for cross-account access
+✓ Never embed credentials in code
+✓ Rotate access keys every 90 days
+✓ Remove unused permissions regularly
+✓ Use Secrets Manager for sensitive data
+```
+
+### Cognito
+**Theory:**
+- User authentication & authorization
+- Sign-up, sign-in, MFA
+- Social login integration (Google, Facebook, Amazon)
+- JWT tokens
+
+**Example: Cognito User Pool**
+```
+User Pool (User directory)
+  ├─ User attributes (email, name, custom)
+  ├─ MFA options
+  └─ Password policy
+
+App Client
+  ├─ Client ID & Secret
+  └─ OAuth scopes
+```
+
+### KMS (Key Management Service)
+**Theory:**
+- Encryption key management
+- CMK (Customer Master Key) types:
+  - AWS-managed: free
+  - Customer-managed: cost per month
+- Integration with S3, EBS, RDS, Lambda
+
+**Example: Encrypt with KMS**
+```bash
+aws kms encrypt \
+  --key-id arn:aws:kms:us-east-1:xxxx:key/xxxx \
+  --plaintext "MySecret"
+```
+
+### Secrets Manager
+**Theory:**
+- Store & rotate secrets
+- Database credentials, API keys, tokens
+- Automatic rotation
+- Audit trail
+
+---
+
+## Monitoring & Logging
+
+### CloudWatch
+**Theory:**
+- Monitoring & logging service
+- Metrics, logs, alarms
+- Dashboards for visualization
+- Log retention policies
+
+**Key Components:**
+```
+Metrics         → Data points (CPU, memory, requests)
+Logs            → Application/system logs
+Alarms          → Trigger actions when threshold exceeded
+Dashboards      → Custom visualizations
+```
+
+**Example: Create Alarm**
+```bash
+aws cloudwatch put-metric-alarm \
+  --alarm-name high-cpu \
+  --metric-name CPUUtilization \
+  --namespace AWS/EC2 \
+  --statistic Average \
+  --period 300 \
+  --threshold 80 \
+  --comparison-operator GreaterThanThreshold \
+  --alarm-actions arn:aws:sns:us-east-1:xxx:MyTopic
+```
+
+### CloudTrail
+**Theory:**
+- API audit logging
+- Track who did what and when
+- Compliance & security monitoring
+- Multi-region support
+
+**Logs Include:**
+```
+- User identity
+- Time of action
+- Source IP
+- Request parameters
+- Response
+```
+
+### X-Ray
+**Theory:**
+- Distributed tracing
+- Visualize request flow through services
+- Performance insights
+- Error analysis
+
+---
+
+## DevOps & Deployment
+
+### CodePipeline
+**Theory:**
+- Continuous integration/deployment (CI/CD)
+- Orchestrates build, test, deploy stages
+- Integration with GitHub, CodeCommit, etc.
+
+**Pipeline Stages:**
+```
+Source (GitHub)
+  ↓
+Build (CodeBuild)
+  ↓
+Test (CodeBuild/Jenkins)
+  ↓
+Deploy (CodeDeploy/CloudFormation)
+  ↓
+Production
+```
+
+### CodeDeploy
+**Theory:**
+- Automates application deployments
+- On-premises, EC2, Lambda
+- Blue/Green deployments
+- Canary deployments
+
+**Deployment Strategies:**
+```
+All at once          → Deploy to all instances
+Rolling              → Deploy to subset, monitor, repeat
+Blue/Green          → Two identical environments, switch traffic
+Canary              → Deploy to 10%, then remaining 90%
+```
+
+### CloudFormation
+**Theory:**
+- Infrastructure as Code (IaC)
+- Template-based deployment
+- YAML/JSON format
+- Version control & repeatable deployments
+
+**Template Structure:**
+```yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template'
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t3.micro
+
+Resources:
+  MyEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-xxxxx
+      InstanceType: !Ref InstanceType
+
+Outputs:
+  InstanceId:
+    Value: !Ref MyEC2Instance
+```
+
+### SAM (Serverless Application Model)
+**Theory:**
+- Extension of CloudFormation
+- Simplifies serverless app deployment
+- Supports Lambda, API Gateway, DynamoDB
+
+**Example SAM Template:**
+```yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Resources:
+  HelloWorldFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: index.handler
+      Runtime: python3.9
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /hello
+            Method: GET
+```
+
+---
+
+## Practical Implementation Scenarios
+
+### Scenario 1: Building a Serverless Web Application
+
+**Architecture:**
+```
+User → CloudFront (CDN) → API Gateway → Lambda → DynamoDB
+                          ↓
+                         S3 (static content)
+```
+
+**Implementation Steps:**
+
+1. **Setup S3 for Static Content**
+```bash
+# Create bucket for React app
+aws s3 mb s3://myapp-frontend-prod
+
+# Enable static website hosting
+aws s3api put-bucket-website \
+  --bucket myapp-frontend-prod \
+  --website-configuration '{"IndexDocument": {"Suffix": "index.html"}}'
+
+# Block public access but enable CloudFront
+aws s3api put-bucket-policy --bucket myapp-frontend-prod --policy '{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {"AWS": "arn:aws:iam::ACCOUNT_ID:root"},
+    "Action": "s3:GetObject",
+    "Resource": "arn:aws:s3:::myapp-frontend-prod/*"
+  }]
+}'
+```
+
+2. **Deploy React App**
+```bash
+# Build React app
+cd react-frontend
+npm run build
+
+# Upload to S3
+aws s3 sync build/ s3://myapp-frontend-prod
+```
+
+3. **Setup CloudFront CDN**
+```bash
+aws cloudfront create-distribution \
+  --origin-domain-name myapp-frontend-prod.s3.amazonaws.com \
+  --default-root-object index.html
+```
+
+4. **Create Lambda Function for API**
+```
+# See Lambda examples above
+```
+
+5. **Setup API Gateway**
+```
+# See API Gateway examples above
+```
+
+6. **Create DynamoDB Table**
+```
+# See DynamoDB examples above
+```
+
+### Scenario 2: Multi-Region Disaster Recovery Setup
+
+**Requirements:**
+- RTO: 1 hour
+- RPO: 15 minutes
+- Active-passive failover
+
+**Implementation:**
+```bash
+# Primary Region: us-east-1
+# Disaster Region: us-west-2
+
+# Step 1: Setup RDS Read Replica in another region
+aws rds create-db-instance-read-replica \
+  --db-instance-identifier primary-db-replica \
+  --source-db-instance-identifier primary-db \
+  --db-instance-class db.t3.micro \
+  --availability-zone us-west-2a
+
+# Step 2: Create automated snapshots
+aws rds modify-db-instance \
+  --db-instance-identifier primary-db \
+  --backup-retention-period 35
+
+# Step 3: Copy snapshots to disaster region
+aws rds copy-db-snapshot \
+  --source-db-snapshot-identifier snapshot-id \
+  --target-db-snapshot-identifier snapshot-id-copy \
+  --source-region us-east-1 \
+  --destination-region us-west-2
+
+# Step 4: S3 cross-region replication
+aws s3api put-bucket-replication \
+  --bucket primary-bucket \
+  --replication-configuration '{
+    "Role": "arn:aws:iam::ACCOUNT:role/s3-replication",
+    "Rules": [{
+      "Status": "Enabled",
+      "Priority": 1,
+      "DeleteMarkerReplication": {"Status": "Enabled"},
+      "Filter": {"Prefix": ""},
+      "Destination": {
+        "Bucket": "arn:aws:s3:::backup-bucket",
+        "ReplicationTime": {"Status": "Enabled", "Time": {"Minutes": 15}}
+      }
+    }]
+  }'
+```
+
+### Scenario 3: Auto-Scaling Web Application on EC2
+
+**Architecture:**
+```
+Internet → ALB (Application Load Balancer)
+           ├─ EC2 Instance 1
+           ├─ EC2 Instance 2
+           └─ EC2 Instance 3 (auto-scaled)
+```
+
+**Implementation:**
+```bash
+# Step 1: Create AMI from configured instance
+aws ec2 create-image \
+  --instance-id i-xxxxxxxx \
+  --name my-app-ami
+
+# Step 2: Create Launch Template
+aws ec2 create-launch-template \
+  --launch-template-name my-app-template \
+  --launch-template-data '{\"ImageId\": \"ami-xxxxxxxx\", \"InstanceType\": \"t3.micro\"}'
+
+# Step 3: Create Auto Scaling Group
+aws autoscaling create-auto-scaling-group \
+  --auto-scaling-group-name my-app-asg \
+  --launch-template LaunchTemplateName=my-app-template,Version="$Default" \
+  --min-size 2 \
+  --max-size 6 \
+  --desired-capacity 3 \
+  --availability-zones us-east-1a us-east-1b us-east-1c
+
+# Step 4: Create Scaling Policy (Scale Up)
+aws autoscaling put-scaling-policy \
+  --auto-scaling-group-name my-app-asg \
+  --policy-name scale-up \
+  --policy-type TargetTrackingScaling \
+  --target-tracking-configuration '{
+    "TargetValue": 70,
+    "PredefinedMetricSpecification": {
+      "PredefinedMetricType": "ASGAverageCPUUtilization"
+    }
+  }'
+```
+
+### Scenario 4: Monitoring and Logging Stack
+
+**Implementation:**
+```python
+import boto3
+import json
+from datetime import datetime, timedelta
+
+cloudwatch = boto3.client('cloudwatch')
+logs = boto3.client('logs')
+
+# Create Log Group
+def create_log_group(group_name):
+    try:
+        logs.create_log_group(logGroupName=group_name)
+        logs.put_retention_policy(
+            logGroupName=group_name,
+            retentionInDays=30
+        )
+        print(f"Created log group: {group_name}")
+    except logs.exceptions.ResourceAlreadyExistsException:
+        print(f"Log group {group_name} already exists")
+
+# Put Metric Data
+def put_metric(metric_name, value, unit='Count'):
+    cloudwatch.put_metric_data(
+        Namespace='MyApp',
+        MetricData=[
+            {
+                'MetricName': metric_name,
+                'Value': value,
+                'Unit': unit,
+                'Timestamp': datetime.utcnow()
+            }
+        ]
+    )
+
+# Create Alarm
+def create_alarm(alarm_name, metric_name, threshold, comparison_operator):
+    cloudwatch.put_metric_alarm(
+        AlarmName=alarm_name,
+        MetricName=metric_name,
+        Namespace='MyApp',
+        Statistic='Average',
+        Period=300,
+        EvaluationPeriods=1,
+        Threshold=threshold,
+        ComparisonOperator=comparison_operator,
+        AlarmActions=['arn:aws:sns:us-east-1:ACCOUNT:alert-topic']
+    )
+
+# Query Logs
+def query_logs(log_group, query_string):
+    response = logs.start_query(
+        logGroupName=log_group,
+        startTime=int((datetime.now() - timedelta(hours=1)).timestamp()),
+        endTime=int(datetime.now().timestamp()),
+        queryString=query_string
+    )
+    query_id = response['queryId']
+    return query_id
+
+# Usage
+if __name__ == "__main__":
+    create_log_group('/aws/myapp/application')
+    put_metric('UserSignups', 15, 'Count')
+    put_metric('APILatency', 250, 'Milliseconds')
+    create_alarm('HighCPU', 'CPUUtilization', 80, 'GreaterThanThreshold')
+```
+
+---
+
+## Common Gotchas & Troubleshooting
+
+### EC2 Connection Issues
+**Problem:** "Permission denied (publickey)" when SSH
+```bash
+# Solution: Fix key permissions
+chmod 400 MyKey.pem
+
+# Check security group allows SSH (port 22)
+aws ec2 describe-security-groups --group-ids sg-xxxxxxxx
+
+# Verify instance has public IP
+aws ec2 describe-instances --instance-ids i-xxxxxxxx
+```
+
+### Lambda Cold Start Performance
+**Problem:** First invocation takes 1-2 seconds
+```bash
+# Solution: Use Provisioned Concurrency
+aws lambda put-provisioned-concurrency-config \
+  --function-name my-function \
+  --provisioned-concurrent-executions 5 \
+  --qualifier LIVE
+```
+
+### S3 Access Denied
+**Problem:** "Access Denied" when accessing S3
+```bash
+# Solution: Check bucket policy and IAM permissions
+aws s3api get-bucket-policy --bucket my-bucket
+
+# Check IAM user/role has s3:GetObject permission
+aws iam get-user-policy --user-name john --policy-name
+```
+
+### RDS Connection Timeout
+**Problem:** Cannot connect to RDS database
+```bash
+# Solution: Check security group and subnet
+aws rds describe-db-instances --db-instance-identifier mydb
+
+# Verify security group allows port 3306 from your IP
+aws ec2 describe-security-groups --group-ids sg-xxxxxxxx
+```
+
+### DynamoDB Throttling
+**Problem:** "ProvisionedThroughputExceededException"
+```bash
+# Solution: Increase capacity or use on-demand billing
+aws dynamodb update-billing-mode \
+  --table-name Users \
+  --billing-mode PAY_PER_REQUEST
+```
+
+### CloudFormation Stack Failure
+**Problem:** Stack creation failed
+```bash
+# Check stack events
+aws cloudformation describe-stack-events \
+  --stack-name my-stack \
+  --query 'StackEvents[?ResourceStatus==`CREATE_FAILED`]'
+
+# Rollback and retry
+aws cloudformation delete-stack --stack-name my-stack
+```
+
+---
+
+### Security Best Practices
+```
+✓ Enable MFA for root account
+✓ Use IAM users (never root for daily tasks)
+✓ Enable CloudTrail for audit
+✓ Encrypt data at rest & in transit
+✓ Use VPC for network isolation
+✓ Apply principle of least privilege
+✓ Rotate credentials regularly
+✓ Enable versioning on S3 buckets
+✓ Use Secrets Manager for sensitive data
+✓ Enable VPC Flow Logs
+```
+
+### Cost Optimization
+```
+✓ Use Reserved Instances for predictable workloads
+✓ Spot Instances for non-critical, flexible workloads
+✓ Terminate unused resources
+✓ Use Auto Scaling to match demand
+✓ Right-size instances (monitor and adjust)
+✓ Use CloudFront for static content
+✓ Enable S3 Intelligent-Tiering
+✓ Monitor costs with AWS Cost Explorer
+✓ Use AWS Budgets for alerts
+✓ Consolidate data transfers
+```
+
+### High Availability & Disaster Recovery
+```
+Multi-AZ Deployment:
+  ├─ Database replication
+  ├─ Load balancer distribution
+  └─ Auto Scaling groups
+
+Backup Strategy:
+  ├─ Daily automated backups
+  ├─ Cross-region replication
+  ├─ Point-in-time recovery
+  └─ Test restore procedures
+
+RTO (Recovery Time Objective):  Target time to recover
+RPO (Recovery Point Objective): Target data loss acceptable
+```
+
+### Performance Optimization
+```
+✓ Use caching (CloudFront, ElastiCache)
+✓ Database indexing
+✓ Connection pooling
+✓ Async processing (SQS, Lambda)
+✓ CDN for global distribution
+✓ Monitor with CloudWatch metrics
+✓ Load testing before production
+✓ Use Auto Scaling policies
+```
+
+---
+
+## Interview Q&A
+
+### Q1: What is the difference between RDS and DynamoDB?
+**A:**
+```
+RDS (Relational)          DynamoDB (NoSQL)
+─────────────────────────────────────────────────
+SQL queries               Key-value queries
+ACID transactions         Eventually consistent
+Structured data           Flexible schema
+Vertical scaling          Horizontal scaling
+Complex relationships     Denormalized data
+Good for: Finance         Good for: Real-time, IoT
+```
+
+### Q2: Explain AWS Global Infrastructure
+**A:**
+```
+Region: Geographically isolated area (e.g., us-east-1)
+  └─ Availability Zone: Isolated data centers (us-east-1a, 1b, 1c)
+     └─ Edge Location: CDN cache points (~500+ globally)
+     
+High Availability:
+- Deploy across multiple AZs
+- RDS Multi-AZ for database HA
+- Auto Scaling across AZs
+- Load Balancer distributes traffic
+```
+
+### Q3: What is VPC and why do we need it?
+**A:**
+```
+VPC (Virtual Private Cloud):
+- Isolated network in AWS cloud
+- Control: IP ranges, subnets, routing, security groups
+- Multi-layer network: public, private, database subnets
+- Security groups & NACLs for traffic control
+
+Benefits:
+✓ Network isolation & security
+✓ Custom IP addressing
+✓ Hybrid cloud connectivity (VPN/Direct Connect)
+✓ VPC Peering for inter-VPC communication
+```
+
+### Q4: Explain IAM Policies and Roles
+**A:**
+```
+Policy: Permission document (JSON)
+├─ Effect: Allow/Deny
+├─ Action: What can be done (s3:GetObject)
+├─ Resource: What can be accessed (arn:aws:s3:::bucket/*)
+└─ Condition: When it applies (IP, time, etc.)
+
+Role: Collection of policies assumed by:
+├─ EC2 instances
+├─ Lambda functions
+├─ Users
+├─ Services
+└─ Cross-account entities
+
+Trust Relationship: Who can assume the role
+```
+
+### Q5: What is the difference between Security Groups and NACLs?
+**A:**
+```
+Security Group (Stateful)
+- Instance level
+- Allow/Deny rules
+- Stateful (return traffic auto-allowed)
+- Outbound: Allow all (default)
+- Inbound: Deny all (default)
+
+NACL (Stateless)
+- Subnet level
+- Allow/Deny rules
+- Stateless (must explicitly allow both directions)
+- Processed in order (first match wins)
+- Rule numbers determine priority
+```
+
+### Q6: How does Auto Scaling work?
+**A:**
+```
+Auto Scaling Policy:
+├─ Target Tracking Scaling (maintain metric)
+│  └─ Example: Keep CPU at 70%
+├─ Step Scaling (react to alarms)
+│  └─ Example: Add 2 instances if CPU > 80%
+└─ Scheduled Scaling (time-based)
+   └─ Example: Scale up weekdays, down weekends
+
+Process:
+1. CloudWatch alarm triggered (metric threshold)
+2. Auto Scaling Group receives notification
+3. Launches/terminates instances
+4. Deregisters from Load Balancer
+```
+
+### Q7: What is Lambda Cold Start?
+**A:**
+```
+Cold Start: Function invoked after inactivity
+Timeline:
+├─ Download code (~100ms)
+├─ Start container (~100-300ms)
+├─ Initialize runtime (~200-500ms)
+└─ Run handler code
+
+Mitigation:
+✓ Provisioned Concurrency (always warm)
+✓ Regular invocations (keep warm)
+✓ Smaller deployment package
+✓ Lightweight runtime (Python < Java)
+✓ Remove unnecessary dependencies
+```
+
+### Q8: Explain S3 Versioning and Lifecycle Policies
+**A:**
+```
+Versioning:
+- Keep multiple versions of objects
+- Protect from accidental deletion
+- Can retrieve previous versions
+- Increases storage costs
+
+Lifecycle Policies:
+- Transition to cheaper storage (Glacier after 30 days)
+- Expire old versions
+- Delete incomplete multipart uploads
+- Example: Move to Glacier after 30 days, delete after 1 year
+```
+
+### Q9: What is CloudFormation Drift?
+**A:**
+```
+Drift: Manual changes to resources after CloudFormation creation
+
+Detection:
+- CloudFormation detects differences
+- Compares actual vs template state
+- Generates drift report
+
+Resolution:
+✓ Update stack (template overrides manual changes)
+✓ Manual remediation (restore template state)
+✓ Document drift as intended
+```
+
+### Q10: Explain ELB vs ALB vs NLB
+**A:**
+```
+ELB (Classic Load Balancer)
+- Layer 4 (Transport)
+- Simple load balancing
+- Legacy, not recommended
+
+ALB (Application Load Balancer)
+- Layer 7 (Application)
+- Path-based routing (/api, /images)
+- Host-based routing (example.com, api.example.com)
+- HTTP/HTTPS
+- Good for: Microservices, containers
+
+NLB (Network Load Balancer)
+- Layer 4 (Transport)
+- Millions of requests/sec
+- Ultra-high performance
+- TCP/UDP
+- Good for: Real-time gaming, IoT, extreme performance
+```
+
+### Q11: What is CloudFront Origin and Distribution?
+**A:**
+```
+Distribution: CloudFront configuration
+├─ Origin: Source (S3, EC2, ALB)
+├─ Behaviors: Routing rules
+│  └─ Path pattern → Cache settings
+├─ Cache settings: TTL, compression
+└─ Geo-restrictions: Allow/block countries
+
+How it works:
+1. User requests content
+2. Nearest edge location checks cache
+3. If hit: return cached content
+4. If miss: fetch from origin
+5. Cache at edge location
+```
+
+### Q12: What are Reserved Instances and Savings Plans?
+**A:**
+```
+Reserved Instance (RI)
+- Commit 1-3 years
+- 30-72% discount vs on-demand
+- Instance family locked
+- Good for: Predictable, stable workloads
+
+Savings Plan
+- Commit 1-3 years
+- 10-72% discount
+- Flexible: any instance type/region
+- Good for: Diverse workloads
+
+Spot Instance
+- 90% discount
+- Can be interrupted
+- Good for: Flexible, non-critical workloads
+```
+
+---
+
+## COMPREHENSIVE INTERVIEW SCENARIOS & Q&A
+
+### SCENARIO-BASED INTERVIEWS
+
+---
+
+#### **SCENARIO 1: E-Commerce Platform Migration to AWS**
+
+**Context:**
+A legacy e-commerce company with 10M daily users needs to migrate to AWS. Requirements:
+- Handle 50,000 requests/second peak
+- 99.99% uptime
+- Global user base
+- Real-time inventory sync
+- $10M annual AWS budget
+
+**Q1: How would you architect this platform?**
+
+**A:**
+```
+Multi-Region Architecture:
+
+Primary: US-East-1              Secondary: EU-West-1
+├─ ALB (multi-AZ)              ├─ ALB (standby)
+├─ Auto Scaling (10-1000)       ├─ Auto Scaling (5-500)
+├─ RDS Aurora (primary)         ├─ RDS Aurora (read replica)
+├─ DynamoDB (global table)      └─ DynamoDB (global table)
+├─ ElastiCache (3 nodes)
+├─ S3 (primary)
+└─ Lambda (microservices)
+
+Traffic Distribution:
+Route 53 (health-aware)
+├─ 90% → US-East-1 (primary)
+├─ 10% → EU-West-1 (standby for testing)
+└─ Automatic failover if primary unhealthy
+
+Expected Costs:
+├─ EC2 (ASG): $50K/month
+├─ RDS Aurora: $20K/month
+├─ DynamoDB: $30K/month
+├─ ALB: $5K/month
+├─ CloudFront: $15K/month
+├─ ElastiCache: $5K/month
+└─ Other: $20K/month
+Total: $145K/month (vs $833K/month budget = good!)
+```
+
+**Q2: How would you handle 50,000 req/sec?**
+
+**A:**
+```
+Scaling Strategy:
+
+1. Static Content (80% of traffic)
+   ├─ CloudFront CDN (caches for 1 week)
+   ├─ Edge locations globally (~500)
+   ├─ Cache hit ratio: 90%+
+   └─ Reduces database load significantly
+
+2. Dynamic Requests (20% of traffic)
+   ├─ ALB distributes across AZs
+   ├─ Auto Scaling: maintains 70% CPU
+   ├─ RDS read replicas: 3x capacity
+   ├─ ElastiCache: 90% cache hit on queries
+   └─ Effective: 1000 concurrent requests/instance
+
+3. Database Optimization
+   ├─ RDS Proxy: connection pooling
+   ├─ Aurora: 5x faster than MySQL
+   ├─ Read replicas: separate analytical queries
+   └─ DynamoDB: unlimited scaling for inventory
+
+4. API Gateway
+   ├─ Request throttling: 50K req/sec
+   ├─ Caching: 300-3600 sec TTL
+   ├─ Request validation: early rejection
+   └─ Cost: ~$3K/month
+
+Calculation:
+- 50K req/sec × 86,400 sec/day = 4.3B requests/day
+- CloudFront caches 80% = 3.4B from cache (free!)
+- ALB handles 20% = 860M requests/day
+- 860M / (86,400 × 1000 req/sec) = 10 instances average
+- Auto Scaling: 10 baseline, 100 peak
+```
+
+**Q3: How would you ensure 99.99% uptime?**
+
+**A:**
+```
+High Availability Strategy:
+
+1. Multi-AZ Deployment
+   ├─ EC2 across 3 AZs
+   ├─ RDS Multi-AZ (sync failover)
+   ├─ ALB cross-AZ
+   └─ Single AZ failure: no downtime
+
+2. Database HA
+   ├─ Aurora Multi-AZ: < 30 sec failover
+   ├─ Automated backups: daily + continuous
+   ├─ Point-in-time recovery: 35 days
+   └─ Cross-region replica: regional DR
+
+3. Service-Level Monitoring
+   ├─ CloudWatch: all metrics
+   ├─ Alarms: CPU, memory, errors, latency
+   ├─ SNS: instant notifications
+   └─ PagerDuty: on-call escalation
+
+4. Graceful Degradation
+   ├─ Cache fallback (if DB down)
+   ├─ Read-only mode (if write fails)
+   ├─ Feature flags (disable expensive features)
+   └─ Error pages (user friendly)
+
+5. Disaster Recovery
+   ├─ RTO: 1-2 hours (promote EU replica)
+   ├─ RPO: < 5 minutes (continuous backup)
+   ├─ Monthly DR drills
+   └─ Automated failover scripts
+
+Uptime Math:
+99.99% = 52.6 min downtime/year
+Causes:
+├─ Planned maintenance: 30 min (monthly)
+├─ Unplanned incidents: 20 min (rare)
+└─ All other time: available
+```
+
+---
+
+#### **SCENARIO 2: Real-Time Analytics Pipeline (100K events/sec)**
+
+**Context:**
+SaaS company needs real-time dashboard updated every 5 seconds. 100K events/sec from users.
+
+**Q4: How would you design the data pipeline?**
+
+**A:**
+```
+Event Processing Architecture:
+
+Data Ingestion
+├─ API Gateway + Lambda
+├─ Kinesis Data Streams (sharded)
+│  └─ 50 shards = 100K events/sec
+├─ Transformation: Lambda
+└─ Storage: DynamoDB + S3
+
+Real-Time Analytics
+├─ Kinesis Data Analytics (SQL)
+├─ 5-minute windows
+├─ Aggregations: count, sum, avg
+└─ Output: DynamoDB
+
+Dashboard Update
+├─ DynamoDB Streams
+├─ Lambda (on update)
+├─ WebSocket (push to browser)
+└─ 5-second refresh
+
+Cost:
+- Kinesis: 50 shards × $0.10/hour = $36K/month
+- Lambda: $5K/month
+- DynamoDB: $10K/month
+- S3/Athena: $10K/month
+─────────────────
+Total: $61K/month
+
+Optimization: Use on-demand DynamoDB (-$5K)
+```
+
+**Q5: How would you handle 100K events/sec affordably?**
+
+**A:**
+```
+Cost Optimization:
+
+1. Reduce Kinesis Shards
+   ├─ Auto-scaling: 50 shards baseline
+   ├─ Peak: 100 shards
+   ├─ Savings: $18K/month (50%)
+   └─ Trade-off: Slight latency increase
+
+2. S3 + Athena (vs Redshift)
+   ├─ Store events in S3 (parquet)
+   ├─ Query with Athena
+   ├─ Cost: $5/TB × 30TB/month = $150
+   └─ Savings: $50K/month!
+
+3. ElastiCache Caching
+   ├─ Cache frequently viewed metrics
+   ├─ TTL: 5 minutes
+   ├─ Cost: ~$5K/month
+   └─ Reduces DynamoDB reads by 80%
+
+4. Batch Processing
+   ├─ Hourly batch (Glue + Spark)
+   ├─ Vs real-time processing
+   ├─ Cost: $10K/month
+   └─ Trade-off: Hourly vs 5-sec updates
+
+Optimized Pipeline Cost:
+- Kinesis (optimized): $20K
+- Lambda: $5K
+- DynamoDB (on-demand): $5K
+- S3 + Athena: $1K
+- ElastiCache: $5K
+────────────────
+Total: $36K/month (40% reduction!)
+```
+
+---
+
+#### **SCENARIO 3: Multi-Tenant SaaS Database Design**
+
+**Context:**
+Design database for 1000s of customers with strong isolation and compliance requirements.
+
+**Q6: What database approach would you choose?**
+
+**A:**
+```
+Multi-Tenancy Options Comparison:
+
+1. Database Per Tenant (Maximum isolation)
+   ├─ 1000 customers = 1000 RDS instances
+   ├─ Cost: $200/instance × 1000 = $200K/month 😱
+   ├─ Pros: Extreme isolation, HIPAA-ready
+   ├─ Cons: Expensive, operational nightmare
+   └─ Use case: Highly regulated, few customers
+
+2. Schema Per Tenant (Medium isolation)
+   ├─ 1 RDS instance, 1000 schemas
+   ├─ Cost: $10K/month
+   ├─ Pros: Reasonable isolation
+   ├─ Cons: Complex management, query isolation needed
+   └─ Use case: Enterprise SaaS
+
+3. Row-Level Tenancy (Recommended)
+   ├─ 1 Aurora instance, tenant_id in every table
+   ├─ Row Level Security (RLS)
+   ├─ Cost: $5K/month
+   ├─ Pros: Efficient, scalable
+   ├─ Cons: Requires strict filtering
+   └─ Use case: Most SaaS companies
+
+4. Hybrid: Aurora + DynamoDB (Best)
+   ├─ Aurora: shared infrastructure
+   ├─ DynamoDB: tenant-specific data
+   │  └─ Partition key: tenant_id
+   ├─ Cost: $10K/month
+   ├─ Pros: True isolation + efficiency
+   └─ Use case: High-scale, sensitive data
+
+RECOMMENDATION:
+Aurora (shared) + DynamoDB (tenant-partitioned)
+├─ Aurora: reference data, metadata
+├─ DynamoDB: tenant-specific (user data, projects)
+├─ Cost: Reasonable
+├─ Scale: Unlimited
+└─ Security: Strong isolation
+```
+
+**Q7: How would you prevent data leaks in multi-tenant?**
+
+**A:**
+```python
+# Data Isolation Pattern
+
+from functools import wraps
+from flask import request, abort, g
+
+# Thread-local tenant context
+tenant_context = threading.local()
+
+def require_tenant(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('Authorization')
+        tenant_id = verify_token_extract_tenant(token)
+        
+        if not tenant_id:
+            abort(401)
+        
+        # Store in thread-local
+        tenant_context.id = tenant_id
+        return f(*args, **kwargs)
+    return decorated
+
+class TenantAwareQuery:
+    """Enforces tenant filtering on all queries"""
+    
+    def __init__(self, model):
+        self.model = model
+    
+    def get(self, id):
+        # MUST filter by tenant
+        return self.model.query.filter(
+            self.model.id == id,
+            self.model.tenant_id == tenant_context.id
+        ).first_or_404()
+    
+    def all(self):
+        # MUST filter by tenant
+        return self.model.query.filter(
+            self.model.tenant_id == tenant_context.id
+        ).all()
+    
+    def create(self, **kwargs):
+        # Auto-set tenant_id
+        kwargs['tenant_id'] = tenant_context.id
+        return self.model(**kwargs)
+
+# Usage
+@app.route('/projects/<project_id>')
+@require_tenant
+def get_project(project_id):
+    project = TenantAwareQuery(Project).get(project_id)
+    return jsonify(project)
+
+# Security:
+✓ Centralized tenant context
+✓ Mandatory filtering (can't bypass)
+✓ Query layer enforcement
+✓ Audit logging
+✓ Regular security reviews
+
+# Test:
+def test_data_isolation():
+    """Verify tenant A can't see tenant B's data"""
+    
+    # Create project for tenant A
+    tenant_context.id = "A"
+    project_a = Project(name="Project A", data="secret")
+    db.session.add(project_a)
+    db.session.commit()
+    
+    # Switch to tenant B
+    tenant_context.id = "B"
+    result = Project.query.all()
+    
+    # MUST be empty (can't see A's data)
+    assert len(result) == 0
+    
+    # Try to access directly (should fail)
+    try:
+        result = TenantAwareQuery(Project).get(project_a.id)
+        assert False, "Should have raised 404"
+    except 404:
+        pass  # Good!
+```
+
+---
+
+### ADVANCED ARCHITECTURE QUESTIONS
+
+**Q8: Design a disaster recovery solution for critical application**
+
+**A:**
+```
+DR Levels by RTO/RPO:
+
+Backup & Restore (RTO: 24h, RPO: 1d)
+├─ Daily snapshots to S3
+├─ Cross-region copy
+├─ Manual restore process
+├─ Cost: $1-5K/month
+└─ Use: Dev, non-critical
+
+Pilot Light (RTO: 4-6h, RPO: 15m)
+├─ Standby infrastructure (small)
+├─ Continuous replication
+├─ Scale up on disaster
+├─ Cost: $10-20K/month
+└─ Use: Important apps
+
+Warm Standby (RTO: 1h, RPO: 5m)
+├─ Secondary region running (reduced)
+├─ Real-time replication
+├─ Weighted traffic (10% to secondary)
+├─ Cost: $50-70K/month
+└─ Use: Critical services
+
+Hot Standby (RTO: <5m, RPO: <1m)
+├─ Active-active in 2+ regions
+├─ Sync replication
+├─ Automatic failover
+├─ Cost: $100K+/month
+└─ Use: Mission-critical
+
+RECOMMENDED for $10M budget:
+Primary (US): Full capacity
+Secondary (EU): 20% capacity
+├─ Can handle 20% traffic
+├─ Scales up on failover
+├─ Cost: ~$140K/month (adds $35K for secondary)
+├─ RTO: 30-60 minutes
+└─ RPO: 5 minutes
+
+Implementation:
+1. Data replication:
+   - RDS: read replica (promoted if needed)
+   - DynamoDB: global table (sync < 1 sec)
+   - S3: cross-region replication
+   - ElastiCache: recreate on demand
+
+2. Infrastructure:
+   - CloudFormation templates (infrastructure as code)
+   - Terraform for secondary region
+   - Auto-scaling policies
+
+3. Failover automation:
+   - Route 53 health checks
+   - Automatic DNS failover
+   - Lambda: coordinate failover steps
+   - SNS: notify ops team
+
+4. Testing:
+   - Monthly DR drills
+   - Failover playbooks
+   - Automated tests
+   - Document recovery times
+```
+
+---
+
+**Q9: Design a globally distributed system with < 100ms latency**
+
+**A:**
+```
+Global Low-Latency Architecture:
+
+Requirements:
+- Users in 190 countries
+- Target: < 100ms latency anywhere
+- Consistency: eventual OK
+
+Solution: Edge Computing Pattern
+
+┌─ Users Globally ─┐
+│ (50M daily)      │
+└────────┬─────────┘
+         ↓
+    Route 53 (geolocation DNS)
+    └─ Route to nearest edge
+         ↓
+    CloudFront (500+ edge locations)
+    ├─ Cache static (hit ratio 95%)
+    ├─ Cache dynamic queries
+    ├─ 50-100ms from user
+    └─ TTL: varies by content
+         ↓
+    Lambda@Edge
+    ├─ Lightweight processing
+    ├─ Viewer request: auth, routing
+    ├─ Origin response: cache headers
+    └─ < 50ms processing
+         ↓
+    Regional API (4 regions)
+    ├─ US-East (primary)
+    ├─ EU-West
+    ├─ AP-Singapore
+    └─ AP-Tokyo
+         ↓
+    DynamoDB Global Tables
+    ├─ Replicate < 1 sec
+    ├─ Read from local region
+    ├─ 1-5ms local latency
+    └─ + network = ~30-50ms total
+
+Client Latency Breakdown:
+└─ User → CloudFront (edge): 20-30ms
+├─ CloudFront cache hit: RETURN (20ms total)
+├─ CloudFront cache miss:
+   └─ CloudFront → Lambda@Edge: 5ms
+   └─ Lambda@Edge → Regional API: 30-50ms
+   └─ Regional API → DynamoDB: 5-10ms
+   └─ Response back: 30-50ms
+   └─ Total (miss): 70-100ms
+
+Optimization:
+✓ Cache aggressively (95% hit rate)
+✓ Edge caching (CloudFront)
+✓ Regional failover (4 regions)
+✓ Global Tables (replication < 1 sec)
+✓ Lambda@Edge (reduce origin hits)
+✓ CDN expansion pops (reduce latency)
+
+Cost (for 50M daily users):
+├─ CloudFront: $50K/month
+├─ Lambda@Edge: $10K/month
+├─ 4 Regional endpoints: $100K/month
+├─ DynamoDB Global: $40K/month
+└─ Total: $200K/month
+```
+
+---
+
+**Q10: Design a system handling 1M concurrent connections**
+
+**A:**
+```
+Ultra-High-Concurrency Architecture:
+
+Challenge: 1M concurrent WebSocket connections
+Traditional approach: Won't work (connection limits)
+
+Solution: Distributed Connection Management
+
+┌─ 1M Users ─────────────┐
+│ Long-lived WebSockets  │
+└────────┬───────────────┘
+         ↓
+    API Gateway WebSocket
+    ├─ Connections: $0.25 per million/month
+    ├─ Scaling: Auto (managed by AWS)
+    ├─ Shards: 100,000+
+    └─ Bandwidth: varies
+         ↓
+    DynamoDB Connection Table
+    ├─ Partition key: connection_id
+    ├─ Store: {connection_id, user_id, region}
+    ├─ TTL: 1 week (cleanup disconnects)
+    └─ Cost: ~$20K/month
+         ↓
+    Lambda (message handler)
+    ├─ Triggered by message
+    ├─ Fetch user connections (DynamoDB)
+    ├─ Send to all (WebSocket API)
+    └─ Cost: ~$50K/month
+         ↓
+    SNS Topics (for fan-out)
+    ├─ Broadcast messages
+    ├─ DLQ for failures
+    └─ Cost: ~$10K/month
+
+Message Flow:
+1. User sends message
+   └─ API Gateway receives
+
+2. Lambda triggered
+   ├─ Query: get all connections
+   ├─ Publish to SNS
+   └─ Async processing
+
+3. Lambda consumers
+   ├─ Subscribe to SNS
+   ├─ Batch send to users (100 per request)
+   ├─ Use connection API
+   └─ Retry on failure
+
+4. User receives message
+   └─ Real-time update
+
+Optimization:
+✓ Batch sends (100 connections per request)
+✓ Connection pooling (ElastiCache)
+✓ Message compression
+✓ Regional distribution
+✓ Connection limits per user
+
+Cost (1M concurrent):
+├─ API Gateway: $250/month
+├─ DynamoDB: $20K/month
+├─ Lambda: $50K/month
+├─ SNS: $10K/month
+├─ DataTransfer: $30K/month
+└─ Total: $110K/month
+
+Comparison:
+- Without AWS: ~$500K/month (servers, network)
+- With AWS: $110K/month (managed, auto-scaling)
+```
+
+---
+
+### CORE TECHNICAL QUESTIONS
+
+**Q11: Explain database scaling strategies**
+
+**A:**
+```
+Database Scaling Challenges & Solutions:
+
+Challenge 1: Reads Exceed Capacity
+Solution:
+├─ Read Replicas (async)
+│  └─ Aurora: up to 15 read replicas
+│  └─ Separate endpoints for reads
+├─ ElastiCache (caching layer)
+│  └─ 90% reduction in DB reads
+├─ Application-level caching
+│  └─ Memcached, Redis
+└─ Cost: ~3x for all replicas
+
+Challenge 2: Writes Can't Scale
+Solution:
+├─ Vertical: Larger instance
+│  └─ Limitation: db.r5.24xlarge = max
+├─ Horizontal: Sharding
+│  └─ Partition by user_id % 10
+│  └─ Requires app logic
+│  └─ Cross-shard queries complex
+├─ DynamoDB (if not SQL)
+│  └─ Scales to millions write/sec
+└─ Cost: High (multiple DBs)
+
+Challenge 3: Storage Exceeds Limits
+Solution:
+├─ Archive old data (S3)
+├─ Partitioning (by date)
+├─ Compression (in DB)
+└─ Cost: Lower
+
+Challenge 4: Connection Pool Exhaustion
+Solution:
+├─ RDS Proxy
+│  └─ Multiplexing (reduce connections)
+│  └─ Cost: $15K/month
+├─ Application: tune pool size
+├─ Database: increase max connections
+└─ Cost: Minimal
+
+Scaling Path (Real Example):
+Phase 1: Single db.t3.large
+├─ Capacity: 1000 QPS
+├─ Cost: $0.45/hour
+
+Phase 2: db.r5.xlarge (vertical scale)
+├─ Capacity: 5000 QPS
+├─ +1 read replica
+├─ Cost: $1.26/hour
+
+Phase 3: db.r5.4xlarge + RDS Proxy
+├─ Capacity: 20,000 QPS
+├─ +3 read replicas
+├─ Cost: $3.82/hour + RDS Proxy
+
+Phase 4: Sharding (if > 50K QPS)
+├─ 10 shards (50K QPS each)
+├─ Infrastructure: Complex
+├─ Cost: High
+
+RECOMMENDATION:
+Monitor early (at 70% capacity)
+→ Vertical scaling (usually sufficient)
+→ Read replicas (for reads)
+→ Caching (reduce DB load)
+→ Sharding (extreme scale only)
+```
+
+---
+
+**Q12: Design a payment processing system**
+
+**A:**
+```
+Payment Processing Architecture:
+
+Requirements:
+├─ PCI DSS compliance
+├─ Never store credit cards (use tokenization)
+├─ Handle failures gracefully
+├─ Exactly-once processing
+└─ Audit trail for compliance
+
+Architecture:
+
+1. Payment Collection
+   ├─ Client → Payment Gateway (Stripe/PayPal)
+   ├─ Tokenized card → Token
+   ├─ Token stored safely → S3 encrypted
+   └─ Avoid handling raw card data
+
+2. Payment Processing
+   ├─ Order → SQS queue
+   ├─ Lambda consumer
+   ├─ Call Stripe API
+   ├─ Handle success/failure
+   └─ Store result in DynamoDB
+
+3. Transaction Record
+   ├─ DynamoDB table:
+   │  ├─ Partition: order_id
+   │  ├─ Sort: timestamp
+   │  ├─ Status: pending/success/failed
+   │  └─ Amount, card_token, etc.
+   ├─ CloudTrail (audit log)
+   └─ S3 (archival)
+
+4. Failure Handling
+   ├─ Retry logic (exponential backoff)
+   ├─ DLQ (dead letter queue)
+   ├─ Manual review (DynamoDB)
+   └─ Notification (SNS)
+
+5. Reconciliation
+   ├─ Daily reconciliation job
+   ├─ Lambda: compare Stripe records
+   ├─ Fix discrepancies
+   └─ Report to accounting
+
+Code Example:
+```python
+import boto3
+import stripe
+import json
+
+sqs = boto3.client('sqs')
+dynamodb = boto3.resource('dynamodb')
+sns = boto3.client('sns')
+
+def process_payment(event, context):
+    \"\"\"Process payment from SQS message\"\"\"
+    
+    for record in event['Records']:
+        order_data = json.loads(record['body'])
+        order_id = order_data['order_id']
+        amount = order_data['amount']
+        card_token = order_data['card_token']
+        
+        try:
+            # Call payment gateway
+            charge = stripe.Charge.create(
+                amount=int(amount * 100),
+                currency='usd',
+                source=card_token,
+                idempotency_key=order_id  # Ensures idempotency
+            )
+            
+            # Store success
+            table = dynamodb.Table('payments')
+            table.put_item(Item={
+                'order_id': order_id,
+                'timestamp': int(time.time()),
+                'status': 'success',
+                'stripe_id': charge.id,
+                'amount': amount
+            })
+            
+            # Send confirmation
+            sns.publish(
+                TopicArn='arn:aws:sns:xxx',
+                Message=f'Payment successful for {order_id}'
+            )
+            
+            # Delete message from queue
+            sqs.delete_message(
+                QueueUrl=record['eventSourceARN'],
+                ReceiptHandle=record['receiptHandle']
+            )
+            
+        except stripe.error.CardError as e:
+            # Card declined
+            table.put_item(Item={
+                'order_id': order_id,
+                'status': 'failed',
+                'error': str(e)
+            })
+            
+            sns.publish(
+                TopicArn='arn:aws:sns:xxx:dlq',
+                Message=f'Payment failed: {e}'
+            )
+            
+            # Don't delete (retry after interval)
+        
+        except Exception as e:
+            # Unexpected error
+            sns.publish(
+                TopicArn='arn:aws:sns:xxx:alerts',
+                Message=f'Payment processing error: {e}'
+            )
+            # Leave in queue for manual review
+
+Cost:
+├─ Stripe: 2.9% + $0.30 per transaction
+├─ SQS: ~$1K/month
+├─ Lambda: ~$5K/month
+├─ DynamoDB: ~$5K/month
+└─ SNS: ~$1K/month
+
+Security:
+✓ No raw card data stored
+✓ Tokenization via Stripe
+✓ Encrypted DynamoDB
+✓ KMS key rotation
+✓ IAM restrictions
+✓ CloudTrail audit trail
+✓ PCI DSS compliant
+```
+
+---
+
+## AWS CLI Cheat Sheet
+
+```bash
+# EC2 Commands
+aws ec2 describe-instances
+aws ec2 describe-instances --filters "Name=instance-state-name,Values=running"
+aws ec2 run-instances --image-id ami-xxxxx --instance-type t3.micro
+aws ec2 start-instances --instance-ids i-xxxxx
+aws ec2 stop-instances --instance-ids i-xxxxx
+aws ec2 terminate-instances --instance-ids i-xxxxx
+
+# S3 Commands
+aws s3 ls
+aws s3 ls s3://mybucket
+aws s3 cp file.txt s3://mybucket/
+aws s3 sync ./local s3://mybucket/
+aws s3 rm s3://mybucket/file.txt
+aws s3 rb s3://mybucket --force
+
+# RDS Commands
+aws rds describe-db-instances
+aws rds create-db-instance --db-instance-identifier mydb --db-instance-class db.t3.micro --engine mysql
+aws rds delete-db-instance --db-instance-identifier mydb --skip-final-snapshot
+
+# CloudWatch Commands
+aws cloudwatch get-metric-statistics --namespace AWS/EC2 --metric-name CPUUtilization --dimensions Name=InstanceId,Value=i-xxxxx --start-time 2024-01-01T00:00:00Z --end-time 2024-01-02T00:00:00Z --period 3600 --statistics Average
+
+# IAM Commands
+aws iam create-user --user-name john
+aws iam attach-user-policy --user-name john --policy-arn arn:aws:iam::aws:policy/AdministratorAccess
+aws iam create-access-key --user-name john
+aws iam list-users
+aws iam delete-user --user-name john
+
+# Lambda Commands
+aws lambda list-functions
+aws lambda create-function --function-name myfunction --runtime python3.9 --role arn:aws:iam::xxxx:role/lambda-role --handler index.handler --zip-file fileb://function.zip
+aws lambda invoke --function-name myfunction response.json
+
+# DynamoDB Commands
+aws dynamodb create-table --table-name Users --attribute-definitions AttributeName=userId,AttributeType=S --key-schema AttributeName=userId,KeyType=HASH --billing-mode PAY_PER_REQUEST
+aws dynamodb scan --table-name Users
+aws dynamodb delete-table --table-name Users
+```
+
+---
+
+## Common AWS Architecture Patterns
+
+### Serverless Web App
+```
+User
+  ↓
+CloudFront (CDN)
+  ↓
+API Gateway
+  ↓
+Lambda Functions
+  ├─ DynamoDB (data)
+  ├─ S3 (files)
+  └─ SQS (async tasks)
+```
+
+### Microservices with Containers
+```
+User
+  ↓
+ALB (Load Balancer)
+  ↓
+ECS/EKS Cluster
+  ├─ Service 1 (container)
+  ├─ Service 2 (container)
+  └─ Service 3 (container)
+  ↓
+RDS + ElastiCache
+```
+
+### Data Lake Architecture
+```
+Data Sources
+  ├─ On-premises databases
+  ├─ APIs
+  └─ IoT devices
+  ↓
+AWS Glue (ETL)
+  ↓
+S3 Data Lake
+  ├─ Raw data
+  ├─ Processed data
+  └─ Aggregated data
+  ↓
+Analytics
+  ├─ Athena (SQL queries)
+  ├─ Redshift (data warehouse)
+  └─ QuickSight (BI visualization)
+```
+
+### Hybrid Cloud
+```
+Corporate Network
+  ↓
+VPN / AWS Direct Connect
+  ↓
+AWS VPC
+  ├─ EC2 instances
+  ├─ Databases
+  └─ Applications
+```
+
+---
+
+## CLOUD ENGINEER & DEVOPS ENGINEER ROLES
+
+### Role Overview & Comparison
+
+| Aspect | Cloud Engineer | DevOps Engineer |
+|--------|---|---|
+| **Primary Focus** | Infrastructure design & management | Deployment automation & operational excellence |
+| **Core Skills** | AWS services, architecture, scaling | CI/CD, containers, IaC, automation |
+| **Daily Tasks** | Design VPCs, manage EC2, RDS, databases | Build pipelines, deploy code, monitor systems |
+| **Tools** | AWS Console, CloudFormation, Terraform | Jenkins, GitLab CI/CD, Kubernetes, Docker |
+| **Salary Range** | $100K - $180K | $110K - $190K |
+| **Career Path** | Solutions Architect → Enterprise Architect | DevOps Lead → Release Manager → VP Eng |
+| **Certification** | AWS Solutions Architect, Developer | Kubernetes, Docker, CI/CD specializations |
+
+---
+
+### CLOUD ENGINEER: Role & Interview Guide
+
+#### What is a Cloud Engineer?
+```
+Definition:
+Designs, deploys, and maintains cloud infrastructure.
+Focuses on architecture, security, and cost optimization.
+
+Responsibilities:
+├─ Design scalable cloud architectures
+├─ Manage AWS services (EC2, RDS, S3, VPC, etc.)
+├─ Ensure security and compliance
+├─ Cost optimization and budgeting
+├─ Disaster recovery and high availability
+├─ Document infrastructure
+└─ Support development teams
+
+Day-to-Day Activities:
+├─ 30% - Architecture design (whiteboarding)
+├─ 30% - Infrastructure implementation
+├─ 20% - Troubleshooting and optimization
+├─ 15% - Documentation and mentoring
+├─ 5% - Cost reviews and optimization
+```
+
+#### Cloud Engineer Interview Questions & Answers
+
+**Q1: How would you design a secure VPC for a healthcare application?**
+
+```
+Answer Framework:
+
+Requirements:
+├─ HIPAA compliance
+├─ High availability
+├─ Security isolation
+├─ Multi-AZ resilience
+└─ Secure data transmission
+
+Architecture:
+```
+Internet → NAT Gateway → Public Subnet (Bastion)
+                             ↓
+                    Private Subnet (App)
+                        ├─ EC2 (app servers)
+                        ├─ ALB (load balancing)
+                        └─ Security groups
+                             ↓
+                    Private Subnet (Database)
+                        ├─ RDS Multi-AZ
+                        ├─ Encryption at rest
+                        ├─ Encryption in transit
+                        └─ Security groups
+```
+
+Implementation Details:
+```python
+import boto3
+
+ec2 = boto3.client('ec2')
+
+# 1. Create VPC with private DNS
+vpc = ec2.create_vpc(
+    CidrBlock='10.0.0.0/16',
+    TagSpecifications=[{
+        'ResourceType': 'vpc',
+        'Tags': [{'Key': 'Name', 'Value': 'healthcare-vpc'}]
+    }]
+)
+vpc_id = vpc['Vpc']['VpcId']
+
+# Enable DNS hostnames
+ec2.modify_vpc_attribute(
+    VpcId=vpc_id,
+    EnableDnsHostnames={'Value': True}
+)
+
+# 2. Create subnets (multi-AZ)
+# Public subnet (bastion/NAT)
+public_subnet = ec2.create_subnet(
+    VpcId=vpc_id,
+    CidrBlock='10.0.1.0/24',
+    AvailabilityZone='us-east-1a'
+)
+
+# Private subnet (app)
+private_subnet_app = ec2.create_subnet(
+    VpcId=vpc_id,
+    CidrBlock='10.0.2.0/24',
+    AvailabilityZone='us-east-1a'
+)
+
+# Private subnet (database)
+private_subnet_db = ec2.create_subnet(
+    VpcId=vpc_id,
+    CidrBlock='10.0.3.0/24',
+    AvailabilityZone='us-east-1a'
+)
+
+# 3. Create Internet Gateway
+igw = ec2.create_internet_gateway()
+ec2.attach_internet_gateway(
+    InternetGatewayId=igw['InternetGateway']['InternetGatewayId'],
+    VpcId=vpc_id
+)
+
+# 4. Create NAT Gateway
+eip = ec2.allocate_address(Domain='vpc')
+nat = ec2.create_nat_gateway(
+    SubnetId=public_subnet['Subnet']['SubnetId'],
+    AllocationId=eip['AllocationId']
+)
+
+# 5. Create Route Tables
+# Public route table
+public_rt = ec2.create_route_table(VpcId=vpc_id)
+ec2.create_route(
+    RouteTableId=public_rt['RouteTable']['RouteTableId'],
+    DestinationCidrBlock='0.0.0.0/0',
+    GatewayId=igw['InternetGateway']['InternetGatewayId']
+)
+
+# Private route table (to NAT)
+private_rt = ec2.create_route_table(VpcId=vpc_id)
+ec2.create_route(
+    RouteTableId=private_rt['RouteTable']['RouteTableId'],
+    DestinationCidrBlock='0.0.0.0/0',
+    NatGatewayId=nat['NatGateway']['NatGatewayId']
+)
+
+# 6. Security Groups
+# Bastion SG (allow SSH from office IP)
+bastion_sg = ec2.create_security_group(
+    GroupName='bastion-sg',
+    Description='Bastion security group',
+    VpcId=vpc_id
+)
+ec2.authorize_security_group_ingress(
+    GroupId=bastion_sg['GroupId'],
+    IpPermissions=[{
+        'IpProtocol': 'tcp',
+        'FromPort': 22,
+        'ToPort': 22,
+        'IpRanges': [{'CidrIp': '203.0.113.0/24'}]  # Office IP
+    }]
+)
+
+# App SG (allow from bastion)
+app_sg = ec2.create_security_group(
+    GroupName='app-sg',
+    Description='Application security group',
+    VpcId=vpc_id
+)
+ec2.authorize_security_group_ingress(
+    GroupId=app_sg['GroupId'],
+    IpPermissions=[{
+        'IpProtocol': 'tcp',
+        'FromPort': 22,
+        'ToPort': 22,
+        'UserIdGroupPairs': [{'GroupId': bastion_sg['GroupId']}]
+    }]
+)
+
+# DB SG (allow from app)
+db_sg = ec2.create_security_group(
+    GroupName='db-sg',
+    Description='Database security group',
+    VpcId=vpc_id
+)
+ec2.authorize_security_group_ingress(
+    GroupId=db_sg['GroupId'],
+    IpPermissions=[{
+        'IpProtocol': 'tcp',
+        'FromPort': 3306,
+        'ToPort': 3306,
+        'UserIdGroupPairs': [{'GroupId': app_sg['GroupId']}]
+    }]
+)
+
+# 7. Create RDS in private subnet with encryption
+rds = boto3.client('rds')
+rds.create_db_instance(
+    DBInstanceIdentifier='healthcare-db',
+    DBInstanceClass='db.r5.large',
+    Engine='mysql',
+    MasterUsername='admin',
+    MasterUserPassword='SecurePassword123!',
+    DBName='healthcare_db',
+    VpcSecurityGroupIds=[db_sg['GroupId']],
+    DBSubnetGroupName='healthcare-subnet-group',
+    MultiAZ=True,
+    StorageEncrypted=True,
+    KmsKeyId='arn:aws:kms:us-east-1:xxx:key/xxx',
+    EnableCloudwatchLogsExports=['error', 'general', 'slowquery'],
+    BackupRetentionPeriod=30,
+    EnableIAMDatabaseAuthentication=True
+)
+
+Security Measures:
+✓ No direct internet access to app/db
+✓ Bastion host for SSH access
+✓ Encryption at rest (KMS) and transit (SSL/TLS)
+✓ Security groups with least privilege
+✓ Multi-AZ for high availability
+✓ Automated backups and WAL for recovery
+✓ VPC Flow Logs for audit trail
+✓ CloudWatch monitoring
+```
+
+**Q2: How do you implement disaster recovery for a production database?**
+
+```
+Answer Framework:
+
+RTO/RPO Requirements:
+├─ RTO: 4 hours (recovery time objective)
+├─ RPO: 1 hour (recovery point objective)
+└─ Budget: $5K/month additional
+
+Solution (Warm Standby):
+
+Primary Region (US-East-1)
+├─ RDS Aurora MySQL
+├─ Continuous backup to S3
+└─ Read replicas
+
+Secondary Region (EU-West-1)
+├─ RDS Aurora read replica (sync)
+├─ EC2 standby infrastructure (small)
+├─ Automated backup copy
+└─ Route 53 weighted routing (90/10)
+
+Failover Process:
+1. Health checks fail (Route 53)
+2. DNS switches to secondary
+3. Promote secondary DB to primary
+4. Scale up EC2 instances
+5. Update connection strings
+6. Validate data integrity
+7. Notify ops team
+
+Cost Analysis:
+├─ Primary: $20K/month
+├─ Secondary (standby): $5K/month
+├─ Cross-region replication: $2K/month
+└─ Total: $27K/month
+
+CloudFormation Template:
+```yaml
+AWSTemplateFormatVersion: '2010-09-09'
+
+Resources:
+  # Primary RDS (US-East-1)
+  PrimaryDB:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: prod-db-primary
+      DBInstanceClass: db.r5.2xlarge
+      Engine: aurora-mysql
+      MultiAZ: true
+      StorageEncrypted: true
+      BackupRetentionPeriod: 35
+      PreferredBackupWindow: "02:00-03:00"
+      PreferredMaintenanceWindow: "sun:03:00-sun:04:00"
+      EnableCloudwatchLogsExports:
+        - error
+        - general
+        - slowquery
+
+  # Read Replica in Secondary Region
+  SecondaryDB:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      Engine: aurora-mysql
+      SourceDBClusterIdentifier: !Sub
+        - arn:aws:rds:us-east-1:${AWS::AccountId}:cluster:prod-db-primary
+      DBClusterIdentifier: prod-db-secondary
+      AvailabilityZones:
+        - eu-west-1a
+        - eu-west-1b
+
+  # Route 53 Weighted Routing
+  PrimaryDNS:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z1234567890ABC
+      Name: db.example.com
+      Type: CNAME
+      TTL: 60
+      SetIdentifier: Primary
+      Weight: 90
+      ResourceRecords:
+        - primary-db.us-east-1.rds.amazonaws.com
+
+  SecondaryDNS:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z1234567890ABC
+      Name: db.example.com
+      Type: CNAME
+      TTL: 60
+      SetIdentifier: Secondary
+      Weight: 10
+      ResourceRecords:
+        - secondary-db.eu-west-1.rds.amazonaws.com
+```
+
+Monitoring:
+├─ Replication lag (< 1 second target)
+├─ Primary DB metrics (CPU, storage, connections)
+├─ Backup success/failure
+├─ RTO/RPO compliance
+└─ Test failover monthly
+```
+
+**Q3: Design a cost-optimized multi-region infrastructure**
+
+```
+Requirements:
+├─ 3 regions (US, Europe, APAC)
+├─ $500K annual budget
+├─ < 100ms latency globally
+├─ On-demand only (no long-term commitments)
+└─ Minimum viable availability
+
+Cost Breakdown Strategy:
+
+1. Compute (40% = $200K/year)
+   ├─ Spot instances (70% of capacity)
+   ├─ Reserved instances (20% of capacity)
+   ├─ On-demand (10% for failover)
+   ├─ Calculation: 1000 instances × $0.10/hour avg
+   └─ Annual: 1000 × 0.10 × 8760 = $876K
+   └─ With discount: $200K (77% discount)
+
+2. Data Transfer & CDN (25% = $125K/year)
+   ├─ CloudFront: $50K/year
+   ├─ Cross-region replication: $40K/year
+   ├─ Data egress: $35K/year
+   └─ Cost optimization:
+      └─ S3 transfer acceleration: save 50%
+      └─ Regional endpoints: reduce transfers
+
+3. Databases (20% = $100K/year)
+   ├─ RDS Multi-AZ: $60K/year
+   ├─ DynamoDB on-demand: $20K/year
+   ├─ ElastiCache: $20K/year
+   └─ Optimization:
+      └─ Use DynamoDB (not RDS) where possible
+      └─ Auto-scaling for peak times
+
+4. Other Services (15% = $75K/year)
+   ├─ Load Balancers: $30K/year
+   ├─ VPC/NAT: $20K/year
+   ├─ Lambda: $15K/year
+   ├─ Monitoring: $10K/year
+   └─ Total: $75K
+
+Architecture:
+```
+Regions:
+├─ Primary (US-East): Full capacity (50%)
+├─ Secondary (EU-West): 30% capacity
+└─ Tertiary (AP-Southeast): 20% capacity
+
+Cost per Region:
+├─ US-East: $250K/year
+├─ EU-West: $150K/year
+├─ AP-Southeast: $100K/year
+└─ Total: $500K
+```
+
+Terraform Implementation:
+```hcl
+provider "aws" {
+  region = "us-east-1"
+}
+
+provider "aws" {
+  alias  = "eu"
+  region = "eu-west-1"
+}
+
+provider "aws" {
+  alias  = "ap"
+  region = "ap-southeast-1"
+}
+
+# Spot Instance for cost savings
+resource "aws_instance" "web_spot" {
+  provider              = aws
+  ami                   = data.aws_ami.ubuntu.id
+  instance_type         = "t3.large"
+  spot_price            = "0.05"
+  iam_instance_profile  = aws_iam_instance_profile.web.name
+  key_name              = aws_key_pair.deployer.key_name
+
+  user_data = base64encode(<<-EOF
+              #!/bin/bash
+              apt-get update
+              apt-get install -y nginx
+              echo "Hello from $(hostname)" > /var/www/html/index.html
+              EOF
+  )
+
+  tags = {
+    Name = "web-server-spot"
+  }
+}
+
+# AutoScaling for Spot instances
+resource "aws_autoscaling_group" "web" {
+  name                = "web-asg-spot"
+  launch_template {
+    id      = aws_launch_template.web.id
+    version = "$Latest"
+  }
+  min_size            = 5
+  max_size            = 50
+  desired_capacity    = 10
+  vpc_zone_identifier = data.aws_subnets.private.ids
+  health_check_type   = "ELB"
+
+  mixed_instances_policy {
+    instances_distribution {
+      on_demand_base_capacity                  = 1
+      on_demand_percentage_above_base_capacity = 10
+      spot_instance_pools                      = 4
+    }
+    launch_template {
+      launch_template_specification {
+        launch_template_id = aws_launch_template.web.id
+        version            = "$Latest"
+      }
+    }
+  }
+}
+
+# CloudFront for cost savings
+resource "aws_cloudfront_distribution" "cdn" {
+  enabled = true
+  
+  origin {
+    domain_name = aws_s3_bucket.cdn_content.bucket_regional_domain_name
+    origin_id   = "S3Origin"
+  }
+
+  default_cache_behavior {
+    allowed_methods  = ["GET", "HEAD"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "S3Origin"
+    
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    viewer_protocol_policy = "https-only"
+    min_ttl                = 0
+    default_ttl            = 3600
+    max_ttl                = 86400
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
+}
+```
+```
+
+---
+
+### DEVOPS ENGINEER: Role & Interview Guide
+
+#### What is a DevOps Engineer?
+```
+Definition:
+Bridges development and operations teams.
+Focuses on automation, CI/CD pipelines, and operational efficiency.
+
+Responsibilities:
+├─ Design CI/CD pipelines
+├─ Infrastructure as Code (Terraform, CloudFormation)
+├─ Container orchestration (Kubernetes, ECS)
+├─ Monitoring and logging
+├─ Database backups and recovery
+├─ Release management
+└─ Security and compliance automation
+
+Day-to-Day Activities:
+├─ 35% - CI/CD pipeline development
+├─ 25% - Infrastructure automation
+├─ 20% - Troubleshooting deployments
+├─ 15% - Monitoring and alerts
+├─ 5% - Documentation and training
+```
+
+#### DevOps Engineer Interview Questions & Answers
+
+**Q1: Design a complete CI/CD pipeline for a microservices application**
+
+```
+Requirements:
+├─ Multiple microservices (5+ services)
+├─ Multiple environments (dev, staging, prod)
+├─ Blue-green deployments
+├─ Automated testing
+├─ Rollback capability
+└─ Deployment frequency: 10x/day
+
+Pipeline Architecture:
+
+Developer Push to GitHub
+    ↓
+GitHub Webhook triggers
+    ↓
+Jenkins/GitLab CI Pipeline Start
+    ├─ Stage 1: Code Checkout
+    ├─ Stage 2: Build
+    │   ├─ Unit tests
+    │   ├─ Code quality scan (SonarQube)
+    │   ├─ Security scan (OWASP)
+    │   └─ Docker build & push to ECR
+    ├─ Stage 3: Deploy to Dev
+    │   ├─ Deploy to ECS/EKS
+    │   ├─ Integration tests
+    │   └─ Health checks
+    ├─ Stage 4: Deploy to Staging
+    │   ├─ Smoke tests
+    │   ├─ Performance tests
+    │   ├─ Security tests
+    │   └─ Manual approval
+    └─ Stage 5: Deploy to Production
+        ├─ Blue-green deployment
+        ├─ Health checks
+        ├─ Traffic gradual shift (10% → 50% → 100%)
+        └─ Auto-rollback on failure
+
+Jenkinsfile (Declarative):
+```groovy
+pipeline {
+    agent any
+    
+    options {
+        timestamps()
+        timeout(time: 30, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+    
+    environment {
+        ECR_REGISTRY = "123456789.dkr.ecr.us-east-1.amazonaws.com"
+        IMAGE_NAME = "myapp"
+        GIT_COMMIT_SHORT = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                script {
+                    sh '''
+                        echo "Building Docker image..."
+                        docker build -t $ECR_REGISTRY/$IMAGE_NAME:$GIT_COMMIT_SHORT .
+                    '''
+                }
+            }
+        }
+        
+        stage('Test') {
+            parallel {
+                stage('Unit Tests') {
+                    steps {
+                        sh '''
+                            echo "Running unit tests..."
+                            npm test -- --coverage
+                        '''
+                    }
+                }
+                
+                stage('Code Quality') {
+                    steps {
+                        sh '''
+                            echo "SonarQube analysis..."
+                            sonar-scanner -Dsonar.projectKey=myapp
+                        '''
+                    }
+                }
+                
+                stage('Security Scan') {
+                    steps {
+                        sh '''
+                            echo "Running security scan..."
+                            trivy image $ECR_REGISTRY/$IMAGE_NAME:$GIT_COMMIT_SHORT
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Push to ECR') {
+            steps {
+                script {
+                    sh '''
+                        echo "Logging in to ECR..."
+                        aws ecr get-login-password --region us-east-1 | \
+                        docker login --username AWS --password-stdin $ECR_REGISTRY
+                        
+                        echo "Pushing image..."
+                        docker push $ECR_REGISTRY/$IMAGE_NAME:$GIT_COMMIT_SHORT
+                        docker tag $ECR_REGISTRY/$IMAGE_NAME:$GIT_COMMIT_SHORT \
+                                  $ECR_REGISTRY/$IMAGE_NAME:latest
+                        docker push $ECR_REGISTRY/$IMAGE_NAME:latest
+                    '''
+                }
+            }
+        }
+        
+        stage('Deploy to Dev') {
+            steps {
+                script {
+                    sh '''
+                        echo "Deploying to Dev..."
+                        kubectl set image deployment/myapp \
+                            myapp=$ECR_REGISTRY/$IMAGE_NAME:$GIT_COMMIT_SHORT \
+                            --namespace=dev
+                        kubectl rollout status deployment/myapp --namespace=dev
+                        
+                        echo "Running integration tests..."
+                        npm run test:integration -- --env=dev
+                    '''
+                }
+            }
+        }
+        
+        stage('Deploy to Staging') {
+            when {
+                branch 'develop'
+            }
+            steps {
+                script {
+                    sh '''
+                        echo "Deploying to Staging..."
+                        kubectl set image deployment/myapp \
+                            myapp=$ECR_REGISTRY/$IMAGE_NAME:$GIT_COMMIT_SHORT \
+                            --namespace=staging
+                        kubectl rollout status deployment/myapp --namespace=staging
+                        
+                        echo "Running E2E tests..."
+                        npm run test:e2e -- --env=staging
+                    '''
+                }
+            }
+        }
+        
+        stage('Manual Approval') {
+            when {
+                branch 'main'
+            }
+            steps {
+                input('Ready to deploy to Production?')
+            }
+        }
+        
+        stage('Deploy to Production (Blue-Green)') {
+            when {
+                branch 'main'
+            }
+            steps {
+                script {
+                    sh '''
+                        echo "Blue-Green deployment..."
+                        
+                        # Create new "Green" deployment
+                        kubectl create deployment myapp-green \
+                            --image=$ECR_REGISTRY/$IMAGE_NAME:$GIT_COMMIT_SHORT \
+                            --namespace=production
+                        
+                        # Wait for Green to be ready
+                        kubectl rollout status deployment/myapp-green \
+                            --namespace=production
+                        
+                        # Health checks
+                        sleep 30
+                        HEALTH=$(curl -f http://myapp-green:8080/health || echo "FAILED")
+                        
+                        if [ "$HEALTH" != "FAILED" ]; then
+                            echo "Green deployment healthy, switching traffic..."
+                            kubectl patch service myapp \
+                                -p '{"spec":{"selector":{"app":"myapp-green"}}}' \
+                                --namespace=production
+                            
+                            # Keep Blue for quick rollback
+                            echo "Blue deployment kept for rollback"
+                        else
+                            echo "Green deployment failed health checks, rolling back..."
+                            kubectl delete deployment myapp-green --namespace=production
+                            exit 1
+                        fi
+                    '''
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            script {
+                sh '''
+                    echo "Cleaning up..."
+                    docker logout $ECR_REGISTRY
+                '''
+            }
+        }
+        
+        failure {
+            emailext(
+                subject: "Deployment Failed: ${BUILD_NUMBER}",
+                body: "Deployment pipeline failed. Check logs: ${BUILD_URL}",
+                to: "devops@example.com"
+            )
+        }
+        
+        success {
+            emailext(
+                subject: "Deployment Successful: ${BUILD_NUMBER}",
+                body: "Version ${GIT_COMMIT_SHORT} deployed successfully",
+                to: "devops@example.com"
+            )
+        }
+    }
+}
+```
+
+Key Features:
+✓ Parallel testing stages for speed
+✓ Automated security scanning
+✓ Blue-green deployment (zero downtime)
+✓ Automated rollback on failure
+✓ Health checks at each stage
+✓ Notifications on success/failure
+```
+
+**Q2: Implement infrastructure as code with disaster recovery**
+
+```
+Requirements:
+├─ Multi-region deployment
+├─ Automated infrastructure provisioning
+├─ Disaster recovery automation
+├─ 5-minute RTO
+└─ Infrastructure versioning
+
+Terraform Module Structure:
+```
+project/
+├─ main.tf
+├─ variables.tf
+├─ outputs.tf
+├─ terraform.tfvars
+└─ modules/
+    ├─ networking/
+    │   ├─ main.tf (VPC, subnets, security groups)
+    │   ├─ variables.tf
+    │   └─ outputs.tf
+    ├─ database/
+    │   ├─ main.tf (RDS setup)
+    │   ├─ variables.tf
+    │   └─ outputs.tf
+    └─ compute/
+        ├─ main.tf (ECS, ALB, ASG)
+        ├─ variables.tf
+        └─ outputs.tf
+```
+
+Main Terraform Configuration:
+```hcl
+# main.tf - Multi-region setup
+
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+  
+  backend "s3" {
+    bucket         = "terraform-state-prod"
+    key            = "prod/terraform.tfstate"
+    region         = "us-east-1"
+    encrypt        = true
+    dynamodb_table = "terraform-state-lock"
+  }
+}
+
+provider "aws" {
+  alias  = "primary"
+  region = var.primary_region
+  
+  default_tags {
+    tags = {
+      Environment = var.environment
+      ManagedBy   = "Terraform"
+      Project     = var.project_name
+    }
+  }
+}
+
+provider "aws" {
+  alias  = "secondary"
+  region = var.secondary_region
+  
+  default_tags {
+    tags = {
+      Environment = var.environment
+      ManagedBy   = "Terraform"
+      Project     = var.project_name
+    }
+  }
+}
+
+# Primary Region - Full Deployment
+module "primary_network" {
+  source = "./modules/networking"
+  providers = {
+    aws = aws.primary
+  }
+  
+  vpc_cidr              = var.primary_vpc_cidr
+  environment           = var.environment
+  availability_zones    = ["us-east-1a", "us-east-1b", "us-east-1c"]
+}
+
+module "primary_database" {
+  source = "./modules/database"
+  providers = {
+    aws = aws.primary
+  }
+  
+  vpc_id                = module.primary_network.vpc_id
+  private_subnets      = module.primary_network.private_subnets
+  db_instance_class    = "db.r5.2xlarge"
+  multi_az             = true
+  backup_retention     = 35
+  environment          = var.environment
+}
+
+module "primary_compute" {
+  source = "./modules/compute"
+  providers = {
+    aws = aws.primary
+  }
+  
+  vpc_id               = module.primary_network.vpc_id
+  public_subnets      = module.primary_network.public_subnets
+  private_subnets     = module.primary_network.private_subnets
+  min_capacity         = 10
+  max_capacity         = 100
+  desired_capacity     = 20
+  environment          = var.environment
+}
+
+# Secondary Region - Disaster Recovery
+module "secondary_network" {
+  source = "./modules/networking"
+  providers = {
+    aws = aws.secondary
+  }
+  
+  vpc_cidr              = var.secondary_vpc_cidr
+  environment           = var.environment
+  availability_zones    = ["eu-west-1a", "eu-west-1b"]
+}
+
+# Read Replica Database
+resource "aws_db_instance_automated_backups_replication" "secondary_backup" {
+  provider                    = aws.secondary
+  source_db_instance_arn     = module.primary_database.db_arn
+  retention_backup_window    = 7
+}
+
+module "secondary_compute" {
+  source = "./modules/compute"
+  providers = {
+    aws = aws.secondary
+  }
+  
+  vpc_id               = module.secondary_network.vpc_id
+  public_subnets      = module.secondary_network.public_subnets
+  private_subnets     = module.secondary_network.private_subnets
+  min_capacity         = 2  # Minimal for disaster recovery
+  max_capacity         = 50
+  desired_capacity     = 5
+  environment          = var.environment
+}
+
+# Route 53 for Global Load Balancing
+resource "aws_route53_health_check" "primary" {
+  provider          = aws.primary
+  type              = "HTTPS"
+  resource_path     = "/health"
+  fqdn              = module.primary_compute.load_balancer_dns
+  port              = 443
+  failure_threshold = 3
+  request_interval  = 30
+  
+  tags = {
+    Name = "primary-health-check"
+  }
+}
+
+resource "aws_route53_zone" "main" {
+  name = var.domain_name
+}
+
+resource "aws_route53_record" "app" {
+  zone_id = aws_route53_zone.main.zone_id
+  name    = var.app_domain
+  type    = "A"
+  
+  failover_routing_policy {
+    type = "PRIMARY"
+  }
+  
+  alias {
+    name                   = module.primary_compute.load_balancer_dns
+    zone_id                = module.primary_compute.load_balancer_zone_id
+    evaluate_target_health = true
+  }
+  
+  set_identifier = "Primary"
+}
+
+resource "aws_route53_record" "app_secondary" {
+  zone_id = aws_route53_zone.main.zone_id
+  name    = var.app_domain
+  type    = "A"
+  
+  failover_routing_policy {
+    type = "SECONDARY"
+  }
+  
+  alias {
+    name                   = module.secondary_compute.load_balancer_dns
+    zone_id                = module.secondary_compute.load_balancer_zone_id
+    evaluate_target_health = true
+  }
+  
+  set_identifier = "Secondary"
+  
+  depends_on = [aws_route53_record.app]
+}
+
+# Disaster Recovery Lambda (Automatic Failover)
+resource "aws_lambda_function" "failover" {
+  provider      = aws.primary
+  filename      = "failover.zip"
+  function_name = "disaster-recovery-failover"
+  role          = aws_iam_role.lambda_role.arn
+  handler       = "index.handler"
+  runtime       = "python3.9"
+  
+  environment {
+    variables = {
+      PRIMARY_REGION   = var.primary_region
+      SECONDARY_REGION = var.secondary_region
+      SECONDARY_DB_ARN = module.primary_database.db_arn
+    }
+  }
+}
+
+# Outputs
+output "primary_load_balancer_dns" {
+  value = module.primary_compute.load_balancer_dns
+}
+
+output "secondary_load_balancer_dns" {
+  value = module.secondary_compute.load_balancer_dns
+}
+
+output "route53_zone_id" {
+  value = aws_route53_zone.main.zone_id
+}
+```
+
+Deployment Process:
+```bash
+# Initialize Terraform
+terraform init
+
+# Plan changes
+terraform plan -out=tfplan
+
+# Apply configuration
+terraform apply tfplan
+
+# Test disaster recovery
+terraform destroy -target=module.primary_compute  # Simulate failure
+# System should automatically failover to secondary
+
+# Restore
+terraform apply  # Recreate primary
+```
+```
+
+**Q3: Design comprehensive monitoring and logging strategy**
+
+```
+Requirements:
+├─ 100+ applications across 3 regions
+├─ < 5 minute alerting SLA
+├─ 1-year log retention
+├─ Cost-optimized
+└─ Compliance audit trail
+
+Monitoring Stack:
+
+CloudWatch
+├─ Metrics collection
+├─ Alarms (CPU, memory, errors)
+├─ Dashboards
+└─ Log Insights queries
+
+OpenTelemetry + Datadog
+├─ Distributed tracing
+├─ Performance monitoring
+├─ APM (Application Performance Monitoring)
+└─ Service dependencies
+
+Prometheus + Grafana
+├─ Custom metrics
+├─ PromQL queries
+├─ Custom dashboards
+└─ Self-hosted alternative
+
+ELK Stack (Elasticsearch, Logstash, Kibana)
+├─ Centralized logging
+├─ Full-text search
+├─ Log analysis
+└─ Security information & event management
+
+Implementation:
+```yaml
+# CloudWatch Agent Configuration
+Configuration:
+  agent:
+    metrics_collection_interval: 60
+    region: us-east-1
+  
+  metrics:
+    namespace: CustomNamespace
+    metrics_collected:
+      cpu:
+        measurement:
+          - name: cpu_usage_idle
+            rename: CPU_IDLE
+            unit: Percent
+        metrics_collection_interval: 60
+        resources:
+          - "*"
+      
+      disk:
+        measurement:
+          - name: used_percent
+            rename: DISK_USED_PERCENT
+        metrics_collection_interval: 60
+        resources:
+          - "/"
+      
+      mem:
+        measurement:
+          - name: mem_used_percent
+            rename: MEM_USED_PERCENT
+        metrics_collection_interval: 60
+  
+  logs:
+    logs_collected:
+      files:
+        collect_list:
+          - file_path: /var/log/application.log
+            log_group_name: /aws/ec2/application
+            log_stream_name: "{instance_id}"
+          
+          - file_path: /var/log/secure
+            log_group_name: /aws/ec2/secure
+            log_stream_name: "{instance_id}"
+
+# Lambda for Processing Logs
+import json
+import boto3
+
+cloudwatch = boto3.client('cloudwatch')
+sns = boto3.client('sns')
+
+def lambda_handler(event, context):
+    """
+    Process CloudWatch logs and trigger alarms
+    """
+    
+    # Decompress log data
+    log_data = json.loads(
+        gzip.decompress(
+            base64.b64decode(event['awslogs']['data'])
+        )
+    )
+    
+    for log_event in log_data['logEvents']:
+        message = log_event['message']
+        
+        # Parse errors
+        if 'ERROR' in message or 'EXCEPTION' in message:
+            # Send custom metric
+            cloudwatch.put_metric_data(
+                Namespace='ApplicationMetrics',
+                MetricData=[{
+                    'MetricName': 'ApplicationErrors',
+                    'Value': 1,
+                    'Unit': 'Count'
+                }]
+            )
+            
+            # Send alert if threshold exceeded
+            if count_errors() > 10:
+                sns.publish(
+                    TopicArn='arn:aws:sns:us-east-1:xxx:alerts',
+                    Subject='High Error Rate Detected',
+                    Message=f'Error: {message}'
+                )
+
+# CloudWatch Alarms
+Alarms:
+  - HighCPU:
+      MetricName: CPUUtilization
+      Threshold: 80
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      EvaluationPeriods: 2
+      Period: 300
+      AlarmActions:
+        - !Ref SNSTopic
+  
+  - HighMemory:
+      MetricName: MemoryUtilization
+      Threshold: 85
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      EvaluationPeriods: 3
+      Period: 300
+      AlarmActions:
+        - !Ref SNSTopic
+  
+  - HighErrorRate:
+      MetricName: ApplicationErrors
+      Threshold: 10
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      EvaluationPeriods: 1
+      Period: 60
+      AlarmActions:
+        - !Ref PagerDutyTopic
+
+# Grafana Dashboard
+{
+  "dashboard": {
+    "title": "Production Overview",
+    "panels": [
+      {
+        "title": "Request Rate",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total[5m])"
+          }
+        ]
+      },
+      {
+        "title": "Error Rate",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{status=~'5..'}[5m])"
+          }
+        ]
+      },
+      {
+        "title": "API Latency (p95)",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))"
+          }
+        ]
+      },
+      {
+        "title": "Database Connections",
+        "targets": [
+          {
+            "expr": "mysql_global_status_threads_connected"
+          }
+        ]
+      }
+    ]
+  }
+}
+
+Cost Optimization:
+├─ CloudWatch: $1K/month (metrics + logs)
+├─ Prometheus/Grafana: $2K/month (self-hosted)
+├─ Log retention: Archive to S3 after 7 days ($200/month)
+├─ Alerts: SNS notification ($50/month)
+└─ Total: ~$3.2K/month
+```
+
+---
+
+### Application & Interview Process for Cloud/DevOps Engineers
+
+#### Typical Hiring Process
+
+```
+Stage 1: Phone Screen (15-30 min)
+├─ Recruiter/HR questions
+├─ Experience discussion
+├─ Compensation expectations
+└─ Role requirements
+
+Stage 2: Technical Assessment (2-4 hours)
+├─ Option A: Live coding
+│   ├─ Infrastructure design
+│   ├─ Write Terraform/CloudFormation
+│   └─ Problem-solving
+├─ Option B: Take-home assignment
+│   ├─ Build CI/CD pipeline
+│   ├─ Design infrastructure
+│   └─ Provide documentation
+└─ Option C: Online test (Hackerrank, CodeSignal)
+
+Stage 3: Technical Interview 1 (1 hour)
+├─ Deep dive into previous projects
+├─ AWS architecture questions
+├─ Scenario-based problem solving
+├─ Follow-ups on weak areas
+
+Stage 4: Technical Interview 2 (1 hour)
+├─ Infrastructure design
+├─ System design
+├─ Trade-offs and optimization
+
+Stage 5: Behavioral Interview (30 min)
+├─ STAR method (Situation, Task, Action, Result)
+├─ Conflict resolution
+├─ Team collaboration
+├─ Failure and learning
+
+Stage 6: Manager/Lead Interview (30 min)
+├─ Technical depth questions
+├─ Career goals alignment
+├─ Team dynamics
+└─ Final questions
+```
+
+#### Common Interview Questions & Strategies
+
+**Technical Questions - Cloud Engineer:**
+
+1. "Explain your most complex infrastructure design"
+   - Strategy: Use STAR method
+   - Include: Architecture diagram, technologies, scale, challenges solved
+   - Highlight: Cost savings, performance, security
+
+2. "How would you migrate a monolithic app to microservices?"
+   - Strategy: Discuss migration strategy, not just technical
+   - Include: Database decomposition, communication patterns, deployment strategy
+   - Trade-offs: Consistency vs availability, complexity vs scalability
+
+3. "Design a system that handles 1M+ concurrent users"
+   - Strategy: Start simple, add complexity
+   - Include: Load balancing, database scaling, caching, CDN
+   - Budget conscious: Cost optimization
+
+**Technical Questions - DevOps Engineer:**
+
+1. "Describe your CI/CD pipeline implementation"
+   - Strategy: Explain full pipeline (build, test, deploy, monitor)
+   - Include: Tools used, stages, error handling, rollback
+   - Highlight: Deployment frequency, reliability, automation
+
+2. "How do you handle deployment failures?"
+   - Strategy: Discuss monitoring, alerting, rollback automation
+   - Include: Blue-green, canary, feature flags
+   - Highlight: RTO/RPO, testing, automation
+
+3. "Design a monitoring strategy for 100+ microservices"
+   - Strategy: Discuss metrics, logs, traces
+   - Include: Tools (Prometheus, ELK, DataDog), dashboards, alerts
+   - Highlight: Cost, performance, insights
+
+#### Preparation Tips
+
+```
+For Cloud Engineer Role:
+✓ Study AWS Well-Architected Framework
+✓ Practice architecture design (whiteboarding)
+✓ Know cost optimization strategies
+✓ Learn VPC, RDS, EC2 deeply
+✓ Understand HA/DR patterns
+✓ Get AWS certification (Solutions Architect)
+✓ Build portfolio projects on AWS
+
+For DevOps Engineer Role:
+✓ Master Kubernetes fundamentals
+✓ Learn CI/CD tools (Jenkins, GitLab, GitHub Actions)
+✓ Study IaC (Terraform, CloudFormation)
+✓ Understand monitoring (Prometheus, ELK)
+✓ Learn containerization (Docker)
+✓ Get Kubernetes certification (CKA)
+✓ Build and deploy sample projects
+
+For Both Roles:
+✓ Practice live coding
+✓ Prepare case studies from previous work
+✓ Learn cost optimization
+✓ Understand security best practices
+✓ Be ready for system design questions
+✓ Ask good questions (shows interest)
+✓ Follow up with thank-you email
+```
+
+#### Salary & Career Growth
+
+```
+Cloud Engineer:
+├─ Junior (0-2 years): $90K-$120K
+├─ Mid-level (2-5 years): $120K-$160K
+├─ Senior (5+ years): $160K-$200K+
+└─ Principal: $200K-$250K+
+
+DevOps Engineer:
+├─ Junior (0-2 years): $100K-$130K
+├─ Mid-level (2-5 years): $130K-$170K
+├─ Senior (5+ years): $170K-$210K+
+└─ Principal: $210K-$260K+
+
+Career Path Options:
+├─ Staff/Principal Engineer (IC track)
+├─ Engineering Manager
+├─ Solutions Architect
+├─ Cloud Architect
+├─ CTO (Chief Technology Officer)
+└─ Consultant/Contractor
+```
+
+---
+
+## References & Additional Resources
+- AWS Official Documentation: https://docs.aws.amazon.com
+- AWS Well-Architected Framework: https://aws.amazon.com/architecture/well-architected/
+- AWS Training: https://www.aws.training
+- AWS Certification Paths: https://aws.amazon.com/certification/
