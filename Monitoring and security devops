@@ -1,0 +1,3372 @@
+# Monitoring & Security for DevOps - Complete Guide
+
+## Table of Contents
+1. [Monitoring Fundamentals](#monitoring-fundamentals)
+2. [Security Fundamentals](#security-fundamentals)
+3. [Network Security](#network-security)
+4. [Identity & Access Management](#identity--access-management)
+5. [Data Protection & Encryption](#data-protection--encryption)
+6. [Security Monitoring & Logging](#security-monitoring--logging)
+7. [Securing Terraform](#securing-terraform)
+8. [Monitoring Best Practices](#monitoring-best-practices)
+9. [Compliance & Governance](#compliance--governance)
+
+---
+
+## Monitoring Fundamentals
+
+### What is Monitoring?
+
+**Monitoring** is the continuous observation of system metrics, logs, and traces to understand infrastructure health, performance, and user experience. It's the foundation of operational excellence and enables rapid incident detection and response.
+
+**Core Definition:**
+- Real-time or near-real-time collection of data
+- Aggregation and analysis of collected data
+- Alert generation based on defined thresholds
+- Historical data retention for trends and optimization
+
+### Key Pillars of Observability
+
+**The "Three Pillars of Observability":**
+
+1. **Metrics**: Quantitative measurements (time-series data)
+   ```
+   Definition: Numerical measurements aggregated over time
+   Collection: Active/Passive from systems
+   Storage: Time-series database (Prometheus, CloudWatch)
+   Granularity: Seconds to minutes intervals
+   
+   Examples:
+   - CPU utilization (0-100%)
+   - Memory usage (bytes)
+   - Request latency (milliseconds)
+   - Throughput (requests/second)
+   - Error rates (percentage)
+   - Queue depths (count)
+   - Connection pooling metrics
+   - Garbage collection pauses
+   ```
+   
+   **Types of Metrics:**
+   - **RED Method** (for services): Rate, Errors, Duration
+   - **USE Method** (for resources): Utilization, Saturation, Errors
+   - **Business Metrics**: Revenue, conversions, user engagement
+   - **Technical Metrics**: Response time, availability, throughput
+
+2. **Logs**: Event records with context (unstructured/structured text)
+   ```
+   Definition: Timestamped records of events and state changes
+   Format: Unstructured text or JSON structured logs
+   Retention: Days to years (depends on compliance)
+   Indexing: Full-text search capabilities (ELK, Splunk)
+   
+   Examples:
+   - Application errors and stack traces
+   - HTTP request logs (method, path, status, duration)
+   - System logs (kernel, services, authentication)
+   - Security logs (failed logins, permission changes)
+   - Audit logs (who did what, when, why)
+   - Debug logs (detailed execution flow)
+   ```
+   
+   **Log Levels (in order of severity):**
+   - **DEBUG**: Detailed info for diagnostic purposes
+   - **INFO**: General informational messages
+   - **WARN**: Warning conditions that should be reviewed
+   - **ERROR**: Error conditions that need attention
+   - **FATAL/CRITICAL**: System shutdown conditions
+
+3. **Traces**: End-to-end request journey (distributed tracing)
+   ```
+   Definition: Complete path of request through microservices
+   Components: Spans (units of work) and traces (collection of spans)
+   Tools: Jaeger, X-Ray, Datadog APM, New Relic
+   
+   Captured Information:
+   - Request path through services
+   - Latency breakdown by service
+   - Database query time
+   - Cache hit/miss
+   - External API calls
+   - Error context and stack traces
+   - Service dependencies
+   ```
+   
+   **Trace Structure:**
+   ```
+   Trace ID: abc123 (unique request identifier)
+   ├─ Span 1: API Gateway (0-50ms)
+   │  └─ Span 2: Auth Service (5-15ms)
+   │  └─ Span 3: Business Logic (15-30ms)
+   │     └─ Span 4: Database Query (10-25ms)
+   │  └─ Span 5: Cache Lookup (1-2ms)
+   └─ Span 6: Response Serialization (3-5ms)
+   ```
+
+4. **Events**: Significant state changes (signals)
+   ```
+   Definition: Discrete occurrences of importance
+   Examples:
+   - Deployments and releases
+   - Auto-scaling events (scale up/down)
+   - Errors and exceptions
+   - Configuration changes
+   - Security incidents
+   - Performance anomalies
+   - Resource exhaustion
+   ```
+
+### Why Monitoring Matters
+
+**Business Impact:**
+- **MTTD (Mean Time to Detect)**: Faster detection = reduced user impact
+- **MTTR (Mean Time to Resolve)**: Better data = faster resolution
+- **Reliability**: 99.9% uptime requires monitoring
+- **Cost**: Right-sized resources reduce cloud spend by 20-40%
+- **User Experience**: Real-user monitoring detects UX issues before support calls
+
+**Operational Benefits:**
+- 🚨 **Alerting**: Detect issues before users experience them (proactive monitoring)
+- 📊 **Optimization**: Identify performance bottlenecks and wasteful resource usage
+- 💰 **Cost Management**: Spot over-provisioned resources, schedule off-peak cleanup
+- 📈 **Capacity Planning**: Forecast growth trends, plan expansions proactively
+- 🔍 **Debugging**: Complete visibility into request flow for rapid root cause analysis
+- 📋 **Compliance**: Audit trails for regulatory requirements (HIPAA, PCI-DSS, SOC2)
+- 🛡️ **Security**: Detect anomalies, unauthorized access, suspicious patterns
+
+**Real-World Example:**
+```
+Without Monitoring:
+- Production outage at 3 AM
+- On-call engineer wakes up
+- No context available
+- Guesses what might be wrong
+- 45 minutes to identify root cause
+- 90 minutes total resolution time
+- Customer SLA breach, reputation damage
+- Post-mortem: "We didn't know it was happening"
+
+With Monitoring:
+- Alert fires within 2 seconds of threshold
+- Dashboard shows exact issue (CPU spike, memory leak)
+- Stack trace available in logs
+- Related spans show which service failed
+- On-call engineer has full context
+- 5 minutes to identify root cause
+- 15 minutes total resolution time
+- SLA met, customer unaffected
+- Post-mortem: "We have detailed data to prevent recurrence"
+```
+
+### Monitoring Types (Detailed)
+
+**1. Infrastructure Monitoring (Resource-level)**
+```
+Purpose: Track compute resources health and utilization
+Focus: Servers, containers, VMs, storage capacity
+
+Key Metrics:
+├─ CPU
+│  ├─ Utilization (percentage)
+│  ├─ Saturation (wait time)
+│  ├─ Context switches per second
+│  └─ Load average (1, 5, 15 min)
+│
+├─ Memory
+│  ├─ Used/Free/Cached (bytes)
+│  ├─ Swap usage
+│  ├─ Page faults
+│  └─ Out-of-memory killer events
+│
+├─ Disk
+│  ├─ Space utilization (percentage)
+│  ├─ Inode usage
+│  ├─ I/O operations per second
+│  └─ Read/write latency
+│
+├─ Network
+│  ├─ Bandwidth in/out
+│  ├─ Packet loss
+│  ├─ Connection count
+│  └─ Network errors
+│
+└─ Reliability
+   ├─ Uptime/downtime
+   ├─ Disk failures
+   ├─ Hardware issues
+   └─ Service restarts
+
+Alert Examples:
+- CPU > 85% for 5 minutes
+- Memory free < 10% remaining
+- Disk full in < 24 hours (trending)
+- Network packet loss > 1%
+```
+
+**2. Application Monitoring (Service-level)**
+```
+Purpose: Track application health and performance
+Focus: API endpoints, business logic, user transactions
+
+Key Metrics (RED Method):
+├─ Rate (Throughput)
+│  ├─ Requests per second
+│  ├─ Transactions per minute
+│  └─ Concurrent users
+│
+├─ Errors
+│  ├─ 4xx errors (client errors)
+│  ├─ 5xx errors (server errors)
+│  ├─ Error rate (percentage)
+│  └─ Specific error types (timeout, connection refused)
+│
+└─ Duration (Latency)
+   ├─ Response time (p50, p90, p99)
+   ├─ Request size
+   ├─ Processing time breakdown
+   └─ Queue wait time
+
+Additional Metrics:
+├─ Database Performance
+│  ├─ Query execution time
+│  ├─ Query throughput
+│  ├─ Connection pool utilization
+│  ├─ Slow query count
+│  └─ Lock contention
+│
+├─ Cache Performance
+│  ├─ Hit rate (percentage)
+│  ├─ Miss rate
+│  ├─ Eviction rate
+│  └─ Cache size
+│
+├─ Dependency Health
+│  ├─ Third-party API latency
+│  ├─ Third-party API error rate
+│  ├─ Circuit breaker state
+│  └─ Timeout frequency
+│
+└─ Business Metrics
+   ├─ Transaction success rate
+   ├─ Conversion rate
+   ├─ Revenue per minute
+   └─ User engagement metrics
+
+Alert Examples:
+- Error rate > 1% (compared to baseline)
+- p99 latency > 1000ms
+- Database query time > 5s
+- API timeout rate > 0.5%
+```
+
+**3. Log Monitoring (Event-level)**
+```
+Purpose: Understand what's happening in detail
+Focus: Patterns, errors, security events, audit trails
+
+Log Categories:
+├─ Application Logs
+│  ├─ Error logs with stack traces
+│  ├─ Request logs (method, path, status, duration)
+│  ├─ Feature logs (feature flags, decisions)
+│  └─ Performance logs (slow queries, expensive operations)
+│
+├─ System Logs
+│  ├─ Kernel logs (OOM killer, panic)
+│  ├─ Service logs (start, stop, restart)
+│  ├─ Package manager logs (install, update)
+│  └─ Cron job logs
+│
+├─ Security Logs
+│  ├─ Failed login attempts
+│  ├─ Permission denied events
+│  ├─ SSH connection attempts
+│  ├─ Sudo usage
+│  └─ File access changes
+│
+├─ Access Logs
+│  ├─ HTTP access logs
+│  ├─ Database connection logs
+│  ├─ API call logs
+│  └─ Load balancer logs
+│
+└─ Audit Logs
+   ├─ Configuration changes
+   ├─ Deployment events
+   ├─ User actions
+   └─ Compliance-related events
+
+Log Analysis Techniques:
+- Pattern matching (grep, regex)
+- Aggregation (error counts, types)
+- Correlation (request ID tracking)
+- Anomaly detection (sudden spike in errors)
+- Root cause analysis (trace related logs)
+
+Alert Examples:
+- Database connection refused errors > 10 in 5 min
+- Error rate spike > 2x baseline
+- Specific exception appearing (e.g., OutOfMemoryError)
+- Failed authentication attempts > 5 from same IP
+```
+
+**4. Synthetic Monitoring (Proactive)**
+```
+Purpose: Monitor from outside, like end users experience
+Focus: Uptime, availability, functionality, performance
+
+Types:
+├─ Endpoint Monitoring
+│  ├─ HTTP/HTTPS availability checks
+│  ├─ DNS resolution time
+│  ├─ SSL certificate expiration
+│  ├─ Response time from multiple regions
+│  └─ Frequency: Every 1-5 minutes
+│
+├─ Transaction Monitoring (Scripted)
+│  ├─ Simulate user workflows (login, purchase, logout)
+│  ├─ Verify critical user paths
+│  ├─ Validate business functions
+│  └─ Frequency: Every 15-30 minutes
+│
+├─ Performance Baselines
+│  ├─ Page load time
+│  ├─ Time to first byte (TTFB)
+│  ├─ Core Web Vitals (LCP, FID, CLS)
+│  └─ Asset load times
+│
+└─ Regional Testing
+   ├─ Monitor from different geographic regions
+   ├─ Detect regional outages
+   ├─ Verify CDN performance
+   └─ Test from various networks (3G, 4G, WiFi)
+
+Benefits:
+- Early detection (before customers notice)
+- Objective performance data
+- User experience perspective
+- Regression testing in production
+
+Alert Examples:
+- Endpoint not responding within 5 seconds
+- API returns 500 error (instant alert)
+- Transaction flow fails at checkout
+```
+
+**5. Real User Monitoring (RUM)**
+```
+Purpose: Track actual user experience
+Focus: Real browsers, real networks, real behavior
+
+Collected Data:
+├─ Page Load Performance
+│  ├─ DNS lookup time
+│  ├─ TCP connect time
+│  ├─ TLS handshake time
+│  ├─ Time to first byte (TTFB)
+│  ├─ Time to interactive (TTI)
+│  └─ Fully loaded time
+│
+├─ User Interactions
+│  ├─ Click response time
+│  ├─ Form submission time
+│  ├─ Navigation timing
+│  └─ Resource timing
+│
+├─ Browser Context
+│  ├─ Device type (mobile, desktop, tablet)
+│  ├─ Browser type and version
+│  ├─ Network type (WiFi, 3G, 4G)
+│  ├─ Geography (country, region)
+│  └─ OS version
+│
+├─ Error Tracking
+│  ├─ JavaScript errors
+│  ├─ Network errors
+│  ├─ HTTP error responses
+│  └─ Long task identification
+│
+└─ Session Recording (optional)
+   ├─ User actions and flow
+   ├─ DOM changes
+   ├─ Console errors
+   └─ Network activity (be careful with PII!)
+
+Advantages Over Synthetic:
+- Real user behavior (not scripted)
+- Natural network conditions
+- Device and browser diversity
+- Session context available
+- Can correlate with user actions
+
+Privacy Considerations:
+- Do NOT capture sensitive data
+- Anonymize PII (user IDs, emails)
+- Get user consent
+- Comply with GDPR, CCPA
+```
+
+### AWS Monitoring Tools
+
+**CloudWatch (Native AWS):**
+
+```hcl
+# EC2 Instance Monitoring
+resource "aws_cloudwatch_metric_alarm" "cpu_high" {
+  alarm_name          = "ec2-cpu-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = "300"          # 5 minutes
+  statistic           = "Average"
+  threshold           = "80"
+  
+  dimensions = {
+    InstanceId = aws_instance.web.id
+  }
+  
+  alarm_actions = [aws_sns_topic.alerts.arn]
+}
+
+# Memory monitoring (requires CloudWatch agent)
+resource "aws_cloudwatch_metric_alarm" "memory_high" {
+  alarm_name          = "ec2-memory-high"
+  comparison_operator = "GreaterThanThreshold"
+  metric_name         = "MemoryUtilization"
+  namespace           = "CWAgent"
+  period              = "300"
+  statistic           = "Average"
+  threshold           = "85"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
+# Application Insights (APM)
+resource "aws_applicationinsights_app" "main" {
+  resource_group_name = aws_resourcegroups_group.app.name
+  
+  tags = { Environment = "production" }
+}
+
+# CloudWatch Logs
+resource "aws_cloudwatch_log_group" "app" {
+  name              = "/aws/app/production"
+  retention_in_days = 30
+  kms_key_id        = aws_kms_key.logs.arn
+}
+```
+
+**Third-Party Tools:**
+- **Prometheus**: Metrics collection and time-series database
+- **Grafana**: Visualization and dashboard creation
+- **ELK Stack**: Elasticsearch, Logstash, Kibana for logs
+- **Splunk**: Enterprise-grade log analytics
+- **Datadog**: Full-stack monitoring platform
+- **New Relic**: Application performance monitoring
+- **Sumo Logic**: Cloud-native monitoring
+- **Dynatrace**: AI-powered observability
+
+---
+
+## Security Fundamentals
+
+### Core Security Concepts & Theory
+
+**What is Security?**
+Security in cloud infrastructure is about:
+1. **Confidentiality**: Only authorized users can access data
+2. **Integrity**: Data cannot be modified without detection
+3. **Availability**: Services are accessible when needed (vs. denial-of-service)
+4. **Authenticity**: Verify users/systems are who they claim to be
+5. **Non-repudiation**: Users cannot deny their actions (audit trail)
+
+**Security Mindset: Assume Breach**
+```
+Traditional Mindset:        Modern Mindset:
+✗ "Keep threats out"        ✓ "Threats are inside, control spread"
+✗ "Trust inside network"    ✓ "Never trust, always verify"
+✗ "Perimeter is secure"     ✓ "No perimeter, verify every access"
+✗ "Fixed defenses"          ✓ "Continuous monitoring & adaptation"
+```
+
+### Defense in Depth - 7 Layers (Detailed Theory)
+
+**Layer 1: Perimeter Security (Network Boundary)**
+```
+Purpose: First line of defense, block obvious threats
+Components:
+├─ DDoS Protection
+│  ├─ AWS Shield (Standard - free, Basic - auto)
+│  ├─ AWS Shield Advanced (paid - advanced protection)
+│  └─ CloudFlare, Akamai (3rd party)
+│
+├─ Web Application Firewall (WAF)
+│  ├─ Rate limiting (prevent brute force, DDoS)
+│  ├─ SQL injection protection
+│  ├─ XSS prevention
+│  ├─ Geo-blocking
+│  └─ IP reputation filtering
+│
+├─ Network Segmentation
+│  ├─ VPC (Virtual Private Cloud)
+│  ├─ Subnets (Public, Private, Database)
+│  ├─ Route tables (control traffic flow)
+│  └─ Network ACLs (stateless rules)
+│
+└─ Firewalls
+   ├─ Security groups (stateful - ALB, EC2, RDS)
+   ├─ Network ACLs (stateless - subnet-level)
+   └─ Host-based firewalls (OS-level - ufw, iptables)
+
+Key Metrics:
+- DDoS attack mitigation time
+- WAF rule effectiveness
+- False positive rate
+```
+
+**Layer 2: Identity & Access (Authentication & Authorization)**
+```
+Purpose: Verify who you are and what you can do
+Components:
+├─ Authentication (Who are you?)
+│  ├─ Username/password (basic, vulnerable)
+│  ├─ Multi-Factor Authentication (MFA)
+│  │  ├─ Something you know (password)
+│  │  ├─ Something you have (phone, hardware token)
+│  │  └─ Something you are (biometric)
+│  ├─ Federated identity (SSO, SAML, OAuth)
+│  └─ Temporary credentials (time-limited tokens)
+│
+├─ Authorization (What can you do?)
+│  ├─ Role-based Access Control (RBAC)
+│  ├─ Attribute-based Access Control (ABAC)
+│  ├─ Policy-based access (JSON policies)
+│  └─ Resource-based permissions (bucket policies)
+│
+├─ IAM Implementation
+│  ├─ Principle of Least Privilege (PoLP)
+│  ├─ Regular access reviews & audits
+│  ├─ Separate prod/dev credentials
+│  └─ Automatic credential rotation
+│
+└─ Session Management
+   ├─ Session timeout (force logout after X minutes)
+   ├─ Concurrent session limits
+   └─ Session token invalidation
+
+Key Metrics:
+- Failed login attempts per user
+- Unused credentials (age > 90 days)
+- Overprivileged accounts (admin when they don't need it)
+- MFA adoption rate
+```
+
+**Layer 3: Data Protection (Encryption)**
+```
+Purpose: Protect data from unauthorized access
+Components:
+├─ Encryption in Transit (TLS/SSL)
+│  ├─ All communications over HTTPS
+│  ├─ TLS 1.2 minimum (TLS 1.3 preferred)
+│  ├─ Certificate validation
+│  └─ Forward secrecy (ephemeral keys)
+│
+├─ Encryption at Rest
+│  ├─ Database encryption (RDS, DynamoDB)
+│  ├─ Storage encryption (S3, EBS)
+│  ├─ Backup encryption
+│  └─ Log file encryption
+│
+├─ Key Management
+│  ├─ AWS KMS (Key Management Service)
+│  ├─ Customer-managed vs AWS-managed keys
+│  ├─ Key rotation policies (annual or more)
+│  └─ Key access audit trail
+│
+├─ Secrets Management
+│  ├─ AWS Secrets Manager (automatic rotation)
+│  ├─ AWS Systems Manager Parameter Store
+│  ├─ Vault, Consul (3rd party)
+│  └─ Never hardcode in code/config
+│
+└─ Data Masking & Tokenization
+   ├─ Redact sensitive data in logs
+   ├─ Anonymize in non-prod environments
+   └─ Token replacement for PII
+
+Key Metrics:
+- Encryption coverage (% of data encrypted)
+- Key rotation compliance
+- Unencrypted data discovery
+- Secret exposure detection (scanning)
+```
+
+**Layer 4: Application Security**
+```
+Purpose: Prevent vulnerable code from causing harm
+Components:
+├─ Secure Coding Practices
+│  ├─ Input validation (prevent injection attacks)
+│  ├─ Output encoding (prevent XSS)
+│  ├─ Error handling (don't expose stack traces)
+│  └─ Dependency management (patch vulnerabilities)
+│
+├─ OWASP Top 10 Mitigation
+│  ├─ A1: Broken Access Control
+│  ├─ A2: Cryptographic Failures
+│  ├─ A3: Injection (SQL, NoSQL, OS)
+│  ├─ A4: Insecure Design
+│  ├─ A5: Security Misconfiguration
+│  ├─ A6: Vulnerable Components
+│  ├─ A7: Authentication Failures
+│  ├─ A8: Software & Data Integrity
+│  ├─ A9: Logging & Monitoring Failures
+│  └─ A10: SSRF
+│
+├─ Code Security
+│  ├─ SAST (Static Application Security Testing)
+│  ├─ DAST (Dynamic Application Security Testing)
+│  ├─ Dependency scanning (npm audit, Snyk)
+│  └─ Container scanning (Trivy, Grype)
+│
+└─ API Security
+   ├─ Rate limiting per API key
+   ├─ Request validation
+   ├─ Response redaction
+   └─ API versioning
+
+Key Metrics:
+- Vulnerability count by severity
+- Time to patch vulnerabilities
+- SAST findings trend
+- Dependency audit findings
+```
+
+**Layer 5: Infrastructure Security**
+```
+Purpose: Harden OS, containers, and platform
+Components:
+├─ OS Hardening
+│  ├─ Remove unnecessary services & packages
+│  ├─ Disable default accounts
+│  ├─ Restrict user permissions (sudo rules)
+│  ├─ Firewall rules (iptables, ufw)
+│  └─ SELinux or AppArmor (MAC)
+│
+├─ Patching & Updates
+│  ├─ OS security patches (monthly)
+│  ├─ Application security updates (as available)
+│  ├─ Dependency updates (regular audits)
+│  └─ Kernel security patches (critical priority)
+│
+├─ Container Security
+│  ├─ Non-root user in containers
+│  ├─ Read-only root filesystem
+│  ├─ Resource limits (CPU, memory)
+│  ├─ Network policies
+│  └─ Pod security policies (K8s)
+│
+├─ Configuration Management
+│  ├─ Immutable infrastructure (build & replace)
+│  ├─ Infrastructure as Code (git-tracked)
+│  ├─ Configuration drift detection
+│  └─ Automated remediation
+│
+└─ Compliance as Code
+   ├─ CIS Benchmarks
+   ├─ AWS Config Rules
+   ├─ CloudFormation Guard
+   └─ Automated scanning
+
+Key Metrics:
+- Patch compliance (% systems patched)
+- Configuration drift instances
+- Unpatched vulnerabilities count
+- Container image scan failures
+```
+
+**Layer 6: Monitoring & Incident Response**
+```
+Purpose: Detect and respond to security events
+Components:
+├─ Security Monitoring
+│  ├─ CloudTrail (API audit logs)
+│  ├─ VPC Flow Logs (network traffic)
+│  ├─ CloudWatch Logs (application logs)
+│  ├─ GuardDuty (threat detection - AI/ML)
+│  └─ Security Hub (centralized findings)
+│
+├─ Threat Detection
+│  ├─ Anomaly detection (unusual API calls)
+│  ├─ Failed login patterns
+│  ├─ Privilege escalation attempts
+│  ├─ Data exfiltration patterns
+│  └─ Backdoor/malware indicators
+│
+├─ Alerting & Response
+│  ├─ Security alerts (SNS, email)
+│  ├─ Incident response runbooks
+│  ├─ Automated response (block IP, disable user)
+│  └─ Escalation procedures (SIEM, SOC)
+│
+└─ Forensics & Investigation
+   ├─ Log retention (1-7 years depending on compliance)
+   ├─ Chain of custody procedures
+   ├─ Forensic tools (Volatility, Ghidra)
+   └─ Timeline reconstruction
+
+Key Metrics:
+- MTTD (Mean Time to Detect) - target < 5 minutes
+- MTTR (Mean Time to Respond) - target < 15 minutes
+- False positive rate
+- Detection coverage (% of threats detected)
+- Log retention compliance
+```
+
+**Layer 7: Disaster Recovery & Resilience**
+```
+Purpose: Survive attacks and recover quickly
+Components:
+├─ Backups & Recovery
+│  ├─ Regular automated backups (daily)
+│  ├─ Off-site backup storage (different region)
+│  ├─ Backup encryption
+│  ├─ Recovery Point Objective (RPO) - data loss tolerance
+│  ├─ Recovery Time Objective (RTO) - downtime tolerance
+│  └─ Backup testing (restore drills)
+│
+├─ High Availability
+│  ├─ Multi-AZ deployment
+│  ├─ Load balancing & failover
+│  ├─ Database replication
+│  ├─ Asynchronous replication (RPO > 0)
+│  └─ Synchronous replication (RPO = 0, slower)
+│
+├─ Disaster Recovery
+│  ├─ Warm standby (secondary in different region)
+│  ├─ Hot standby (active-active replication)
+│  ├─ DR plan and runbook
+│  ├─ Regular DR drills (quarterly)
+│  └─ Terraform recovery (infrastructure as code)
+│
+├─ Business Continuity
+│  ├─ Critical service identification
+│  ├─ Dependency mapping
+│  ├─ Escalation procedures
+│  └─ Communication plan
+│
+└─ Resilience Architecture
+   ├─ Circuit breakers (fail fast)
+   ├─ Retry logic with exponential backoff
+   ├─ Graceful degradation
+   ├─ Rate limiting & throttling
+   └─ Health checks & auto-healing
+
+Key Metrics:
+- RPO and RTO compliance
+- Backup success rate
+- Restore time verification
+- Failover time
+- DR drill frequency & success
+- Uptime percentage (99.9%, 99.99%)
+```
+
+### Security Principles & Frameworks
+
+**Principle of Least Privilege (PoLP)**
+```
+Definition: Grant minimum permissions necessary for task completion
+
+Application:
+├─ IAM: Users get specific permissions, not admin access
+├─ Database: App user can SELECT, not DROP tables
+├─ Filesystem: Files have restrictive permissions (750)
+├─ Network: Only allow required ports, deny all else
+└─ API: Token scopes limited to required endpoints
+
+Implementation:
+1. Start with NO permissions (deny by default)
+2. Grant ONLY what's needed (whitelist approach)
+3. Use time-limited credentials
+4. Review periodically (quarterly audits)
+5. Revoke when no longer needed
+
+Example:
+✗ Developer has AWS Admin access (overprivileged)
+✓ Developer has read-only EC2 + S3 bucket access (least privilege)
+```
+
+**Zero Trust Architecture (Never Trust, Always Verify)**
+```
+Principles:
+├─ Assume Breach: Threats exist inside and outside
+├─ Verify Explicitly: All access requires authentication/authorization
+├─ Secure by Default: Deny by default, allow specific
+├─ Monitor Continuously: Track all access and behavior
+├─ Protect Data: Encrypt, classify, control
+└─ Focus on Identity: Identity is the new perimeter
+
+Implementation:
+1. Authenticate every request (no implicit trust)
+2. Authorize based on context (device, location, time)
+3. Encrypt all communication (TLS end-to-end)
+4. Monitor all access (comprehensive logging)
+5. Validate device health (antivirus, patches updated)
+
+Traditional vs Zero Trust:
+Traditional (Perimeter-based):
+  Internet → DMZ → Internal Network → Servers
+  ✗ Trust inside network
+  ✗ Single perimeter breach = full access
+  ✗ Lateral movement easy
+
+Zero Trust (Identity-based):
+  Every access point requires:
+  1. Authentication (who are you?)
+  2. Authorization (what can you do?)
+  3. Device health check (is your machine secure?)
+  4. Monitoring (logging every access)
+```
+
+**Defense in Depth**
+```
+Concept: Multiple layers of security controls
+Rationale: If one layer fails, others still protect
+
+Example Stack:
+1. DDoS Protection (CloudFlare/Shield)
+2. WAF (rate limiting, SQL injection)
+3. ALB + Security Groups
+4. VPC segmentation + NACLs
+5. IAM + MFA authentication
+6. Encryption in transit (TLS)
+7. Encryption at rest (KMS)
+8. Application-level validation
+9. Logging + anomaly detection
+10. Incident response + DR
+
+Benefit: Attacker must break through multiple layers
+Cost: Complexity, but worth it for critical systems
+```
+
+**Shared Responsibility Model (AWS)**
+```
+AWS Responsible For:
+├─ Physical security (data centers)
+├─ Network security (DDoS, firewalls)
+├─ Infrastructure (hypervisor, virtualization)
+├─ Managed services (RDS, DynamoDB, Lambda)
+└─ Compliance infrastructure (monitoring, logging)
+
+Customer Responsible For:
+├─ IAM & access control
+├─ Application security (code)
+├─ Data classification & encryption
+├─ Network configuration
+├─ OS patching (EC2, containers)
+├─ Firewall rules & NACLs
+├─ Secrets management
+├─ Backup & disaster recovery
+└─ Compliance verification
+
+Not a Shared Responsibility:
+├─ Customer data (you own it)
+├─ Your applications (you secure them)
+├─ Your business logic (you verify)
+└─ Your compliance (you prove it)
+```
+
+---
+
+## Network Security (Comprehensive Theory)
+
+### Network Segmentation Theory
+
+**Why Segment Networks?**
+```
+Without Segmentation (Flat Network):
+  Attacker compromises 1 server → Access to ALL servers
+  Problem: Lateral movement unrestricted
+  
+With Segmentation (Layered Network):
+  Attacker compromises 1 server → Trapped in DMZ
+  Cannot access backend database/cache
+  Lateral movement blocked by security groups
+  Detected faster when unusual access attempted
+```
+
+**OSI Model Approach to Network Security**
+```
+Layer 7 (Application):    WAF - block malicious requests
+Layer 6 (Presentation):   TLS - encrypt data
+Layer 5 (Session):        Session management, timeouts
+Layer 4 (Transport):      NACLs, security groups (port-level)
+Layer 3 (Network):        Routing, VPC CIDR blocks, VPN
+Layer 2 (Data Link):      MAC filtering (advanced)
+Layer 1 (Physical):       Data center security (AWS responsibility)
+```
+
+**Network Architecture: Three-Tier Model**
+```
+┌──────────────────────────────────────────────────────┐
+│  INTERNET (Public World)                             │
+└──────────────────────┬───────────────────────────────┘
+                       │
+┌──────────────────────▼────────────────────────────────┐
+│  TIER 1: DMZ / Public Tier                            │
+│  ├─ Load Balancers (ALB, NLB)                        │
+│  ├─ NAT Gateways (for outbound)                      │
+│  ├─ CloudFront / CDN                                │
+│  └─ Public EC2 (Bastion hosts)                      │
+│  CIDR: 10.0.0.0/24 - 10.0.1.0/24                    │
+└──────────────────────┬───────────────────────────────┘
+        SG: Allow 80/443 from internet
+                       │
+┌──────────────────────▼───────────────────────────────┐
+│  TIER 2: Application / Private Tier                  │
+│  ├─ Web servers (Node, Python, Java)                │
+│  ├─ App servers (microservices)                     │
+│  ├─ Cache layer (Redis, Memcached)                 │
+│  └─ Message queues (RabbitMQ, SQS)                 │
+│  CIDR: 10.0.10.0/24 - 10.0.11.0/24                │
+└──────────────────────┬───────────────────────────────┘
+        SG: Allow 8080-8090 from ALB only
+                       │
+┌──────────────────────▼────────────────────────────────┐
+│  TIER 3: Data / Database Tier                        │
+│  ├─ RDS (PostgreSQL, MySQL)                         │
+│  ├─ DynamoDB (NoSQL)                                │
+│  ├─ Elasticsearch                                   │
+│  └─ Backups & Snapshots                             │
+│  CIDR: 10.0.20.0/24 - 10.0.21.0/24                 │
+└───────────────────────────────────────────────────────┘
+        SG: Allow 5432/3306 from App tier only
+        NACL: Deny all outbound (database shouldn't initiate)
+```
+
+**Subnet Design Principles**
+```
+Public Subnets:
+├─ Have route to Internet Gateway (IGW)
+├─ Instances get public IPs
+├─ Accessible from internet
+├─ Contains: Load Balancers, NAT Gateways, Bastion Hosts
+└─ Should have MINIMAL instances
+
+Private Subnets:
+├─ No direct internet access
+├─ No public IPs
+├─ Access internet through NAT Gateway (in public subnet)
+├─ Contains: Web servers, app servers, databases
+└─ Should have MOST instances
+
+Database/Isolated Subnets:
+├─ No internet access (not even through NAT)
+├─ Can only be reached from app tier
+├─ Contains: Databases, sensitive data
+└─ Most restricted tier
+
+Multi-AZ Deployment:
+  ├─ Public Subnet 1 (us-east-1a) + Public Subnet 2 (us-east-1b)
+  ├─ Private Subnet 1 (us-east-1a) + Private Subnet 2 (us-east-1b)
+  ├─ Database Subnet 1 (us-east-1a) + Database Subnet 2 (us-east-1b)
+  └─ High availability: AZ failure doesn't cause outage
+
+CIDR Planning:
+  VPC: 10.0.0.0/16 (65,536 IP addresses)
+  ├─ Public: 10.0.0.0/24 (256 IPs), 10.0.1.0/24
+  ├─ Private: 10.0.10.0/24 (256 IPs), 10.0.11.0/24
+  └─ Database: 10.0.20.0/24 (256 IPs), 10.0.21.0/24
+  
+  Reserve 10.0.128.0/17 for future expansion
+```
+
+```hcl
+resource "aws_vpc" "main" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+}
+
+# DMZ/Public subnets (web tier)
+resource "aws_subnet" "public" {
+  count                   = 2
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.${count.index + 1}.0/24"
+  availability_zone       = data.aws_availability_zones.available.names[count.index]
+  map_public_ip_on_launch = true
+  
+  tags = { Name = "public-subnet-${count.index + 1}" }
+}
+
+# Private subnets (application tier)
+resource "aws_subnet" "private" {
+  count             = 2
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.${count.index + 10}.0/24"
+  availability_zone = data.aws_availability_zones.available.names[count.index]
+  
+  tags = { Name = "private-subnet-${count.index + 1}" }
+}
+
+# Database subnets (isolated data tier)
+resource "aws_subnet" "database" {
+  count             = 2
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.${count.index + 20}.0/24"
+  availability_zone = data.aws_availability_zones.available.names[count.index]
+  
+  tags = { Name = "database-subnet-${count.index + 1}" }
+}
+
+# Internet Gateway (for public subnets)
+resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.main.id
+  tags   = { Name = "main-igw" }
+}
+
+# NAT Gateway (for private subnets outbound)
+resource "aws_eip" "nat" {
+  count  = 2
+  domain = "vpc"
+  tags   = { Name = "nat-eip-${count.index + 1}" }
+  
+  depends_on = [aws_internet_gateway.main]
+}
+
+resource "aws_nat_gateway" "main" {
+  count         = 2
+  allocation_id = aws_eip.nat[count.index].id
+  subnet_id     = aws_subnet.public[count.index].id
+  
+  tags = { Name = "nat-gw-${count.index + 1}" }
+}
+```
+
+### Security Group and NACL Implementation Details
+
+**Security Groups (Stateful Firewall) - Complete Implementation**
+
+```hcl
+# ALB Security Group
+resource "aws_security_group" "alb" {
+  name_prefix = "alb-"
+  vpc_id      = aws_vpc.main.id
+  
+  # Allow HTTPS from internet
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "HTTPS from internet"
+  }
+  
+  # Allow HTTP redirect
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "HTTP redirect"
+  }
+  
+  # Allow all outbound
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  
+  tags = { Name = "alb-sg" }
+}
+
+# Application Security Group
+resource "aws_security_group" "app" {
+  name_prefix = "app-"
+  vpc_id      = aws_vpc.main.id
+  
+  # Allow from ALB only
+  ingress {
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+    description     = "App traffic from ALB"
+  }
+  
+  # Allow outbound to database
+  egress {
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.database.id]
+    description     = "Database access"
+  }
+}
+
+# Database Security Group
+resource "aws_security_group" "database" {
+  name_prefix = "database-"
+  vpc_id      = aws_vpc.main.id
+  
+  # Allow from application tier only
+  ingress {
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.app.id]
+    description     = "PostgreSQL from app tier"
+  }
+  
+  # Deny all outbound (database doesn't initiate connections)
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = []
+    description = "Deny all outbound"
+  }
+  
+  tags = { Name = "database-sg" }
+}
+```
+
+**Security Groups vs NACLs: Comprehensive Comparison**
+
+```
+┌─────────────────────┬──────────────────────┬────────────────────┐
+│ Feature             │ Security Groups      │ NACLs              │
+├─────────────────────┼──────────────────────┼────────────────────┤
+│ Layer               │ Instance level       │ Subnet level       │
+│ State               │ STATEFUL             │ STATELESS          │
+│ Rules               │ Allow + Implicit     │ Allow + Explicit   │
+│                     │ deny all             │ deny all           │
+│ Evaluation          │ Unordered (all eval) │ Ordered (first     │
+│                     │                      │ match wins)        │
+│ Scope               │ Attached to ENI      │ Attached to subnet │
+│ Replication         │ Auto replies         │ Manual replies     │
+│ Performance         │ Slightly slower      │ Very fast          │
+│ IPv6                │ Yes                  │ Yes                │
+│ Default Rules       │ Implicit deny ingress│ Explicit deny 32768│
+│                     │ Allow all egress     │ for ephemeral      │
+│ Rule Limit          │ 120 rules            │ 20 rules (soft)    │
+└─────────────────────┴──────────────────────┴────────────────────┘
+
+STATEFUL vs STATELESS:
+
+Security Groups (STATEFUL):
+  Inbound Rule:  Allow TCP 443 from 0.0.0.0/0
+  ↓
+  Client connects to server:
+  Server receives packet → Matches rule → ALLOW ✓
+  ↓
+  Client receives response from server:
+  Server sends response → No explicit inbound rule needed
+  BUT stateful tracking remembers the outbound connection
+  Response allowed automatically ✓
+
+NACLs (STATELESS):
+  Inbound Rule 100:  Allow TCP 443 from 0.0.0.0/0
+  Outbound Rule 100: Allow TCP 1024-65535 to 0.0.0.0/0 (ephemeral)
+  ↓
+  Client connects to server:
+  Server receives packet → Matches inbound rule 100 → ALLOW ✓
+  ↓
+  Client receives response from server:
+  Server sends response → Must match outbound rule (ephemeral range)
+  Response matches 1024-65535 → ALLOW ✓
+  
+  Without ephemeral range in NACL:
+  Response sent → No matching outbound rule → DENY ✗
+  Connection fails silently (worst debugging nightmare!)
+
+When to Use Each:
+├─ Security Groups: PRIMARY - Use for 95% of filtering
+│  ├─ Fine-grained control (port ranges, protocols)
+│  ├─ Easier to understand and troubleshoot
+│  ├─ Stateful = less rules needed
+│  └─ Performance is adequate
+│
+└─ NACLs: SECONDARY - Use for additional protection
+   ├─ Subnet-level blocking (protect multiple instances)
+   ├─ Deny specific traffic (override security groups)
+   ├─ Additional compliance requirement
+   └─ High-traffic filtering (performance advantage)
+```
+
+**Security Group Best Practices**
+
+```
+1. Principle of Least Privilege
+   ✗ Bad:   Allow 0.0.0.0/0 (entire internet)
+   ✓ Good:  Allow 10.0.10.0/24 (app tier only)
+   ✓ Better: Allow sg-xxxxx (reference security group)
+
+2. Layered Security Groups
+   ✗ One massive SG with hundreds of rules
+   ✓ Separate SGs: ALB, App, Database, Cache
+   ✓ Each SG handles one tier with focused rules
+
+3. Document with Descriptions
+   ✗ ingress {
+        from_port = 8080
+        to_port = 8080
+      }
+   ✓ ingress {
+        from_port = 8080
+        to_port = 8080
+        description = "App traffic from ALB for health checks"
+      }
+
+4. Reference Security Groups (Not CIDR)
+   ✗ ingress {
+        cidr_blocks = ["10.0.10.0/24"]  # Breaks if app tier expands
+      }
+   ✓ ingress {
+        security_groups = [aws_security_group.app.id]  # Dynamic
+      }
+
+5. Separate Inbound and Egress Rules
+   - Inbound: Be restrictive (allow specific sources only)
+   - Egress: Consider what services NEED to reach (not allow-all)
+   - Example: Database shouldn't need outbound internet access
+
+6. Avoid Circular Dependencies
+   ✗ ALB SG references App SG, App SG references ALB SG
+     Creates Terraform circular dependency
+   ✓ Create separate rules after initial SG creation
+
+7. Regular Audits
+   - Quarterly: Review all security groups
+   - Remove unused rules (rules that never match)
+   - Check for overly permissive rules (0.0.0.0/0)
+   - Monitor with AWS Config rules
+```
+
+**NACL Best Practices**
+
+```
+1. Always Configure Both Inbound and Outbound
+   ✗ Configure inbound only
+     Outbound defaults to ALLOW → Potential data exfiltration
+   ✓ Configure both with explicit deny rules
+
+2. Remember Ephemeral Ports (1024-65535)
+   ✗ Forget to allow return traffic
+   ✓ Always allow 1024-65535 for responses
+
+3. Use Rule Numbers Strategically
+   Rule 100: Allow critical traffic
+   Rule 200: Allow secondary traffic
+   Rule 32767: Explicit deny all (AWS default)
+   
+   Leaves room (101-199) for future rules
+
+4. Keep NACL Rules Minimal
+   - NACLs should have < 20 rules (soft limit 20)
+   - Use Security Groups for detailed filtering
+   - NACLs for subnet-level, broad policies
+
+5. Test NACL Changes
+   - Changes take effect immediately
+   - Test from instance in subnet
+   - Use traceroute/netstat to debug
+   - Have rollback plan ready
+
+6. Document Network Diagram
+   - Visual of inbound/outbound rules
+   - Clear dependencies between layers
+   - Help new team members understand
+```
+
+```hcl
+# Database subnet NACL - strict access control
+resource "aws_network_acl" "database" {
+  vpc_id     = aws_vpc.main.id
+  subnet_ids = aws_subnet.database[*].id
+  
+  # Allow inbound from application tier
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 100
+    action     = "allow"
+    cidr_block = "10.0.10.0/23"  # App tier CIDR
+    from_port  = 5432
+    to_port    = 5432
+  }
+  
+  # Allow ephemeral ports for responses
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 110
+    action     = "allow"
+    cidr_block = "10.0.10.0/23"
+    from_port  = 1024
+    to_port    = 65535
+  }
+  
+  # Deny all other inbound traffic
+  ingress {
+    protocol   = "-1"
+    rule_no    = 200
+    action     = "deny"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 0
+    to_port    = 0
+  }
+  
+  # Allow all outbound (implicit for stateless)
+  egress {
+    protocol   = "-1"
+    rule_no    = 100
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 0
+    to_port    = 0
+  }
+  
+  tags = { Name = "database-nacl" }
+}
+```
+
+### Web Application Firewall (WAF)
+
+```hcl
+resource "aws_wafv2_web_acl" "main" {
+  name  = "application-waf"
+  scope = "CLOUDFRONT"
+  
+  default_action {
+    allow {}
+  }
+  
+  # Rule 1: Rate limiting
+  rule {
+    name     = "rate-limit-rule"
+    priority = 1
+    action {
+      block {
+        custom_response {
+          response_code = 429
+        }
+      }
+    }
+    
+    statement {
+      rate_based_statement {
+        limit              = 2000
+        aggregate_key_type = "IP"
+        
+        # Rate limit per custom key (e.g., user ID)
+        scope_down_statement {
+          byte_match_statement {
+            field_to_match {
+              uri_path {}
+            }
+            text_transformation {
+              priority = 0
+              type     = "URL_DECODE"
+            }
+            positional_constraint = "STARTS_WITH"
+            search_string         = "/api/"
+            operator              = "EQ"
+          }
+        }
+      }
+    }
+    
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "rate-limit-metric"
+      sampled_requests_enabled   = true
+    }
+  }
+  
+  # Rule 2: SQL Injection protection
+  rule {
+    name     = "sql-injection-rule"
+    priority = 2
+    action {
+      block {}
+    }
+    
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesSQLiRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+    
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "sql-injection-metric"
+      sampled_requests_enabled   = true
+    }
+  }
+  
+  # Rule 3: XSS protection
+  rule {
+    name     = "xss-protection-rule"
+    priority = 3
+    action {
+      block {}
+    }
+    
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesKnownBadInputsRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+    
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "xss-metric"
+      sampled_requests_enabled   = true
+    }
+  }
+  
+  # Rule 4: Geo-blocking (optional)
+  rule {
+    name     = "geo-blocking-rule"
+    priority = 4
+    action {
+      block {}
+    }
+    
+    statement {
+      geo_match_statement {
+        country_codes = ["KP", "IR"]  # North Korea, Iran
+      }
+    }
+    
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "geo-block-metric"
+      sampled_requests_enabled   = true
+    }
+  }
+  
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "application-waf-metrics"
+    sampled_requests_enabled   = true
+  }
+  
+  tags = { Name = "application-waf" }
+}
+```
+
+---
+
+### IAM Best Practices Checklist
+
+**Authentication Security**
+```
+☐ Enable MFA on all human users (especially admin/privileged)
+  - Email MFA (least secure)
+  - SMS MFA (vulnerable to sim-swap)
+  - Virtual MFA app (Authy, Google Authenticator - better)
+  - Hardware token (most secure)
+
+☐ Rotate credentials regularly
+  - Access keys: Every 90 days
+  - Passwords: Every 90 days
+  - Temporary credentials: Auto-rotated (no action needed)
+
+☐ Use temporary credentials wherever possible
+  - EC2 instances: Use IAM roles (temporary)
+  - Lambda: Use IAM roles (temporary)
+  - Mobile apps: Use Cognito/temporary tokens
+  - Cross-account: Use STS AssumeRole (temporary)
+
+☐ Implement password policies
+  - Minimum 14 characters
+  - Require uppercase, lowercase, numbers, symbols
+  - Prevent reuse of last 24 passwords
+  - Require MFA for console access
+```
+
+**Authorization & Permissions**
+```
+☐ Start with DENY by default
+  - Don't attach AdministratorAccess
+  - Explicitly list allowed actions
+  - Use condition keys for additional restrictions
+
+☐ Use roles instead of users for applications
+  - ✗ Create IAM user for EC2 instance
+  - ✓ Attach IAM role to EC2 instance
+  - Credentials auto-rotated, no key rotation needed
+
+☐ Implement permission boundaries
+  - Set maximum permissions for user/role
+  - Limits what admins can grant
+  - Safety net: "Never grant more than X permissions"
+
+☐ Use resource-based policies for cross-account access
+  - More secure than long-term cross-account keys
+  - Grants access to assume role in other account
+  - Can include external ID for additional safety
+```
+
+**Governance & Compliance**
+```
+☐ Regular access reviews
+  - Quarterly: Review all user permissions
+  - Remove unused permissions
+  - Remove unused users
+  - Verify MFA enabled on all accounts
+
+☐ Enable AWS IAM Access Analyzer
+  - Identifies overprivileged users
+  - Detects unused permissions
+  - Recommends permission reduction
+
+☐ Implement SCPs (Service Control Policies)
+  - Organization-wide maximum permissions
+  - Prevent services in non-approved regions
+  - Block termination of critical resources
+  - Enforce tag requirements
+
+☐ Logging & Monitoring
+  - CloudTrail: Track all IAM changes
+  - CloudWatch: Alert on privilege escalation attempts
+  - Suppress logs for low-risk actions (DescribeInstances)
+  - Focus logs on high-risk (DeleteUser, ModifyPolicy)
+```
+
+**Common IAM Mistakes & How to Avoid**
+
+```
+Mistake #1: Hardcoding AWS Credentials
+❌ Wrong:
+  AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+  AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+
+✅ Right:
+  Use IAM roles (EC2, Lambda, ECS)
+  Use environment variables (managed by platform)
+  Use credential profiles (~/.aws/credentials with MFA)
+  Use temporary credentials (STS)
+
+Mistake #2: Creating IAM User for Application
+❌ Wrong:
+  resource "aws_iam_user" "app_service" {
+    name = "my-app"
+  }
+  # Access key gets compromised
+  # App has long-term credentials
+  # Manual rotation required
+
+✅ Right:
+  resource "aws_iam_role" "app_service" {
+    name = "my-app-role"
+    assume_role_policy = jsonencode({
+      Principal = { Service = "ec2.amazonaws.com" }
+    })
+  }
+  # Automatic credential rotation (hourly)
+  # Short-lived temporary credentials
+  # No manual key management
+
+Mistake #3: Using Root Account for Daily Work
+❌ Wrong:
+  All operations with root account
+  # Root cannot be restricted
+  # Cannot use MFA with certain services
+  # If compromised: Complete account takeover
+
+✅ Right:
+  Root account: Only for account setup, recovery, billing
+  Daily work: Use IAM users/roles with minimal permissions
+  Privileged operations: Use switch role (assume role) with MFA
+
+Mistake #4: Overly Permissive S3 Bucket Policy
+❌ Wrong:
+  resource "aws_s3_bucket_policy" "allow_all" {
+    bucket = aws_s3_bucket.data.id
+    policy = jsonencode({
+      Version = "2012-10-17"
+      Statement = [{
+        Effect = "Allow"
+        Principal = "*"          # Anyone!
+        Action = "s3:GetObject"
+        Resource = "${aws_s3_bucket.data.arn}/*"
+      }]
+    })
+  }
+  # Anyone can read your data
+  # GDPR/HIPAA violation if sensitive data
+
+✅ Right:
+  resource "aws_s3_bucket_policy" "allow_specific" {
+    bucket = aws_s3_bucket.data.id
+    policy = jsonencode({
+      Version = "2012-10-17"
+      Statement = [{
+        Effect = "Allow"
+        Principal = {
+          AWS = aws_iam_role.app_role.arn
+        }
+        Action = "s3:GetObject"
+        Resource = "${aws_s3_bucket.data.arn}/public/*"  # Only specific prefix
+        Condition = {
+          IpAddress = {
+            "aws:SourceIp" = ["10.0.0.0/8"]  # Only from VPC
+          }
+        }
+      }]
+    })
+  }
+
+Mistake #5: Granting Full Service Permissions
+❌ Wrong:
+  "Action": "s3:*"      # All S3 permissions
+  "Action": "ec2:*"     # All EC2 permissions
+
+✅ Right:
+  "Action": [
+    "s3:GetObject",         # Only what's needed
+    "s3:ListBucket"
+  ]
+  "Action": [
+    "ec2:DescribeInstances",
+    "ec2:GetConsoleOutput"
+  ]
+```
+
+```hcl
+# ❌ Bad: Admin access for everyone
+resource "aws_iam_role" "developer" {
+  name = "developer-role"
+  
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { AWS = "arn:aws:iam::ACCOUNT:user/john" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "admin" {
+  role       = aws_iam_role.developer.name
+  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
+}
+
+# ✅ Good: Specific permissions only
+resource "aws_iam_policy" "developer" {
+  name = "developer-policy"
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "EC2ReadOnly"
+        Effect = "Allow"
+        Action = [
+          "ec2:DescribeInstances",
+          "ec2:DescribeSecurityGroups",
+          "ec2:DescribeNetworkInterfaces"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "S3DevBucket"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject"
+        ]
+        Resource = "arn:aws:s3:::dev-bucket/developers/*"
+      },
+      {
+        Sid    = "CloudWatchLogs"
+        Effect = "Allow"
+        Action = [
+          "logs:GetLogEvents",
+          "logs:FilterLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:log-group:/app/*"
+      },
+      {
+        Sid    = "DenyDangerousActions"
+        Effect = "Deny"
+        Action = [
+          "iam:*",
+          "organizations:*",
+          "account:*"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "developer" {
+  role       = aws_iam_role.developer.name
+  policy_arn = aws_iam_policy.developer.arn
+}
+```
+
+### Use Roles for Applications (No Long-Lived Keys)
+
+```hcl
+# Application role for EC2
+resource "aws_iam_role" "app_role" {
+  name = "app-ec2-role"
+  
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "app_policy" {
+  name = "app-policy"
+  role = aws_iam_role.app_role.id
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject"
+        ]
+        Resource = "arn:aws:s3:::app-bucket/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = "arn:aws:secretsmanager:*:*:secret:app/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt"
+        ]
+        Resource = aws_kms_key.app.arn
+      }
+    ]
+  })
+}
+
+# Instance profile to attach role
+resource "aws_iam_instance_profile" "app_profile" {
+  name = "app-instance-profile"
+  role = aws_iam_role.app_role.name
+}
+
+resource "aws_instance" "app" {
+  ami                  = data.aws_ami.ubuntu.id
+  instance_type        = "t3.medium"
+  iam_instance_profile = aws_iam_instance_profile.app_profile.name
+  
+  tags = { Name = "app-server" }
+}
+```
+
+### Cross-Account Access
+
+```hcl
+# Trust role in secondary account
+resource "aws_iam_role" "cross_account" {
+  name = "cross-account-access"
+  
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { AWS = "arn:aws:iam::PRIMARY_ACCOUNT:root" }
+      Action    = "sts:AssumeRole"
+      Condition = {
+        StringEquals = {
+          "sts:ExternalId" = "unique-external-id-12345"
+        }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "cross_account_policy" {
+  name = "cross-account-policy"
+  role = aws_iam_role.cross_account.id
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "ec2:*",
+        "s3:*"
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
+# Primary account user assumes role
+resource "aws_iam_user" "primary_user" {
+  name = "cross-account-user"
+}
+
+resource "aws_iam_user_policy" "assume_cross_account" {
+  name = "assume-cross-account-policy"
+  user = aws_iam_user.primary_user.name
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = "sts:AssumeRole"
+      Resource = "arn:aws:iam::SECONDARY_ACCOUNT:role/cross-account-access"
+      Condition = {
+        StringEquals = {
+          "sts:ExternalId" = "unique-external-id-12345"
+        }
+      }
+    }]
+  })
+}
+```
+
+### IAM Best Practices
+
+```hcl
+# 1. Enable MFA for console access
+resource "aws_iam_user" "admin" {
+  name = "admin-user"
+}
+
+# MFA requirement enforced via policy
+
+# 2. Regular audit of permissions
+resource "aws_iam_access_analyzer" "main" {
+  analyzer_name = "organization-analyzer"
+  type          = "ACCOUNT"
+  
+  tags = { Environment = "production" }
+}
+
+# 3. Use service control policies
+resource "aws_organizations_policy" "restrict_regions" {
+  content = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Deny"
+      Action    = "*"
+      Resource  = "*"
+      Condition = {
+        StringNotEquals = {
+          "aws:RequestedRegion" = [
+            "us-east-1",
+            "us-west-2",
+            "eu-west-1"
+          ]
+        }
+      }
+    }]
+  })
+  
+  name = "restrict-regions-policy"
+  type = "SERVICE_CONTROL_POLICY"
+}
+
+# 4. Rotate access keys regularly
+resource "aws_iam_access_key" "user" {
+  user = aws_iam_user.developer.name
+}
+
+# 5. Use conditions for additional security
+resource "aws_iam_policy" "conditional_access" {
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "s3:GetObject"
+      Resource = "arn:aws:s3:::secure-bucket/*"
+      Condition = {
+        IpAddress = {
+          "aws:SourceIp" = ["10.0.0.0/8"]
+        }
+        StringEquals = {
+          "aws:username" = "admin"
+        }
+      }
+    }]
+  })
+}
+```
+
+---
+
+## Data Protection & Encryption (Comprehensive Theory)
+
+### Encryption Fundamentals
+
+**What is Encryption?**
+```
+Definition: Converting readable data (plaintext) into unreadable format (ciphertext)
+using a key, so only authorized parties can decrypt.
+
+Simple Example:
+  Plaintext:      "Hello"
+  + Encryption Key: "SecureKey123"
+  + Encryption Algorithm: AES-256
+  = Ciphertext: "7x9@#$%K2m"
+  
+  Only someone with "SecureKey123" can decrypt back to "Hello"
+```
+
+**Symmetric vs Asymmetric Encryption**
+
+```
+SYMMETRIC ENCRYPTION (Same Key for Encrypt & Decrypt):
+├─ Algorithms: AES-256, DES (outdated), 3DES
+├─ How it works:
+│  Alice: "Secret message" + Key1 → Encrypted
+│  Network: Encrypted data travels
+│  Bob: Encrypted + Key1 → "Secret message"
+│
+├─ Advantages:
+│  ✓ Fast (good for large data)
+│  ✓ Strong encryption with short keys
+│  ✓ Standard for at-rest encryption
+│
+├─ Disadvantages:
+│  ✗ Key distribution problem (how does Bob get Key1 securely?)
+│  ✗ No non-repudiation (both parties have same key)
+│
+└─ Use Cases:
+   - Database encryption
+   - Disk/EBS encryption
+   - S3 object encryption
+   - Backup encryption
+
+ASYMMETRIC ENCRYPTION (Different Keys for Encrypt & Decrypt):
+├─ Algorithms: RSA, ECC, ECDSA
+├─ How it works:
+│  Alice: Has Bob's PUBLIC key
+│  Alice: "Secret message" + Bob's Public Key → Encrypted
+│  Network: Encrypted data travels
+│  Bob: Encrypted + Bob's PRIVATE key → "Secret message"
+│  Bob cannot decrypt (he doesn't have private key for encryption)
+│
+├─ Advantages:
+│  ✓ No key distribution problem (public key is public!)
+│  ✓ Non-repudiation (only sender could have encrypted)
+│  ✓ Enables digital signatures
+│
+├─ Disadvantages:
+│  ✗ Slower than symmetric (not good for large data)
+│  ✗ Larger key sizes needed
+│
+└─ Use Cases:
+   - TLS/HTTPS certificates (RSA)
+   - API signing
+   - Digital signatures
+   - Email encryption
+
+HYBRID ENCRYPTION (Best of Both):
+  Alice → Generates random symmetric key (Data Key)
+  Alice → Encrypts message with Data Key (symmetric, fast)
+  Alice → Encrypts Data Key with Bob's public key (asymmetric)
+  Alice → Sends encrypted message + encrypted data key
+  Bob → Decrypts data key with private key
+  Bob → Uses data key to decrypt message
+  
+  AWS KMS uses this approach!
+```
+
+**Encryption in Transit (TLS/HTTPS)**
+```
+Purpose: Protect data while moving over network
+Threat: Man-in-the-middle (MITM) attacks, eavesdropping
+
+TLS/HTTPS Process (Simplified):
+1. Client initiates connection
+2. Server sends certificate (containing public key)
+3. Client verifies certificate validity
+4. Client & server negotiate symmetric key (encrypted)
+5. All further communication uses symmetric key
+6. Attacker in middle cannot decrypt (doesn't have private key)
+
+TLS Versions:
+  ✗ SSL 3.0, TLS 1.0, 1.1 (deprecated - insecure)
+  ✓ TLS 1.2 (minimum for production)
+  ✓ TLS 1.3 (latest, fastest)
+
+Certificate Validation:
+  ✓ Certificate matches domain (example.com certificate for example.com)
+  ✗ Using self-signed certificate (no CA verification)
+  ✓ Certificate signed by trusted CA
+  ✓ Certificate not expired
+  ✓ Certificate not revoked (CRL/OCSP check)
+
+AWS Best Practices:
+  ├─ Use AWS Certificate Manager (free certificates)
+  ├─ Enforce HTTPS everywhere (redirect HTTP→HTTPS)
+  ├─ Minimum TLS 1.2 (policy: ELBSecurityPolicy-TLS-1-2-2017-01)
+  ├─ Use strong cipher suites (AES-128 GCM minimum)
+  └─ Enable HSTS (HTTP Strict Transport Security)
+     - Tells browser: Only use HTTPS for this domain
+     - Prevents downgrade attacks
+```
+
+**Encryption at Rest (KMS - Key Management Service)**
+```
+Purpose: Protect data stored in databases, filesystems, backups
+Threat: Someone steals hard drive or snapshot
+
+AWS KMS Architecture:
+  Application ← Encrypt/Decrypt Request
+    ↓
+  AWS KMS (Managed Service)
+    ├─ Customer Master Key (CMK)
+    │  ├─ AWS-managed key (simple, shared with others)
+    │  └─ Customer-managed key (more control, separate keys)
+    │
+    ├─ Data Key (generated from CMK)
+    │  ├─ Used to encrypt/decrypt actual data
+    │  ├─ Never leaves KMS in plaintext
+    │  └─ Different key for each data object
+    │
+    └─ Key Rotation
+       ├─ Automatic: New key generated yearly
+       ├─ Old keys retained for decryption
+       └─ No action required (automatic)
+
+When to Use AWS-Managed vs Customer-Managed Keys:
+  AWS-Managed (aws/s3, aws/rds):
+    ├─ Automatic rotation
+    ├─ Low cost (free)
+    ├─ Shared across accounts (multiple customers)
+    ├─ No direct control
+    └─ Good for: Standard encryption at rest
+
+  Customer-Managed:
+    ├─ Manual rotation control
+    ├─ Cost ($1/month per key)
+    ├─ Individual keys per customer
+    ├─ Full control (disable, schedule deletion)
+    ├─ Compliance requirements (HIPAA, PCI-DSS)
+    └─ Good for: Sensitive data, compliance, audit requirements
+
+Encryption at Rest: Where to Apply
+  ├─ RDS / Aurora database
+  │  └─ Enable "Storage encryption" during creation
+  │     (Cannot enable on existing database - must restore)
+  │
+  ├─ EBS volumes
+  │  └─ Enable "Encrypt this volume" during creation
+  │     (Can be enabled on existing volumes)
+  │
+  ├─ S3 buckets
+  │  └─ Default encryption: All objects encrypted with KMS
+  │     Block unencrypted uploads with bucket policy
+  │
+  ├─ DynamoDB tables
+  │  └─ Enable "Encryption at rest"
+  │
+  ├─ CloudWatch Logs
+  │  └─ Encrypt log group with KMS key
+  │
+  ├─ Snapshots & Backups
+  │  └─ Encrypted snapshots (inherited from volume/DB)
+  │
+  └─ Secrets Manager
+     └─ Secrets encrypted with KMS
+```
+
+**Key Rotation Strategy**
+```
+Why Rotate Keys?
+  ├─ Limit impact of key compromise
+  ├─ Comply with security policies (annually)
+  ├─ Reduce exposure window if key leaked
+  └─ Best practice: Annual rotation minimum
+
+Automatic Key Rotation (AWS KMS Default):
+  Current year:  Use Key Version 1
+  Next year:     New Key Version 2 automatically created
+  Encryption:    Always uses latest version
+  Decryption:    KMS tries all versions (transparent)
+  
+  Pro: Automatic, no operational burden
+  Con: Cannot audit exactly when rotation occurred
+
+Manual Key Rotation:
+  1. Create new CMK (different key, different ID)
+  2. Update application to use new key for encryption
+  3. Keep old key for decryption (of historical data)
+  4. Schedule old key deletion (30 days waiting period)
+  
+  Pro: Full control and audit trail
+  Con: Manual process, more operational burden
+
+Rotation Best Practices:
+  ├─ Annual minimum (monthly if sensitive data)
+  ├─ After employee departure (they might have key access)
+  ├─ After security audit/incident
+  ├─ Document rotation in change log
+  ├─ Test rotation procedure quarterly
+  └─ Disable key after rotation (waiting period before deletion)
+```
+
+**Data Classification & Handling**
+
+```
+Classify Data by Sensitivity:
+├─ PUBLIC (No encryption needed)
+│  └─ Publicly available information
+│     Example: Blog posts, marketing materials
+│
+├─ INTERNAL (Encryption recommended)
+│  └─ Company-specific but not sensitive
+│     Example: Internal documentation, policies
+│
+├─ CONFIDENTIAL (Encryption required)
+│  └─ Sensitive business data
+│     Example: Financial data, customer lists
+│     KMS: Customer-managed key minimum
+│
+└─ RESTRICTED (Encryption + access control required)
+   └─ Highly sensitive, regulated data
+      Example: HIPAA (medical), PCI-DSS (payment), PII
+      KMS: Customer-managed key, separate per data type
+      Access: MFA, cross-account roles, audit logging
+
+Encryption Requirements by Data Type:
+  Credit Cards (PCI-DSS):
+    ✓ Encrypt in transit (TLS 1.2+)
+    ✓ Encrypt at rest (AES-256 minimum)
+    ✓ Strong access control (MFA)
+    ✓ Audit logging (CloudTrail)
+    ✓ Regular security testing
+    ✗ Store in plaintext (never)
+    ✗ Log sensitive data (never)
+
+  Medical Records (HIPAA):
+    ✓ Encrypt in transit (TLS 1.2+)
+    ✓ Encrypt at rest (AES-256 minimum)
+    ✓ Strong access control (MFA)
+    ✓ Audit logging (CloudTrail, VPC Flow Logs)
+    ✓ Automatic logout (15 min idle)
+    ✓ Incident response plan
+    ✗ Store unencrypted (never)
+
+  Personally Identifiable Info (GDPR):
+    ✓ Encrypt in transit
+    ✓ Encrypt at rest
+    ✓ Right to be forgotten (data deletion)
+    ✓ Data portability
+    ✓ Breach notification (72 hours)
+    ✓ Data processing agreements (DPA)
+    ✗ Retain longer than necessary
+```
+
+```hcl
+# ALB with HTTPS
+resource "aws_lb" "main" {
+  name               = "application-alb"
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb.id]
+  subnets            = aws_subnet.public[*].id
+  
+  tags = { Name = "application-alb" }
+}
+
+# HTTPS listener
+resource "aws_lb_listener" "https" {
+  load_balancer_arn = aws_lb.main.arn
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS-1-2-Ext-2018-06"
+  certificate_arn   = aws_acm_certificate.main.arn
+  
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app.arn
+  }
+}
+
+# HTTP redirect to HTTPS
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.main.arn
+  port              = 80
+  protocol          = "HTTP"
+  
+  default_action {
+    type = "redirect"
+    
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
+    }
+  }
+}
+
+# SSL certificate
+resource "aws_acm_certificate" "main" {
+  domain_name       = "example.com"
+  validation_method = "DNS"
+  
+  lifecycle {
+    create_before_destroy = true
+  }
+  
+  tags = { Name = "example-cert" }
+}
+
+# Database force SSL
+resource "aws_db_parameter_group" "postgres" {
+  family = "postgres14"
+  
+  parameter {
+    name         = "rds.force_ssl"
+    value        = "1"
+    apply_method = "immediate"
+  }
+}
+
+resource "aws_db_instance" "postgres" {
+  db_parameter_group_name = aws_db_parameter_group.postgres.name
+  # ... other configuration
+}
+```
+
+### Encryption at Rest (KMS)
+
+```hcl
+# KMS Master Key
+resource "aws_kms_key" "main" {
+  description             = "Master key for application encryption"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+  
+  tags = { Name = "app-master-key" }
+}
+
+resource "aws_kms_alias" "main" {
+  name          = "alias/app-master-key"
+  target_key_id = aws_kms_key.main.key_id
+}
+
+# RDS encryption
+resource "aws_db_instance" "postgres" {
+  identifier            = "production-db"
+  engine                = "postgres"
+  engine_version        = "14.7"
+  instance_class        = "db.r6i.large"
+  allocated_storage     = 100
+  
+  storage_encrypted = true
+  kms_key_id        = aws_kms_key.main.arn
+  
+  # ... other configuration
+}
+
+# EBS encryption
+resource "aws_ebs_volume" "data" {
+  availability_zone = "us-east-1a"
+  size              = 500
+  
+  encrypted   = true
+  kms_key_id  = aws_kms_key.main.arn
+  
+  tags = { Name = "data-volume" }
+}
+
+# EBS encryption by default
+resource "aws_ebs_encryption_by_default" "main" {
+  enabled = true
+}
+
+resource "aws_ebs_default_kms_key" "main" {
+  kms_key_id = aws_kms_key.main.arn
+}
+
+# S3 encryption
+resource "aws_s3_bucket_server_side_encryption_configuration" "data" {
+  bucket = aws_s3_bucket.data.id
+  
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.main.arn
+    }
+    bucket_key_enabled = true
+  }
+}
+
+# Block unencrypted uploads
+resource "aws_s3_bucket_policy" "force_encryption" {
+  bucket = aws_s3_bucket.data.id
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid    = "DenyUnencryptedObjectUploads"
+      Effect = "Deny"
+      Principal = "*"
+      Action = "s3:PutObject"
+      Resource = "${aws_s3_bucket.data.arn}/*"
+      Condition = {
+        StringNotEquals = {
+          "s3:x-amz-server-side-encryption" = "aws:kms"
+        }
+      }
+    }]
+  })
+}
+
+# CloudWatch encryption
+resource "aws_cloudwatch_log_group" "app" {
+  name              = "/aws/app/production"
+  retention_in_days = 30
+  kms_key_id        = aws_kms_key.main.arn
+}
+
+# DynamoDB encryption
+resource "aws_dynamodb_table" "sessions" {
+  name           = "application-sessions"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "SessionID"
+  
+  attribute {
+    name = "SessionID"
+    type = "S"
+  }
+  
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = aws_kms_key.main.arn
+  }
+}
+```
+
+### Secrets Management
+
+```hcl
+# AWS Secrets Manager
+resource "aws_secretsmanager_secret" "db_credentials" {
+  name                    = "prod/rds/credentials"
+  description             = "RDS database credentials"
+  recovery_window_in_days = 7
+  
+  tags = { Environment = "production" }
+}
+
+resource "aws_secretsmanager_secret_version" "db_credentials" {
+  secret_id = aws_secretsmanager_secret.db_credentials.id
+  secret_string = jsonencode({
+    username = aws_db_instance.postgres.username
+    password = random_password.db.result
+    engine   = "postgres"
+    host     = aws_db_instance.postgres.address
+    port     = aws_db_instance.postgres.port
+    dbname   = aws_db_instance.postgres.db_name
+  })
+}
+
+# Use in application
+resource "aws_iam_policy" "access_secrets" {
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "secretsmanager:GetSecretValue"
+      ]
+      Resource = [
+        aws_secretsmanager_secret.db_credentials.arn
+      ]
+    }]
+  })
+}
+
+# Systems Manager Parameter Store
+resource "aws_ssm_parameter" "api_endpoint" {
+  name  = "/prod/api/endpoint"
+  type  = "String"
+  value = aws_lb.main.dns_name
+  
+  tags = { Environment = "production" }
+}
+
+resource "aws_ssm_parameter" "api_key" {
+  name  = "/prod/api/key"
+  type  = "SecureString"
+  value = random_string.api_key.result
+  key_id = aws_kms_key.main.id
+  
+  tags = { Environment = "production" }
+}
+
+# Automatic secret rotation
+resource "aws_secretsmanager_secret_rotation" "db" {
+  secret_id           = aws_secretsmanager_secret.db_credentials.id
+  rotation_enabled    = true
+  rotation_lambda_arn = aws_lambda_function.rotate_db_password.arn
+  
+  rotation_rules {
+    automatically_after_days = 30
+  }
+}
+```
+
+---
+
+## Security Monitoring & Logging
+
+### CloudTrail (API Audit Logging)
+
+```hcl
+# S3 bucket for CloudTrail logs
+resource "aws_s3_bucket" "cloudtrail_logs" {
+  bucket = "org-cloudtrail-logs-${data.aws_caller_identity.current.account_id}"
+  
+  tags = { Name = "cloudtrail-logs" }
+}
+
+resource "aws_s3_bucket_versioning" "cloudtrail" {
+  bucket = aws_s3_bucket.cloudtrail_logs.id
+  
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "cloudtrail" {
+  bucket = aws_s3_bucket.cloudtrail_logs.id
+  
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "cloudtrail" {
+  bucket = aws_s3_bucket.cloudtrail_logs.id
+  
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# CloudTrail
+resource "aws_cloudtrail" "main" {
+  name                          = "organization-trail"
+  s3_bucket_name                = aws_s3_bucket.cloudtrail_logs.id
+  include_global_service_events = true
+  is_multi_region_trail         = true
+  enable_log_file_validation    = true
+  depends_on                    = [aws_s3_bucket_policy.cloudtrail]
+  
+  tags = { Name = "organization-trail" }
+}
+
+resource "aws_s3_bucket_policy" "cloudtrail" {
+  bucket = aws_s3_bucket.cloudtrail_logs.id
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid    = "AWSCloudTrailAclCheck"
+      Effect = "Allow"
+      Principal = { Service = "cloudtrail.amazonaws.com" }
+      Action   = "s3:GetBucketAcl"
+      Resource = aws_s3_bucket.cloudtrail_logs.arn
+    },
+    {
+      Sid    = "AWSCloudTrailWrite"
+      Effect = "Allow"
+      Principal = { Service = "cloudtrail.amazonaws.com" }
+      Action   = "s3:PutObject"
+      Resource = "${aws_s3_bucket.cloudtrail_logs.arn}/*"
+      Condition = {
+        StringEquals = { "s3:x-amz-acl" = "bucket-owner-full-control" }
+      }
+    }]
+  })
+}
+```
+
+### VPC Flow Logs
+
+```hcl
+# IAM role for VPC Flow Logs
+resource "aws_iam_role" "vpc_flow_logs" {
+  name = "vpc-flow-logs-role"
+  
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "vpc-flow-logs.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "vpc_flow_logs" {
+  name = "vpc-flow-logs-policy"
+  role = aws_iam_role.vpc_flow_logs.id
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams"
+      ]
+      Effect   = "Allow"
+      Resource = "*"
+    }]
+  })
+}
+
+# CloudWatch Log Group
+resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
+  name              = "/aws/vpc/flowlogs"
+  retention_in_days = 90
+  kms_key_id        = aws_kms_key.main.arn
+}
+
+# VPC Flow Logs
+resource "aws_flow_log" "vpc" {
+  iam_role_arn    = aws_iam_role.vpc_flow_logs.arn
+  log_destination = "${aws_cloudwatch_log_group.vpc_flow_logs.arn}:*"
+  traffic_type    = "ALL"
+  vpc_id          = aws_vpc.main.id
+  
+  tags = { Name = "vpc-flow-logs" }
+}
+
+# Alert on suspicious activity
+resource "aws_cloudwatch_metric_alarm" "rejected_connections" {
+  alarm_name          = "vpc-rejected-connections"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "1"
+  metric_name         = "RejectedConnectionCount"
+  namespace           = "AWS/VPC"
+  period              = "300"
+  statistic           = "Sum"
+  threshold           = "100"
+  
+  alarm_actions = [aws_sns_topic.security_alerts.arn]
+}
+```
+
+### GuardDuty (Threat Detection)
+
+```hcl
+# Enable GuardDuty
+resource "aws_guardduty_detector" "main" {
+  enable = true
+  
+  datasources {
+    s3_logs {
+      enable = true
+    }
+    kubernetes {
+      audit_logs {
+        enable = true
+      }
+    }
+  }
+  
+  tags = { Name = "main-detector" }
+}
+
+# CloudWatch Event Rule for GuardDuty Findings
+resource "aws_cloudwatch_event_rule" "guardduty_findings" {
+  name        = "guardduty-findings"
+  description = "Capture GuardDuty findings"
+  
+  event_pattern = jsonencode({
+    source      = ["aws.guardduty"]
+    detail-type = ["GuardDuty Finding"]
+    detail = {
+      severity = [4, 7, 8]  # Medium and above
+    }
+  })
+}
+
+resource "aws_cloudwatch_event_target" "sns" {
+  rule      = aws_cloudwatch_event_rule.guardduty_findings.name
+  target_id = "GuardDutyFindings"
+  arn       = aws_sns_topic.security_alerts.arn
+}
+
+# SNS topic for alerts
+resource "aws_sns_topic" "security_alerts" {
+  name = "security-alerts"
+  
+  tags = { Name = "security-alerts" }
+}
+
+resource "aws_sns_topic_subscription" "security_email" {
+  topic_arn = aws_sns_topic.security_alerts.arn
+  protocol  = "email"
+  endpoint  = "security-team@example.com"
+}
+```
+
+---
+
+## Securing Terraform
+
+### 1. Secure State Management
+
+```hcl
+# Remote state in S3 with encryption and locking
+terraform {
+  backend "s3" {
+    bucket         = "organization-terraform-state"
+    key            = "prod/terraform.tfstate"
+    region         = "us-east-1"
+    encrypt        = true
+    dynamodb_table = "terraform-locks"
+  }
+}
+
+# S3 bucket for state
+resource "aws_s3_bucket" "terraform_state" {
+  bucket = "organization-terraform-state"
+  
+  tags = { Name = "terraform-state" }
+}
+
+# Block public access
+resource "aws_s3_bucket_public_access_block" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
+  
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# Enable versioning
+resource "aws_s3_bucket_versioning" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
+  
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+# Server-side encryption
+resource "aws_s3_bucket_server_side_encryption_configuration" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
+  
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.terraform_state.arn
+    }
+  }
+}
+
+# DynamoDB table for state locking
+resource "aws_dynamodb_table" "terraform_locks" {
+  name           = "terraform-locks"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "LockID"
+  
+  attribute {
+    name = "LockID"
+    type = "S"
+  }
+  
+  server_side_encryption {
+    enabled = true
+  }
+  
+  point_in_time_recovery {
+    enabled = true
+  }
+  
+  tags = { Name = "terraform-locks" }
+}
+```
+
+### 2. Avoid Hardcoding Secrets
+
+```hcl
+# ❌ Bad: Hardcoded secrets
+resource "aws_db_instance" "main" {
+  password = "MySecurePassword123!"
+}
+
+# ✅ Good: Use variables with sensitive flag
+variable "db_password" {
+  type      = string
+  sensitive = true
+}
+
+resource "aws_db_instance" "main" {
+  password = var.db_password
+}
+
+# ✅ Better: Use Secrets Manager
+data "aws_secretsmanager_secret_version" "db_password" {
+  secret_id = "prod/rds/password"
+}
+
+resource "aws_db_instance" "main" {
+  password = jsondecode(
+    data.aws_secretsmanager_secret_version.db_password.secret_string
+  )["password"]
+}
+
+# ✅ Best: Use Terraform Cloud variables
+resource "aws_db_instance" "main" {
+  password = var.db_password  # Set in Terraform Cloud UI
+}
+```
+
+### 3. Regular Security Scanning
+
+```bash
+# Terraform linting and security
+terraform fmt -recursive
+terraform validate
+
+# TFSec - Terraform security scanner
+tfsec .
+
+# Checkov - IaC compliance checker
+checkov -d .
+
+# Trivy - Configuration scanning
+trivy config .
+
+# Terrascan - Terraform scanning
+terrascan scan -t aws
+```
+
+### 4. Code Review & CI/CD Integration
+
+```yaml
+# GitHub Actions workflow
+name: Terraform Security
+
+on: [pull_request, push]
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      # Format check
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+      
+      # Validation
+      - name: Terraform Validate
+        run: terraform validate
+      
+      # TFSec scanning
+      - name: TFSec
+        uses: aquasecurity/tfsec-action@v1.0.0
+      
+      # Checkov scanning
+      - name: Checkov
+        uses: bridgecrewio/checkov-action@master
+      
+      # Plan
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
+      
+      # Block PR if security issues found
+      - name: Block on Failures
+        if: failure()
+        run: exit 1
+```
+
+---
+
+## Monitoring Best Practices
+
+### 1. Establish Baselines
+
+```hcl
+# Create comprehensive dashboards
+resource "aws_cloudwatch_dashboard" "application" {
+  dashboard_name = "application-health"
+  
+  dashboard_body = jsonencode({
+    widgets = [
+      {
+        type = "metric"
+        properties = {
+          metrics = [
+            ["AWS/ApplicationELB", "RequestCount", { stat = "Sum" }],
+            ["AWS/ApplicationELB", "TargetResponseTime", { stat = "Average" }],
+            ["AWS/ApplicationELB", "HTTPCode_Target_5XX_Count", { stat = "Sum" }],
+            ["AWS/ApplicationELB", "HealthyHostCount", { stat = "Average" }],
+            ["AWS/ApplicationELB", "UnHealthyHostCount", { stat = "Average" }]
+          ]
+          period = 60
+          stat   = "Average"
+          region = "us-east-1"
+          title  = "Application Load Balancer"
+        }
+      },
+      {
+        type = "metric"
+        properties = {
+          metrics = [
+            ["AWS/RDS", "CPUUtilization"],
+            ["AWS/RDS", "DatabaseConnections"],
+            ["AWS/RDS", "ReadLatency"],
+            ["AWS/RDS", "WriteLatency"]
+          ]
+          title = "Database Performance"
+        }
+      }
+    ]
+  })
+}
+```
+
+### 2. Anomaly Detection
+
+```hcl
+# Detect anomalies in API latency
+resource "aws_cloudwatch_metric_alarm" "latency_anomaly" {
+  alarm_name          = "api-latency-anomaly"
+  comparison_operator = "LessThanLowerOrGreaterThanUpperThreshold"
+  evaluation_periods  = "2"
+  threshold_metric_id = "e1"
+  
+  metric_query {
+    id          = "e1"
+    expression  = "ANOMALY_DETECTION_BAND(m1, 2)"
+    label       = "API Latency (Expected)"
+    return_data = true
+  }
+  
+  metric_query {
+    id          = "m1"
+    return_data = true
+    metric {
+      metric_name = "Latency"
+      namespace   = "AWS/ApplicationELB"
+      period      = "60"
+      stat        = "Average"
+    }
+  }
+  
+  alarm_actions = [aws_sns_topic.alerts.arn]
+}
+```
+
+### 3. Distributed Tracing
+
+```hcl
+# X-Ray sampling configuration
+resource "aws_xray_sampling_rule" "main" {
+  rule_name      = "default"
+  priority       = 1000
+  version        = 1
+  reservoir_size = 1
+  fixed_rate     = 0.05  # 5% of requests
+  url_path       = "*"
+  host           = "*"
+  http_method    = "*"
+  service_type   = "*"
+  service_name   = "*"
+  resource_arn   = "*"
+}
+
+# Application instrumentation
+# Use AWS X-Ray SDK in application code
+# Enable X-Ray write access in IAM role
+resource "aws_iam_policy" "xray_write" {
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "xray:PutTraceSegments",
+        "xray:PutTelemetryRecords"
+      ]
+      Resource = "*"
+    }]
+  })
+}
+```
+
+---
+
+## Compliance & Governance
+
+### AWS Config for Compliance
+
+```hcl
+# Enable AWS Config
+resource "aws_config_configuration_recorder" "main" {
+  name       = "main-recorder"
+  role_arn   = aws_iam_role.config.arn
+  depends_on = [aws_iam_role_policy_attachment.config]
+  
+  recording_group {
+    all_supported = true
+    include_global = true
+  }
+}
+
+resource "aws_config_configuration_recorder_status" "main" {
+  name              = aws_config_configuration_recorder.main.name
+  is_enabled        = true
+  depends_on        = [aws_config_delivery_channel.main]
+  start_recording   = true
+}
+
+# Delivery channel
+resource "aws_config_delivery_channel" "main" {
+  name                        = "main-delivery-channel"
+  s3_bucket_name              = aws_s3_bucket.config_logs.id
+  depends_on                  = [aws_config_configuration_recorder.main]
+}
+
+# Organization-wide aggregator
+resource "aws_config_configuration_aggregator" "organization" {
+  name = "organization-aggregator"
+  
+  account_aggregation_sources {
+    all_regions = true
+    account_ids = var.member_account_ids
+  }
+}
+
+# CIS Benchmark compliance
+resource "aws_config_conformance_pack" "cis_benchmark" {
+  name = "cis-aws-foundations-benchmark"
+  
+  conformance_pack_input_parameters = {
+    AccessKeysRotatedParameterMaxAccessKeyAge = "90"
+    PasswordRequirementPasswordMinimumLength   = "14"
+  }
+}
+```
+
+---
+
+**Key Takeaways:**
+
+✅ **Monitoring**: Metrics, logs, traces, events for complete observability
+✅ **Security**: Defense in depth with 7 layers of protection
+✅ **Encryption**: TLS for transit, KMS for at-rest data
+✅ **IAM**: Least privilege, roles over long-lived keys
+✅ **Logging**: CloudTrail, VPC Flow Logs, GuardDuty
+✅ **Terraform**: Secure state, no hardcoded secrets, automated scanning
+✅ **Compliance**: AWS Config, conformance packs, CIS benchmarks
+
+Monitoring and security are continuous, ongoing activities that require automation, regular reviews, and team commitment to maintain production-grade infrastructure!
+# Interview-Based Scenarios & Real-World Questions
+
+## Q13: Production Incident - You're on-call at 3 AM, monitoring system goes down. How do you respond?
+
+**Scenario Setup:**
+```
+Your monitoring system (Grafana, Prometheus) is down
+├─ Can't see any metrics
+├─ Can't verify if application is up or down
+├─ On-call alerts can't be sent
+├─ You're woken up at 3 AM
+└─ Business Impact: CRITICAL (blind to production problems)
+```
+
+**Immediate Actions (First 60 Seconds):**
+```
+1. Wake up, assess situation
+   ├─ Check phone notifications: What triggered the alert?
+   ├─ Slack: Check #incidents channel for context
+   └─ First thought: "What's the blast radius?"
+
+2. Determine: Is application down or just monitoring?
+   ├─ Try direct application access (curl, browser)
+   ├─ Check AWS console status page
+   ├─ Ask team: "Can you access the app?"
+   
+   If app is UP but monitoring is DOWN:
+   ✓ Good news: Application is serving customers
+   ✓ Priority: Restore monitoring (understand situation)
+   ✗ Don't panic about false alarm
+   
+   If app is DOWN:
+   ✗ Critical: Application not accessible
+   ✗ Priority: Restore application (customer impact)
+   ✗ Monitoring is secondary
+```
+
+**Debugging Steps (Next 10 Minutes):**
+```
+1. Check obvious issues
+   ├─ Disk full? (df -h) → Most common cause
+   ├─ Memory exhausted? (free -h)
+   ├─ Service running? (systemctl status prometheus)
+   ├─ Network connectivity? (ping 8.8.8.8)
+   └─ Logs for errors? (tail -f /var/log/prometheus/error.log)
+
+2. Recovery options
+   Option A: Quick restart (30 seconds)
+   ├─ systemctl restart prometheus grafana
+   ├─ Risk: Low (monitoring is non-critical to app)
+   
+   Option B: Degraded mode (2 minutes)
+   ├─ Start with reduced retention to free disk
+   ├─ Clear old metrics, restart services
+   
+   Option C: Restore from backup (5-10 minutes)
+   ├─ For database corruption scenarios
+   ├─ Restore Prometheus from S3 snapshot
+
+3. Communication
+   T=3:15 AM: Alert to team on Slack
+   "@channel Monitoring down since 3:05 AM
+    Application: ✅ UP (verified)
+    Status: Investigating Prometheus crash
+    ETA: 3:25 AM for fix"
+
+4. Root Cause Analysis (Next Morning)
+   └─ Why did disk fill up?
+   └─ Why wasn't this caught by monitoring?
+   └─ Solution: Monitor the monitor (dogfooding)
+```
+
+**Takeaway:** Always verify if application is up before investigating monitoring. Communicate frequently. Have degraded mode.
+
+---
+
+## Q14: Security Incident - You find suspicious IAM activity. What do you do?
+
+**Scenario:**
+```
+Alert triggers: "Unusual IAM activity detected"
+├─ 10 new admin users created in 30 minutes
+├─ Created from internal IP but outside working hours
+├─ Created by Jenkins service account
+└─ Question: Legitimate automation or compromise?
+```
+
+**Immediate Response (First Minute):**
+```
+1. DON'T DELETE ANYTHING YET
+   ├─ Need evidence for forensics
+   └─ Don't break the incident investigation
+
+2. Alert team immediately
+   Slack: "@security-team 🚨 CRITICAL: 10 admin users created
+           Investigate if legitimate or breach"
+
+3. Start war room with security, infrastructure, and DevOps
+```
+
+**Investigation (Next 5 Minutes):**
+```
+Check CloudTrail for:
+├─ Principal that created users (who/what?)
+├─ Timestamp and source IP
+├─ Were they created by Jenkins automation?
+├─ Check Jenkins logs: Was a job scheduled?
+├─ Check Jenkins credentials: Are they compromised?
+
+Determination:
+├─ Scenario A: Legitimate (Jenkins job deployed 10 services)
+│  └─ Result: FALSE ALARM, close incident, improve alerts
+│
+└─ Scenario B: Compromise (no scheduled job, unknown principal)
+   └─ Proceed to containment
+```
+
+**Containment (If Compromise):**
+```
+Within 2 minutes:
+1. Disable compromised access key
+2. Disable the 10 new admin users
+3. Revoke all sessions
+4. Enable MFA enforcement
+5. Forensic investigation starts
+```
+
+**Timeline of Communication:**
+```
+T=0:00  Alert team about suspicious activity
+T=0:05  Initial findings: Likely compromise
+T=0:10  Containment: Access key disabled
+T=0:20  Forensics underway
+T=1:00  Root cause: Access key leaked in GitHub
+T=2:00  Full investigation complete, prevention actions identified
+```
+
+**Prevention Actions:**
+- Never commit credentials to git
+- Pre-commit hooks to block credentials
+- Rotate Jenkins keys daily (not weekly)
+- Enable MFA on all IAM users
+- Alert on unknown access keys being created
+
+**Takeaway:** Speed of detection matters. Forensics matter. Prevention is key.
+
+---
+
+## Q15: Multi-Service Monitoring Design - How do you monitor 20+ microservices?
+
+**The Challenge:**
+```
+20+ services × 10 metrics = 200 metrics (seems fine)
+But: 2 regions × 3 instances = 600 metrics (getting bigger)
+With all tags and dimensions = 10,000+ metrics (explosion!)
+Problems: Which dashboard? Which alert? Too much noise.
+```
+
+**Solution: Organized Monitoring Architecture:**
+
+```
+TIER 1: Golden Signals (Executives)
+├─ Overall availability
+├─ Active users
+├─ Global error rate
+└─ Alert ONLY on critical items
+
+TIER 2: Service Level (Engineers)
+├─ Per-service RED metrics
+├─ Dependencies health
+├─ Error breakdown
+└─ Alert on service-level issues
+
+TIER 3: Instance Level (Deep debugging)
+├─ CPU, memory, disk, network
+├─ Connection pools
+├─ GC pauses
+└─ No alerts (informational only)
+```
+
+**Alert Strategy - 3 Tiers:**
+```
+CRITICAL: Page on-call (service down, error > 5%)
+WARNING: Slack notification (error > 1%, latency spike)
+INFO: Logs only (CPU > 50%, normal load)
+```
+
+**Distributed Tracing for Root Cause:**
+```
+Without tracing: "User Service is slow. Why?"
+With tracing: Shows exact breakdown:
+  ├─ User Service (100ms)
+  ├─ Auth Service (50ms)
+  ├─ Payment Service (800ms) ← BOTTLENECK!
+  │  └─ Database query (750ms) ← SLOW QUERY!
+  └─ Solution: Add index, back to 500ms
+```
+
+**Takeaway:** Organize by role (executives, engineers, on-call). Use tracing for root cause. Tier your alerts.
+
+---
+
+## Q16: Cost Optimization - Reduce monitoring costs 80% while maintaining visibility
+
+**Scenario:**
+```
+Monitoring bill: $16,000/month
+├─ CloudWatch metrics: $5,000
+├─ CloudWatch Logs: $3,000
+├─ Datadog: $8,000
+└─ Business asks: "Can we cut this 50%?"
+```
+
+**Cost Optimization Strategy:**
+```
+1. Metrics Reduction (50,000 → 10,000 metrics)
+   ├─ Remove unused metrics (not queried in 90 days)
+   ├─ Aggregate instance to service level
+   ├─ Remove redundant metrics
+   └─ Cost: $5,000 → $1,000 ✓ $4,000 savings
+
+2. Log Sampling
+   ├─ DEBUG logs: Sample 10% (keep 10%)
+   ├─ INFO logs: Sample 50% (keep 50%)
+   ├─ ERROR logs: 100% (keep all, important)
+   └─ Cost: $3,000 → $60 ✓ $2,940 savings
+
+3. Log Tiering
+   ├─ 1 week in CloudWatch (hot, expensive)
+   ├─ 90 days in S3/Athena (warm, cheaper)
+   ├─ 2 years in Glacier (cold, compliance only)
+   └─ Cost: $3,000 → $170
+
+4. Dashboard & Alert Consolidation
+   ├─ Delete unused dashboards (50 of 150)
+   ├─ Merge overlapping dashboards
+   ├─ Reduce false positive alerts (only actionable)
+   └─ Reduced metric queries = lower cost
+
+TOTAL BEFORE: $8,000/month
+TOTAL AFTER: $1,060/month (87% reduction!)
+Still monitoring: All errors (100%), critical metrics, visibility
+```
+
+**Takeaway:** Smart sampling preserves what matters. Tiering saves more than reducing collection.
+
+---
+
+## Q17: SaaS Monitoring - Multi-tenant platform with 1,000+ customers
+
+**SaaS Challenges:**
+```
+Each customer needs isolation:
+├─ Customer A: 100 req/sec, 0% error
+├─ Customer B: 500 req/sec, 2% error
+└─ (Cannot combine, must separate metrics)
+
+Different SLOs per tier:
+├─ Free: 99% uptime (43 min/month ok)
+├─ Pro: 99.9% uptime (4.3 min/month)
+├─ Enterprise: 99.95% uptime (22 sec/month)
+
+Monitoring must respect:
+├─ Data isolation (Customer A can't see B's metrics)
+├─ Compliance (HIPAA, PCI-DSS for sensitive data)
+├─ Customer-facing status page
+└─ Support SLA tracking per customer
+```
+
+**Implementation:**
+```
+Metric tagging with customer_id:
+├─ {customer_id="acme-corp", service="api", metric="latency"}
+├─ Prometheus labels or CloudWatch dimensions
+└─ Customer-specific dashboard (dropdown to select)
+
+Per-customer SLO tracking:
+├─ Calculate: Has customer breached their SLO?
+├─ Alert if: Trending towards breach (predict)
+├─ Customer self-service status page
+└─ Different alert thresholds per tier (not one-size-fits-all)
+
+Security & compliance:
+├─ Never log customer data (no PII in logs)
+├─ Encrypt monitoring data (sensitive)
+├─ Audit trail (who accessed which customer?)
+├─ RBAC (support sees customer X only)
+```
+
+---
+
+## Q18: Chaos Engineering - Test monitoring by breaking things deliberately
+
+**Challenge:**
+```
+You have comprehensive monitoring, but question:
+"Will we actually catch a failure when it happens?"
+└─ Answer: Run chaos experiments to find out
+```
+
+**Common Chaos Experiments:**
+
+```
+1. Network Latency (What if database gets slow?)
+   ├─ Gradually add 1000ms latency
+   ├─ Watch: Does alert fire?
+   ├─ Measure: How long until detection?
+   └─ Result: Alert fires after 5 minutes (should be < 2 min)
+
+2. Service Down (What if auth service crashes?)
+   ├─ Kill auth service pods
+   ├─ Should trigger errors in dependent services
+   ├─ Alert: "Auth service down"
+   └─ Runbook: "Restart auth service"
+
+3. Memory Leak (Gradual degradation)
+   ├─ Memory increases 10% per minute
+   ├─ Can you identify the leak from metrics?
+   ├─ Does auto-scaling kick in before crash?
+   └─ Alerts: Memory trending, OOM risk
+
+4. Cache Failure (What if Redis goes down?)
+   ├─ Baseline: 2,000 req/sec, 50ms latency, 80% cache hit
+   ├─ Turn off Redis
+   ├─ Watch: Latency ↑ (now hitting database)
+   ├─ Database CPU ↑ to 90%, connections maxed
+   ├─ Error rate ↑ to 20%
+   └─ Measure: Time until critical alert: 30 seconds
+```
+
+**Automation:**
+```
+Run experiments every Friday afternoon:
+├─ Measure: Does alert fire? (yes/no)
+├─ Track: MTTD (mean time to detect)
+├─ Track: MTTR (mean time to resolve)
+├─ Iterate: Fix issues found
+└─ Goal: Continuous monitoring validation
+
+Tools:
+├─ Kubernetes: Chaos Mesh, Kube-monkey
+├─ Network: Toxiproxy, Linux TC
+├─ Commercial: Gremlin, BigCommerce chaos
+└─ Custom: Application-level fault injection
+```
+
+**Example Experiment Run:**
+```
+Experiment: Redis failure
+
+Pre: 2,000 req/sec, 50ms latency, 0% error
+Kill Redis...
+T=10s: Cache errors appear, latency ↑ to 500ms ✓ Alert 1
+T=20s: DB connections maxed, error rate ↑ to 5% ✓ Alert 2
+T=30s: Error rate ↑ to 20% ✓ Critical alert
+T=45s: Load balancer removes unhealthy instances ✓ Auto-healing
+
+Results:
+✓ Alerts fired correctly
+✓ Dashboard showed root cause (Redis down)
+✗ Problem: No alert for "Redis connection errors" (add it)
+✗ Problem: Auto-scaling too slow (tune threshold)
+
+Action items:
+├─ Add alert for Redis connection errors
+├─ Tune auto-scaling (faster response)
+├─ Update runbook for this scenario
+└─ Re-test next Friday
+```
+
+---
+
+**Key Takeaways:**
+
+✅ **Production Incidents**: Verify app status first, communicate early, have degraded mode
+✅ **Security Response**: Don't delete evidence, isolate quickly, improve alerts
+✅ **Multi-Service Monitoring**: Organize by role, use distributed tracing for root causes
+✅ **Cost Optimization**: Smart sampling, metric aggregation, log tiering
+✅ **SaaS Complexity**: Data isolation, per-customer SLOs, compliance requirements
+✅ **Chaos Engineering**: Validate alerts, measure MTTD/MTTR, continuous improvement
+
+Real-world DevOps expertise requires not just knowing the theory, but understanding how to respond under pressure, design for complexity, and continuously improve systems!
