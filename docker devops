@@ -1,0 +1,4895 @@
+# Docker Complete Notes
+
+## Table of Contents
+1. [Fundamentals](#fundamentals)
+2. [Docker Architecture](#docker-architecture)
+3. [Images](#images)
+4. [Containers](#containers)
+5. [Docker Compose](#docker-compose)
+6. [Networking](#networking)
+7. [Volumes and Storage](#volumes-and-storage)
+8. [Best Practices](#best-practices)
+9. [Docker Registry](#docker-registry)
+10. [Security](#security)
+11. [Multi-Stage Builds](#multi-stage-builds)
+12. [Advanced Concepts](#advanced-concepts)
+13. [Practical Applications](#practical-applications)
+14. [Troubleshooting](#troubleshooting)
+15. [Interview Questions](#interview-questions)
+
+---
+
+## Fundamentals
+
+### What is Docker?
+
+Docker is a **containerization platform** that packages applications and their dependencies into standardized units called containers. It enables consistent execution across different environments (development, testing, production).
+
+**Key Concepts:**
+- **Container**: Lightweight, isolated environment with application and dependencies
+- **Image**: Blueprint/template for creating containers (read-only)
+- **Registry**: Repository storing Docker images (Docker Hub, private registries)
+- **Daemon**: Background service managing containers and images
+
+### Why Docker?
+
+1. **Consistency**: "Works on my machine" problem solved
+2. **Isolation**: Each container is independent
+3. **Portability**: Run anywhere (laptop, server, cloud)
+4. **Efficiency**: Lightweight compared to VMs
+5. **Scalability**: Easy to scale applications
+6. **DevOps**: Streamlined development and deployment
+
+**Practical Examples:**
+
+```bash
+# Problem without Docker:
+# Development: Ubuntu with Python 3.9, Node 14, PostgreSQL 12
+# Staging: Red Hat with Python 3.8, Node 12, PostgreSQL 11
+# Production: CentOS with Python 3.7, Node 10, PostgreSQL 10
+# Result: "Works on my machine" syndrome
+
+# Solution with Docker:
+# All environments: Same Dockerfiles, same versions
+docker run myapp:1.0  # Same everywhere
+```
+
+**Real-world benefits:**
+
+```dockerfile
+# Before Docker - Manual setup (30+ steps per environment)
+# 1. Install Ubuntu
+# 2. Update packages
+# 3. Install Python 3.9
+# 4. Install pip
+# 5. Install PostgreSQL
+# ... 25 more steps
+# 6 hours setup time per environment
+# Frequent "works for me" bugs
+
+# After Docker
+FROM python:3.9
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+CMD ["python", "app.py"]
+
+# 2 minutes to spin up environment
+# Guaranteed consistency
+```
+
+### Containers vs Virtual Machines
+
+| Aspect | Container | Virtual Machine |
+|--------|-----------|-----------------|
+| Size | Lightweight (MB) | Heavy (GB) |
+| Startup | Seconds | Minutes |
+| OS | Shares host OS | Full OS per VM |
+| Resource Use | Efficient | Higher overhead |
+| Isolation | Process-level | Hardware-level |
+| Density | Hundreds | Tens |
+
+```
+Virtual Machine Architecture:
+┌─────────────────────────────────────┐
+│         Host Operating System       │
+├─────────────────────────────────────┤
+│   Hypervisor (KVM, VirtualBox)      │
+├──────────────────┬──────────────────┤
+│  Guest OS        │  Guest OS        │
+│  ┌────────────┐  │  ┌────────────┐  │
+│  │ App & Deps │  │  │ App & Deps │  │
+│  └────────────┘  │  └────────────┘  │
+└──────────────────┴──────────────────┘
+
+Container Architecture:
+┌─────────────────────────────────────┐
+│    Host Operating System (Linux)    │
+├─────────────────────────────────────┤
+│        Docker Engine/Daemon         │
+├──────────┬──────────┬──────────┐    │
+│Container │Container │Container │    │
+│┌────────┐│┌────────┐│┌────────┐│    │
+││App&Deps│││App&Deps│││App&Deps││    │
+│└────────┘│└────────┘│└────────┘│    │
+└──────────┴──────────┴──────────┘    │
+```
+
+**Key Points:**
+- Containers leverage OS-level virtualization (cgroups, namespaces)
+- Faster boot and lower resource overhead than VMs
+- VMs provide better isolation (separate kernel)
+- Containers ideal for microservices; VMs for complete OS isolation
+
+---
+
+## Docker Architecture
+
+### Architecture Overview
+
+```
+┌────────────────────────────────────────────────────────┐
+│                  Docker Client                         │
+│  (docker CLI - local machine or remote)                │
+└────────────────────────────────────────────────────────┘
+                          │
+                          │ REST API
+                          ▼
+┌────────────────────────────────────────────────────────┐
+│                 Docker Daemon (Host)                   │
+├────────────────────────────────────────────────────────┤
+│  ┌──────────────┐  ┌──────────────┐  ┌─────────────┐  │
+│  │   Images     │  │  Containers  │  │  Registry   │  │
+│  │ (Local Store)│  │  (Running)   │  │ (Remote)    │  │
+│  └──────────────┘  └──────────────┘  └─────────────┘  │
+│                                                         │
+│  ┌──────────────┐  ┌──────────────┐  ┌─────────────┐  │
+│  │   Networks   │  │   Volumes    │  │ Buildkit    │  │
+│  └──────────────┘  └──────────────┘  └─────────────┘  │
+└────────────────────────────────────────────────────────┘
+```
+
+### Key Components
+
+**1. Docker Client**
+- Command-line interface (CLI)
+- Communicates with daemon via REST API
+- Can connect to local or remote daemon
+- Example: `docker run`, `docker build`
+
+**2. Docker Daemon (dockerd)**
+- Runs on host machine
+- Manages images, containers, networks, storage
+- Receives commands from client
+- Communicates with containerd for container lifecycle
+
+**3. containerd**
+- Container runtime (manages container lifecycle)
+- Low-level container management
+- OCI-compliant
+- Separated from Docker daemon for modularity
+
+**4. runc**
+- OCI runtime (Open Container Initiative)
+- Actually starts and manages containers
+- Low-level interaction with kernel
+
+**5. Docker Registry**
+- Stores images (Docker Hub, private registries)
+- Allows image distribution
+- Versioning and tagging support
+
+### Data Flow
+
+```
+docker run ubuntu
+        ↓
+Docker Client sends request
+        ↓
+Docker Daemon receives request
+        ↓
+Check if image exists locally
+        ↓
+If not, pull from registry
+        ↓
+containerd creates container from image
+        ↓
+runc creates OS-level container
+        ↓
+Container runs
+```
+
+---
+
+## Images
+
+### Image Fundamentals
+
+**Definition**: An image is a **read-only template** containing:
+- Application code
+- Runtime environment
+- Libraries and dependencies
+- Environment variables
+- Entry point
+
+**Key Characteristics:**
+- Immutable (changes create new layers)
+- Layered (built from multiple read-only layers)
+- Portable (same everywhere)
+- Versioned (tagged with versions)
+
+### Dockerfile
+
+A **Dockerfile** is a text file containing instructions to build an image.
+
+```dockerfile
+# Dockerfile syntax
+FROM base_image:tag           # Start from base image
+WORKDIR /app                  # Set working directory
+COPY source dest              # Copy files from host
+RUN command                   # Execute command in image
+ENV KEY=value                 # Set environment variable
+EXPOSE port                   # Document exposed port
+CMD ["executable", "param"]   # Default command
+ENTRYPOINT ["executable"]     # Overridable entry point
+```
+
+### Dockerfile Instructions
+
+**Basic Progression:**
+
+```dockerfile
+# LEVEL 1: Minimal Dockerfile
+FROM python:3.9
+COPY app.py .
+CMD ["python", "app.py"]
+
+# Problem: Large image size, mixed concerns, no dependency management
+```
+
+```dockerfile
+# LEVEL 2: Adding dependencies and structure
+FROM python:3.9
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY app.py .
+EXPOSE 5000
+CMD ["python", "app.py"]
+
+# Better: Structured, dependencies explicit, documented port
+# Problem: Still 900MB image, all build tools in final image
+```
+
+```dockerfile
+# LEVEL 3: Multi-stage optimization
+FROM python:3.9 as builder
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --user -r requirements.txt
+
+FROM python:3.9-slim
+WORKDIR /app
+COPY --from=builder /root/.local /root/.local
+ENV PATH=/root/.local/bin:$PATH
+COPY app.py .
+EXPOSE 5000
+CMD ["python", "app.py"]
+
+# Better: ~150MB, only runtime needs
+# Problem: No health checks, running as root
+```
+
+```dockerfile
+# LEVEL 4: Production-ready
+FROM python:3.9 as builder
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --user --no-cache-dir -r requirements.txt
+
+FROM python:3.9-slim
+RUN useradd -m -u 1000 appuser
+WORKDIR /app
+COPY --from=builder /root/.local /home/appuser/.local
+ENV PATH=/home/appuser/.local/bin:$PATH
+COPY --chown=appuser:appuser app.py .
+
+EXPOSE 5000
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
+    CMD curl -f http://localhost:5000/health || exit 1
+
+USER appuser
+CMD ["python", "app.py"]
+
+# Best: Secure, optimized, maintainable, monitored
+```
+
+**Detailed Instruction Reference:**
+# Base image
+FROM python:3.9-slim
+
+# Metadata
+LABEL maintainer="user@example.com"
+LABEL version="1.0"
+
+# Working directory
+WORKDIR /app
+
+# Copy files
+COPY requirements.txt .
+COPY . .
+
+# Run commands (executed at build time)
+RUN pip install -r requirements.txt
+RUN apt-get update && apt-get install -y curl
+
+# Environment variables
+ENV FLASK_APP=app.py
+ENV ENVIRONMENT=production
+
+# Expose port
+EXPOSE 5000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
+    CMD curl -f http://localhost:5000/health || exit 1
+
+# Default working user
+USER appuser
+
+# Volume mount point
+VOLUME ["/data"]
+
+# Entrypoint (cannot be overridden)
+ENTRYPOINT ["python"]
+
+# Default command (can be overridden)
+CMD ["app.py"]
+
+# Build arguments
+ARG BUILD_DATE
+ARG VERSION=1.0
+```
+
+**Detailed Explanation:**
+
+```dockerfile
+# Theory: Dockerfile builds images in layers
+# Each instruction creates a new layer
+
+# FROM - Every image starts from base
+FROM ubuntu:20.04
+# Layer 1: Ubuntu 20.04 base image
+
+RUN apt-get update && apt-get install -y python3
+# Layer 2: Added Python3
+
+COPY app.py /app/
+# Layer 3: Added app.py file
+
+RUN pip install flask
+# Layer 4: Installed Flask
+
+CMD ["python3", "/app/app.py"]
+# Layer 5: Set default command
+
+# When image runs, Docker combines all layers
+# If you rebuild after changing app.py:
+# - Layers 1, 2 (unchanged) are cached
+# - Only layer 3 onwards need rebuild
+# - This is why layer ordering matters!
+```
+
+### Building Images
+
+```bash
+# Build image from Dockerfile
+docker build -t image_name:tag .
+
+# Build with build arguments
+docker build -t myapp:1.0 --build-arg VERSION=1.0 .
+
+# Build from specific Dockerfile
+docker build -f custom.dockerfile -t myapp .
+
+# Build without cache (ignore cached layers)
+docker build --no-cache -t myapp .
+
+# Build and push to registry
+docker build -t registry.example.com/myapp:1.0 .
+docker push registry.example.com/myapp:1.0
+
+# Multi-stage build (see Multi-Stage Builds section)
+docker build -t myapp .
+```
+
+### Image Tagging and Naming
+
+**Naming Convention**: `[REGISTRY]/[NAMESPACE]/[REPOSITORY]:[TAG]`
+
+```bash
+# Examples
+ubuntu:20.04
+docker.io/library/nginx:latest
+gcr.io/my-project/backend:v1.2.3
+registry.example.com/team/app:feature-branch
+
+# Tagging existing image
+docker tag source_image:tag target_image:tag
+docker tag myapp:latest myapp:1.0
+docker tag myapp:latest registry.example.com/myapp:1.0
+
+# Push to registry
+docker push registry.example.com/myapp:1.0
+```
+
+### Image Management
+
+```bash
+# List images
+docker images
+docker image ls
+
+# Show image details
+docker image inspect ubuntu:20.04
+docker inspect <image_id>
+
+# Show image history (layers)
+docker history myapp:1.0
+
+# Remove image
+docker rmi image_name:tag
+docker image rm image_id
+
+# Remove unused images
+docker image prune
+
+# Save image to tar
+docker save myapp:1.0 > myapp.tar
+
+# Load image from tar
+docker load < myapp.tar
+
+# Export container as image
+docker export container_id > container.tar
+```
+
+### Layers and Layer Caching
+
+**Theory**: Docker images are built from layers. Each instruction creates a new layer.
+
+```dockerfile
+# Inefficient Dockerfile (poor caching)
+FROM python:3.9
+COPY . .
+RUN pip install -r requirements.txt
+
+# Problem: if ANY file changes, pip install re-runs
+# Solution: Copy requirements first, then code
+
+# Efficient Dockerfile (good caching)
+FROM python:3.9
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+
+# Now: code changes don't trigger pip install re-run
+```
+
+**Layer Caching Strategy:**
+```dockerfile
+# Principle: put frequently-changing instructions LAST
+
+# Bad: frequently-changing instructions early
+FROM node:14
+COPY . .
+RUN npm install
+RUN npm run build
+
+# Good: frequently-changing instructions last
+FROM node:14
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+```
+
+**Key Points:**
+- Build context is sent to daemon (include only needed files)
+- Use `.dockerignore` to exclude files
+- Each layer can be cached and reused
+- Layer size accumulates (watch out for large files)
+- Clean up package manager caches to reduce size
+
+---
+
+## Containers
+
+### Container Lifecycle
+
+```
+┌─────────────────────────────────────────────────────┐
+│              Container Lifecycle                    │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  Created ──┐                                        │
+│            ▼                                        │
+│       Running ◄──────┐                              │
+│            │         │                              │
+│            ├─────────┴─── Restart/Resume           │
+│            │                                        │
+│            ▼                                        │
+│       Paused ◄──── pause ──────┐                   │
+│            │                   │                   │
+│            └──── unpause ──────┘                   │
+│                                                     │
+│            ▼                                        │
+│       Stopped/Exited                               │
+│            │                                        │
+│            ▼                                        │
+│      Removed/Deleted                               │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+### Running Containers
+
+**Progression from Basic to Advanced:**
+
+```bash
+# LEVEL 1: Simplest run
+docker run ubuntu:20.04
+# Starts and exits immediately (no command to keep it running)
+
+# LEVEL 2: Run with terminal
+docker run -it ubuntu:20.04 /bin/bash
+# i = interactive, t = terminal allocation
+# You get shell prompt
+
+# LEVEL 3: Run in background with naming
+docker run -d --name my-server ubuntu:20.04 sleep infinity
+# d = detached mode (background)
+# Container keeps running with sleep command
+
+# LEVEL 4: Port and volume mapping
+docker run -d -p 8080:80 --name web \
+  -v /host/files:/container/files \
+  nginx
+# Access nginx at http://localhost:8080
+# Share files between host and container
+
+# LEVEL 5: Full production setup
+docker run -d \
+  --name api-service \
+  --restart always \
+  -p 5000:5000 \
+  -e DB_HOST=db.example.com \
+  -e DB_PASS=$(cat /secure/password) \
+  -v logs:/var/log \
+  --memory=512m \
+  --cpus=1 \
+  --health-cmd='curl -f http://localhost:5000/health' \
+  --health-interval=30s \
+  myapp:1.0
+
+# Features: restart policy, secrets, limits, health monitoring
+```
+
+**Common Port Mapping Patterns:**
+docker run ubuntu:20.04
+
+# Interactive terminal (attach to container)
+docker run -it ubuntu:20.04 /bin/bash
+
+# Detached mode (run in background)
+docker run -d ubuntu:20.04
+
+# Named container
+docker run -d --name my-container ubuntu:20.04
+
+# Port mapping
+docker run -p 8080:80 nginx         # host_port:container_port
+docker run -p 127.0.0.1:8080:80 nginx  # Bind to specific interface
+
+# Environment variables
+docker run -e VAR=value -e DEBUG=true ubuntu:20.04
+docker run --env-file .env ubuntu:20.04
+
+# Volume mounting
+docker run -v /host/path:/container/path ubuntu:20.04
+docker run -v my-volume:/data ubuntu:20.04
+docker run -v /data --read-only ubuntu:20.04
+
+# Resource limits
+docker run -m 512m --cpus=1 ubuntu:20.04
+
+# Network
+docker run --network my-network ubuntu:20.04
+docker run --network host ubuntu:20.04
+docker run --network none ubuntu:20.04
+
+# Custom entry point
+docker run --entrypoint /bin/sh ubuntu:20.04
+
+# Run command
+docker run ubuntu:20.04 echo "Hello"
+
+# Run as user
+docker run --user 1000:1000 ubuntu:20.04
+
+# Keep container alive
+docker run -d ubuntu:20.04 sleep infinity
+
+# Restart policy
+docker run --restart=always ubuntu:20.04
+docker run --restart=on-failure:5 ubuntu:20.04
+```
+
+**Port Mapping Explained:**
+```bash
+# Container runs service on port 80
+# Host accesses on port 8080
+docker run -p 8080:80 nginx
+
+# Multiple ports
+docker run -p 8080:80 -p 443:443 nginx
+
+# Bind to specific interface
+docker run -p 127.0.0.1:8080:80 nginx  # Localhost only
+docker run -p 0.0.0.0:8080:80 nginx    # All interfaces
+```
+
+### Container Management
+
+```bash
+# List containers
+docker ps                    # Running containers
+docker ps -a                 # All containers
+docker container ls
+
+# Container information
+docker inspect container_id
+docker logs container_id
+docker logs -f container_id  # Follow logs (tail)
+docker stats container_id    # Resource usage
+
+# Execute command in running container
+docker exec -it container_id /bin/bash
+docker exec container_id ls /app
+
+# Copy files to/from container
+docker cp file.txt container_id:/app/
+docker cp container_id:/app/result.txt .
+
+# Stop and start container
+docker stop container_id          # Graceful shutdown (SIGTERM)
+docker kill container_id          # Force shutdown (SIGKILL)
+docker start container_id         # Restart stopped container
+docker restart container_id       # Stop then start
+
+# Pause and resume
+docker pause container_id
+docker unpause container_id
+
+# Remove container
+docker rm container_id
+docker rm -f container_id         # Force remove
+docker container prune            # Remove all stopped
+
+# Rename container
+docker rename old_name new_name
+
+# View processes in container
+docker top container_id
+
+# Attach to running container
+docker attach container_id
+```
+
+### Container Entry Points and Commands
+
+**Theory**: Understanding ENTRYPOINT vs CMD is crucial.
+
+```dockerfile
+# CMD - can be overridden by arguments
+FROM ubuntu:20.04
+CMD ["echo", "hello"]
+
+# Usage:
+# docker run myimage              → prints "hello"
+# docker run myimage echo "bye"   → prints "bye" (CMD overridden)
+
+# ENTRYPOINT - cannot be easily overridden
+FROM ubuntu:20.04
+ENTRYPOINT ["echo"]
+CMD ["hello"]
+
+# Usage:
+# docker run myimage              → echo hello
+# docker run myimage "custom"     → echo custom (only CMD overridden)
+# docker run --entrypoint cat myimage file  → cat file
+
+# Shell form vs Exec form (IMPORTANT!)
+
+# Shell form: runs with /bin/sh
+ENTRYPOINT echo "hello"
+CMD ["world"]
+# Actual execution: /bin/sh -c 'echo hello world'
+
+# Exec form: runs directly without shell
+ENTRYPOINT ["echo"]
+CMD ["hello"]
+# Actual execution: echo hello
+
+# Key difference:
+# - Exec form: better for signal handling
+# - Shell form: allows variable expansion
+```
+
+**Best Practice Example:**
+```dockerfile
+FROM python:3.9
+WORKDIR /app
+COPY . .
+RUN pip install -r requirements.txt
+
+# Exec form - enables proper signal handling
+ENTRYPOINT ["python"]
+CMD ["app.py"]
+
+# Usage:
+# docker run myapp              → python app.py
+# docker run myapp debug.py     → python debug.py
+# docker stop container         → SIGTERM sent to python (proper shutdown)
+```
+
+---
+
+## Docker Compose
+
+### Introduction
+
+**Docker Compose** is a tool for defining and running **multi-container applications**.
+
+**Use Cases:**
+- Local development environments
+- Testing with multiple services
+- Production deployments (with orchestration)
+- CI/CD pipelines
+
+### docker-compose.yml Structure
+
+```yaml
+# Version of Docker Compose format
+version: '3.9'
+
+# Services (containers)
+services:
+  # Service 1: Web application
+  web:
+    image: node:14
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgres://db:5432/mydb
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+    depends_on:
+      - db
+    networks:
+      - mynetwork
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  # Service 2: Database
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mydb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - mynetwork
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Service 3: Cache
+  cache:
+    image: redis:6
+    ports:
+      - "6379:6379"
+    networks:
+      - mynetwork
+    volumes:
+      - redis_data:/data
+
+# Named volumes (persistent storage)
+volumes:
+  postgres_data:
+  redis_data:
+  node_modules:
+
+# Networks
+networks:
+  mynetwork:
+    driver: bridge
+```
+
+### Docker Compose Commands
+
+```bash
+# Start all services
+docker-compose up
+
+# Start in background
+docker-compose up -d
+
+# Build images
+docker-compose build
+
+# Build and start
+docker-compose up --build
+
+# View service logs
+docker-compose logs
+docker-compose logs -f web           # Follow logs for specific service
+docker-compose logs --tail=100 db    # Last 100 lines
+
+# List services
+docker-compose ps
+docker-compose services
+
+# Execute command in service
+docker-compose exec web bash
+docker-compose exec web npm test
+
+# Stop services
+docker-compose stop
+
+# Restart services
+docker-compose restart
+
+# Remove containers, networks (keeps volumes)
+docker-compose down
+
+# Remove everything including volumes
+docker-compose down -v
+
+# Remove images too
+docker-compose down -v --rmi all
+
+# Scale service to multiple instances
+docker-compose up --scale worker=3
+
+# Pull images
+docker-compose pull
+```
+
+### Service Dependencies and Startup Order
+
+**Theory and Practical Patterns:**
+
+Controlling startup order is critical for distributed systems.
+
+```yaml
+# ANTI-PATTERN: Assuming depends_on ensures readiness
+version: '3.9'
+services:
+  app:
+    image: myapp
+    depends_on:
+      - db
+  db:
+    image: postgres:13
+# Problem: app starts AFTER db, but db might not accept connections yet
+# TCP port open ≠ database ready
+```
+
+```yaml
+# PATTERN 1: Health check conditions
+version: '3.9'
+services:
+  app:
+    image: myapp
+    depends_on:
+      db:
+        condition: service_healthy  # Wait for health check
+    
+  db:
+    image: postgres:13
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+# Better: app waits for database to report healthy
+```
+
+```yaml
+# PATTERN 2: Polling with timeout (most reliable)
+version: '3.9'
+services:
+  app:
+    image: myapp
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        # Wait for database to be ready
+        until pg_isready -h db -U user; do
+          echo "Waiting for database..."
+          sleep 1
+        done
+        # Only then start application
+        exec python app.py
+    depends_on:
+      - db
+  
+  db:
+    image: postgres:13
+```
+
+**Keypoints:**
+- `depends_on` controls startup order only, not readiness
+- Health checks should verify service functionality
+- Polling loops are more reliable than assuming port availability
+- Service-to-service calls should have retry logic
+```bash
+# In app startup script
+#!/bin/bash
+set -e
+
+# Wait for database
+until pg_isready -h db -U user; do
+    echo "Waiting for database..."
+    sleep 1
+done
+
+# Wait for cache
+until redis-cli -h cache ping; do
+    echo "Waiting for cache..."
+    sleep 1
+done
+
+# Start application
+exec npm start
+```
+
+### Environment Variables and .env Files
+
+```yaml
+# docker-compose.yml
+services:
+  web:
+    image: myapp
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - DEBUG=${DEBUG:-false}
+      - NODE_ENV=production
+    env_file:
+      - .env
+      - .env.local
+```
+
+```bash
+# .env file
+DATABASE_URL=postgres://user:pass@db:5432/mydb
+DEBUG=true
+API_KEY=secret123
+```
+
+```bash
+# Usage
+docker-compose up
+
+# Or override
+DATABASE_URL=postgres://... docker-compose up
+```
+
+### Networking in Compose
+
+**Key Concept**: Each service gets hostname = service name
+
+```yaml
+services:
+  web:
+    image: myapp
+    # Can access: http://db:5432, http://cache:6379
+    
+  db:
+    image: postgres:13
+    hostname: postgres-db  # Custom hostname
+    # Accessible as: postgres-db or db (service name)
+    
+  cache:
+    image: redis:6
+    # Accessible as: cache or redis (if aliased)
+
+# Explicit network definition
+networks:
+  frontend:
+  backend:
+
+services:
+  web:
+    networks:
+      - frontend
+      - backend
+  
+  db:
+    networks:
+      - backend
+```
+
+---
+
+## Networking
+
+### Docker Network Types
+
+**Practical Progression:**
+
+```bash
+# LEVEL 1: Default bridge (isolated)
+docker run nginx
+# Isolated from host network, port not accessible
+
+# LEVEL 2: Port mapping (expose container)
+docker run -p 80:80 nginx
+# Now accessible at http://localhost:80
+
+# LEVEL 3: Named bridge network (service communication)
+docker network create myapp
+docker run --network myapp --name web myapp:latest
+docker run --network myapp --name db postgres:13
+# web can access: postgresql://db:5432
+# Automatic DNS resolution by service name
+
+# LEVEL 4: Host network (performance, less isolation)
+docker run --network host nginx
+# Shares host network stack
+# Same IP:port as host
+# No network overhead, but reduced isolation
+
+# LEVEL 5: Advanced routing with external network
+docker network create \
+  --driver bridge \
+  --subnet=172.20.0.0/16 \
+  --gateway=172.20.0.1 \
+  custom-net
+
+docker run --network custom-net \
+  --ip=172.20.0.5 \
+  --hostname=api \
+  myapp:latest
+```
+
+**Network Communication Scenarios:**
+```bash
+docker network create my-bridge
+docker run --network my-bridge myapp
+
+# Features:
+# - Isolated from host network
+# - Services accessible by hostname
+# - Port mapping required for host access
+# - Each container gets unique IP
+```
+
+**2. Host**
+```bash
+docker run --network host myapp
+
+# Features:
+# - Shares host network stack
+# - Direct access to host network
+# - No port mapping needed
+# - Lower latency, less isolation
+# - Limited to Linux
+```
+
+**3. None**
+```bash
+docker run --network none myapp
+
+# Features:
+# - No network connectivity
+# - Isolated from everything
+# - Use case: security-sensitive workloads
+```
+
+**4. Overlay (Swarm/Kubernetes)**
+```bash
+# Used in Docker Swarm or Kubernetes
+# Enables multi-host networking
+# Encrypted communication
+```
+
+### Port Mapping
+
+```bash
+# Expose port to host
+docker run -p 8080:80 nginx
+
+# Bind to specific interface
+docker run -p 127.0.0.1:8080:80 nginx
+
+# Map multiple ports
+docker run -p 8080:80 -p 8443:443 nginx
+
+# Dynamic port mapping (host picks random port)
+docker run -p 80 nginx
+docker port container_id               # Shows mapping
+
+# UDP port
+docker run -p 8080:8080/udp nginx
+```
+
+### Service Discovery
+
+```yaml
+# docker-compose.yml
+services:
+  web:
+    image: myapp
+    # Accessible as: http://web:3000 from other services
+  
+  db:
+    image: postgres:13
+    # Accessible as: postgres://db:5432 from web service
+```
+
+```javascript
+// Node.js example - no need for IP addresses
+const dbUrl = 'postgresql://user:pass@db:5432/mydb';
+const cacheUrl = 'redis://cache:6379';
+```
+
+### Network Connectivity Testing
+
+```bash
+# Inspect network
+docker network inspect my-network
+
+# Test connectivity between containers
+docker run -it --network my-network alpine
+ping other-container
+
+# Test from outside
+docker run --network host curl localhost:8080
+
+# Port availability
+docker run -p 8080:80 nginx
+# If port taken: docker ps -a | grep 8080
+```
+
+---
+
+## Volumes and Storage
+
+### Volume Types
+
+**Progression - Understanding Persistence:**
+
+```bash
+# LEVEL 1: Container-only (data lost on delete)
+docker run myapp:latest
+# Data: /var/log/app.log inside container
+# Problem: Restarting container loses logs
+
+# LEVEL 2: Bind mount (host directory)
+docker run -v $(pwd)/logs:/var/log myapp:latest
+# Data: /var/log in container → $(pwd)/logs on host
+# Advantage: Direct file access on host
+# Disadvantage: Host-dependent paths
+
+# LEVEL 3: Named volume (managed by Docker)
+docker volume create app-logs
+docker run -v app-logs:/var/log myapp:latest
+# Data: Managed by Docker at /var/lib/docker/volumes/
+# Advantage: Docker manages lifecycle
+# Works on any host
+
+# LEVEL 4: Multiple volumes with different permissions
+docker run \
+  -v app-logs:/var/log \
+  -v config:/etc/app \
+  -v /host/readonly:/data:ro \
+  -v /tmp:/tmp:rw \
+  myapp:latest
+
+# Different purposes: logs, config, read-only data, temp files
+
+# LEVEL 5: Volume driver plugins (advanced)
+docker volume create \
+  --driver nfs \
+  --opt o=addr=192.168.1.1,vers=4,soft,timeo=180,bg,tcp \
+  --opt device=:/mnt/nfs \
+  nfs-volume
+
+docker run -v nfs-volume:/data myapp:latest
+# Network storage for distributed deployments
+```
+
+**Practical Data Persistence Patterns:**
+```bash
+# Create volume
+docker volume create my-volume
+
+# Run with named volume
+docker run -v my-volume:/data myapp
+
+# List volumes
+docker volume ls
+
+# Inspect volume
+docker volume inspect my-volume
+
+# Remove volume
+docker volume rm my-volume
+
+# Use in Compose
+services:
+  db:
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
+```
+
+**2. Bind Mounts**
+```bash
+# Mount host directory
+docker run -v /host/path:/container/path myapp
+
+# Read-only
+docker run -v /host/path:/container/path:ro myapp
+
+# Absolute paths only
+docker run -v $(pwd):/app myapp
+
+# Use in Compose
+services:
+  app:
+    volumes:
+      - .:/app
+      - ./config:/etc/app/config:ro
+```
+
+**3. Tmpfs Mounts**
+```bash
+# Mount in-memory (temporary)
+docker run --tmpfs /app/cache myapp
+
+# With options
+docker run --tmpfs /app:rw,size=100m,noexec myapp
+
+# Use case: temporary storage, no persistence needed
+```
+
+### Storage Drivers
+
+Docker supports different storage drivers for container filesystems:
+
+```bash
+# Check storage driver
+docker info | grep "Storage Driver"
+
+# Common storage drivers:
+# - overlay2 (default, recommended)
+# - ext4
+# - btrfs
+# - vfs (slow, no CoW)
+
+# overlayfs: Upper (writable), Lower (read-only image layers)
+# Union mount: merges directories
+```
+
+### Data Persistence
+
+```yaml
+version: '3.9'
+
+services:
+  database:
+    image: postgres:13
+    volumes:
+      # Named volume - managed by Docker
+      - db_data:/var/lib/postgresql/data
+      # Bind mount - initialize from host
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    
+  cache:
+    image: redis:6
+    volumes:
+      # Persist Redis data
+      - cache_data:/data
+    
+  app:
+    image: myapp
+    volumes:
+      # Application logs
+      - ./logs:/app/logs
+      # Temporary files
+      - tmp:/tmp
+
+volumes:
+  db_data:
+  cache_data:
+  tmp:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+```
+
+### Backup and Restore Volumes
+
+```bash
+# Backup volume
+docker run --rm -v my-volume:/data -v $(pwd):/backup \
+  alpine tar czf /backup/volume-backup.tar.gz -C /data .
+
+# Restore volume
+docker run --rm -v my-volume:/data -v $(pwd):/backup \
+  alpine tar xzf /backup/volume-backup.tar.gz -C /data
+
+# Backup database
+docker exec postgres_container pg_dump -U user dbname > backup.sql
+
+# Restore database
+docker exec -i postgres_container psql -U user dbname < backup.sql
+```
+
+---
+
+## Best Practices
+
+### 1. Dockerfile Best Practices
+
+**Progression of Optimization:**
+
+```dockerfile
+# ANTI-PATTERN 1: Bloated image
+FROM python:3.9
+COPY . /app
+WORKDIR /app
+RUN pip install -r requirements.txt
+RUN apt-get update && apt-get install -y build-essential
+CMD ["python", "app.py"]
+# Result: 900MB+ image with build tools included
+
+# PATTERN 1: Separate dependencies
+FROM python:3.9-slim
+COPY requirements.txt /app/
+WORKDIR /app
+RUN pip install -r requirements.txt
+COPY . /app
+CMD ["python", "app.py"]
+# Better: 150MB, but still has pip cache
+
+# PATTERN 2: Clean up caches
+FROM python:3.9-slim
+COPY requirements.txt /app/
+WORKDIR /app
+RUN pip install --no-cache-dir -r requirements.txt && \
+    rm -rf /tmp/* && \
+    rm -rf /var/cache/apt/*
+COPY . /app
+CMD ["python", "app.py"]
+# Better: Removes unnecessary files
+
+# PATTERN 3: Multi-stage (BEST)
+FROM python:3.9 as builder
+COPY requirements.txt .
+RUN pip install --user --no-cache-dir -r requirements.txt
+
+FROM python:3.9-slim
+COPY --from=builder /root/.local /root/.local
+ENV PATH=/root/.local/bin:$PATH
+COPY . /app
+WORKDIR /app
+CMD ["python", "app.py"]
+# Best: 120MB, minimal footprint, no build dependencies
+```
+
+**Practical Layer Optimization Theory:**
+
+```dockerfile
+# Understanding layer caching - the KEY to fast builds
+FROM python:3.9
+
+# Layer 1: Base image
+COPY requirements.txt .
+# Layer 2: Small, doesn't change often
+
+RUN pip install -r requirements.txt
+# Layer 3: Large, expensive to rebuild, changes when requirements change
+
+COPY . /app
+# Layer 4: Application code, changes frequently
+
+# Ordering strategy:
+# 1. Least frequently changing (base, system deps)
+# 2. Less frequently changing (requirements)
+# 3. Most frequently changing (code)
+
+# This way, code changes don't invalidate pip layer cache
+# Without this ordering, ANY file change rebuilds pip dependencies
+```
+FROM python:3.9 as builder
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --user -r requirements.txt
+
+FROM python:3.9-slim
+COPY --from=builder /root/.local /root/.local
+ENV PATH=/root/.local:$PATH
+COPY app.py .
+CMD ["python", "app.py"]
+
+# ✗ Bad: Single stage with bloated image
+FROM python:3.9
+COPY . .
+RUN pip install -r requirements.txt
+CMD ["python", "app.py"]
+```
+
+```dockerfile
+# ✓ Good: Leverage layer caching
+FROM python:3.9-slim
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY app.py .
+CMD ["python", "app.py"]
+
+# ✗ Bad: Copy all files early
+FROM python:3.9-slim
+COPY . .
+RUN pip install -r requirements.txt
+CMD ["python", "app.py"]
+```
+
+```dockerfile
+# ✓ Good: Minimize layers
+FROM ubuntu:20.04
+RUN apt-get update && \
+    apt-get install -y python3 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# ✗ Bad: Creates many layers
+FROM ubuntu:20.04
+RUN apt-get update
+RUN apt-get install -y python3
+RUN apt-get clean
+```
+
+```dockerfile
+# ✓ Good: Use .dockerignore
+# In .dockerignore:
+# .git
+# .gitignore
+# node_modules
+# *.log
+# .env
+
+# ✓ Good: Non-root user
+FROM python:3.9
+RUN useradd -m appuser
+USER appuser
+CMD ["python", "app.py"]
+
+# ✗ Bad: Running as root
+FROM python:3.9
+CMD ["python", "app.py"]
+```
+
+### 2. Image Size Optimization
+
+```dockerfile
+# Start with slim variant
+FROM python:3.9-slim          # ~150MB
+# Better than: python:3.9     # ~900MB
+
+# Use alpine for minimal size
+FROM alpine:3.14              # ~5MB
+RUN apk add --no-cache python3
+
+# Remove package manager cache
+RUN apt-get update && \
+    apt-get install -y curl && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Remove unnecessary files
+RUN rm -rf /tmp/* /var/tmp/* /var/cache/*
+
+# Multi-stage builds for final stage
+# Example: node
+FROM node:14 as builder
+WORKDIR /app
+COPY . .
+RUN npm ci && npm run build
+
+FROM node:14-alpine
+COPY --from=builder /app/dist .
+CMD ["node", "server.js"]
+```
+
+### 3. Security Best Practices
+
+```dockerfile
+# ✓ Good: Run as non-root
+FROM python:3.9-slim
+RUN addgroup appgroup && adduser -S appuser -G appgroup
+USER appuser
+
+# ✓ Good: Read-only filesystem where possible
+FROM python:3.9
+VOLUME /tmp  # Writable temp
+# Container will be mounted as read-only
+
+# ✓ Good: Don't include secrets in image
+FROM python:3.9
+# Instead: use --secret or environment variables
+# ARG BUILD_SECRET  # NEVER do this!
+
+# ✓ Good: Scan image for vulnerabilities
+# docker scan myimage
+```
+
+```bash
+# ✓ Good: Use secrets in compose
+docker-compose exec app cat /run/secrets/db_password
+
+# docker-compose.yml
+services:
+  app:
+    image: myapp
+    secrets:
+      - db_password
+    environment:
+      - DB_PASSWORD_FILE=/run/secrets/db_password
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+```
+
+### 4. Health Checks
+
+```dockerfile
+FROM python:3.9
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
+  CMD curl -f http://localhost:5000/health || exit 1
+
+CMD ["python", "app.py"]
+```
+
+```yaml
+# docker-compose.yml
+services:
+  web:
+    image: myapp
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+```
+
+### 5. Logging Best Practices
+
+```dockerfile
+# ✓ Good: Log to stdout/stderr
+FROM python:3.9
+ENV PYTHONUNBUFFERED=1  # Don't buffer output
+CMD ["python", "-u", "app.py"]
+
+# View logs
+docker logs container_id
+docker-compose logs web
+```
+
+```yaml
+# docker-compose.yml
+services:
+  app:
+    image: myapp
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+```
+
+### 6. Resource Limits
+
+```bash
+# Limit memory and CPU
+docker run -m 512m --cpus=1 myapp
+docker run -m 512m --cpus=0.5 myapp  # 0.5 CPU core
+
+# Compose
+services:
+  web:
+    image: myapp
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+```
+
+### 7. Environment Management
+
+```bash
+# ✓ Good: Separate .env files
+.env           # Default/shared
+.env.local     # Local overrides
+.env.prod      # Production values
+.env.test      # Test values
+
+# Don't commit .env to git
+# Add to .gitignore
+
+# Use in compose
+docker-compose --env-file .env.prod up
+```
+
+---
+
+## Docker Registry
+
+### Docker Hub
+
+```bash
+# Login
+docker login
+
+# Pull image
+docker pull ubuntu:20.04
+docker pull nginx:latest
+
+# Search images
+docker search nginx
+
+# Logout
+docker logout
+```
+
+### Private Registries
+
+```bash
+# Self-hosted registry
+docker run -d -p 5000:5000 registry:2
+
+# Tag image for private registry
+docker tag myapp:1.0 localhost:5000/myapp:1.0
+
+# Push to private registry
+docker push localhost:5000/myapp:1.0
+
+# Pull from private registry
+docker pull localhost:5000/myapp:1.0
+
+# Configure insecure registry (dev only)
+# /etc/docker/daemon.json
+{
+  "insecure-registries": ["localhost:5000"]
+}
+```
+
+### Image Publishing Workflow
+
+```bash
+# Build image
+docker build -t myapp:1.0 .
+
+# Tag for registry
+docker tag myapp:1.0 myregistry.com/myapp:1.0
+docker tag myapp:1.0 myregistry.com/myapp:latest
+
+# Login to registry
+docker login myregistry.com
+
+# Push to registry
+docker push myregistry.com/myapp:1.0
+docker push myregistry.com/myapp:latest
+
+# Pull and run
+docker run myregistry.com/myapp:1.0
+```
+
+### Registry Authentication
+
+```bash
+# Login creates ~/.docker/config.json
+docker login -u username -p password registry.example.com
+
+# Use credentials in compose
+services:
+  app:
+    image: registry.example.com/myapp:1.0
+    # Requires login before docker-compose up
+```
+
+---
+
+## Security
+
+### Container Isolation
+
+```bash
+# Read-only filesystem
+docker run --read-only myapp
+
+# Read-only with tmpfs for temp files
+docker run --read-only --tmpfs /tmp myapp
+
+# Limit capabilities (drop unnecessary)
+docker run --cap-drop=ALL --cap-add=NET_BIND_SERVICE myapp
+
+# Disable privileged
+docker run myapp                        # Safe (default)
+docker run --privileged myapp           # Dangerous!
+```
+
+### Secret Management
+
+```bash
+# Method 1: Environment variables (not secure for secrets!)
+docker run -e DB_PASSWORD=secret myapp
+
+# Method 2: Docker Secrets (Swarm mode)
+echo "mysecret" | docker secret create my_secret -
+docker service create --secret my_secret myapp
+
+# Method 3: Docker Compose secrets
+services:
+  app:
+    secrets:
+      - db_password
+    environment:
+      - DB_PASSWORD_FILE=/run/secrets/db_password
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+
+# Method 4: External secret management (Vault, AWS Secrets Manager)
+```
+
+### Network Security
+
+```bash
+# Isolated network
+docker network create isolated
+docker run --network isolated myapp
+
+# No network
+docker run --network none myapp
+
+# Host network (dangerous, full access)
+docker run --network host myapp
+```
+
+### Image Scanning
+
+```bash
+# Scan for vulnerabilities
+docker scan myapp:1.0
+
+# Build with scanning
+docker build --squash myapp .
+
+# Check image for secrets
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+  aquasec/trivy image myapp:1.0
+```
+
+---
+
+## Multi-Stage Builds
+
+### Concept and Benefits
+
+Multi-stage builds reduce final image size by separating build dependencies from runtime.
+
+```dockerfile
+# Single-stage (bloated):
+FROM node:14
+WORKDIR /app
+COPY . .
+RUN npm ci && npm run build
+CMD ["npm", "start"]
+# Result: Final image includes build tools, node_modules, etc.
+
+# Multi-stage (optimized):
+# Stage 1: Builder (compiles code)
+FROM node:14 as builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+COPY . .
+RUN npm run build
+
+# Stage 2: Runtime (only final artifacts)
+FROM node:14-alpine
+WORKDIR /app
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+CMD ["node", "dist/server.js"]
+```
+
+### Real-World Examples
+
+**Python Multi-Stage:**
+```dockerfile
+FROM python:3.9 as builder
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --user -r requirements.txt
+
+# Builder stage produces /root/.local with Python packages
+
+FROM python:3.9-slim
+
+# Copy only what's needed
+COPY --from=builder /root/.local /root/.local
+ENV PATH=/root/.local/bin:$PATH
+
+COPY app.py .
+CMD ["python", "app.py"]
+```
+
+**Java Multi-Stage:**
+```dockerfile
+# Stage 1: Compile Java
+FROM maven:3.6-jdk-11 as builder
+
+WORKDIR /app
+COPY pom.xml .
+RUN mvn dependency:go-offline
+
+COPY src ./src
+RUN mvn clean package -DskipTests
+
+# Stage 2: Runtime (only JAR needed)
+FROM openjdk:11-jre-slim
+
+COPY --from=builder /app/target/app.jar app.jar
+ENTRYPOINT ["java", "-jar", "app.jar"]
+```
+
+**Go Multi-Stage:**
+```dockerfile
+# Stage 1: Compile
+FROM golang:1.17 as builder
+
+WORKDIR /app
+COPY . .
+RUN CGO_ENABLED=0 go build -o app .
+
+# Stage 2: Runtime (minimal)
+FROM alpine:3.14
+
+COPY --from=builder /app/app /app
+ENTRYPOINT ["./app"]
+```
+
+**Size Comparison:**
+```
+Single-stage Node: ~1GB
+Multi-stage Node: ~150MB
+```
+
+---
+
+## Advanced Concepts
+
+### Docker Swarm
+
+```bash
+# Initialize swarm
+docker swarm init
+
+# Add worker
+docker swarm join --token SWMTKN-... <manager-ip>:2377
+
+# Deploy service
+docker service create --replicas 3 --name web -p 80:80 nginx
+
+# Scale service
+docker service scale web=5
+
+# View services
+docker service ls
+
+# View tasks
+docker service ps web
+```
+
+### Overlay Networks (Swarm)
+
+```bash
+# Create overlay network
+docker network create --driver overlay my-network
+
+# Services on overlay network can communicate across hosts
+docker service create --network my-network -p 80:80 web
+docker service create --network my-network redis
+```
+
+### BuildKit (Advanced Build)
+
+```bash
+# Enable BuildKit
+DOCKER_BUILDKIT=1 docker build -t myapp .
+
+# Inline cache
+DOCKER_BUILDKIT=1 docker build --build-arg BUILDKIT_INLINE_CACHE=1 -t myapp .
+
+# Use BuildKit features
+# - Better caching
+# - Secrets handling
+# - Faster builds
+```
+
+### Init Process (PID 1)
+
+```dockerfile
+# Problem: Zombie processes if app isn't PID 1
+FROM ubuntu:20.04
+RUN apt-get install -y myapp
+CMD ["myapp"]
+# myapp becomes PID 1, can't handle signals properly
+
+# Solution 1: Use tini
+FROM ubuntu:20.04
+RUN apt-get install -y tini myapp
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["myapp"]
+
+# Solution 2: Use --init
+docker run --init myapp
+
+# Solution 3: Use exec form
+FROM ubuntu:20.04
+ENTRYPOINT ["myapp"]  # Replaces shell
+```
+
+### Resource Cgroups
+
+```bash
+# Memory limits
+docker run -m 1g myapp
+
+# CPU limits
+docker run --cpus=2 myapp           # 2 CPU cores
+docker run --cpus=0.5 myapp         # 0.5 CPU core
+
+# CPU shares (relative weighting)
+docker run --cpu-shares=1024 myapp
+
+# I/O limits (block device)
+docker run --blkio-weight=300 myapp
+
+# PID limit
+docker run --pids-limit=100 myapp
+```
+
+---
+
+## Practical Applications
+
+### Level 1: Basic Single Container Application
+
+**Scenario**: Run a simple Python web application in Docker
+
+**Step-by-step theory:**
+1. Create application code
+2. Write Dockerfile with dependencies
+3. Build and test locally
+4. Run container
+5. Access from host
+
+**Example - Flask Application:**
+
+```python
+# app.py - Simple Flask app
+from flask import Flask
+
+app = Flask(__name__)
+
+@app.route('/')
+def hello():
+    return {'message': 'Hello from Docker!'}
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
+```
+
+```dockerfile
+# Dockerfile - Basic Python image
+FROM python:3.9-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY app.py .
+
+EXPOSE 5000
+CMD ["python", "app.py"]
+```
+
+```bash
+# requirements.txt
+Flask==2.0.1
+
+# Build
+docker build -t my-flask-app:1.0 .
+
+# Run and test
+docker run -d -p 5000:5000 --name flask-app my-flask-app:1.0
+curl http://localhost:5000
+
+# Verify it's working
+docker logs flask-app
+
+# Cleanup
+docker stop flask-app
+docker rm flask-app
+```
+
+**Keypoints:**
+- WORKDIR organizes files inside container
+- EXPOSE documents intended port (not actual)
+- Port mapping: `-p 8080:5000` = host_port:container_port
+- Always use tag for version tracking
+- `docker logs` shows application output to stdout/stderr
+
+---
+
+### Level 2: Multi-Container Application with Compose
+
+**Scenario**: Web application with database backend
+
+**Practical theory:**
+- Services communicate via hostname (same network)
+- Depends_on controls startup order
+- Volumes persist database data
+- Environment variables configure services
+- Health checks prevent premature startup
+
+**Complete Example - Web + Database:**
+
+```dockerfile
+# Dockerfile for web service
+FROM python:3.9-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY app.py .
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s \
+    CMD curl -f http://localhost:5000/health || exit 1
+
+CMD ["python", "app.py"]
+```
+
+```python
+# app.py - Flask with PostgreSQL
+import os
+import psycopg2
+from flask import Flask
+from psycopg2.extras import RealDictCursor
+
+app = Flask(__name__)
+
+def get_db():
+    conn = psycopg2.connect(
+        host=os.getenv('DB_HOST', 'db'),
+        database=os.getenv('DB_NAME', 'mydb'),
+        user=os.getenv('DB_USER', 'user'),
+        password=os.getenv('DB_PASSWORD', 'password')
+    )
+    return conn
+
+@app.route('/health')
+def health():
+    try:
+        conn = get_db()
+        conn.close()
+        return {'status': 'healthy'}, 200
+    except:
+        return {'status': 'unhealthy'}, 500
+
+@app.route('/data')
+def get_data():
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute('SELECT * FROM users LIMIT 10')
+    data = cur.fetchall()
+    cur.close()
+    conn.close()
+    return {'users': data}
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
+```
+
+```yaml
+# docker-compose.yml - Complete setup
+version: '3.9'
+
+services:
+  web:
+    build: .
+    container_name: web-app
+    ports:
+      - "5000:5000"
+    environment:
+      - DB_HOST=db
+      - DB_NAME=mydb
+      - DB_USER=user
+      - DB_PASSWORD=password
+      - FLASK_ENV=development
+    volumes:
+      - .:/app  # Live reload during development
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  db:
+    image: postgres:13
+    container_name: postgres-db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mydb
+    volumes:
+      # Persist data
+      - postgres_data:/var/lib/postgresql/data
+      # Initialize database
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+
+networks:
+  app-network:
+    driver: bridge
+```
+
+```sql
+-- init.sql - Database initialization
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255),
+    email VARCHAR(255),
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+INSERT INTO users (name, email) VALUES
+    ('Alice', 'alice@example.com'),
+    ('Bob', 'bob@example.com'),
+    ('Charlie', 'charlie@example.com');
+```
+
+```bash
+# Usage
+docker-compose up -d
+
+# Check services
+docker-compose ps
+
+# View logs
+docker-compose logs -f web
+
+# Test application
+curl http://localhost:5000/health
+curl http://localhost:5000/data
+
+# Scale web service (development)
+docker-compose up -d --scale web=3
+
+# Cleanup
+docker-compose down -v
+```
+
+**Practical Keypoints:**
+- `depends_on` with `condition: service_healthy` waits for readiness
+- Environment variables pass configuration between services
+- Volumes mount keep code updated during development
+- Healthchecks ensure services are truly ready
+- Service names are hostnames: `db`, `cache`, etc.
+- Networks isolate and connect services
+
+---
+
+### Level 3: Advanced Multi-Service Architecture
+
+**Scenario**: Microservices with API Gateway, Workers, and Cache
+
+**Architecture Theory:**
+- API Gateway routes requests
+- Backend services process logic
+- Message queue decouples services
+- Cache reduces database load
+- Monitoring tracks system health
+
+**Complete Setup:**
+
+```yaml
+# docker-compose.yml - Microservices
+version: '3.9'
+
+services:
+  # API Gateway - Entry point
+  api-gateway:
+    image: nginx:alpine
+    container_name: gateway
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+      - admin-api
+    networks:
+      - public
+      - backend
+    restart: always
+
+  # Main API Service
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: api-service
+    environment:
+      - DATABASE_URL=postgresql://user:pass@db:5432/api_db
+      - REDIS_URL=redis://cache:6379
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - WORKERS_QUEUE=task_queue
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
+  # Admin API Service
+  admin-api:
+    build:
+      context: ./admin
+      dockerfile: Dockerfile
+    container_name: admin-service
+    environment:
+      - DATABASE_URL=postgresql://user:pass@db:5432/api_db
+      - API_URL=http://api:8000
+      - ADMIN_TOKEN=${ADMIN_TOKEN}
+    depends_on:
+      - db
+      - api
+    networks:
+      - backend
+    restart: always
+
+  # Background Worker Service
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    container_name: background-worker
+    environment:
+      - DATABASE_URL=postgresql://user:pass@db:5432/api_db
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - WORKERS_QUEUE=task_queue
+    depends_on:
+      - db
+      - rabbitmq
+    networks:
+      - backend
+    restart: always
+    deploy:
+      replicas: 2  # Multiple workers
+      resources:
+        limits:
+          memory: 256M
+
+  # PostgreSQL Database
+  db:
+    image: postgres:13
+    container_name: postgres
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  # Redis Cache
+  cache:
+    image: redis:6-alpine
+    container_name: redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  # RabbitMQ Message Queue
+  rabbitmq:
+    image: rabbitmq:3.9-management-alpine
+    container_name: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "15672:15672"  # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  # Monitoring - Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - backend
+    restart: always
+
+  # Monitoring - Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - backend
+    restart: always
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  public:
+    driver: bridge
+  backend:
+    driver: bridge
+    internal: false  # Can access external if needed
+```
+
+```nginx
+# nginx.conf - API Gateway routing
+events {
+    worker_connections 1024;
+}
+
+http {
+    upstream api_service {
+        server api:8000;
+    }
+
+    upstream admin_service {
+        server admin-api:8000;
+    }
+
+    server {
+        listen 80;
+        server_name localhost;
+
+        # API routes
+        location /api/ {
+            proxy_pass http://api_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # Caching
+            proxy_cache_bypass $http_pragma $http_authorization;
+            add_header X-Cache-Status $upstream_cache_status;
+        }
+
+        # Admin routes
+        location /admin/ {
+            proxy_pass http://admin_service;
+            proxy_set_header Host $host;
+        }
+
+        # Health check
+        location /health {
+            proxy_pass http://api_service/health;
+        }
+    }
+}
+```
+
+```bash
+# Usage - Advanced Compose Commands
+
+# Start all services
+docker-compose up -d
+
+# Check service status
+docker-compose ps
+
+# View logs with filtering
+docker-compose logs -f api
+docker-compose logs -f worker --tail=100
+
+# Scale workers
+docker-compose up -d --scale worker=3
+
+# Rebuild specific service
+docker-compose build api
+docker-compose up -d api
+
+# Execute command in service
+docker-compose exec api python manage.py migrate
+
+# View resource usage
+docker stats
+
+# Access monitoring
+# Prometheus: http://localhost:9090
+# Grafana: http://localhost:3000
+# RabbitMQ: http://localhost:15672
+
+# Stop all
+docker-compose down
+
+# Full cleanup (with volumes)
+docker-compose down -v
+```
+
+**Practical Keypoints - Advanced Architecture:**
+- **API Gateway**: Single entry point, routes to multiple backends
+- **Service Independence**: Each service has own database (microservices pattern)
+- **Async Processing**: Queue decouples request/response from processing
+- **Caching Strategy**: Redis reduces database hits
+- **Monitoring**: Prometheus + Grafana track system health
+- **Resource Limits**: Prevent runaway processes
+- **Health Checks**: Ensure services are actually ready
+- **Networking**: Public (external) and backend (internal) networks
+- **Replication**: Multiple worker instances for parallelism
+- **Data Persistence**: Volumes for databases and caches
+
+---
+
+### Level 4: Production Deployment Patterns
+
+**Scenario**: Ready for production with security, monitoring, and resilience
+
+**Theory:**
+- Secrets management separate from code
+- Reverse proxy for SSL/TLS
+- Load balancing across instances
+- Centralized logging
+- Backup and recovery
+- CI/CD integration
+
+**Production-Ready Setup:**
+
+```dockerfile
+# Dockerfile - Production optimized
+# Stage 1: Build
+FROM python:3.9 as builder
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --user --no-cache-dir -r requirements.txt
+
+# Stage 2: Runtime
+FROM python:3.9-slim
+
+# Security: Non-root user
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+WORKDIR /app
+
+# Copy only runtime dependencies
+COPY --from=builder /root/.local /home/appuser/.local
+ENV PATH=/home/appuser/.local/bin:$PATH
+
+# Copy application
+COPY --chown=appuser:appuser . .
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
+    CMD curl -f http://localhost:5000/health || exit 1
+
+USER appuser
+EXPOSE 5000
+
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "60", "app:app"]
+```
+
+```yaml
+# docker-compose.prod.yml - Production configuration
+version: '3.9'
+
+services:
+  # Reverse Proxy with SSL
+  reverse-proxy:
+    image: traefik:v2.5
+    container_name: traefik
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik.yml:/traefik.yml:ro
+      - ./acme.json:/acme.json
+      - ./certs:/certs:ro
+    networks:
+      - public
+    restart: always
+
+  # Application Instances (Load Balanced)
+  app-1:
+    build: .
+    container_name: app-1
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - SECRET_KEY=${SECRET_KEY}
+      - LOG_LEVEL=INFO
+    depends_on:
+      - db
+      - cache
+    networks:
+      - backend
+    restart: always
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.app.rule=Host(\`api.example.com\`)"
+      - "traefik.http.services.app.loadbalancer.server.port=5000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  app-2:
+    build: .
+    container_name: app-2
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - SECRET_KEY=${SECRET_KEY}
+      - LOG_LEVEL=INFO
+    depends_on:
+      - db
+      - cache
+    networks:
+      - backend
+    restart: always
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.app.rule=Host(\`api.example.com\`)"
+      - "traefik.http.services.app.loadbalancer.server.port=5000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Database with Backup
+  db:
+    image: postgres:13
+    container_name: postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backup:/backup
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+    restart_policy:
+      condition: on-failure
+      delay: 5s
+      max_attempts: 5
+      window: 120s
+
+  # Cache with Persistence
+  cache:
+    image: redis:6-alpine
+    container_name: redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  # Centralized Logging
+  logging:
+    image: elastic/filebeat:7.14.0
+    container_name: filebeat
+    user: root
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+    networks:
+      - backend
+    restart: always
+
+  # Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - backend
+    restart: always
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+
+networks:
+  public:
+    driver: bridge
+  backend:
+    driver: bridge
+    internal: true  # No external access
+```
+
+```bash
+# .env - Production secrets (in secure location)
+DB_NAME=production_db
+DB_USER=prod_user
+DB_PASSWORD=complex_secure_password_here
+SECRET_KEY=your_app_secret_key
+REDIS_PASSWORD=redis_secure_password
+DATABASE_URL=postgresql://prod_user:complex_secure_password_here@db:5432/production_db
+REDIS_URL=redis://:redis_secure_password@cache:6379/0
+```
+
+```bash
+# Deployment script
+#!/bin/bash
+set -e
+
+echo "Starting production deployment..."
+
+# Load environment
+source .env.prod
+
+# Pull latest images
+docker-compose -f docker-compose.prod.yml pull
+
+# Start/Update services
+docker-compose -f docker-compose.prod.yml up -d
+
+# Wait for services
+echo "Waiting for services to be ready..."
+sleep 10
+
+# Run migrations
+docker-compose -f docker-compose.prod.yml exec -T app \
+  python manage.py migrate
+
+# Collect static files
+docker-compose -f docker-compose.prod.yml exec -T app \
+  python manage.py collectstatic --noinput
+
+# Backup database
+docker-compose -f docker-compose.prod.yml exec -T db \
+  pg_dump -U ${DB_USER} ${DB_NAME} | gzip > ./backup/db-$(date +%Y%m%d-%H%M%S).sql.gz
+
+echo "Deployment complete!"
+```
+
+**Production Keypoints:**
+- **Multi-stage builds**: Minimal final image
+- **Non-root user**: Security best practice
+- **Load balancing**: Multiple app instances
+- **Reverse proxy**: SSL/TLS termination
+- **Secrets management**: .env files not committed
+- **Health checks**: Critical for production
+- **Resource limits**: Prevent resource exhaustion
+- **Restart policies**: Auto-recovery on failure
+- **Backup strategy**: Regular automated backups
+- **Monitoring**: Prometheus + Grafana
+- **Logging**: Centralized log aggregation
+
+---
+
+## Troubleshooting
+
+### Common Issues and Solutions
+
+**Container exits immediately:**
+```bash
+# Check logs
+docker logs container_id
+
+# Inspect
+docker inspect container_id
+
+# Check entrypoint
+docker history image_id
+```
+
+**Out of disk space:**
+```bash
+# Check usage
+docker system df
+
+# Clean up
+docker system prune          # Remove unused containers, images, networks
+docker image prune           # Remove dangling images
+docker volume prune          # Remove unused volumes
+```
+
+**High memory usage:**
+```bash
+# Monitor
+docker stats
+
+# Check limits
+docker inspect container_id | grep -A 10 "Memory"
+
+# Set limits
+docker run -m 512m myapp
+```
+
+**Network issues:**
+```bash
+# Check network
+docker network inspect my-network
+
+# Test connectivity
+docker run --network my-network alpine ping other-container
+
+# Check ports
+docker port container_id
+docker ps
+```
+
+**Permission denied:**
+```bash
+# Check file permissions in volume
+docker run -v $(pwd):/app -it ubuntu ls -la /app
+
+# Fix: match host user ID
+docker run --user $(id -u):$(id -g) -v $(pwd):/app myapp
+```
+
+### Debugging Commands
+
+**Comprehensive Debugging Toolkit:**
+
+```bash
+# Inspect container thoroughly
+docker inspect container_id
+
+# View logs with filtering
+docker logs container_id --since 1h --until 10m --timestamps
+docker logs container_id -f --tail=50
+
+# Execute interactive command
+docker exec -it container_id /bin/bash
+docker exec -it container_id python -c "print('debugging')"
+
+# View container processes
+docker top container_id
+
+# Check filesystem changes
+docker diff container_id  # Shows modified/added/removed files
+
+# View container stats in real-time
+docker stats              # All containers
+docker stats container_id # Specific container
+docker stats --no-stream  # Single snapshot
+
+# Inspect image layers
+docker history image_id --no-trunc --human
+
+# Check volume mount paths
+docker inspect container_id | grep -A 5 Mounts
+
+# Network diagnostics
+docker run --network mynet --rm nicolaka/netshoot \
+  nslookup service-name  # DNS resolution
+docker run --network mynet --rm nicolaka/netshoot \
+  curl http://service:port  # Test connectivity
+
+# Port mapping check
+docker port container_id
+netstat -tulpn | grep docker  # Host perspective
+
+# Save container state for debugging
+docker commit container_id debug-image:latest
+docker run -it debug-image:latest /bin/bash
+```
+
+**Debugging Checklist:**
+
+```bash
+# Service won't start - check logs first
+docker logs container_id -f
+
+# Port not accessible
+docker ps              # Running?
+docker port container_id  # Mapped?
+netstat -tulpn | grep 8080  # Port taken?
+curl localhost:8080  # Test locally
+
+# Permission denied - check user and volumes
+docker exec container_id id  # Which user?
+docker inspect container_id | grep -A 10 Mounts  # Volume perms?
+
+# Out of memory
+docker stats container_id  # Memory usage?
+docker inspect container_id | grep -i memory  # Limits set?
+
+# High CPU
+docker stats --no-stream container_id  # Which container?
+docker exec -it container_id top  # What's consuming?
+
+# Disk space issues
+docker system df  # Overall usage
+du -sh /var/lib/docker/volumes/*  # Volume sizes
+docker image ls  # Image sizes
+
+# Network connectivity
+docker run --network mynet --rm nicolaka/netshoot \
+  nslookup database  # Can resolve service name?
+docker exec container_id curl http://other-service:8080  # Can reach?
+
+# Check Dockerfile execution
+docker build --progress=plain -t myapp .  # Verbose build output
+docker history myapp --human --no-trunc  # See all layers
+```
+
+---
+
+## Interview Questions
+
+### 1. Explain Docker containers vs virtual machines
+
+**Answer:**
+
+| Aspect | Container | VM |
+|--------|-----------|-----|
+| **Architecture** | OS-level virtualization | Hardware-level virtualization |
+| **Resource** | Lightweight (shares kernel) | Heavy (full OS per VM) |
+| **Boot time** | Seconds | Minutes |
+| **Isolation** | Process-level | Hardware-level |
+| **Size** | MB | GB |
+| **Density** | Hundreds per host | Tens per host |
+
+**Diagram:**
+```
+VMs: Host OS → Hypervisor → Guest OS → App
+Containers: Host OS → Docker → App (shared kernel)
+```
+
+**When to use:**
+- **Containers**: Microservices, consistency, rapid scaling
+- **VMs**: Legacy apps, full OS needed, strong isolation
+
+---
+
+### 2. What are Docker layers and why do they matter?
+
+**Answer:**
+
+Docker images are built in layers. Each instruction in a Dockerfile creates a new read-only layer. When you run a container, Docker adds a writable layer on top.
+
+**Layer structure:**
+```
+┌──────────────────┐
+│ Writable Layer   │  (Container-specific)
+├──────────────────┤
+│ Layer N          │  (FROM/COPY/RUN)
+├──────────────────┤
+│ Layer 3          │  (RUN pip install)
+├──────────────────┤
+│ Layer 2          │  (COPY files)
+├──────────────────┤
+│ Layer 1          │  (Base image)
+└──────────────────┘
+```
+
+**Benefits:**
+1. **Caching**: Unchanged layers reused (faster builds)
+2. **Reusability**: Base layers shared among images
+3. **Efficiency**: Reduces storage (shared layers)
+4. **Updates**: Only changed layers need rebuilding
+
+**Example:**
+```dockerfile
+FROM python:3.9              # Layer 1 (300MB) - cached
+COPY requirements.txt .      # Layer 2 (1KB)
+RUN pip install -r req...    # Layer 3 (100MB)
+COPY app.py .                # Layer 4 (10KB)
+```
+
+If only `app.py` changes, layers 1-3 are cached, only layer 4 rebuilds.
+
+---
+
+### 3. What's the difference between ENTRYPOINT and CMD?
+
+**Answer:**
+
+| Feature | ENTRYPOINT | CMD |
+|---------|-----------|-----|
+| **Override** | Difficult | Easy |
+| **Purpose** | Configure container as executable | Provide defaults |
+| **Combined** | ENTRYPOINT executes, CMD as args | - |
+
+**Examples:**
+
+```dockerfile
+# Example 1: CMD only
+FROM ubuntu
+CMD ["echo", "hello"]
+
+# Usage:
+# docker run myimage              → echo hello
+# docker run myimage echo "bye"   → echo bye (CMD replaced)
+```
+
+```dockerfile
+# Example 2: ENTRYPOINT + CMD
+FROM ubuntu
+ENTRYPOINT ["echo"]
+CMD ["hello"]
+
+# Usage:
+# docker run myimage              → echo hello
+# docker run myimage "custom"     → echo custom
+# docker run --entrypoint cat myimage file → cat file
+```
+
+**Best Practice:**
+```dockerfile
+FROM python:3.9
+COPY . /app
+WORKDIR /app
+ENTRYPOINT ["python"]
+CMD ["app.py"]
+
+# Usage:
+# docker run myapp            → python app.py
+# docker run myapp debug.py   → python debug.py
+```
+
+---
+
+### 4. How do you optimize Docker image size?
+
+**Answer:**
+
+**Techniques:**
+
+1. **Use alpine/slim base images**
+```dockerfile
+FROM python:3.9-slim        # 150MB
+# Instead of: python:3.9    # 900MB
+```
+
+2. **Multi-stage builds**
+```dockerfile
+FROM node:14 as builder
+RUN npm install && npm build
+
+FROM node:14-alpine
+COPY --from=builder /app/dist .
+# Final: ~200MB instead of 1GB
+```
+
+3. **Minimize layers**
+```dockerfile
+RUN apt-get update && \
+    apt-get install -y curl && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+```
+
+4. **Use .dockerignore**
+```
+.git
+node_modules
+.npm
+.env
+```
+
+5. **Layer ordering**
+```dockerfile
+# Put frequently-changing instructions LAST
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .  # This changes often
+```
+
+**Result:**
+- Before: 1.2GB
+- After: 150MB (90% smaller)
+
+---
+
+### 5. Explain Docker Compose and when to use it
+
+**Answer:**
+
+Docker Compose is a tool for defining and running multi-container applications using a YAML file.
+
+**Use Cases:**
+1. **Local development**: Multiple services locally
+2. **Testing**: Full application stack in containers
+3. **Documentation**: Services and configuration in one file
+4. **CI/CD**: Reproducible test environments
+
+**Example:**
+```yaml
+version: '3.9'
+services:
+  web:
+    build: .
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+    
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
+```
+
+**Commands:**
+```bash
+docker-compose up          # Start all services
+docker-compose down        # Stop and remove
+docker-compose exec web bash    # Execute command
+```
+
+**Not for production** (use Kubernetes instead):
+- No auto-scaling
+- Single host
+- No high availability
+- No rolling updates
+
+---
+
+### 6. How do volumes work in Docker?
+
+**Answer:**
+
+Volumes are mechanisms for persisting data beyond container lifecycle.
+
+**Types:**
+
+1. **Named Volumes** (managed by Docker)
+```bash
+docker volume create mydata
+docker run -v mydata:/data myapp
+```
+
+2. **Bind Mounts** (host directory)
+```bash
+docker run -v /host/path:/container/path myapp
+```
+
+3. **Tmpfs** (temporary, in-memory)
+```bash
+docker run --tmpfs /tmp myapp
+```
+
+**Benefits:**
+- Data persists after container deletion
+- Shared between containers
+- Decoupled from container lifecycle
+- Easier backup/restore
+
+**Example:**
+```yaml
+services:
+  db:
+    image: postgres:13
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
+```
+
+---
+
+### 7. What's the difference between docker build and docker-compose build?
+
+**Answer:**
+
+| Command | Use Case |
+|---------|----------|
+| `docker build` | Build single image from Dockerfile |
+| `docker-compose build` | Build images for services in compose |
+
+```bash
+# Single image
+docker build -t myapp:1.0 .
+
+# Multiple images (one per service)
+docker-compose build
+
+# Rebuild without cache
+docker build --no-cache -t myapp:1.0 .
+docker-compose build --no-cache
+```
+
+---
+
+### 8. How do you handle secrets in Docker?
+
+**Answer:**
+
+**Options:**
+
+1. **Environment Variables** (not secure)
+```bash
+docker run -e DB_PASS=secret myapp  # Visible in processes!
+```
+
+2. **Docker Secrets** (Swarm mode)
+```bash
+echo "mysecret" | docker secret create db_pass -
+docker service create --secret db_pass myapp
+```
+
+3. **Compose secrets**
+```yaml
+services:
+  app:
+    secrets:
+      - db_password
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+```
+
+4. **External systems** (best practice)
+```bash
+# Use Vault, AWS Secrets Manager, etc.
+# Inject at runtime, not at build time
+```
+
+**Best Practice:**
+```dockerfile
+# Never include secrets in image!
+# ✗ Bad:
+RUN echo "secret" > /app/.env
+
+# ✓ Good:
+# Use --secret flag or environment variables at runtime
+```
+
+---
+
+### 9. Explain the Docker build process
+
+**Answer:**
+
+**Steps:**
+
+1. **Context creation**: Send files to daemon
+2. **Image layer building**: Execute each instruction
+3. **Layer caching**: Reuse unchanged layers
+4. **Image tagging**: Tag final image
+
+**Detailed process:**
+```
+docker build -t myapp:1.0 .
+        ↓
+[Context] Collect all files to send to daemon
+        ↓
+[Daemon] FROM ubuntu:20.04
+        ↓ Layer 1 (from registry if needed)
+[Daemon] COPY . /app
+        ↓ Layer 2 (new layer)
+[Daemon] RUN npm install
+        ↓ Layer 3 (execute, create layer)
+[Daemon] CMD ["npm", "start"]
+        ↓ Layer 4 (metadata)
+[Final] Tag as myapp:1.0
+```
+
+**Optimization:**
+```dockerfile
+# Bad: copy first, invalidates cache if any file changes
+COPY . /app
+RUN npm install
+
+# Good: copy dependencies first
+COPY package*.json /app/
+RUN npm install
+COPY . /app
+```
+
+---
+
+### 10. What are container networking best practices?
+
+**Answer:**
+
+**Best Practices:**
+
+1. **Use user-defined networks**
+```bash
+docker network create myapp-network
+docker run --network myapp-network web
+docker run --network myapp-network db
+# Services can reference each other by name (web, db)
+```
+
+2. **Don't use host network for isolation**
+```bash
+# Bad for isolation
+docker run --network host myapp
+
+# Good
+docker run --network bridge myapp
+```
+
+3. **Document ports**
+```dockerfile
+# Explicit
+EXPOSE 3000 8080
+
+# In compose
+ports:
+  - "3000:3000"
+  - "8080:8080"
+```
+
+4. **Use service discovery**
+```yaml
+# Services reference by hostname
+services:
+  web:
+    image: myapp
+  db:
+    image: postgres
+    # Access as: postgresql://db:5432
+```
+
+5. **Security**
+```bash
+# Isolated network
+docker network create --internal secure-net
+docker run --network secure-net app
+# Cannot access external internet
+```
+
+---
+
+### 11. Explain the dependency problem in docker-compose and how to solve it
+
+**Answer:**
+
+**Problem:**
+
+`depends_on` only controls startup order, NOT readiness. Service may start before it's actually ready.
+
+```yaml
+# WRONG: Assumes db is ready when TCP port opens
+version: '3.9'
+services:
+  app:
+    image: myapp
+    depends_on:
+      - db  # Only ensures db starts first
+  db:
+    image: postgres:13
+```
+
+**Why it fails:**
+- Port 5432 open ≠ database accepting connections
+- Database may still be initializing
+- Connection attempts from app may fail
+
+**Solution 1: Health Checks**
+```yaml
+version: '3.9'
+services:
+  app:
+    image: myapp
+    depends_on:
+      db:
+        condition: service_healthy  # Wait for health check
+  
+  db:
+    image: postgres:13
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+```
+
+**Solution 2: Polling with Retry (Most Reliable)**
+```yaml
+version: '3.9'
+services:
+  app:
+    image: myapp
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        # Poll until database is ready
+        until pg_isready -h db -U user; do
+          echo "Waiting for database..."
+          sleep 1
+        done
+        exec python app.py
+    depends_on:
+      - db
+  
+  db:
+    image: postgres:13
+```
+
+**Solution 3: Application-Level Retry Logic**
+```python
+import psycopg2
+import time
+
+def connect_db():
+    for attempt in range(30):  # Try for 30 seconds
+        try:
+            conn = psycopg2.connect(host='db', database='mydb')
+            print("Connected to database!")
+            return conn
+        except Exception as e:
+            print(f"Attempt {attempt+1}/30: {e}")
+            time.sleep(1)
+    raise Exception("Failed to connect after 30 attempts")
+```
+
+**Keypoint:** Never assume TCP port = service ready. Always implement explicit readiness checks.
+
+---
+
+### 12. What's the difference between a container and an image? Explain with example.
+
+**Answer:**
+
+| Aspect | Image | Container |
+|--------|-------|-----------|
+| **Type** | Blueprint/Template (immutable) | Running instance (mutable) |
+| **Persistence** | Stored on disk | Temporary (unless volumes used) |
+| **Layer** | Multiple read-only layers | Layers + writable layer |
+| **Creation** | Built from Dockerfile | Created from image |
+| **Purpose** | Distribution and reusability | Execution and isolation |
+
+**Analogy:**
+- **Image** = Class in OOP
+- **Container** = Object instance
+
+```bash
+# Image (blueprint)
+docker build -t my-app:1.0 .
+docker image ls
+# Result: Single image definition
+
+# Containers (instances)
+docker run -d --name app1 my-app:1.0
+docker run -d --name app2 my-app:1.0
+docker run -d --name app3 my-app:1.0
+docker ps
+# Result: Three running containers from same image
+
+# Each container has its own:
+# - Writable layer (changes don't affect others)
+# - Process namespace (separate PID 1)
+# - Network interfaces
+# - Volumes (if specified)
+```
+
+**Layer Comparison:**
+```
+Image:
+└─ Layer 1: ubuntu:20.04 (read-only, shared)
+   └─ Layer 2: RUN apt-get install (read-only, shared)
+      └─ Layer 3: COPY app.py (read-only, shared)
+
+Container 1 (from image):
+└─ Layer 1: ubuntu:20.04 (read-only, shared)
+   └─ Layer 2: RUN apt-get install (read-only, shared)
+      └─ Layer 3: COPY app.py (read-only, shared)
+         └─ Writable Layer (unique to this container)
+
+Container 2 (from same image):
+└─ Layer 1: ubuntu:20.04 (read-only, shared)
+   └─ Layer 2: RUN apt-get install (read-only, shared)
+      └─ Layer 3: COPY app.py (read-only, shared)
+         └─ Writable Layer (different from Container 1)
+```
+
+**Practical Example:**
+```bash
+# Create image with a file
+docker build -t myapp .
+# Inside: /app/config.txt with default values
+
+# Run Container 1 and modify file
+docker run -d --name c1 myapp
+docker exec c1 sh -c 'echo "modified" > /app/config.txt'
+
+# Run Container 2 from same image
+docker run -d --name c2 myapp
+docker exec c2 cat /app/config.txt
+# Shows: "modified" (from writable layer)
+
+# Image is unchanged
+# Each container has isolated changes
+```
+
+---
+
+### 13. How do you troubleshoot a container that keeps crashing?
+
+**Answer:**
+
+**Troubleshooting Steps:**
+
+```bash
+# Step 1: Check if container is running
+docker ps -a
+# Look for status: Exited, Restarting, etc.
+
+# Step 2: View logs (most important!)
+docker logs container_id
+docker logs -f container_id  # Follow logs
+docker logs --tail=50 container_id  # Last 50 lines
+docker logs --since 1h container_id  # Since 1 hour ago
+
+# Step 3: Inspect container for error details
+docker inspect container_id
+# Look for: State, LastExitCode, RestartCount
+
+# Step 4: Check Dockerfile/entrypoint
+docker history image_id
+docker inspect image_id  # Check ENTRYPOINT, CMD
+
+# Step 5: Recreate locally for debugging
+docker run -it image_id /bin/bash  # Interactive shell
+
+# Step 6: Check resource limits
+docker stats container_id
+docker inspect container_id | grep -A 10 "Memory"
+# If memory = 0, no limit set
+# Check if container is OOMKilled
+
+# Step 7: Examine dependencies
+docker logs container_id | grep -i "error\|failed\|connection"
+# Look for: database connection, missing env vars, etc.
+```
+
+**Common Causes and Fixes:**
+
+1. **Wrong entrypoint**
+```dockerfile
+# WRONG:
+CMD python app.py
+# Container exits after script finishes
+
+# CORRECT:
+CMD ["python", "app.py"]
+# Or run infinite process: sleep infinity, while true, etc.
+```
+
+2. **Missing environment variables**
+```bash
+# Crash: KeyError on env var
+docker run -e DATABASE_URL=... myapp
+
+# Or use --env-file
+docker run --env-file .env myapp
+```
+
+3. **Port already in use**
+```bash
+docker logs container_id
+# Error: bind: address already in use
+
+# Fix: Use different port
+docker run -p 8080:5000 myapp
+```
+
+4. **Volume permission denied**
+```bash
+docker logs container_id
+# Error: Permission denied
+
+# Fix: Run with correct user
+docker run --user 1000:1000 -v $(pwd):/app myapp
+```
+
+5. **Health check failing**
+```bash
+# Container exits due to failed health check
+docker logs container_id
+# Check health check definition
+
+# Test manually:
+docker exec container_id curl localhost:5000/health
+```
+
+**Debugging Checklist:**
+```bash
+✓ Check logs: docker logs
+✓ Check exit code: docker inspect
+✓ Check dependencies: database, cache, etc.
+✓ Check environment variables
+✓ Check volume permissions
+✓ Check resource limits (memory, CPU)
+✓ Run image interactively: docker run -it
+✓ Check entrypoint/cmd syntax
+```
+
+---
+
+### 14. Explain Docker networking modes and when to use each
+
+**Answer:**
+
+**Four Networking Modes:**
+
+**1. Bridge (Default)**
+```bash
+docker run ubuntu
+# Automatically uses bridge network
+
+# Characteristics:
+# - Isolated from host
+# - Each container gets unique IP
+# - Port mapping required for host access
+# - Service discovery by hostname (custom networks only)
+
+# Example:
+docker network create mynet
+docker run --network mynet --name db postgres
+docker run --network mynet --name web myapp
+# web can access: postgresql://db:5432 (automatic DNS)
+```
+
+**2. Host**
+```bash
+docker run --network host myapp
+
+# Characteristics:
+# - Shares host network namespace
+# - No port mapping needed (same ports as host)
+# - Better performance (no NAT)
+# - Less isolation, security risk
+# - Container sees all host interfaces
+
+# Example: Run Nginx on host's port 80
+docker run --network host nginx
+# Now accessible directly at localhost:80
+# No -p flag needed
+```
+
+**3. None**
+```bash
+docker run --network none myapp
+
+# Characteristics:
+# - No network connectivity
+# - Only loopback (127.0.0.1) available
+# - Completely isolated
+# - For security-sensitive workloads
+
+# Example:
+docker run --network none offline-processor
+# Can't reach anything, can't be reached
+```
+
+**4. Overlay (Docker Swarm/Kubernetes)**
+```bash
+# Multi-host networking
+docker network create --driver overlay distributed-net
+
+# Characteristics:
+# - Spans multiple hosts
+# - Encrypted communication
+# - Service discovery across cluster
+# - Used in Swarm mode only
+```
+
+**Decision Matrix:**
+```
+Use Bridge:
+✓ Default choice
+✓ Most applications
+✓ Development and production
+✓ Need service discovery
+
+Use Host:
+✓ Performance critical
+✓ Legacy applications
+✓ Low latency required
+✗ Multiple containers on same port impossible
+
+Use None:
+✓ Security isolation needed
+✓ Offline processing
+✓ No network needed
+
+Use Overlay:
+✓ Docker Swarm deployment
+✓ Multi-host setup
+✓ Kubernetes clusters
+```
+
+**Practical Example - Wrong vs Right:**
+```bash
+# WRONG: Using host network for isolation
+docker run --network host app1
+docker run --network host app2
+# Both use host ports - conflicts!
+
+# RIGHT: Using bridge network
+docker network create mynet
+docker run --network mynet --name app1 myapp
+docker run --network mynet --name app2 myapp
+# Each gets unique IP, can communicate by name
+```
+
+---
+
+### 15. How do you scale applications in Docker?
+
+**Answer:**
+
+**Horizontal Scaling (Multiple Containers):**
+
+```yaml
+# docker-compose.yml
+version: '3.9'
+
+services:
+  web:
+    image: myapp:1.0
+    ports:
+      - "8000-8003:8000"  # Maps 8000-8003 to container:8000
+    deploy:
+      replicas: 4  # Run 4 instances
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+  
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - web
+    # nginx load balances across 4 web instances
+```
+
+```bash
+# Scale dynamically
+docker-compose up -d --scale web=8
+# Now running 8 instances instead of 4
+
+# Or with Docker Swarm
+docker service scale web=10
+```
+
+**Load Balancing Setup:**
+```nginx
+# nginx.conf
+upstream web_backend {
+    server web:8000;
+    server web:8001;
+    server web:8002;
+    server web:8003;
+}
+
+server {
+    listen 80;
+    location / {
+        proxy_pass http://web_backend;
+    }
+}
+```
+
+**Vertical Scaling (Resource Limits):**
+```yaml
+services:
+  database:
+    image: postgres:13
+    deploy:
+      resources:
+        limits:
+          cpus: '2'        # 2 CPU cores
+          memory: 4G       # 4GB memory
+        reservations:
+          cpus: '1'        # Guaranteed 1 core
+          memory: 2G       # Guaranteed 2GB
+```
+
+**Auto-Scaling Pattern (Application-Level):**
+```python
+# Monitor CPU and scale automatically
+import subprocess
+
+def get_cpu_usage():
+    # Get average CPU across all containers
+    pass
+
+def scale_service(replicas):
+    cmd = f"docker-compose up -d --scale web={replicas}"
+    subprocess.run(cmd, shell=True)
+
+while True:
+    cpu = get_cpu_usage()
+    if cpu > 80:
+        scale_service(current_replicas + 1)  # Scale up
+    elif cpu < 20:
+        scale_service(current_replicas - 1)  # Scale down
+    time.sleep(60)
+```
+
+**Monitoring Scaled Services:**
+```bash
+# Check all running instances
+docker-compose ps
+
+# Monitor resource usage
+docker stats
+
+# Check load balancer
+curl localhost/  # Hits different backends
+```
+
+**Keypoint:** Compose handles port mapping automatically. For true auto-scaling at scale, use Kubernetes.
+
+---
+
+### 16. Explain the difference between COPY and ADD in Dockerfile
+
+**Answer:**
+
+| Feature | COPY | ADD |
+|---------|------|-----|
+| **Purpose** | Copy files from host | Copy + additional features |
+| **Source** | Only host filesystem | Host filesystem OR URLs |
+| **Archives** | Doesn't extract | Auto-extracts tar files |
+| **Best Practice** | Preferred (explicit) | Use only for tar extraction |
+
+**Examples:**
+
+```dockerfile
+# COPY - Simple file copy
+FROM python:3.9
+COPY requirements.txt /app/
+COPY src/ /app/src/
+COPY . /app
+```
+
+```dockerfile
+# ADD - URL support (NOT recommended)
+FROM python:3.9
+# Pulls from URL (harder to debug, slower)
+ADD https://example.com/file.tar.gz /app/
+# Same as: curl example.com/file.tar.gz | tar xz -C /app
+
+# PROBLEM: Adds layer for download, can't be cached well
+```
+
+```dockerfile
+# ADD - Auto-extract tar (reasonable use)
+FROM python:3.9
+ADD app.tar.gz /app/
+# Extracts app.tar.gz to /app automatically
+# Equivalent to: COPY app.tar.gz /tmp/ && tar xz -C /app && rm /tmp/app.tar.gz
+```
+
+**Best Practices:**
+
+```dockerfile
+# GOOD: Use COPY for everything
+FROM python:3.9
+COPY . /app
+WORKDIR /app
+RUN pip install -r requirements.txt
+
+# AVOID: Using ADD for URLs
+# Instead do this:
+FROM python:3.9
+RUN curl -O https://example.com/file.tar.gz && \
+    tar xz -C /app && \
+    rm file.tar.gz
+```
+
+**Comparison:**
+
+```dockerfile
+# ADD usage (less clear intention)
+ADD https://github.com/project/archive.tar.gz /app/
+ADD ./data.tar.gz /app/
+
+# COPY usage (clearer, preferred)
+COPY ./data.tar.gz /app/
+# Or decompress before copying:
+# Extract locally, then:
+COPY ./data /app/data
+```
+
+**Keypoint:** Stick with `COPY` for clarity. Use `ADD` only when you specifically need tar extraction, and document why.
+
+---
+
+### 17. How do you implement health checks and why are they critical?
+
+**Answer:**
+
+**Health Check Definition:**
+
+A health check is a command that Docker runs periodically to verify the container is actually functioning, not just running.
+
+**Dockerfile Health Check:**
+```dockerfile
+FROM python:3.9
+COPY . /app
+WORKDIR /app
+RUN pip install flask
+
+# Health check definition
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:5000/health || exit 1
+
+CMD ["python", "app.py"]
+```
+
+**Parameters Explained:**
+- `--interval=30s`: Check every 30 seconds
+- `--timeout=3s`: Command must respond in 3 seconds
+- `--start-period=5s`: Don't start checking until 5s after start
+- `--retries=3`: Mark unhealthy after 3 consecutive failures
+
+**Docker Compose Health Check:**
+```yaml
+services:
+  web:
+    image: myapp:1.0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+  
+  db:
+    image: postgres:13
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+```
+
+**Health Check States:**
+
+```
+Healthy   ✓ All checks passing
+Unhealthy ✗ Failed threshold reached
+Starting  ⊘ In start_period (not checked yet)
+```
+
+**Real-World Application Endpoint:**
+
+```python
+from flask import Flask, jsonify
+
+app = Flask(__name__)
+
+@app.route('/health')
+def health_check():
+    # Check dependencies
+    try:
+        # Check database
+        check_database()
+        # Check cache
+        check_cache()
+        # Check external APIs
+        check_dependencies()
+        
+        return jsonify(status='healthy', code=200), 200
+    except Exception as e:
+        return jsonify(status='unhealthy', error=str(e), code=500), 500
+
+def check_database():
+    # Verify DB connection
+    # Could be: SELECT 1 query, connection pool status
+    pass
+
+def check_cache():
+    # Verify cache availability
+    # Could be: redis PING command
+    pass
+
+def check_dependencies():
+    # Verify external service availability
+    pass
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
+```
+
+**Why Health Checks Are Critical:**
+
+```bash
+# WITHOUT health checks:
+docker run myapp
+# Docker sees process running
+# But application might be hanging/stuck
+# Load balancer sends traffic to broken container
+# Users get errors
+
+# WITH health checks:
+docker run myapp
+# If health check fails, docker marks unhealthy
+# Load balancer removes from rotation
+# Orchestrator can restart automatically
+# Users still get service
+```
+
+**Load Balancer Integration:**
+
+```yaml
+services:
+  app:
+    image: myapp:1.0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 2
+  
+  nginx:
+    image: nginx:latest
+    depends_on:
+      app:
+        condition: service_healthy  # Only route to healthy
+    volumes:
+      - ./nginx-healthcheck.conf:/etc/nginx/nginx.conf:ro
+```
+
+```nginx
+# nginx configuration with health awareness
+upstream backend {
+    server app:5000 max_fails=2 fail_timeout=10s;
+}
+
+server {
+    location / {
+        proxy_pass http://backend;
+        # nginx will skip unhealthy backends
+    }
+}
+```
+
+**Keypoint:** Health checks are mandatory for production. They enable automatic recovery and prevent routing to broken containers.
+
+---
+
+### 18. What's the purpose of multi-stage builds and how do they reduce image size?
+
+**Answer:**
+
+**Problem Multi-Stage Builds Solve:**
+
+```dockerfile
+# Traditional single-stage (bloated)
+FROM golang:1.17
+WORKDIR /app
+COPY . .
+RUN go build -o app .
+
+# Final image includes:
+# - Go compiler (500MB)
+# - Go standard library (500MB)
+# - Build tools (200MB)
+# - Source code (10MB)
+# - Your binary (5MB)
+# Total: ~1.2GB for 5MB binary!
+```
+
+**Multi-Stage Solution:**
+
+```dockerfile
+# Stage 1: Builder (compile)
+FROM golang:1.17 as builder
+WORKDIR /app
+COPY . .
+RUN go build -o app .
+# Stage 1 size: ~1.2GB
+
+# Stage 2: Runtime (only binary needed)
+FROM alpine:3.14
+COPY --from=builder /app/app /app/app
+ENTRYPOINT ["./app"]
+# Stage 2 size: ~10MB (5MB binary + 5MB alpine)
+
+# Final image: Only ~15MB (discards Stage 1)
+```
+
+**Real-World Examples:**
+
+**Node.js Multi-Stage:**
+```dockerfile
+FROM node:16 as builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+# Layer size: 500MB
+
+FROM node:16-alpine
+WORKDIR /app
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+CMD ["node", "dist/server.js"]
+# Final size: 200MB (saved 300MB)
+```
+
+**Python Multi-Stage:**
+```dockerfile
+FROM python:3.9 as builder
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --user -r requirements.txt
+# Installs to /root/.local
+
+FROM python:3.9-slim
+COPY --from=builder /root/.local /root/.local
+ENV PATH=/root/.local/bin:$PATH
+COPY . /app
+WORKDIR /app
+CMD ["python", "app.py"]
+# Original: 900MB → Final: 150MB (saved 750MB)
+```
+
+**Size Comparison:**
+
+```
+Java Application:
+Single-stage: 1.2GB (JDK + source + compiled code)
+Multi-stage:  200MB (JRE + compiled code)
+Reduction: 83%
+
+Node.js:
+Single-stage: 600MB
+Multi-stage:  100MB
+Reduction: 83%
+
+Go:
+Single-stage: 1.0GB
+Multi-stage:  15MB (statically compiled binary + alpine)
+Reduction: 98%
+```
+
+**Advanced Multi-Stage Patterns:**
+
+```dockerfile
+# Three stages: dependencies, build, runtime
+FROM python:3.9 as dependencies
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --user -r requirements.txt
+
+FROM python:3.9 as builder
+COPY --from=dependencies /root/.local /root/.local
+COPY . .
+RUN python -m py_compile app.py
+
+FROM python:3.9-slim
+COPY --from=builder /root/.local /root/.local
+COPY --from=builder /app /app
+WORKDIR /app
+CMD ["python", "app.py"]
+```
+
+**Best Practices:**
+
+```dockerfile
+# Name stages for clarity
+FROM node:16 as dependencies
+FROM node:16 as builder
+FROM node:16-alpine as runtime
+
+# Only copy what's needed
+COPY --from=builder /app/dist ./dist
+# Don't: COPY --from=builder /app .
+
+# Use specific versions
+FROM alpine:3.14  # Good
+# Not: FROM alpine:latest  # Unpredictable
+```
+
+**Keypoint:** Multi-stage builds are essential for production images. 80-98% size reduction is common. Always use them for compiled languages.
+
+---
+
+### 19. How do you ensure containers are stateless and properly handle configuration?
+
+**Answer:**
+
+**Why Stateless is Critical:**
+
+```
+Stateless containers enable:
+- Scaling: Run multiple identical copies
+- Resilience: Replace failing containers
+- Updates: Deploy new version without data loss
+- Portability: Same container everywhere
+```
+
+**Identifying Stateless vs Stateful:**
+
+```dockerfile
+# STATEFUL (Wrong approach)
+FROM python:3.9
+COPY . /app
+WORKDIR /app
+# Data stored in container:
+RUN mkdir /app/data
+# If container deleted: DATA LOST
+
+# STATELESS (Correct approach)
+FROM python:3.9
+COPY . /app
+WORKDIR /app
+# No data in image
+# Data comes from outside (volumes, databases)
+VOLUME ["/data"]
+```
+
+**Proper Configuration Management:**
+
+```yaml
+# WRONG: Hardcode config in image
+FROM python:3.9
+COPY config.json /app/config.json  # Committed to image
+COPY . /app
+```
+
+```yaml
+# RIGHT: Configuration from environment
+version: '3.9'
+services:
+  app:
+    image: myapp:1.0
+    environment:
+      - DATABASE_URL=postgresql://db:5432/mydb
+      - REDIS_URL=redis://cache:6379
+      - API_KEY=${API_KEY}  # From .env
+      - DEBUG=${DEBUG:-false}  # With default
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./config:/etc/app/config:ro  # External config
+```
+
+```python
+# Application code reads from environment
+import os
+
+DATABASE_URL = os.getenv('DATABASE_URL')
+REDIS_URL = os.getenv('REDIS_URL')
+API_KEY = os.getenv('API_KEY')
+DEBUG = os.getenv('DEBUG', 'false').lower() == 'true'
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable not set")
+```
+
+**Data Handling - Always External:**
+
+```yaml
+services:
+  app:
+    image: myapp:1.0
+    volumes:
+      # Database data (external)
+      - postgres_data:/var/lib/postgresql/data
+      # User uploads (external)
+      - user_uploads:/app/uploads
+      # Logs (external or external logging)
+      - ./logs:/app/logs
+      # Config (external)
+      - ./config.json:/etc/app/config.json:ro
+
+  db:
+    image: postgres:13
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # CRITICAL: Persists outside container
+
+volumes:
+  postgres_data:
+  user_uploads:
+```
+
+**Stateless Checklist:**
+
+```bash
+✓ No data stored in writable layers
+✓ Configuration from environment variables
+✓ All data in external volumes or databases
+✓ Logs to stdout/stderr (Docker logs)
+✓ Can restart without data loss
+✓ Can scale to 10 instances (no data conflicts)
+✓ Can replace with new version (state elsewhere)
+✓ No local file writes (except /tmp)
+```
+
+**Verification:**
+
+```bash
+# Test: Delete container, create new from image
+docker run myapp:1.0
+# Should work exactly the same
+# If it fails: Container has state (FIX IT)
+
+# Anti-pattern detection:
+docker diff container_id
+# Should show minimal changes
+# If many files modified: Container is stateful (BAD)
+```
+
+**Keypoint:** Treat containers as ephemeral. Any data that matters must be external. This enables true scaling and resilience.
+
+---
+
+### 20. Explain difference between docker commit and building from Dockerfile
+
+**Answer:**
+
+**docker commit - Create image from running container**
+
+```bash
+# Start container and make changes
+docker run -it ubuntu:20.04 /bin/bash
+# Inside container:
+# apt-get install -y python3
+# pip install flask
+# echo "version 1.0" > /app/version.txt
+
+# Commit to image
+docker commit <container_id> my-custom-image:1.0
+
+# Problems:
+# ✗ No reproducibility (manual steps)
+# ✗ Hard to version (lost history)
+# ✗ Can't review what changed
+# ✗ Undocumented dependencies
+# ✗ Different results if steps change order
+# ✗ Difficult to maintain long-term
+```
+
+**Dockerfile - Define image as code**
+
+```dockerfile
+FROM ubuntu:20.04
+RUN apt-get update && \
+    apt-get install -y python3
+RUN pip install flask
+RUN echo "version 1.0" > /app/version.txt
+
+# Benefits:
+# ✓ Reproducible (same image every build)
+# ✓ Version controlled (git history)
+# ✓ Reviewable (see all changes)
+# ✓ Documented (each line explains)
+# ✓ Consistent results
+# ✓ Easy to maintain
+```
+
+**Comparison Table:**
+
+| Aspect | docker commit | Dockerfile |
+|--------|---------------|-----------|
+| **Method** | Snapshot container | Define steps |
+| **Reproducibility** | Not reproducible | Fully reproducible |
+| **Version Control** | Can't track changes | Track in git |
+| **Layer Caching** | Single layer | Optimized layers |
+| **Debugging** | Hard (mystery image) | Easy (read Dockerfile) |
+| **Collaboration** | Share container | Share Dockerfile |
+| **Modification** | Recommit entire layer | Edit Dockerfile line |
+
+**When docker commit is useful:**
+
+```bash
+# ONLY: Debugging and exploration
+docker run -it ubuntu:20.04 /bin/bash
+# Experiment and test
+# When working: convert steps to Dockerfile
+
+# NOT: Production workflows
+# NEVER: For deployment images
+```
+
+**Proper Workflow:**
+
+```bash
+# 1. Experiment interactively
+docker run -it ubuntu:20.04 /bin/bash
+# apt-get install python3
+# pip install flask
+# test and verify
+
+# 2. Document in Dockerfile
+cat > Dockerfile <<EOF
+FROM ubuntu:20.04
+RUN apt-get update && \
+    apt-get install -y python3
+RUN pip install flask
+COPY . /app
+WORKDIR /app
+CMD ["python", "server.py"]
+EOF
+
+# 3. Build from Dockerfile
+docker build -t my-app:1.0 .
+
+# 4. Version in git
+git add Dockerfile
+git commit -m "Add Python 3 and Flask"
+```
+
+**Size Comparison:**
+
+```bash
+# docker commit creates large image
+docker run ubuntu:20.04 bash -c "apt-get install -y build-essential"
+docker commit <id> app:commit
+# Result: Large image with all build tools
+
+# Dockerfile with cleanup
+FROM ubuntu:20.04
+RUN apt-get update && \
+    apt-get install -y build-essential && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+# Result: Smaller image (caches cleaned)
+```
+
+**Keypoint:** Use `docker commit` only for exploration. Always use Dockerfiles for production. Dockerfiles are code; treat them like code.
+
+---
+
+## Comprehensive Theory and Keypoints
+
+### Docker Execution Model (Core Understanding)
+
+**How Docker Actually Works:**
+
+```
+docker run ubuntu echo "hello"
+          ↓
+┌─────────────────────────────────────────────┐
+│ 1. CLIENT: Parse command                    │
+│    - Image: ubuntu                          │
+│    - Command: echo "hello"                  │
+└─────────────────────────────────────────────┘
+          ↓ REST API Call
+┌─────────────────────────────────────────────┐
+│ 2. DAEMON: Receive request                  │
+│    - Check local image cache                │
+│    - If missing, pull from registry         │
+└─────────────────────────────────────────────┘
+          ↓ containerd API
+┌─────────────────────────────────────────────┐
+│ 3. CONTAINERD: Create container             │
+│    - Allocate container ID                  │
+│    - Create root filesystem (layers)        │
+│    - Setup networking namespace             │
+│    - Setup process namespace                │
+└─────────────────────────────────────────────┘
+          ↓ OCI spec
+┌─────────────────────────────────────────────┐
+│ 4. RUNC: Start container                    │
+│    - Use namespaces (pid, net, mnt, etc)    │
+│    - Use cgroups (memory, CPU limits)       │
+│    - Execute specified command              │
+└─────────────────────────────────────────────┘
+          ↓ OS Kernel
+┌─────────────────────────────────────────────┐
+│ 5. KERNEL: Process execution                │
+│    - PID 1: echo "hello"                    │
+│    - Isolated filesystem                    │
+│    - Isolated network interfaces            │
+└─────────────────────────────────────────────┘
+          ↓ Output
+stdout: hello
+exit code: 0
+```
+
+**Keypoints:**
+- Docker daemon handles orchestration
+- containerd manages container lifecycle
+- runc is the actual container runtime
+- Namespaces provide isolation (6 types: pid, net, mnt, ipc, uts, user)
+- cgroups enforce resource limits
+- Each layer is immutable until runtime layer added
+
+---
+
+### Layer Mechanism Deep Dive
+
+```
+Image with 5 layers:
+┌──────────────────────────┐ L5: Your /app code
+├──────────────────────────┤ L4: RUN pip install
+├──────────────────────────┤ L3: COPY requirements.txt
+├──────────────────────────┤ L2: System setup
+├──────────────────────────┤ L1: Base OS (ubuntu)
+└──────────────────────────┘
+
+Running container adds writable layer:
+┌──────────────────────────┐ Container Layer (writable)
+├──────────────────────────┤ L5: Your /app code
+├──────────────────────────┤ L4: RUN pip install
+├──────────────────────────┤ L3: COPY requirements.txt
+├──────────────────────────┤ L2: System setup
+├──────────────────────────┤ L1: Base OS
+└──────────────────────────┘
+
+Union Mount merges all layers:
+Result: Single unified filesystem view
+```
+
+**Caching Strategy Explained:**
+```dockerfile
+FROM python:3.9
+# Layer 1: Heavy (900MB)
+
+COPY requirements.txt .
+# Layer 2: Small (1KB)
+# Fingerprint: hash of requirements.txt content
+
+RUN pip install -r requirements.txt
+# Layer 3: Medium (200MB)
+# Only runs if Layer 2 fingerprint changed
+
+COPY . .
+# Layer 4: Variable (1-1000MB)
+# Fingerprint: hash of all files
+
+RUN python app.py
+# Layer 5: Only runs if Layer 4 changed
+```
+
+**Build Scenario:**
+```bash
+# First build:
+docker build -t myapp .
+# All layers built: 1s + 30s + 5s = 36s total
+
+# Change only app.py:
+docker build -t myapp .
+# Layers 1-3 cached (instantaneous)
+# Layer 4 rebuilt (5s)
+# Layer 5 rebuilt (1s)
+# Total: 6s (6x faster!)
+
+# Change requirements.txt:
+docker build -t myapp .
+# Layers 1-2 cached
+# Layer 3 rebuilt: pip install (30s)
+# Layer 4 rebuilt (5s)
+# Layer 5 rebuilt (1s)
+# Total: 36s (can't avoid pip reinstall)
+```
+
+**Keypoints:**
+- Docker uses UnionFS to merge layers
+- Each layer is a delta (not full copy)
+- Caching is based on instruction + input hash
+- Layer order affects build time dramatically
+- Shared base images save bandwidth and storage
+
+---
+
+### Network Isolation and Service Discovery
+
+**How services find each other:**
+
+```yaml
+services:
+  web:
+    image: myapp
+    # Hostname: web
+    # IP: 172.18.0.2 (example)
+    
+  db:
+    image: postgres:13
+    # Hostname: db
+    # IP: 172.18.0.3 (example)
+```
+
+**Name Resolution:**
+```
+web container tries: postgresql://db:5432
+      ↓
+Docker embedded DNS (127.0.0.11:53)
+      ↓
+Resolves "db" → 172.18.0.3
+      ↓
+Connects to 172.18.0.3:5432
+```
+
+**Key Discovery Concepts:**
+- Service names are hostnames in custom networks
+- Docker daemon acts as DNS server
+- Each service gets consistent IP in named network
+- Bridge networks have automatic service discovery
+- Host network shares host's network stack (no DNS needed)
+
+---
+
+### Resource Limits and cgroups
+
+**Memory Management:**
+
+```bash
+# Container tries to use 1GB
+docker run -m 512m nginx
+# Kernel kills process if exceeds limit
+# Memory not freed on exit (volume data persists)
+
+# Memory constraints:
+-m 512m              # Hard limit
+--memory-swap 1g     # Total mem + swap limit
+--memory-swappiness 0 # 0=no swap, 100=prefer swap
+--memory-reservation 256m  # Soft limit, can exceed
+```
+
+**CPU Management:**
+
+```bash
+# CPU share (relative weighting)
+docker run --cpu-shares 1024 app1  # Default
+docker run --cpu-shares 512 app2   # Half as much CPU
+# When both running, app1 gets 2x CPU time
+
+# CPU limit (absolute)
+docker run --cpus 1.5 app
+# Max 1.5 CPU cores regardless of load
+
+# CPU pinning (advanced)
+docker run --cpuset-cpus 0,1,3 app  # Use only cores 0,1,3
+```
+
+**I/O Limits:**
+
+```bash
+# Block device I/O
+docker run --blkio-weight 300 app  # Relative I/O weight
+docker run --device-read-bps /dev/sda:10mb app  # Max read
+docker run --device-write-bps /dev/sda:10mb app  # Max write
+```
+
+**Keypoints:**
+- cgroups (control groups) enforce limits at kernel level
+- Out-of-memory = OOMKilled (application dies)
+- CPU limits are relative or absolute
+- I/O limits prevent disk saturation
+- Limits should be set for production stability
+
+---
+
+### Data Persistence Strategies
+
+**Pattern 1: Volume for Database**
+```yaml
+db:
+  image: postgres:13
+  volumes:
+    - postgres_data:/var/lib/postgresql/data
+  # Data persists across restarts
+  # Can backup volume easily
+  # Managed by Docker
+```
+
+**Pattern 2: Bind Mount for Config**
+```yaml
+app:
+  image: myapp
+  volumes:
+    - ./config:/etc/app:ro  # Read-only
+  # Config on host, container reads it
+  # Can edit without rebuilding image
+```
+
+**Pattern 3: Temporary Data**
+```yaml
+cache:
+  image: redis:6
+  volumes:
+    - /tmp  # tmpfs mount (in-memory)
+  # Fast access, no persistence
+  # Data lost on restart
+```
+
+**Backup Pattern:**
+```bash
+# Backup volume
+docker run --rm -v postgres_data:/data -v $(pwd):/backup \
+  ubuntu tar czf /backup/db.tar.gz -C /data .
+
+# Restore volume
+docker run --rm -v postgres_data:/data -v $(pwd):/backup \
+  ubuntu tar xzf /backup/db.tar.gz -C /data
+
+# Database backup
+docker exec postgres pg_dump -U user mydb > backup.sql
+
+# Database restore
+docker exec -i postgres psql -U user mydb < backup.sql
+```
+
+**Keypoints:**
+- Named volumes: best for persistent databases
+- Bind mounts: good for configuration, development
+- tmpfs: good for cache, temporary files
+- Always backup before deleting volumes
+- Test restore procedures regularly
+
+---
+
+## Key Takeaways
+
+### Fundamental Concepts
+1. **Containers are lightweight processes** - OS-level virtualization via namespaces and cgroups
+2. **Images are immutable blueprints** - Built from layers, cached for efficiency
+3. **Layers enable caching** - Proper ordering dramatically reduces build time
+4. **Networking is automatic** - Service discovery by hostname in custom networks
+5. **Volumes persist data** - Named volumes best for production, bind mounts for development
+
+### Development Practices
+6. **Use multi-stage builds** - Drastically reduces final image size (70-90% reduction common)
+7. **Optimize layer ordering** - Static dependencies before changing code
+8. **Health checks are critical** - Ensure services are actually ready, not just listening
+9. **Use environment variables** - For configuration management without rebuilding
+10. **Keep images minimal** - Use slim/alpine variants as base
+
+### Architecture and Design
+11. **Docker Compose for local development** - Not for production orchestration
+12. **Named networks for service communication** - Better than linking containers
+13. **Resource limits prevent catastrophes** - Set memory and CPU limits
+14. **Service dependencies need polling** - depends_on doesn't guarantee readiness
+15. **Security starts with non-root user** - Always drop unnecessary capabilities
+
+### Production Deployment
+16. **Secrets separate from images** - Never commit secrets, use runtime injection
+17. **Implement health checks** - For load balancers and orchestrators
+18. **Plan for data persistence** - Volumes and backup strategies upfront
+19. **Monitor and log properly** - Centralized logging, Prometheus metrics
+20. **Use registries for distribution** - Docker Hub or private registries for teams
+
+### Common Pitfalls to Avoid
+- ❌ Assuming `depends_on` ensures readiness
+- ❌ Storing secrets in Dockerfiles
+- ❌ Running as root user
+- ❌ Single-layer large images
+- ❌ Committing node_modules or .venv to images
+- ❌ Ignoring health checks
+- ❌ No resource limits in production
+- ❌ Using host network for isolation
+- ❌ Forgetting to remove temporary files
+- ❌ Not testing volume mounts with different host environments
+
+### When to Use Docker
+✓ Microservices
+✓ Multi-service development environments
+✓ CI/CD pipelines
+✓ Consistent environments across team
+✓ Quick deployment and rollback
+✓ Horizontal scaling
+✓ Dependency isolation
+
+### When NOT to Use Docker
+✗ Desktop GUI applications
+✗ Real-time systems with strict latency requirements
+✗ When full OS isolation needed (use VMs instead)
+✗ Simple single-file scripts
+✗ Legacy monolithic applications (unless modernizing)
+
+---
+
+## Resources
+
+- **Official Docker Documentation**: https://docs.docker.com/
+- **Docker Hub**: https://hub.docker.com/
+- **Docker Best Practices**: https://docs.docker.com/develop/dev-best-practices/
+- **Dockerfile Reference**: https://docs.docker.com/engine/reference/builder/
+- **Docker Compose Reference**: https://docs.docker.com/compose/compose-file/
+- **Docker Community**: https://www.docker.com/community
+- **Play with Docker**: https://www.labs.play-with-docker.com/ (Online sandbox)
+- **Docker Certification**: https://www.docker.com/certification
+- **Container Security Best Practices**: https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html
+
+### Learning Path Progression
+
+**Week 1: Fundamentals**
+- What is Docker and containers
+- Install Docker on your machine
+- Run hello-world
+- Learn docker run flags
+- Build first Dockerfile
+
+**Week 2: Images and Registries**
+- Understand layers
+- Optimize Dockerfiles
+- Push/pull images
+- Use Docker Hub
+- Create multi-stage builds
+
+**Week 3: Compose and Networking**
+- Write docker-compose.yml
+- Multi-container applications
+- Service communication
+- Volume basics
+- Environment variables
+
+**Week 4: Production Ready**
+- Health checks
+- Resource limits
+- Non-root users
+- Logging and monitoring
+- Secrets management
+
+**Week 5-6: Advanced Topics**
+- Docker Swarm basics
+- Complex networking scenarios
+- Performance optimization
+- Security hardening
+- Multi-host deployments
+
+### Hands-On Exercises
+
+1. **Exercise 1**: Create a Node.js app with Dockerfile, build, run, and access from browser
+2. **Exercise 2**: Write docker-compose.yml with web service and PostgreSQL
+3. **Exercise 3**: Add health checks and restart policies
+4. **Exercise 4**: Optimize image size from 1GB to <100MB
+5. **Exercise 5**: Create multi-stage build for Go application
+6. **Exercise 6**: Setup multi-service app with API gateway, workers, and cache
+7. **Exercise 7**: Implement proper logging and monitoring
+8. **Exercise 8**: Practice backup and restore workflows
+9. **Exercise 9**: Create production-ready deployment with SSL/TLS
+10. **Exercise 10**: Troubleshoot real failure scenarios
