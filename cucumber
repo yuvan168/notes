@@ -1,0 +1,2964 @@
+# Cucumber Testing - Complete Notes & Theory
+
+## Table of Contents
+1. [Introduction](#introduction)
+2. [Core Concepts](#core-concepts)
+3. [Gherkin Language](#gherkin-language)
+4. [Setup & Installation](#setup--installation)
+5. [Feature Files](#feature-files)
+6. [Step Definitions](#step-definitions)
+7. [Hooks](#hooks)
+8. [Data Tables](#data-tables)
+9. [Scenario Outlines](#scenario-outlines)
+10. [Best Practices](#best-practices)
+11. [Advanced Topics](#advanced-topics)
+12. [Real-World Examples](#real-world-examples)
+
+---
+
+## Introduction
+
+### What is Cucumber?
+Cucumber is a **Behavior-Driven Development (BDD)** testing framework that enables collaboration between technical and non-technical stakeholders. It uses **Gherkin** language to write human-readable test scenarios.
+
+### Why Cucumber?
+- **Readable**: Tests written in plain English/Gherkin language
+- **Maintainable**: Easy to update and understand
+- **Collaboration**: Bridges gap between QA, developers, and business analysts
+- **Reusable**: Step definitions can be reused across multiple scenarios
+- **Multi-language Support**: Works with Java, Python, JavaScript, Ruby, C#, etc.
+
+### BDD vs TDD
+| BDD | TDD |
+|-----|-----|
+| Outside-in approach | Inside-out approach |
+| Tests written in human-readable language | Tests written in technical language |
+| Focus on behavior | Focus on unit functionality |
+| Stakeholder collaboration | Developer-centric |
+
+---
+
+## Core Concepts
+
+### 1. Gherkin Language
+
+#### Theory
+Gherkin is a **Domain-Specific Language (DSL)** designed specifically for writing test scenarios in a human-readable format. It abstracts away technical implementation details while maintaining clarity about what is being tested. The language follows a simple structure that allows non-technical stakeholders (business analysts, product managers) to understand and contribute to test specifications.
+
+**Key Philosophy**: Gherkin represents the **Given-When-Then** pattern, which maps to the **Arrange-Act-Assert** pattern in traditional testing:
+- **Arrange (Given)**: Set up initial state/preconditions
+- **Act (When)**: Perform the action being tested
+- **Assert (Then)**: Verify the expected outcome
+
+#### Detailed Explanation
+Gherkin is not a programming language but a structured language that bridges communication between business and technical teams. Each step in Gherkin:
+1. Must be readable by non-technical people
+2. Should focus on "what" not "how"
+3. Represents a testable unit of behavior
+4. Maps to executable code (step definitions)
+
+#### Key Points
+- **Language Agnostic**: Gherkin itself is independent of programming language
+- **Executability**: Each Gherkin statement must have a corresponding step definition
+- **Clarity First**: Prioritizes readability over technical precision
+- **One Action Per Step**: Each step should represent one logical action
+- **Business Focus**: Written from business perspective, not implementation
+
+#### Why Gherkin Matters
+```
+Traditional Test:         Gherkin:
+Check login page         Given user is on login page
+Enter credentials        When user enters valid credentials
+Click button             And user clicks login button
+Verify navigation        Then user is redirected to dashboard
+```
+
+---
+
+### 2. Feature Files
+
+#### Theory
+Feature files are the **blueprint of your test suite**. They represent:
+1. **Documentation** of system behavior
+2. **Specification** of requirements
+3. **Test Cases** that validate implementation
+4. **Living Document** that evolves with the system
+
+Feature files serve as the single source of truth for what the system should do. They're organized around **features** (business capabilities) not implementations.
+
+#### Detailed Explanation
+
+**Structure Hierarchy:**
+```
+Feature (Business capability)
+  ├── Background (Common setup)
+  ├── Scenario 1 (Test case)
+  │   ├── Given (Precondition)
+  │   ├── When (Action)
+  │   └── Then (Assertion)
+  ├── Scenario 2
+  └── Scenario 3
+```
+
+**File Organization Patterns:**
+1. **By Feature**: One file per business feature
+2. **By Module**: One file per module/component
+3. **By Epic**: Group related features together
+4. **By User Story**: Each file represents a user story
+
+#### Key Points
+- **One Feature Per File**: Each `.feature` file contains one feature
+- **Independent Scenarios**: Scenarios should not depend on each other
+- **Reusable Scenarios**: Same scenario can be used in multiple contexts
+- **Naming Convention**: Use descriptive names: `user_authentication.feature`, `product_management.feature`
+- **Location Convention**: Keep in `features/`, `specs/`, or `src/test/features/` directory
+- **Version Control**: Feature files should be version controlled with code
+- **Discoverability**: Clear naming enables easy finding of related tests
+
+#### Common Pitfalls
+- ❌ Multiple features in one file
+- ❌ Tightly coupled scenarios
+- ❌ Technical jargon in descriptions
+- ❌ Missing background for common steps
+- ❌ Unclear scenario names
+
+---
+
+### 3. Step Definitions
+
+#### Theory
+Step definitions are the **bridge between Gherkin and implementation code**. They translate human-readable steps into executable actions. Each Gherkin step has a corresponding step definition that contains the actual test logic.
+
+**The Mapping Process:**
+```
+Gherkin Step:                    Step Definition:
+"Given user is logged in"  -->   def user_is_logged_in():
+                                     login(user, password)
+
+"When user clicks logout"  -->   def user_clicks_logout():
+                                     click_element(logout_button)
+
+"Then user sees login"     -->   def user_sees_login():
+                                     assert login_page_visible()
+```
+
+#### Detailed Explanation
+
+**Step Definition Binding:**
+1. **Annotation/Decorator**: Links step text to function
+2. **Pattern Matching**: Matches Gherkin text to step definition
+3. **Parameter Extraction**: Captures values from step text
+4. **Execution**: Runs the implementation code
+
+**Pattern Types:**
+- **Cucumber Expressions** (Modern): `Given user has {int} items`
+- **Regular Expressions** (Traditional): `Given user has (\d+) items`
+
+**Execution Flow:**
+```
+Gherkin: "Given user has 5 items"
+  ↓
+Cucumber finds matching step definition
+  ↓
+Extracts "5" as parameter
+  ↓
+Calls: user_has_items(5)
+  ↓
+Step definition executes implementation
+  ↓
+Result stored for assertion or next step
+```
+
+#### Key Points
+- **One Action Per Step**: Step definition should do one logical thing
+- **Reusability**: Designed to be used across multiple scenarios
+- **Clarity**: Code should be readable and maintainable
+- **No Nesting**: Don't call step definitions from step definitions (use helpers)
+- **Parameter Extraction**: Use consistent parameter names and types
+- **World Object**: Share state between steps using world/context object
+- **Error Handling**: Proper exception handling for meaningful failure messages
+
+#### Best Practices
+```javascript
+// ✅ Good: Clear, single responsibility
+Given('user has {int} items in cart', function(count) {
+  this.cart.addItems(count);
+});
+
+// ❌ Bad: Too much logic
+Given('user is fully set up with data and permissions and notifications', 
+  function() {
+    // 50 lines of setup code
+  }
+);
+
+// ✅ Good: Reusable
+When('user clicks {string} button', function(buttonName) {
+  this.click(`button[name="${buttonName}"]`);
+});
+
+// ❌ Bad: Hard-coded
+When('user clicks logout', function() {
+  this.click('[name="logout"]'); // Only works for logout
+});
+```
+
+---
+
+### 4. Test Runners
+
+#### Theory
+Test runners are the **orchestrators of test execution**. They:
+1. **Discover** feature files and step definitions
+2. **Parse** Gherkin syntax
+3. **Match** steps to definitions
+4. **Execute** tests in order
+5. **Report** results and failures
+
+#### Detailed Explanation
+
+**Runner Responsibilities:**
+1. **Discovery**: Find all feature files matching pattern
+2. **Parsing**: Parse Gherkin syntax and validate
+3. **Compilation**: Connect steps to definitions
+4. **Execution**: Run scenarios in sequence
+5. **State Management**: Maintain context/world object between steps
+6. **Error Handling**: Capture and report failures
+7. **Reporting**: Generate test reports
+
+**Execution Flow:**
+```
+Runner Start
+  ↓
+Load Configuration (cucumber.js, cucumber.xml, etc.)
+  ↓
+Discover Feature Files
+  ↓
+Discover Step Definitions
+  ↓
+For each Scenario:
+  ├→ Run Before Hooks
+  ├→ For each Step:
+  │  ├→ Find matching Step Definition
+  │  ├→ Execute Definition
+  │  └→ Check Result (Pass/Fail/Pending)
+  └→ Run After Hooks
+  ↓
+Generate Report
+```
+
+#### Key Points
+- **Configuration Driven**: Behavior configured through files or CLI options
+- **Parallel Execution**: Can run multiple scenarios in parallel
+- **Selective Execution**: Can run specific features, tags, or scenarios
+- **Dry Run Mode**: Parses without executing (useful for validation)
+- **Strict Mode**: Treats pending/undefined steps as failures
+- **Multiple Formats**: Can output reports in various formats
+
+---
+
+### 5. Hooks
+
+#### Theory
+Hooks are **lifecycle methods** that run at specific points during test execution. They handle **cross-cutting concerns** like:
+- Browser/driver initialization
+- Database setup/cleanup
+- Test data creation/deletion
+- Logging and reporting
+- Screenshot capture on failure
+
+**Hook Execution Model:**
+```
+BeforeAll
+  ↓
+For each Scenario:
+  ├→ Before (general)
+  ├→ Before (tagged hooks)
+  ├→ Run Steps
+  ├→ After (tagged hooks)
+  └→ After (general)
+  ↓
+AfterAll
+```
+
+#### Detailed Explanation
+
+**Hook Types and Execution Order:**
+
+1. **BeforeAll**: Runs once at test suite start
+   - Database initialization
+   - Server startup
+   - Configuration loading
+
+2. **Before**: Runs before each scenario
+   - Browser/driver setup
+   - Fresh state creation
+   - Test data insertion
+
+3. **After**: Runs after each scenario (always, even on failure)
+   - Browser/driver cleanup
+   - Data rollback
+   - Screenshot on failure
+
+4. **AfterAll**: Runs once at suite end
+   - Database shutdown
+   - Server shutdown
+   - Report generation
+
+**Tagged Hook Execution:**
+```
+Before('@database'): Runs before scenarios tagged @database
+After('@ui'): Runs after scenarios tagged @ui
+
+@database @ui
+Scenario: Complex operation
+  # Both Before hooks run, then scenario, then both After hooks
+```
+
+#### Key Points
+- **Guaranteed Execution**: After hooks run even if test fails
+- **Selective Execution**: Tag hooks to run conditionally
+- **State Isolation**: Each scenario should have fresh state
+- **Parallel Safety**: Hooks must be thread-safe for parallel execution
+- **Error Handling**: Failures in hooks should be caught and reported
+- **Context Access**: Hooks have access to scenario info and world object
+- **No Side Effects**: Avoid leaving state that affects other scenarios
+
+---
+
+### 6. Scenario Context (World Object)
+
+#### Theory
+The **World Object** (or Context) is a **shared state container** that:
+1. Persists data between steps in a scenario
+2. Provides helper methods for steps
+3. Isolates state between scenarios
+4. Enables step communication
+
+**State Flow:**
+```
+Scenario Start
+  ↓
+World object created (fresh instance)
+  ↓
+Given step: Stores user data in world
+  ↓
+When step: Accesses user data from world
+  ↓
+Then step: Verifies data from world
+  ↓
+Scenario End: World object destroyed
+  ↓
+Next Scenario: Fresh world object created
+```
+
+#### Detailed Explanation
+
+**World Object Pattern:**
+```javascript
+class MyWorld {
+  constructor() {
+    this.users = [];
+    this.currentUser = null;
+    this.driver = null;
+    this.lastResponse = null;
+  }
+
+  addUser(user) {
+    this.users.push(user);
+  }
+
+  getUser(id) {
+    return this.users.find(u => u.id === id);
+  }
+
+  async navigateTo(url) {
+    await this.driver.navigate(url);
+  }
+}
+```
+
+**Usage in Steps:**
+```javascript
+Given('user {string} exists', function(username) {
+  // 'this' refers to world object
+  this.currentUser = { name: username, id: Date.now() };
+  this.addUser(this.currentUser);
+});
+
+Then('user {string} should be in list', function(username) {
+  const user = this.getUser(username);
+  expect(user).to.exist;
+});
+```
+
+#### Key Points
+- **Fresh Instance Per Scenario**: Each scenario gets isolated world
+- **Shared Between Steps**: All steps in scenario access same world
+- **Helper Methods**: Implement reusable utilities in world
+- **Data Persistence**: Holds state that spans multiple steps
+- **Cleanup**: Automatically discarded after scenario
+- **No Interference**: Changes in one scenario don't affect others
+- **Performance**: Keep world lightweight, don't store unnecessary data
+
+---
+
+## Gherkin Language - Comprehensive Guide
+
+### Gherkin Fundamentals
+
+#### Theory & Philosophy
+Gherkin is built on the **Given-When-Then** model, which represents the **Arrange-Act-Assert** pattern:
+
+**The AAA Pattern in Gherkin:**
+```
+Arrange (Given):  Set up initial state - What is the starting condition?
+Act (When):       Perform action - What action is being tested?
+Assert (Then):    Verify outcome - What is the expected result?
+```
+
+**Example Mapping:**
+```gherkin
+Given: user has $100 in account      ← Arrange: Setup
+When: user withdraws $20              ← Act: Action
+Then: account balance should be $80   ← Assert: Verification
+```
+
+#### Why This Pattern Works
+1. **Clarity**: Clear structure that's easy to understand
+2. **Completeness**: Forces you to consider all three aspects
+3. **Testability**: Each step is independently verifiable
+4. **Reusability**: Steps can be reused with different contexts
+
+---
+
+### Basic Syntax & Keywords
+
+#### Keywords Deep Dive
+
+```gherkin
+# Feature: Declares the business capability being tested
+# - Describes what is being built
+# - Not executable, only descriptive
+# - Scope: Multiple related scenarios
+Feature: User Authentication
+  Users should be able to create accounts and log in
+
+# Scenario: A concrete example of how a feature should behave
+# - Represents one test case
+# - Should be independent
+# - Scope: Single test flow
+Scenario: User successfully logs in
+  
+  # Given: Preconditions that must be true
+  # - Sets up the initial state
+  # - Can have multiple Givens
+  # - Should answer "What is the current state?"
+  Given user "john@example.com" exists with password "secret123"
+  
+  # When: The action being tested
+  # - Represents the user action/system behavior
+  # - Should have ONE main action
+  # - Can have multiple Whens for complex flows
+  When user enters email "john@example.com"
+  And user enters password "secret123"
+  And user clicks login button
+  
+  # Then: Expected outcomes/assertions
+  # - Verifies the result
+  # - Can have multiple Thens
+  # - Should answer "What should happen?"
+  Then user should be redirected to dashboard
+  And user should see welcome message
+  And user session should be stored
+```
+
+#### And / But Keywords
+
+**And**: Continuation of previous keyword type
+```gherkin
+Given user has admin role
+And user has all permissions     ← Continues "Given"
+When user clicks edit
+And user modifies settings       ← Continues "When"
+Then changes should be saved
+And notification should be sent  ← Continues "Then"
+```
+
+**But**: Negation/contrast (opposite of previous)
+```gherkin
+Given user is logged in
+But user has not verified email
+When user tries to access premium feature
+Then user should see verification prompt
+But user should NOT be charged
+```
+
+#### Background
+
+**Purpose**: Common steps for all scenarios in a feature
+
+```gherkin
+Feature: Shopping Cart
+  
+  # These steps run before EVERY scenario
+  Background:
+    Given user is on shopping website
+    And user has empty cart
+    And products are available
+  
+  # Execution order: Background steps, then Scenario steps
+  Scenario: Add product to cart
+    When user searches for "laptop"
+    And user clicks add to cart
+    Then product should appear in cart
+  
+  Scenario: Remove product from cart
+    Given product "laptop" is in cart      ← Background runs first
+    When user clicks remove
+    Then cart should be empty
+```
+
+**Benefits:**
+- ✅ Reduces duplication
+- ✅ Makes scenarios clearer
+- ✅ Easier to maintain common setup
+- ✅ Automatic execution before each scenario
+
+---
+
+### Advanced Gherkin Features
+
+#### 1. Scenario Outline & Examples
+
+**Purpose**: Test multiple scenarios with different data
+
+```gherkin
+Scenario Outline: Login with various credentials
+  Given user is on login page
+  When user enters email "<email>"
+  And user enters password "<password>"
+  Then login result should be "<result>"
+  
+  # Placeholder syntax: <variable_name>
+  Examples: Valid credentials
+    | email           | password | result  |
+    | user1@test.com  | pass123  | success |
+    | user2@test.com  | pass456  | success |
+  
+  Examples: Invalid credentials
+    | email           | password | result  |
+    | wrong@test.com  | wrong    | failure |
+    | invalid@test.com| invalid  | failure |
+```
+
+**Execution Details:**
+- Creates ONE test scenario for EACH example row
+- Replaces placeholders with actual values
+- Runs independently (not sequential)
+- Failed row doesn't stop other rows
+
+**Generated Scenarios:**
+```
+Scenario: Login with various credentials [Example 1]
+  Given user is on login page
+  When user enters email "user1@test.com"
+  And user enters password "pass123"
+  Then login result should be "success"
+
+Scenario: Login with various credentials [Example 2]
+  Given user is on login page
+  When user enters email "user2@test.com"
+  And user enters password "pass456"
+  Then login result should be "success"
+```
+
+---
+
+#### 2. Tags
+
+**Purpose**: Organize and filter scenarios for execution
+
+```gherkin
+# Single tag
+@smoke
+Scenario: User can log in
+  ...
+
+# Multiple tags on same scenario
+@smoke @high_priority @login
+Scenario: User can log in
+
+# Tags on feature (apply to all scenarios)
+@user_management
+Feature: User Administration
+  @critical
+  Scenario: Create new user
+    ...
+  
+  @slow
+  Scenario: Bulk user import
+    ...
+```
+
+**Tag Execution:**
+
+```bash
+# Run only smoke tests
+npx cucumber-js --tags "@smoke"
+
+# Run smoke AND critical tests
+npx cucumber-js --tags "@smoke and @critical"
+
+# Run smoke OR critical tests
+npx cucumber-js --tags "@smoke or @critical"
+
+# Run smoke but NOT slow tests
+npx cucumber-js --tags "@smoke and not @slow"
+
+# Complex expressions
+npx cucumber-js --tags "(@ui or @api) and not @flaky"
+```
+
+**Common Tag Conventions:**
+- `@smoke`: Quick sanity checks
+- `@critical`: Must-pass tests
+- `@regression`: Check for regressions
+- `@ui`: UI-specific tests
+- `@api`: API-specific tests
+- `@slow`: Takes significant time
+- `@skip`: Temporarily skip
+- `@wip`: Work in progress
+- `@flaky`: Known to be unstable
+
+---
+
+#### 3. Docstrings
+
+**Purpose**: Pass multi-line text to steps
+
+```gherkin
+Scenario: Send email with rich content
+  Given I have an email to send
+  When I send the following email:
+    """
+    Subject: Welcome to our service
+    To: user@example.com
+    
+    Hello John,
+    
+    Welcome to our amazing service!
+    We're excited to have you on board.
+    
+    Best regards,
+    The Team
+    """
+  Then email should be delivered
+```
+
+**JavaScript Implementation:**
+```javascript
+When('I send the following email:', function(docstring) {
+  // docstring is a multi-line string
+  const emailContent = docstring;
+  this.email.send(emailContent);
+});
+```
+
+**JSON Docstrings:**
+```gherkin
+Scenario: Create user with JSON data
+  When I create a user with the following data:
+    """
+    {
+      "name": "John Doe",
+      "email": "john@example.com",
+      "role": "admin"
+    }
+    """
+  Then user should be created successfully
+```
+
+---
+
+#### 4. Data Tables
+
+**Purpose**: Structured data input in scenarios
+
+```gherkin
+Scenario: Create multiple users
+  Given the following users exist:
+    | name  | email            | role   |
+    | John  | john@example.com | admin  |
+    | Jane  | jane@example.com | user   |
+    | Bob   | bob@example.com  | guest  |
+  When I verify all users
+  Then all users should be in system
+```
+
+**JavaScript Implementation:**
+```javascript
+Given('the following users exist:', function(dataTable) {
+  // Convert to array of objects
+  const users = dataTable.hashes();
+  users.forEach(user => {
+    this.createUser(user);
+  });
+});
+
+// users = [
+//   { name: 'John', email: 'john@example.com', role: 'admin' },
+//   { name: 'Jane', email: 'jane@example.com', role: 'user' },
+//   ...
+// ]
+```
+
+---
+
+#### 5. Comments
+
+**Purpose**: Document feature files
+
+```gherkin
+# This is a comment - not executed
+
+# Feature comment
+Feature: User Management
+  
+  # Scenario comment
+  Scenario: Create user
+    # Step comment
+    Given user is on registration page
+    # More comment
+    When user fills in details
+    Then user should be created
+```
+
+---
+
+### Gherkin Best Practices
+
+#### DO's ✅
+
+```gherkin
+# Clear and business-focused
+Feature: Shopping Cart Management
+  
+  Scenario: User can add products to cart
+    Given user is browsing products
+    When user adds "laptop" to cart
+    Then "laptop" should appear in cart
+    And cart total should update
+
+# Descriptive and reusable steps
+Given user enters email "john@example.com"
+When user enters password "secure123"
+```
+
+#### DON'Ts ❌
+
+```gherkin
+# Vague and unclear
+Scenario: Something happens
+  Given something is set up
+  When user does something
+  Then something should change
+
+# Technical jargon
+Scenario: DB connection pool exhaustion
+  Given connection pool is initialized
+  When N+1 queries execute
+  Then connection should be recycled
+
+# Hard-coded step definitions
+Scenario: Admin login
+  Given user john@example.com logs in
+  When user navigates to /admin/dashboard
+  Then user sees admin interface
+```
+
+#### Naming Conventions
+
+```gherkin
+# Feature files
+user_authentication.feature
+product_management.feature
+payment_processing.feature
+
+# Feature descriptions
+Feature: User Authentication
+Feature: E-commerce Checkout
+Feature: Inventory Management
+
+# Scenario naming
+Scenario: User successfully logs in
+Scenario: Admin user can create new products
+Scenario: Payment fails with invalid card
+```
+
+---
+
+### Step Design Principles
+
+#### 1. Single Responsibility
+
+```gherkin
+# ✅ Good: One action per step
+Given user is on login page
+When user enters email
+And user enters password
+And user clicks login
+Then user should see dashboard
+
+# ❌ Bad: Multiple actions
+When user enters email, password, and clicks login
+```
+
+#### 2. Meaningful Steps
+
+```gherkin
+# ✅ Good: Business-focused
+Given user has "Verified" account status
+When user clicks "Activate Account"
+Then user should see "Account Activated" message
+
+# ❌ Bad: Implementation-focused
+Given database record has status = 'V'
+When REST API endpoint /activate is called
+Then HTTP response contains success flag
+```
+
+#### 3. Reusability
+
+```gherkin
+# ✅ Good: Reusable across scenarios
+Given user enters email "<email>"
+When user enters password "<password>"
+Then login result is "<result>"
+
+# ❌ Bad: Specific to one scenario
+When admin user john@company.com logs in with correct password
+```
+
+#### 4. Abstraction Level
+
+```gherkin
+# ✅ Good: Appropriate abstraction
+Given user is logged in
+When user navigates to settings
+Then settings page should load
+
+# ❌ Bad: Too detailed
+Given browser is launched
+And home page loads
+And login form appears
+...
+When username field is focused
+And username is typed character by character
+...
+
+# ❌ Bad: Too high-level
+Given system is initialized
+When business logic executes
+Then results are verified
+```
+
+---
+
+## Setup & Installation - Complete Guide
+
+### JavaScript/Node.js Setup
+
+#### Theory
+Node.js Cucumber setup involves installing the Cucumber framework and integrating it with your test environment, including assertion libraries for verification and drivers for interacting with the system under test.
+
+#### Step-by-Step Installation
+
+```bash
+# 1. Initialize project (if not exists)
+npm init -y
+
+# 2. Install Cucumber core
+npm install --save-dev @cucumber/cucumber
+
+# 3. Install assertion library for validations
+npm install --save-dev chai
+
+# 4. Install WebDriver for UI testing (if needed)
+npm install --save-dev selenium-webdriver
+
+# 5. Install Cucumber reporting utilities
+npm install --save-dev @cucumber/pretty @cucumber/html-formatter
+
+# 6. Install additional reporting (optional)
+npm install --save-dev @cucumber/json-formatter
+```
+
+#### Project Structure Setup
+
+```
+project/
+├── features/
+│   ├── step_definitions/
+│   │   ├── login.steps.js
+│   │   └── product.steps.js
+│   ├── support/
+│   │   ├── hooks.js
+│   │   ├── world.js
+│   │   └── helpers.js
+│   └── *.feature
+├── cucumber.js (configuration)
+├── package.json
+└── reports/
+    └── cucumber.html
+```
+
+#### Configuration File (cucumber.js)
+
+```javascript
+// cucumber.js - Main configuration file
+module.exports = {
+  // Default profile
+  default: `
+    --require features/step_definitions/**/*.js
+    --require features/support/**/*.js
+    --format @cucumber/pretty
+    --format html:reports/index.html
+    --format json:reports/report.json
+    --publish-quiet
+  `,
+  
+  // Parallel execution profile
+  parallel: `
+    --require features/step_definitions/**/*.js
+    --require features/support/**/*.js
+    --format @cucumber/pretty
+    --parallel 4
+  `,
+  
+  // CI/CD profile
+  ci: `
+    --require features/step_definitions/**/*.js
+    --require features/support/**/*.js
+    --format json:reports/report.json
+    --format junit:reports/results.xml
+    --strict
+    --retry 2
+  `
+};
+```
+
+#### Package.json Scripts
+
+```json
+{
+  "scripts": {
+    "test:bdd": "cucumber-js",
+    "test:bdd:watch": "cucumber-js --watch",
+    "test:bdd:smoke": "cucumber-js --tags @smoke",
+    "test:bdd:parallel": "cucumber-js --parallel 4",
+    "test:bdd:report": "cucumber-js --format html:reports/index.html",
+    "test:bdd:ci": "cucumber-js --profile ci"
+  }
+}
+```
+
+#### Verification Setup
+
+```bash
+# Create basic feature file
+mkdir -p features/step_definitions features/support
+
+# Verify installation
+npx cucumber-js --version
+
+# Run tests
+npm run test:bdd
+```
+
+---
+
+### Java Setup
+
+#### Theory
+Java Cucumber setup requires Maven or Gradle build management, JUnit for test execution, and Selenium WebDriver for UI automation. The framework integrates with Java's testing ecosystem.
+
+#### Maven Setup
+
+**Project Structure:**
+```
+src/
+├── test/
+│   ├── java/
+│   │   ├── runners/
+│   │   │   └── TestRunner.java
+│   │   └── steps/
+│   │       ├── LoginSteps.java
+│   │       ├── ProductSteps.java
+│   │       └── Hooks.java
+│   └── resources/
+│       └── features/
+│           ├── login.feature
+│           └── products.feature
+└── pom.xml
+```
+
+**pom.xml Dependencies:**
+
+```xml
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>cucumber-tests</artifactId>
+  <version>1.0-SNAPSHOT</version>
+  
+  <dependencies>
+    <!-- Cucumber -->
+    <dependency>
+      <groupId>io.cucumber</groupId>
+      <artifactId>cucumber-java</artifactId>
+      <version>7.14.0</version>
+      <scope>test</scope>
+    </dependency>
+    
+    <!-- JUnit 4 (for Cucumber) -->
+    <dependency>
+      <groupId>io.cucumber</groupId>
+      <artifactId>cucumber-junit</artifactId>
+      <version>7.14.0</version>
+      <scope>test</scope>
+    </dependency>
+    
+    <!-- Selenium WebDriver -->
+    <dependency>
+      <groupId>org.seleniumhq.selenium</groupId>
+      <artifactId>selenium-java</artifactId>
+      <version>4.15.0</version>
+      <scope>test</scope>
+    </dependency>
+    
+    <!-- TestNG (alternative to JUnit) -->
+    <dependency>
+      <groupId>io.cucumber</groupId>
+      <artifactId>cucumber-testng</artifactId>
+      <version>7.14.0</version>
+      <scope>test</scope>
+    </dependency>
+    
+    <!-- REST Assured for API testing -->
+    <dependency>
+      <groupId>io.rest-assured</groupId>
+      <artifactId>rest-assured</artifactId>
+      <version>5.3.2</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+  
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>2.22.2</version>
+      </plugin>
+    </plugins>
+  </build>
+</project>
+```
+
+#### Gradle Setup
+
+**build.gradle:**
+
+```gradle
+plugins {
+  id 'java'
+}
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  // Cucumber
+  testImplementation 'io.cucumber:cucumber-java:7.14.0'
+  testImplementation 'io.cucumber:cucumber-junit:7.14.0'
+  
+  // Selenium
+  testImplementation 'org.seleniumhq.selenium:selenium-java:4.15.0'
+  
+  // TestNG
+  testImplementation 'org.testng:testng:7.8.1'
+  testImplementation 'io.cucumber:cucumber-testng:7.14.0'
+}
+
+test {
+  useTestNG()
+}
+```
+
+#### Test Runner Configuration
+
+**JUnit Test Runner:**
+```java
+package runners;
+
+import io.cucumber.junit.Cucumber;
+import io.cucumber.junit.CucumberOptions;
+import org.junit.runner.RunWith;
+
+@RunWith(Cucumber.class)
+@CucumberOptions(
+    features = "src/test/resources/features",
+    glue = {"steps", "hooks"},
+    plugin = {
+        "pretty",
+        "html:target/cucumber-reports/index.html",
+        "json:target/cucumber-reports/report.json",
+        "junit:target/cucumber-reports/junit.xml"
+    },
+    tags = "@smoke and not @skip",
+    monochrome = false,
+    dryRun = false,
+    strict = true
+)
+public class TestRunner {
+}
+```
+
+**TestNG Test Runner:**
+```java
+package runners;
+
+import io.cucumber.testng.AbstractTestNGCucumberTests;
+import io.cucumber.testng.CucumberOptions;
+
+@CucumberOptions(
+    features = "src/test/resources/features",
+    glue = {"steps"},
+    plugin = {"pretty", "json:target/report.json"}
+)
+public class TestRunner extends AbstractTestNGCucumberTests {
+}
+```
+
+---
+
+### Setup Verification
+
+#### JavaScript
+```bash
+# Check installation
+npx cucumber-js --version
+# Output: @cucumber/cucumber 9.x.x
+
+# Run sample test
+npx cucumber-js --dry-run
+
+# Verify configuration
+npx cucumber-js --help
+```
+
+#### Java
+```bash
+# Maven verification
+mvn test -Dtest=TestRunner
+
+# Gradle verification
+gradle test
+
+# Check dependencies
+mvn dependency:tree
+```
+
+---
+
+## Feature Files
+
+### Structure
+
+```gherkin
+Feature: Product Management
+  As a store manager
+  I want to manage products
+  So that I can keep inventory updated
+
+  Background:
+    Given user is logged in as admin
+    And user is on product page
+
+  Scenario: Add new product
+    When user clicks "Add Product" button
+    And user enters product details:
+      | Name    | Laptop      |
+      | Price   | $1200       |
+      | Stock   | 50          |
+    And user clicks save
+    Then product should be added successfully
+    And product should appear in product list
+
+  Scenario: Delete product
+    Given product "Laptop" exists
+    When user clicks delete button for "Laptop"
+    And user confirms deletion
+    Then product should be removed from list
+```
+
+### Best Practices for Feature Files
+
+1. **Keep it Simple**: One feature per file
+2. **Clear Naming**: `user_login.feature`, `product_management.feature`
+3. **Independent Scenarios**: Each scenario should be independent
+4. **Avoid Technical Details**: Use business language
+5. **Proper Location**: Keep in `features/` or `src/test/features/` directory
+
+---
+
+## Step Definitions - Deep Dive
+
+### Theory & Fundamentals
+
+#### What Are Step Definitions?
+
+Step definitions are the **implementation layer** that connects Gherkin steps to executable code. They form the bridge between:
+```
+Business Requirement (Gherkin)
+         ↓
+    Step Definition
+         ↓
+    Implementation Code
+```
+
+**Key Responsibilities:**
+1. **Pattern Matching**: Recognize Gherkin text
+2. **Parameter Extraction**: Capture values from step text
+3. **Execution**: Run implementation logic
+4. **State Management**: Work with world object
+5. **Assertion**: Validate results
+6. **Error Handling**: Report meaningful failures
+
+#### Step Definition Lifecycle
+
+```
+1. Cucumber parses Gherkin step: "Given user has 5 items"
+        ↓
+2. Looks for matching step definition
+        ↓
+3. Extracts parameters: count = 5
+        ↓
+4. Invokes step definition function
+        ↓
+5. Executes implementation code
+        ↓
+6. Captures result (pass/fail/pending)
+        ↓
+7. Continues to next step or stops if failed
+```
+
+---
+
+### Step Definition Patterns
+
+#### 1. Cucumber Expressions (Modern, Recommended)
+
+**Advantages:**
+- ✅ More readable than regex
+- ✅ Better error messages
+- ✅ Type-safe parameters
+- ✅ Self-documenting
+
+**Syntax:**
+
+```javascript
+// String parameter
+Given('user enters {string}', function(value) {
+  // value = input as string
+});
+
+// Integer parameter
+When('user adds {int} items', function(count) {
+  // count = input as number
+});
+
+// Floating point
+Then('price should be {float}', function(price) {
+  // price = input as float
+});
+
+// Capture word (no spaces)
+Given('{word} user exists', function(username) {
+  // username = captured word
+});
+
+// Custom type
+Given('date is {isoDateTimeString}', function(date) {
+  // date = parsed datetime
+});
+```
+
+**Type Examples:**
+```javascript
+// Built-in types
+{int}              // Integer: 42, -5, 0
+{float}            // Float: 3.14, -2.5
+{word}             // Word: hello, test123
+{string}           // String: "any text here"
+
+// Custom types
+{isoDateTime}      // ISO format datetime
+{isoDate}          // ISO format date
+```
+
+#### 2. Regular Expressions (Traditional)
+
+```javascript
+// Simple pattern
+Given(/^user has (\d+) items$/, function(count) {
+  // count is string, need parseInt()
+  this.items.add(parseInt(count));
+});
+
+// String capture
+When(/^user enters "(.*?)"$/, function(text) {
+  this.input = text;
+});
+
+// Multiple captures
+Then(/^(\w+) should be (\d+)$/, function(field, value) {
+  expect(this.getField(field)).to.equal(value);
+});
+```
+
+**Regex Patterns:**
+```
+\d+         - One or more digits
+\w+         - Word characters (letters, numbers, underscore)
+.*?         - Any characters (non-greedy)
+[a-zA-Z]    - Character range
+\s+         - Whitespace
+^...$       - Start and end anchors (required for Cucumber)
+```
+
+---
+
+### JavaScript Step Definitions - Complete Examples
+
+#### Basic Implementation
+
+```javascript
+// features/step_definitions/user.steps.js
+const { Given, When, Then } = require('@cucumber/cucumber');
+const { expect } = require('chai');
+
+// ======== GIVEN STEPS (Setup) ========
+
+Given('user is on the login page', function() {
+  // Navigate to login
+  this.driver.navigate('http://localhost/login');
+  
+  // Verify page is loaded
+  expect(this.driver.title).to.include('Login');
+});
+
+Given('user has valid credentials', function() {
+  // Store credentials in world object
+  this.credentials = {
+    email: 'test@example.com',
+    password: 'password123'
+  };
+});
+
+Given('user {string} exists', function(username) {
+  // Create user in system
+  this.user = {
+    name: username,
+    email: `${username}@test.com`,
+    created: true
+  };
+  // Could also insert into database
+  // this.database.insertUser(this.user);
+});
+
+Given('user has {int} items in cart', function(count) {
+  // Add items to cart
+  for(let i = 0; i < count; i++) {
+    this.cart.addItem('item-' + i);
+  }
+});
+
+// ======== WHEN STEPS (Actions) ========
+
+When('user enters email {string}', function(email) {
+  // Find and fill email field
+  const emailField = this.driver.find('input[name="email"]');
+  emailField.clear();
+  emailField.sendKeys(email);
+});
+
+When('user enters password {string}', function(password) {
+  // Find and fill password field
+  const passwordField = this.driver.find('input[name="password"]');
+  passwordField.clear();
+  passwordField.sendKeys(password);
+});
+
+When('user clicks {string} button', function(buttonName) {
+  // Generic button click
+  const button = this.driver.find(`button[name="${buttonName}"]`);
+  button.click();
+  
+  // Wait for navigation
+  return this.driver.wait(
+    webdriver.until.urlContains('dashboard'),
+    5000
+  );
+});
+
+When('user clicks login', function() {
+  this.driver.find('button.login-btn').click();
+});
+
+// ======== THEN STEPS (Assertions) ========
+
+Then('user should be on {string} page', function(pageName) {
+  // Verify current page
+  const currentUrl = this.driver.getCurrentUrl();
+  expect(currentUrl).to.include(pageName.toLowerCase());
+});
+
+Then('user should see {string} message', function(message) {
+  // Check message is displayed
+  const messageElement = this.driver.find('.alert-message');
+  expect(messageElement.getText()).to.equal(message);
+});
+
+Then('user session should be stored', function() {
+  // Verify session exists
+  const session = this.driver.manage().getCookie('session_id');
+  expect(session).to.exist;
+});
+
+Then('{int} items should be in cart', function(expectedCount) {
+  // Verify cart count
+  expect(this.cart.getCount()).to.equal(expectedCount);
+});
+
+// ======== COMPOUND STEPS ========
+
+Given('user is logged in', function() {
+  // Use existing steps
+  this.user = { email: 'test@example.com' };
+  this.driver.navigate('http://localhost/login');
+  this.driver.find('input[name="email"]').sendKeys(this.user.email);
+  this.driver.find('input[name="password"]').sendKeys('password123');
+  this.driver.find('button.login-btn').click();
+});
+
+// ======== ERROR CASES ========
+
+Then('error message should be displayed', function() {
+  const errorElement = this.driver.find('.error-message');
+  expect(errorElement).to.exist;
+  expect(errorElement.isDisplayed()).to.be.true;
+});
+
+Then('user should not be able to proceed', function() {
+  const submitButton = this.driver.find('button[type="submit"]');
+  expect(submitButton.isEnabled()).to.be.false;
+});
+```
+
+#### Advanced Patterns
+
+**Async/Await Handling:**
+```javascript
+When('user waits for page to load', async function() {
+  // Return promise for async operation
+  await this.driver.wait(
+    webdriver.until.elementLocated({ css: '.loaded' }),
+    5000
+  );
+});
+
+Then('data should be loaded', async function() {
+  const data = await this.database.getData();
+  expect(data).to.exist;
+});
+
+// Using return instead of async/await
+When('user navigates to dashboard', function() {
+  return this.driver.navigate('http://localhost/dashboard')
+    .then(() => this.driver.wait(
+      webdriver.until.elementLocated({ css: '.dashboard' }),
+      5000
+    ));
+});
+```
+
+**Parameterized Complex Data:**
+```javascript
+When('user enters details:', function(dataTable) {
+  // Convert table to object
+  const data = dataTable.rowsHash();
+  
+  // data = {
+  //   'First Name': 'John',
+  //   'Last Name': 'Doe',
+  //   'Email': 'john@example.com'
+  // }
+  
+  this.driver.find('input[name="first-name"]').sendKeys(data['First Name']);
+  this.driver.find('input[name="last-name"]').sendKeys(data['Last Name']);
+  this.driver.find('input[name="email"]').sendKeys(data['Email']);
+});
+
+Given('users exist:', function(dataTable) {
+  const users = dataTable.hashes();
+  
+  // users = [
+  //   { name: 'John', role: 'admin' },
+  //   { name: 'Jane', role: 'user' }
+  // ]
+  
+  users.forEach(user => {
+    this.createUser(user);
+  });
+});
+```
+
+**Error Handling:**
+```javascript
+Then('operation should succeed', function() {
+  try {
+    const result = this.performOperation();
+    expect(result).to.equal('success');
+  } catch(error) {
+    // Provide meaningful error message
+    throw new Error(`Operation failed: ${error.message}`);
+  }
+});
+```
+
+---
+
+### Java Step Definitions - Complete Examples
+
+#### Basic Implementation
+
+```java
+// src/test/java/steps/UserSteps.java
+package steps;
+
+import io.cucumber.java.en.*;
+import org.junit.Assert;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebElement;
+import org.openqa.selenium.By;
+
+public class UserSteps {
+  
+  private WebDriver driver;
+  private String currentUrl;
+  
+  // Constructor (dependency injection)
+  public UserSteps(WebDriver driver) {
+    this.driver = driver;
+  }
+  
+  // ======== GIVEN STEPS ========
+  
+  @Given("user is on the login page")
+  public void userOnLoginPage() {
+    driver.navigate().to("http://localhost/login");
+    Assert.assertTrue(driver.getTitle().contains("Login"));
+  }
+  
+  @Given("user {string} exists")
+  public void userExists(String username) {
+    // Create test user
+    String email = username + "@test.com";
+    // Could create via API or database
+    System.out.println("Creating user: " + username);
+  }
+  
+  @Given("user has {int} items in cart")
+  public void userHasItemsInCart(int count) {
+    for(int i = 0; i < count; i++) {
+      addItemToCart();
+    }
+  }
+  
+  // ======== WHEN STEPS ========
+  
+  @When("user enters email {string}")
+  public void userEntersEmail(String email) {
+    WebElement emailField = driver.findElement(By.name("email"));
+    emailField.clear();
+    emailField.sendKeys(email);
+  }
+  
+  @When("user enters password {string}")
+  public void userEntersPassword(String password) {
+    WebElement passwordField = driver.findElement(By.name("password"));
+    passwordField.clear();
+    passwordField.sendKeys(password);
+  }
+  
+  @When("user clicks {string} button")
+  public void userClicksButton(String buttonName) {
+    WebElement button = driver.findElement(
+      By.xpath("//button[contains(text(), '" + buttonName + "')]")
+    );
+    button.click();
+  }
+  
+  @When("user clicks login")
+  public void userClicksLogin() {
+    driver.findElement(By.className("login-btn")).click();
+  }
+  
+  // ======== THEN STEPS ========
+  
+  @Then("user should be on {string} page")
+  public void userShouldBeOnPage(String pageName) {
+    currentUrl = driver.getCurrentUrl();
+    Assert.assertTrue(
+      "Not on " + pageName + " page",
+      currentUrl.contains(pageName.toLowerCase())
+    );
+  }
+  
+  @Then("user should see {string} message")
+  public void userShouldSeeMessage(String message) {
+    WebElement messageElement = driver.findElement(By.className("alert-message"));
+    Assert.assertEquals(message, messageElement.getText());
+  }
+  
+  @Then("{int} items should be in cart")
+  public void itemsShouldBeInCart(int expectedCount) {
+    int actualCount = getCartCount();
+    Assert.assertEquals(
+      "Cart count mismatch",
+      expectedCount,
+      actualCount
+    );
+  }
+  
+  @Then("error message should be displayed")
+  public void errorMessageShouldBeDisplayed() {
+    WebElement errorElement = driver.findElement(By.className("error-message"));
+    Assert.assertTrue("Error message not displayed", errorElement.isDisplayed());
+  }
+  
+  // ======== HELPER METHODS ========
+  
+  private void addItemToCart() {
+    // Implementation
+  }
+  
+  private int getCartCount() {
+    // Implementation
+    return 0;
+  }
+}
+```
+
+#### DataTable Handling
+
+```java
+@Given("following users exist:")
+public void followingUsersExist(List<Map<String, String>> users) {
+  for(Map<String, String> user : users) {
+    String name = user.get("name");
+    String email = user.get("email");
+    String role = user.get("role");
+    
+    createUser(name, email, role);
+  }
+}
+
+// Example feature:
+// Given following users exist:
+//   | name | email           | role  |
+//   | John | john@test.com   | admin |
+//   | Jane | jane@test.com   | user  |
+
+@When("user enters details:")
+public void userEntersDetails(Map<String, String> details) {
+  driver.findElement(By.name("first-name"))
+    .sendKeys(details.get("First Name"));
+  driver.findElement(By.name("last-name"))
+    .sendKeys(details.get("Last Name"));
+  driver.findElement(By.name("email"))
+    .sendKeys(details.get("Email"));
+}
+```
+
+---
+
+### Common Patterns & Anti-Patterns
+
+#### Pattern: Single Responsibility
+
+```javascript
+// ✅ GOOD: Each step does one thing
+When('user enters email {string}', function(email) {
+  this.driver.find('input[name="email"]').sendKeys(email);
+});
+
+When('user enters password {string}', function(password) {
+  this.driver.find('input[name="password"]').sendKeys(password);
+});
+
+When('user clicks login', function() {
+  this.driver.find('button.login').click();
+});
+
+// ❌ BAD: Too much logic
+When('user logs in', function(credentials) {
+  // 30 lines of setup and execution code
+});
+```
+
+#### Pattern: Reusability
+
+```javascript
+// ✅ GOOD: Reusable with parameters
+Given('user has {int} notifications', function(count) {
+  this.notifications = Array(count).fill({ read: false });
+});
+
+// ❌ BAD: Hard-coded, not reusable
+Given('user has 5 notifications', function() {
+  // Only works for 5 notifications
+});
+```
+
+#### Pattern: Error Messages
+
+```javascript
+// ✅ GOOD: Descriptive error messages
+Then('product {string} should be in cart', function(productName) {
+  const product = this.cart.find(p => p.name === productName);
+  if(!product) {
+    throw new Error(
+      `Product "${productName}" not found in cart. ` +
+      `Cart contains: ${this.cart.map(p => p.name).join(', ')}`
+    );
+  }
+  expect(product).to.exist;
+});
+
+// ❌ BAD: Unclear errors
+Then('product should be found', function() {
+  expect(this.product).to.exist; // What product?
+});
+```
+
+---
+
+### Step Definition Organization
+
+#### By Feature
+```
+features/step_definitions/
+├── login.steps.js
+├── product.steps.js
+├── payment.steps.js
+└── admin.steps.js
+```
+
+#### By Action
+```
+features/step_definitions/
+├── given.steps.js (all Given steps)
+├── when.steps.js (all When steps)
+└── then.steps.js (all Then steps)
+```
+
+#### By Domain
+```
+features/step_definitions/
+├── user/
+│   ├── authentication.steps.js
+│   └── profile.steps.js
+├── product/
+│   ├── catalog.steps.js
+│   └── search.steps.js
+└── order/
+    └── checkout.steps.js
+```
+
+---
+
+## Hooks - Complete Theory & Implementation
+
+### Understanding Hooks
+
+#### Theory
+Hooks are **lifecycle methods** that execute at specific points in the test execution cycle. They handle **cross-cutting concerns** that apply across multiple scenarios but aren't part of the scenario logic itself.
+
+**Execution Model:**
+```
+Test Suite Start
+    ↓
+BeforeAll (once for entire suite)
+    ↓
+┌─ For Each Scenario:
+│   ├→ Before (general)
+│   ├→ Before (tagged hooks)
+│   ├→ Run All Steps
+│   ├→ After (tagged hooks)
+│   └→ After (always, even on failure)
+└─
+    ↓
+AfterAll (once after all scenarios)
+    ↓
+Test Suite End
+```
+
+#### Why Hooks Matter
+1. **Isolation**: Each scenario starts with clean state
+2. **Resource Management**: Setup/teardown database connections, browsers
+3. **Reusability**: Common logic isn't repeated in scenarios
+4. **Separation**: Test logic stays separate from setup/cleanup
+5. **Maintenance**: Changes to setup affect all scenarios automatically
+
+#### Key Principle
+> Hooks run OUTSIDE steps. They're for test infrastructure, not test logic.
+
+---
+
+### Hook Lifecycle Detailed
+
+#### 1. BeforeAll Hook
+```
+Runs: ONCE before entire test suite
+Purpose: Suite-level initialization
+Typical Uses:
+  - Start test server
+  - Initialize database
+  - Load configuration
+  - Create shared resources
+```
+
+**Important**: BeforeAll runs only ONCE total, not per scenario.
+
+#### 2. Before Hook
+```
+Runs: BEFORE each scenario
+Purpose: Scenario-level setup
+Typical Uses:
+  - Create fresh browser instance
+  - Clear database
+  - Insert test data
+  - Reset application state
+  - Start timer
+```
+
+**Guarantee**: Every scenario gets fresh environment.
+
+#### 3. After Hook
+```
+Runs: AFTER each scenario (ALWAYS, even if scenario fails)
+Purpose: Scenario-level cleanup
+Typical Uses:
+  - Close browser
+  - Delete test data
+  - Rollback database transactions
+  - Capture screenshots on failure
+  - Clear cookies/cache
+  - Generate logs
+```
+
+**Important**: After hooks run regardless of test pass/fail/pending.
+
+#### 4. AfterAll Hook
+```
+Runs: ONCE after entire test suite
+Purpose: Suite-level cleanup
+Typical Uses:
+  - Stop test server
+  - Close database connection
+  - Generate final reports
+  - Clean up temporary files
+  - Send notifications
+```
+
+---
+
+### JavaScript Hook Implementation
+
+#### Complete Hooks Example
+
+```javascript
+// features/support/hooks.js
+const { Before, After, BeforeAll, AfterAll } = require('@cucumber/cucumber');
+const WebDriver = require('selenium-webdriver');
+
+// ======== BEFORE ALL ========
+BeforeAll(async function() {
+  console.log('🚀 Starting test suite');
+  
+  // Start server
+  global.testServer = startTestServer();
+  
+  // Initialize database
+  global.database = new Database();
+  await global.database.connect();
+  
+  // Load test configuration
+  global.config = loadConfig();
+});
+
+// ======== BEFORE EACH SCENARIO ========
+Before(function() {
+  console.log(`📝 Running scenario: ${this.scenario.name}`);
+  
+  // Record start time for performance monitoring
+  this.startTime = Date.now();
+  
+  // Initialize Selenium driver
+  this.driver = new WebDriver.Builder()
+    .forBrowser('chrome')
+    .build();
+  
+  // Initialize test utilities
+  this.utils = {
+    wait: ms => new Promise(resolve => setTimeout(resolve, ms)),
+    random: () => Math.random().toString(36).substring(7)
+  };
+  
+  // Clear any previous test data
+  this.testData = {};
+  
+  // Set implicit timeout
+  this.driver.manage().setTimeouts({ implicit: 5000 });
+});
+
+// ======== TAGGED BEFORE HOOKS ========
+// Run only for scenarios tagged @database
+Before('@database', async function() {
+  console.log('🗄️ Setting up database');
+  
+  // Start database transaction
+  this.dbTransaction = await global.database.beginTransaction();
+  
+  // Insert test data
+  await global.database.insertTestData();
+});
+
+// Run only for scenarios tagged @api
+Before('@api', function() {
+  console.log('🌐 Setting up API');
+  
+  // Initialize API client
+  this.api = new APIClient(global.config.apiUrl);
+  
+  // Set authorization headers
+  this.api.setHeaders({
+    'Authorization': 'Bearer test-token',
+    'Content-Type': 'application/json'
+  });
+});
+
+// Run only for scenarios tagged @ui
+Before('@ui', function() {
+  console.log('🖥️ Setting up UI tests');
+  
+  // Navigate to application
+  this.driver.navigate().to(global.config.appUrl);
+});
+
+// ======== AFTER EACH SCENARIO ========
+After(async function(scenario) {
+  console.log(`✅ Completed scenario: ${scenario.pickle.name}`);
+  
+  // Calculate duration
+  const duration = Date.now() - this.startTime;
+  console.log(`⏱️ Duration: ${duration}ms`);
+  
+  // Check if scenario failed
+  if(scenario.result.status === 'FAILED') {
+    console.log('❌ Scenario failed');
+    
+    // Capture screenshot
+    const screenshot = await this.driver.takeScreenshot();
+    const filename = `screenshots/${scenario.pickle.name}.png`;
+    require('fs').writeFileSync(filename, screenshot, 'base64');
+    console.log(`📸 Screenshot saved: ${filename}`);
+    
+    // Save browser logs
+    const logs = await this.driver.manage().logs().get('browser');
+    console.log('Browser logs:', logs);
+  } else {
+    console.log('✨ Scenario passed');
+  }
+  
+  // Clean up browser
+  if(this.driver) {
+    await this.driver.quit();
+  }
+  
+  // Clear test data
+  this.testData = null;
+});
+
+// ======== TAGGED AFTER HOOKS ========
+// Run only for scenarios tagged @database (always executes)
+After('@database', async function(scenario) {
+  console.log('🗄️ Cleaning up database');
+  
+  // Rollback transaction to clean state
+  if(this.dbTransaction) {
+    await this.dbTransaction.rollback();
+  }
+});
+
+// Run only for scenarios tagged @api
+After('@api', function() {
+  console.log('🌐 Cleaning up API');
+  
+  // Clear API authentication
+  this.api.clearHeaders();
+  
+  // Close connections
+  if(this.api) {
+    this.api.close();
+  }
+});
+
+// ======== AFTER ALL ========
+AfterAll(async function() {
+  console.log('🏁 Finishing test suite');
+  
+  // Close database
+  if(global.database) {
+    await global.database.disconnect();
+  }
+  
+  // Stop server
+  if(global.testServer) {
+    global.testServer.close();
+  }
+  
+  // Generate reports
+  generateTestReport();
+  
+  console.log('✅ Test suite completed');
+});
+```
+
+#### Conditional Hooks
+
+```javascript
+// Run only for specific tags
+Before('@slow', function() {
+  // Increase timeout for slow tests
+  this.timeout = 30000;
+});
+
+Before('@critical', function() {
+  // Enable extra logging for critical tests
+  this.verboseLogging = true;
+});
+
+// Run for all except specific tags
+Before(function() {
+  if(!this.scenario.gherkinDocument.feature.tags
+    .some(tag => tag.name === '@skip')) {
+    // Setup code
+  }
+});
+
+// Check scenario name
+Before(function() {
+  if(this.scenario.pickle.name.includes('Admin')) {
+    // Setup for admin scenarios
+  }
+});
+
+// Conditional skip
+Before('@skip', function() {
+  return 'skipped'; // Skip this scenario
+});
+
+Before('@pending', function() {
+  return 'pending'; // Mark as pending
+});
+```
+
+---
+
+### Java Hook Implementation
+
+#### Complete Hooks Example
+
+```java
+// src/test/java/steps/Hooks.java
+package steps;
+
+import io.cucumber.java.*;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.chrome.ChromeDriver;
+import java.util.Date;
+
+public class Hooks {
+    
+    private WebDriver driver;
+    private long startTime;
+    private Database database;
+    
+    // ======== BEFORE ALL ========
+    @BeforeAll
+    public static void setupAll() {
+        System.out.println("🚀 Starting test suite");
+        // Initialize test server, database, etc.
+    }
+    
+    // ======== BEFORE EACH SCENARIO ========
+    @Before
+    public void setup(Scenario scenario) {
+        System.out.println("📝 Running: " + scenario.getName());
+        
+        startTime = System.currentTimeMillis();
+        
+        // Initialize WebDriver
+        System.setProperty("webdriver.chrome.driver", "path/to/chromedriver");
+        driver = new ChromeDriver();
+        
+        // Set timeouts
+        driver.manage().timeouts().implicitlyWait(10, TimeUnit.SECONDS);
+    }
+    
+    // ======== TAGGED BEFORE HOOKS ========
+    @Before("@database")
+    public void setupDatabase() {
+        System.out.println("🗄️ Setting up database");
+        database = new Database();
+        database.connect();
+        database.beginTransaction();
+    }
+    
+    @Before("@api")
+    public void setupAPI() {
+        System.out.println("🌐 Setting up API");
+        // Initialize API client
+    }
+    
+    @Before("@ui")
+    public void setupUI() {
+        System.out.println("🖥️ Setting up UI");
+        driver.navigate().to("http://localhost:3000");
+    }
+    
+    // ======== AFTER EACH SCENARIO ========
+    @After
+    public void teardown(Scenario scenario) {
+        long duration = System.currentTimeMillis() - startTime;
+        System.out.println("✅ Completed: " + scenario.getName());
+        System.out.println("⏱️ Duration: " + duration + "ms");
+        
+        // Check if failed
+        if(scenario.isFailed()) {
+            System.out.println("❌ Scenario failed");
+            
+            // Capture screenshot
+            String filename = "screenshots/" + scenario.getName() + ".png";
+            takeScreenshot(driver, filename);
+            
+            // Add to scenario for reporting
+            scenario.attach(
+                filename.getBytes(),
+                "image/png",
+                scenario.getName()
+            );
+        }
+        
+        // Clean up
+        if(driver != null) {
+            driver.quit();
+        }
+    }
+    
+    // ======== TAGGED AFTER HOOKS ========
+    @After("@database")
+    public void teardownDatabase() {
+        System.out.println("🗄️ Cleaning up database");
+        if(database != null) {
+            database.rollback();
+            database.disconnect();
+        }
+    }
+    
+    @After("@api")
+    public void teardownAPI() {
+        System.out.println("🌐 Cleaning up API");
+        // Clean up API resources
+    }
+    
+    // ======== AFTER ALL ========
+    @AfterAll
+    public static void teardownAll() {
+        System.out.println("🏁 Finishing test suite");
+        // Close database, stop server, generate reports
+    }
+    
+    // ======== HELPER METHODS ========
+    private void takeScreenshot(WebDriver driver, String filename) {
+        File screenshot = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
+        FileUtils.copyFile(screenshot, new File(filename));
+    }
+}
+```
+
+---
+
+### Common Hook Patterns
+
+#### Pattern 1: Browser Management
+```javascript
+Before(function() {
+  this.driver = new WebDriver.Builder()
+    .forBrowser('chrome')
+    .setChromeService(
+      new chrome.ServiceBuilder(chromeDriverPath)
+    )
+    .build();
+});
+
+After(async function() {
+  if(this.driver) {
+    await this.driver.quit();
+  }
+});
+```
+
+#### Pattern 2: Database Management
+```javascript
+Before('@database', async function() {
+  this.db = await connectToDatabase();
+  await this.db.beginTransaction();
+});
+
+After('@database', async function() {
+  if(this.db) {
+    await this.db.rollback();
+    await this.db.close();
+  }
+});
+```
+
+#### Pattern 3: Authentication
+```javascript
+Before(function() {
+  this.authToken = null;
+});
+
+Before('@authenticated', async function() {
+  this.authToken = await loginUser('testuser', 'password');
+  this.api.setAuthHeader(this.authToken);
+});
+
+After('@authenticated', async function() {
+  if(this.authToken) {
+    await logoutUser(this.authToken);
+  }
+});
+```
+
+#### Pattern 4: Test Data Management
+```javascript
+Before(function() {
+  this.testData = {
+    users: [],
+    products: [],
+    orders: []
+  };
+});
+
+After(async function() {
+  // Clean up all test data
+  for(const user of this.testData.users) {
+    await deleteUser(user.id);
+  }
+  for(const product of this.testData.products) {
+    await deleteProduct(product.id);
+  }
+});
+```
+
+#### Pattern 5: Screenshot on Failure
+```javascript
+After(async function(scenario) {
+  if(scenario.result.status === 'FAILED') {
+    const screenshot = await this.driver.takeScreenshot();
+    const filename = `failures/${scenario.pickle.name}-${Date.now()}.png`;
+    writeFileSync(filename, screenshot, 'base64');
+  }
+});
+```
+
+---
+
+### Hook Execution Order & Rules
+
+#### Hook Execution Order (Details)
+```
+1. BeforeAll (if not executed yet)
+2. For each scenario:
+   a. Before (global)
+   b. Before @tag1 (if scenario has @tag1)
+   c. Before @tag2 (if scenario has @tag2)
+   d. [Run scenario steps]
+   e. After @tag2 (if scenario has @tag2)
+   f. After @tag1 (if scenario has @tag1)
+   g. After (global)
+3. After all scenarios, run AfterAll
+```
+
+#### Important Rules
+1. **After Always Runs**: Even if Before fails, After still runs
+2. **Tagged Hooks First**: More specific hooks run before general ones
+3. **Execution Stops**: If step fails, remaining steps skipped, After still runs
+4. **No Nesting**: Hooks can't call step definitions
+5. **Independent**: Each scenario hook is independent
+
+---
+
+### Hook Best Practices
+
+#### ✅ DO's
+
+```javascript
+// Good: Hook does one thing
+Before(function() {
+  this.driver = new WebDriver.Builder().forBrowser('chrome').build();
+});
+
+// Good: Clear naming
+Before('@heavy-setup', function() {
+  // Complex setup
+});
+
+// Good: Use tags for selective execution
+Before('@ui', function() {
+  this.driver.navigate().to(baseUrl);
+});
+
+// Good: Error handling
+After(async function() {
+  try {
+    if(this.driver) await this.driver.quit();
+  } catch(error) {
+    console.error('Error quitting driver:', error);
+  }
+});
+```
+
+#### ❌ DON'Ts
+
+```javascript
+// Bad: Hook does too much
+Before(function() {
+  // 100 lines of setup
+});
+
+// Bad: No cleanup
+Before(function() {
+  this.database = new Database();
+  this.database.connect();
+  // Never closed in After
+});
+
+// Bad: Nested step definitions
+Before(function() {
+  // DON'T do this
+  executeStepDefinition('user logs in');
+});
+
+// Bad: No error handling
+After(async function() {
+  await this.driver.quit(); // What if this fails?
+});
+```
+
+---
+
+## Data Tables
+
+### Converting Data Tables
+
+#### JavaScript Example
+```gherkin
+Scenario: Create users with details
+  Given following users exist:
+    | name  | email            | role  |
+    | John  | john@example.com | admin |
+    | Jane  | jane@example.com | user  |
+```
+
+```javascript
+Given('following users exist:', function(dataTable) {
+  // Convert to list of objects
+  const users = dataTable.hashes();
+  users.forEach(user => {
+    this.createUser(user);
+  });
+  // users = [
+  //   { name: 'John', email: 'john@example.com', role: 'admin' },
+  //   { name: 'Jane', email: 'jane@example.com', role: 'user' }
+  // ]
+});
+
+// Or convert to raw array
+const raw = dataTable.raw();
+// raw = [['name', 'email', 'role'], ['John', 'john@example.com', 'admin'], ...]
+```
+
+#### Java Example
+```java
+@Given("following users exist:")
+public void usersExist(List<Map<String, String>> users) {
+    for(Map<String, String> user : users) {
+        String name = user.get("name");
+        String email = user.get("email");
+        createUser(name, email);
+    }
+}
+
+// Using DataTable class
+@Given("following users exist:")
+public void usersExist(DataTable dataTable) {
+    List<Map<String, String>> users = dataTable.asMaps();
+    // Process users
+}
+```
+
+### Vertical Data Tables
+```gherkin
+Scenario: Product details
+  Given product has details:
+    | Name  | Laptop           |
+    | Price | 1200             |
+    | Stock | 50               |
+    | Brand | Dell             |
+```
+
+---
+
+## Scenario Outlines
+
+### Parameterized Testing
+
+#### Feature File
+```gherkin
+Scenario Outline: User login with various credentials
+  Given user is on login page
+  When user enters email "<email>" and password "<password>"
+  Then result should be "<result>"
+
+  Examples: Valid users
+    | email           | password | result  |
+    | user1@test.com  | pass123  | success |
+    | user2@test.com  | pass456  | success |
+
+  Examples: Invalid users
+    | email           | password | result  |
+    | wrong@test.com  | pass000  | failure |
+    | admin@test.com  | wrong    | failure |
+```
+
+#### Step Definition
+```javascript
+When('user enters email {string} and password {string}', 
+  function(email, password) {
+    this.enterEmail(email);
+    this.enterPassword(password);
+    this.clickLogin();
+  }
+);
+
+Then('result should be {string}', function(result) {
+  if(result === 'success') {
+    expect(this.currentPage).to.equal('dashboard');
+  } else {
+    expect(this.errorMessage).to.exist;
+  }
+});
+```
+
+---
+
+## Best Practices
+
+### 1. Gherkin Best Practices
+
+**✅ DO:**
+```gherkin
+# Clear and business-focused
+Scenario: User successfully logs in with valid credentials
+  Given user is on the login page
+  When user enters valid email and password
+  And user clicks the login button
+  Then user should see the dashboard
+```
+
+**❌ DON'T:**
+```gherkin
+# Too technical or unclear
+Scenario: Login
+  Given the application is running
+  When user performs login action with params
+  Then check if redirect happens
+```
+
+### 2. Step Definition Best Practices
+
+**✅ DO:**
+```javascript
+// Reusable and clear
+When('user enters email {string}', function(email) {
+  this.emailField.setValue(email);
+});
+
+When('user enters password {string}', function(password) {
+  this.passwordField.setValue(password);
+});
+```
+
+**❌ DON'T:**
+```javascript
+// Too specific and not reusable
+When('user enters admin@example.com and password123', function() {
+  // Hard-coded values, can't be reused
+});
+```
+
+### 3. Scenario Best Practices
+
+**✅ DO:**
+```gherkin
+# Independent scenarios
+Scenario: Add product to cart
+  Given user is logged in
+  And user is on product page
+  When user clicks add to cart
+  Then product should appear in cart
+
+Scenario: Remove product from cart
+  Given user is logged in
+  And user has product in cart
+  When user clicks remove
+  Then product should be removed
+```
+
+**❌ DON'T:**
+```gherkin
+# Dependent scenarios
+Scenario: Add product to cart
+  # ...
+
+Scenario: Remove added product
+  # Depends on previous scenario
+```
+
+### 4. Avoid Step Nesting
+
+**✅ DO:**
+```javascript
+Given('user is logged in', function() {
+  this.login('user@test.com', 'password');
+});
+```
+
+**❌ DON'T:**
+```javascript
+Given('user is logged in', function() {
+  this.navigate('login');
+  this.fillEmail('user@test.com');
+  this.fillPassword('password');
+  this.clickLogin();
+  // Too much logic in single step
+});
+```
+
+### 5. Use Meaningful Tags
+
+```gherkin
+@smoke @high_priority
+Scenario: Critical user login
+
+@database @slow
+Scenario: Complex data processing
+
+@ui @regression
+Scenario: Button styling
+```
+
+---
+
+## Advanced Topics
+
+### 1. Custom Hooks with Context
+
+#### JavaScript
+```javascript
+Before(function() {
+  this.startTime = new Date();
+});
+
+After(function(scenario) {
+  const duration = new Date() - this.startTime;
+  console.log(`Scenario: ${scenario.pickle.name} took ${duration}ms`);
+  
+  if(scenario.result.status === 'FAILED') {
+    console.log('Test failed, taking screenshot');
+  }
+});
+```
+
+#### Java
+```java
+@After
+public void afterScenario(Scenario scenario) {
+    if(scenario.isFailed()) {
+        screenshot.take(scenario.getName());
+    }
+}
+```
+
+### 2. Conditional Skipping
+
+#### JavaScript
+```javascript
+Before('@skip', function() {
+  return 'skipped'; // Skip this scenario
+});
+```
+
+#### Java
+```java
+@Before
+public void setup(Scenario scenario) {
+    if(scenario.getSourceTagNames().contains("@skip")) {
+        // Skip logic
+    }
+}
+```
+
+### 3. Environment-Specific Configuration
+
+```javascript
+// features/support/env.js
+const env = process.env.ENVIRONMENT || 'dev';
+
+const config = {
+  dev: { baseUrl: 'http://localhost:3000' },
+  staging: { baseUrl: 'https://staging.example.com' },
+  prod: { baseUrl: 'https://example.com' }
+};
+
+module.exports = config[env];
+```
+
+### 4. API Testing with Cucumber
+
+```gherkin
+Scenario: Get user by ID
+  When I send GET request to "/api/users/1"
+  Then response status should be 200
+  And response body should contain:
+    | id   | 1      |
+    | name | John   |
+```
+
+```javascript
+When('I send GET request to {string}', async function(endpoint) {
+  this.response = await axios.get(`${baseUrl}${endpoint}`);
+});
+
+Then('response status should be {int}', function(status) {
+  expect(this.response.status).to.equal(status);
+});
+```
+
+---
+
+## Real-World Examples
+
+### Example 1: E-Commerce Product Purchase
+
+```gherkin
+Feature: Product Purchase Flow
+  Background:
+    Given user is registered and logged in
+    And user is on the products page
+
+  Scenario: Purchase product with valid details
+    When user searches for "laptop"
+    And user adds product to cart
+    And user proceeds to checkout
+    And user enters shipping address:
+      | Country | USA     |
+      | City    | NY      |
+      | Zip     | 10001   |
+    And user selects "Credit Card" payment method
+    And user confirms order
+    Then order should be created successfully
+    And user should receive confirmation email
+    And inventory should be updated
+
+  Scenario Outline: Purchase with different payment methods
+    When user adds product to cart
+    And user proceeds to checkout
+    And user selects payment method "<method>"
+    Then transaction status should be "<status>"
+
+    Examples:
+      | method      | status    |
+      | Credit Card | approved  |
+      | Debit Card  | approved  |
+      | PayPal      | approved  |
+      | Gift Card   | declined  |
+```
+
+### Example 2: User Management
+
+```gherkin
+Feature: User Management
+  Background:
+    Given admin user is logged in
+
+  Scenario: Create new user
+    Given admin is on user management page
+    When admin clicks "Create User" button
+    And admin enters user details:
+      | First Name | John         |
+      | Last Name  | Doe          |
+      | Email      | john@test.com |
+      | Role       | Manager      |
+    And admin clicks save
+    Then user should be created successfully
+    And new user should appear in user list
+    And email should be sent to new user
+
+  Scenario: Deactivate user
+    Given user "jane@test.com" exists and is active
+    When admin clicks deactivate button for user "jane@test.com"
+    And admin confirms deactivation
+    Then user status should be changed to inactive
+    And user should not be able to login
+    And audit log should record the action
+```
+
+### Example 3: Data-Driven Testing
+
+```gherkin
+Feature: Form Validation
+  
+  Scenario Outline: Email validation
+    Given user is on registration form
+    When user enters email "<email>"
+    Then validation message should be "<message>"
+
+    Examples:
+      | email                | message              |
+      | valid@example.com    | Email is valid       |
+      | invalid.email        | Invalid email format |
+      | user@domain.co.uk    | Email is valid       |
+      | @example.com         | Invalid email format |
+      | user@example.        | Invalid email format |
+```
+
+---
+
+## Reporting & Monitoring
+
+### Console Report
+```bash
+# Default output
+npx cucumber-js
+
+# Pretty format
+npx cucumber-js --format @cucumber/pretty
+```
+
+### HTML Report
+```javascript
+// cucumber.js config
+const common = `--format html:cucumber-report.html`;
+
+module.exports = {
+  default: common
+};
+```
+
+### JUnit XML Report (for CI/CD)
+```bash
+npx cucumber-js --format json:report.json
+```
+
+### JavaScript Reporter Setup
+```javascript
+// cucumber.js
+module.exports = {
+  default: `--format @cucumber/pretty --format json:reports/cucumber.json`
+};
+```
+
+---
+
+## Common Issues & Solutions
+
+### Issue: Steps not being recognized
+**Solution**: Ensure step definitions file is in correct location and properly exported
+```javascript
+// Correct location: features/step_definitions/
+// or features/support/
+```
+
+### Issue: World object undefined
+**Solution**: Import and use World class properly
+```javascript
+const { World } = require('@cucumber/cucumber');
+
+class MyWorld extends World {
+  // Implementation
+}
+
+module.exports = MyWorld;
+```
+
+### Issue: Async steps timing out
+**Solution**: Return promise or use async/await
+```javascript
+// Good
+Then('data should be loaded', async function() {
+  await this.waitForElement('.data');
+  expect(this.data).to.exist;
+});
+
+// Good
+Given('user navigates', function() {
+  return this.navigate(url); // Return promise
+});
+```
+
+### Issue: Test flakiness
+**Solution**: Add proper waits and error handling
+```javascript
+Given('user waits for element', function() {
+  return this.driver.wait(
+    webdriver.until.elementLocated(By.id('element')),
+    5000
+  );
+});
+```
+
+---
+
+## Cucumber CLI Options
+
+```bash
+# Run specific feature file
+npx cucumber-js features/login.feature
+
+# Run specific scenario
+npx cucumber-js -n "Successful login"
+
+# Run with specific tags
+npx cucumber-js --tags "@smoke"
+npx cucumber-js --tags "@smoke and @critical"
+npx cucumber-js --tags "@ui or @api"
+
+# Dry run (parse without executing)
+npx cucumber-js --dry-run
+
+# Strict mode (fail if there are pending/undefined steps)
+npx cucumber-js --strict
+
+# Format options
+npx cucumber-js --format progress-bar
+npx cucumber-js --format usage
+
+# Parallel execution
+npx cucumber-js --parallel 4
+```
+
+---
+
+## Integration with CI/CD
+
+### GitHub Actions Example
+```yaml
+name: Cucumber Tests
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: 14
+      - name: Install dependencies
+        run: npm install
+      - name: Run Cucumber tests
+        run: npm run test:cucumber
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v2
+        with:
+          name: cucumber-report
+          path: reports/
+```
+
+### Jenkins Example
+```groovy
+pipeline {
+    stages {
+        stage('Test') {
+            steps {
+                sh 'npm install'
+                sh 'npm run test:cucumber'
+            }
+        }
+        stage('Report') {
+            steps {
+                publishHTML(target: [
+                    reportDir: 'reports',
+                    reportFiles: 'cucumber-report.html',
+                    reportName: 'Cucumber Report'
+                ])
+            }
+        }
+    }
+}
+```
+
+---
+
+## Summary
+
+**Key Takeaways:**
+1. Cucumber enables BDD through readable, business-focused test scenarios
+2. Gherkin provides a standardized language for test writing
+3. Step definitions connect scenarios to executable code
+4. Hooks handle setup/teardown and cross-cutting concerns
+5. Data tables and scenario outlines enable parameterized testing
+6. Proper organization and naming conventions improve maintainability
+7. Integration with CI/CD ensures continuous testing
+8. Tagging allows flexible test execution and categorization
+
+**Best Practices Summary:**
+- Write scenarios from user perspective
+- Keep step definitions simple and reusable
+- Use meaningful names for features and scenarios
+- Avoid technical jargon in feature files
+- Make scenarios independent
+- Use data tables for complex data
+- Implement proper error handling
+- Document non-obvious behavior
