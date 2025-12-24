@@ -1,0 +1,4529 @@
+# PostgreSQL Complete Notes - Theory & Practice
+
+## Table of Contents
+1. [Introduction](#introduction)
+2. [Installation & Setup](#installation--setup)
+3. [Database Fundamentals](#database-fundamentals)
+4. [SQL Basics](#sql-basics)
+5. [Data Types](#data-types)
+6. [Operators & Functions](#operators--functions)
+7. [Table Management](#table-management)
+8. [Constraints](#constraints)
+9. [Indexes](#indexes)
+10. [Relationships & Joins](#relationships--joins)
+11. [Aggregation & Grouping](#aggregation--grouping)
+12. [Subqueries](#subqueries)
+13. [Views](#views)
+14. [Transactions](#transactions)
+15. [Stored Procedures & Functions](#stored-procedures--functions)
+16. [Triggers](#triggers)
+17. [Window Functions](#window-functions)
+18. [Performance Optimization](#performance-optimization)
+19. [Backup & Recovery](#backup--recovery)
+20. [Security](#security)
+
+---
+
+## Introduction
+
+### What is PostgreSQL?
+
+PostgreSQL is a powerful, open-source relational database management system (RDBMS) that emphasizes:
+- **Reliability**: ACID compliance ensures data integrity
+- **Performance**: Efficient query execution and indexing
+- **Extensibility**: Support for custom data types, operators, and functions
+- **Compliance**: SQL standards adherence
+- **Features**: Advanced capabilities like JSON support, full-text search, and geospatial data
+
+### PostgreSQL vs Other Databases
+
+| Feature | PostgreSQL | MySQL | SQL Server | Oracle |
+|---------|-----------|-------|-----------|--------|
+| Open Source | Yes | Yes | No | No |
+| ACID | Full | Yes (InnoDB) | Yes | Yes |
+| JSON Support | Yes | Yes | Yes | Yes |
+| Full-Text Search | Yes | Yes | Yes | Yes |
+| Window Functions | Yes | Yes | Yes | Yes |
+| Cost | Free | Free | Paid | Paid |
+
+### Key Features
+
+1. **ACID Compliance**: Atomicity, Consistency, Isolation, Durability
+2. **Advanced Data Types**: Arrays, JSON, UUID, Range types, Geometric types
+3. **Full-Text Search**: Native full-text search capabilities
+4. **JSON/JSONB**: Native JSON support with JSONB for better performance
+5. **Extensibility**: User-defined functions, types, operators
+6. **Replication**: Built-in replication for high availability
+7. **Partitioning**: Table partitioning for performance
+8. **Window Functions**: Advanced analytical queries
+
+---
+
+## Installation & Setup
+
+### Installation on Windows
+
+```powershell
+# Download installer from https://www.postgresql.org/download/windows/
+# Run the installer and follow the setup wizard
+# Default port: 5432
+# Default username: postgres
+```
+
+### Installation on Linux (Ubuntu/Debian)
+
+```bash
+# Update package list
+sudo apt-get update
+
+# Install PostgreSQL
+sudo apt-get install postgresql postgresql-contrib
+
+# Start the service
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+
+# Access PostgreSQL
+sudo -u postgres psql
+```
+
+### Installation on macOS
+
+```bash
+# Using Homebrew
+brew install postgresql
+
+# Start the service
+brew services start postgresql
+
+# Access PostgreSQL
+psql postgres
+```
+
+### Basic Configuration
+
+```bash
+# Connect to PostgreSQL
+psql -U postgres -h localhost
+
+# List all databases
+\l
+
+# Create a new database
+CREATE DATABASE my_database;
+
+# Connect to a database
+\c my_database
+
+# List tables
+\dt
+
+# Get help
+\h
+
+# Exit psql
+\q
+```
+
+### PostgreSQL File Locations
+
+- **Windows**: `C:\Program Files\PostgreSQL\14\data`
+- **Linux**: `/var/lib/postgresql/14/main`
+- **macOS**: `/usr/local/var/postgres`
+
+---
+
+## Database Fundamentals
+
+### Core Concepts
+
+#### Database
+A database is a collection of organized data stored in a structured format.
+
+#### Schema
+A schema is a logical namespace within a database that contains tables, indexes, views, functions, etc.
+
+```sql
+-- Create a schema
+CREATE SCHEMA ecommerce;
+
+-- Create a table in a schema
+CREATE TABLE ecommerce.products (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255)
+);
+
+-- Access table in schema
+SELECT * FROM ecommerce.products;
+```
+
+#### Table
+A table is a collection of related data organized in rows and columns.
+
+#### Row/Record
+A single entry in a table.
+
+#### Column/Field
+A single attribute of a table.
+
+### ACID Properties
+
+**Atomicity**: Transaction either completely succeeds or completely fails
+```sql
+BEGIN;
+  UPDATE accounts SET balance = balance - 100 WHERE id = 1;
+  UPDATE accounts SET balance = balance + 100 WHERE id = 2;
+COMMIT; -- Both succeed or both fail
+```
+
+**Consistency**: Database transitions from one valid state to another
+**Isolation**: Concurrent transactions don't interfere with each other
+**Durability**: Committed data persists even if system fails
+
+---
+
+## SQL Basics
+
+### DDL (Data Definition Language)
+
+#### CREATE Database
+```sql
+-- Create a database
+CREATE DATABASE store;
+
+-- Create with specific encoding
+CREATE DATABASE store ENCODING 'UTF8';
+
+-- Drop a database
+DROP DATABASE store;
+
+-- Drop if exists
+DROP DATABASE IF EXISTS store;
+```
+
+#### CREATE Table
+```sql
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    email VARCHAR(100),
+    age INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### ALTER Table
+```sql
+-- Add a column
+ALTER TABLE users ADD COLUMN phone VARCHAR(15);
+
+-- Drop a column
+ALTER TABLE users DROP COLUMN phone;
+
+-- Rename a column
+ALTER TABLE users RENAME COLUMN age TO user_age;
+
+-- Modify column type
+ALTER TABLE users ALTER COLUMN username TYPE VARCHAR(100);
+
+-- Add a constraint
+ALTER TABLE users ADD CONSTRAINT unique_email UNIQUE(email);
+
+-- Drop a constraint
+ALTER TABLE users DROP CONSTRAINT unique_email;
+```
+
+#### DROP Table
+```sql
+DROP TABLE users;
+DROP TABLE IF EXISTS users;
+DROP TABLE users CASCADE; -- Also drop dependent objects
+```
+
+### DML (Data Manipulation Language)
+
+#### INSERT
+```sql
+-- Insert single row
+INSERT INTO users (username, email, age) 
+VALUES ('john_doe', 'john@example.com', 25);
+
+-- Insert multiple rows
+INSERT INTO users (username, email, age) 
+VALUES 
+    ('jane_doe', 'jane@example.com', 28),
+    ('bob_smith', 'bob@example.com', 35);
+
+-- Insert with SELECT
+INSERT INTO users (username, email, age)
+SELECT name, email, age FROM temp_users;
+```
+
+#### UPDATE
+```sql
+-- Update single column
+UPDATE users SET age = 26 WHERE username = 'john_doe';
+
+-- Update multiple columns
+UPDATE users 
+SET age = 30, email = 'newemail@example.com' 
+WHERE id = 1;
+
+-- Update with expression
+UPDATE users SET age = age + 1 WHERE age > 30;
+
+-- Update from another table
+UPDATE users u
+SET age = t.age
+FROM temp_users t
+WHERE u.username = t.name;
+```
+
+#### DELETE
+```sql
+-- Delete specific rows
+DELETE FROM users WHERE age < 18;
+
+-- Delete all rows
+DELETE FROM users;
+
+-- Delete with condition
+DELETE FROM users WHERE username LIKE 'test_%';
+```
+
+### DQL (Data Query Language)
+
+#### SELECT
+```sql
+-- Basic SELECT
+SELECT * FROM users;
+SELECT username, email FROM users;
+
+-- With WHERE clause
+SELECT * FROM users WHERE age > 25;
+
+-- With ORDER BY
+SELECT * FROM users ORDER BY age DESC;
+
+-- With LIMIT and OFFSET
+SELECT * FROM users LIMIT 10 OFFSET 5;
+
+-- With DISTINCT
+SELECT DISTINCT age FROM users;
+```
+
+### DCL (Data Control Language)
+
+```sql
+-- Grant privileges
+GRANT SELECT, INSERT, UPDATE ON users TO username;
+
+-- Revoke privileges
+REVOKE UPDATE ON users FROM username;
+
+-- Grant all privileges
+GRANT ALL PRIVILEGES ON DATABASE mydb TO username;
+```
+
+---
+
+## Data Types
+
+### Numeric Types
+
+| Type | Description | Range |
+|------|-------------|-------|
+| `SMALLINT` | Small integer | -32,768 to 32,767 |
+| `INTEGER` | Standard integer | -2,147,483,648 to 2,147,483,647 |
+| `BIGINT` | Large integer | -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807 |
+| `DECIMAL(p,s)` | Fixed-point decimal | Precision p, scale s |
+| `NUMERIC(p,s)` | Exact numeric | Same as DECIMAL |
+| `REAL` | Floating-point | Single precision |
+| `DOUBLE PRECISION` | Floating-point | Double precision |
+| `SERIAL` | Auto-incrementing integer | 1 to 2,147,483,647 |
+| `BIGSERIAL` | Auto-incrementing bigint | 1 to 9,223,372,036,854,775,807 |
+
+```sql
+CREATE TABLE products (
+    id SERIAL PRIMARY KEY,
+    price DECIMAL(10, 2),
+    quantity INTEGER,
+    rating REAL
+);
+```
+
+### Character Types
+
+| Type | Description |
+|------|-------------|
+| `CHAR(n)` | Fixed-length character string |
+| `VARCHAR(n)` | Variable-length character string with max length |
+| `TEXT` | Variable-length text without limit |
+
+```sql
+CREATE TABLE articles (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    content TEXT,
+    category CHAR(20)
+);
+```
+
+### Date/Time Types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `DATE` | Date only | 2024-12-24 |
+| `TIME` | Time only | 14:30:45 |
+| `TIMESTAMP` | Date and time | 2024-12-24 14:30:45 |
+| `TIMESTAMPTZ` | Timestamp with timezone | 2024-12-24 14:30:45+05:30 |
+| `INTERVAL` | Time interval | '2 days 3 hours' |
+
+```sql
+CREATE TABLE events (
+    id SERIAL PRIMARY KEY,
+    event_name VARCHAR(100),
+    event_date DATE,
+    event_time TIME,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at_tz TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### Boolean Type
+
+```sql
+CREATE TABLE features (
+    id SERIAL PRIMARY KEY,
+    feature_name VARCHAR(100),
+    is_active BOOLEAN DEFAULT TRUE
+);
+
+-- Insert
+INSERT INTO features (feature_name, is_active) 
+VALUES ('Dark Mode', TRUE);
+
+-- Query
+SELECT * FROM features WHERE is_active = TRUE;
+```
+
+### JSON Types
+
+#### JSON vs JSONB
+
+```sql
+-- JSON (text-based)
+CREATE TABLE logs (
+    id SERIAL PRIMARY KEY,
+    data JSON
+);
+
+-- JSONB (binary, faster, supports indexing)
+CREATE TABLE user_settings (
+    id SERIAL PRIMARY KEY,
+    settings JSONB
+);
+
+-- Insert JSON data
+INSERT INTO user_settings (settings)
+VALUES ('{
+    "theme": "dark",
+    "notifications": true,
+    "language": "en"
+}');
+
+-- Query JSON
+SELECT settings->'theme' FROM user_settings;
+SELECT settings->>'theme' FROM user_settings;
+
+-- JSON array
+INSERT INTO user_settings (settings)
+VALUES ('{"hobbies": ["reading", "gaming", "coding"]}');
+
+SELECT settings->'hobbies'->0 FROM user_settings;
+```
+
+### UUID Type
+
+```sql
+-- Enable UUID extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Create table with UUID
+CREATE TABLE users (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    username VARCHAR(100)
+);
+
+-- Insert
+INSERT INTO users (username) VALUES ('john_doe');
+```
+
+### Array Types
+
+```sql
+-- Create table with array
+CREATE TABLE user_interests (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(100),
+    interests TEXT[] -- Array of text
+);
+
+-- Insert array
+INSERT INTO user_interests (username, interests)
+VALUES ('john', ARRAY['reading', 'gaming', 'coding']);
+
+-- Query array
+SELECT * FROM user_interests WHERE 'reading' = ANY(interests);
+
+-- Array function
+SELECT interests[1] FROM user_interests;
+SELECT array_length(interests, 1) FROM user_interests;
+```
+
+---
+
+## Operators & Functions
+
+### Comparison Operators
+
+```sql
+-- Equal
+SELECT * FROM users WHERE age = 25;
+
+-- Not equal
+SELECT * FROM users WHERE age != 25;
+SELECT * FROM users WHERE age <> 25;
+
+-- Greater than
+SELECT * FROM users WHERE age > 25;
+
+-- Less than
+SELECT * FROM users WHERE age < 25;
+
+-- Greater than or equal
+SELECT * FROM users WHERE age >= 25;
+
+-- Less than or equal
+SELECT * FROM users WHERE age <= 25;
+
+-- BETWEEN
+SELECT * FROM users WHERE age BETWEEN 25 AND 35;
+
+-- IN
+SELECT * FROM users WHERE age IN (25, 30, 35);
+
+-- NOT IN
+SELECT * FROM users WHERE age NOT IN (25, 30, 35);
+
+-- IS NULL
+SELECT * FROM users WHERE email IS NULL;
+
+-- IS NOT NULL
+SELECT * FROM users WHERE email IS NOT NULL;
+
+-- LIKE pattern matching
+SELECT * FROM users WHERE username LIKE 'john%';
+SELECT * FROM users WHERE username LIKE '%smith';
+SELECT * FROM users WHERE username LIKE '%oh%';
+
+-- ILIKE case-insensitive pattern
+SELECT * FROM users WHERE username ILIKE 'JOHN%';
+```
+
+### Logical Operators
+
+```sql
+-- AND
+SELECT * FROM users WHERE age > 25 AND age < 35;
+
+-- OR
+SELECT * FROM users WHERE age < 20 OR age > 60;
+
+-- NOT
+SELECT * FROM users WHERE NOT age > 30;
+```
+
+### String Functions
+
+```sql
+-- Length
+SELECT LENGTH('hello'); -- 5
+
+-- Concatenation
+SELECT 'Hello' || ' ' || 'World'; -- Hello World
+SELECT CONCAT('Hello', ' ', 'World'); -- Hello World
+
+-- Upper case
+SELECT UPPER('hello'); -- HELLO
+
+-- Lower case
+SELECT LOWER('HELLO'); -- hello
+
+-- Substring
+SELECT SUBSTRING('hello world', 1, 5); -- hello
+
+-- Replace
+SELECT REPLACE('hello world', 'world', 'PostgreSQL');
+
+-- Trim whitespace
+SELECT TRIM('  hello  '); -- hello
+
+-- Split string
+SELECT string_to_array('a,b,c', ',');
+
+-- Position
+SELECT POSITION('world' IN 'hello world'); -- 7
+```
+
+### Numeric Functions
+
+```sql
+-- Absolute value
+SELECT ABS(-10); -- 10
+
+-- Round
+SELECT ROUND(10.567, 2); -- 10.57
+
+-- Ceiling
+SELECT CEIL(10.2); -- 11
+
+-- Floor
+SELECT FLOOR(10.9); -- 10
+
+-- Power
+SELECT POWER(2, 3); -- 8
+
+-- Square root
+SELECT SQRT(16); -- 4
+
+-- Greatest
+SELECT GREATEST(10, 20, 30); -- 30
+
+-- Least
+SELECT LEAST(10, 20, 30); -- 10
+
+-- Modulo
+SELECT 10 % 3; -- 1
+```
+
+### Date Functions
+
+```sql
+-- Current date
+SELECT CURRENT_DATE;
+
+-- Current time
+SELECT CURRENT_TIME;
+
+-- Current timestamp
+SELECT CURRENT_TIMESTAMP;
+
+-- Extract parts
+SELECT EXTRACT(YEAR FROM CURRENT_DATE);
+SELECT EXTRACT(MONTH FROM CURRENT_DATE);
+SELECT EXTRACT(DAY FROM CURRENT_DATE);
+
+-- Date arithmetic
+SELECT CURRENT_DATE + INTERVAL '1 day';
+SELECT CURRENT_DATE - INTERVAL '1 month';
+
+-- Age calculation
+SELECT AGE(CURRENT_DATE, '2000-01-01');
+
+-- Date truncation
+SELECT DATE_TRUNC('month', CURRENT_DATE);
+```
+
+### Aggregate Functions
+
+```sql
+-- Count
+SELECT COUNT(*) FROM users;
+SELECT COUNT(email) FROM users; -- Counts non-null values
+
+-- Sum
+SELECT SUM(price) FROM orders;
+
+-- Average
+SELECT AVG(price) FROM orders;
+
+-- Minimum
+SELECT MIN(price) FROM orders;
+
+-- Maximum
+SELECT MAX(price) FROM orders;
+
+-- String aggregation
+SELECT STRING_AGG(username, ', ') FROM users;
+
+-- Array aggregation
+SELECT ARRAY_AGG(username) FROM users;
+```
+
+---
+
+## Table Management
+
+### Creating Tables with Constraints
+
+```sql
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    age INTEGER CHECK (age >= 18),
+    country VARCHAR(50) DEFAULT 'USA',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### Table Inheritance
+
+```sql
+-- Parent table
+CREATE TABLE vehicles (
+    id SERIAL PRIMARY KEY,
+    brand VARCHAR(50),
+    model VARCHAR(50),
+    year INTEGER
+);
+
+-- Child table inherits from parent
+CREATE TABLE cars (
+    num_doors INTEGER
+) INHERITS (vehicles);
+
+-- Child table
+CREATE TABLE motorcycles (
+    has_sidecar BOOLEAN
+) INHERITS (vehicles);
+```
+
+### Temporary Tables
+
+```sql
+-- Create temporary table
+CREATE TEMP TABLE temp_users AS
+SELECT * FROM users WHERE age > 30;
+
+-- Temporary table only exists for current session
+```
+
+### Unlogged Tables (faster but not crash-safe)
+
+```sql
+CREATE UNLOGGED TABLE logs (
+    id SERIAL PRIMARY KEY,
+    message TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+---
+
+## Constraints
+
+### PRIMARY KEY Constraint
+
+```sql
+-- Single column primary key
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(100)
+);
+
+-- Composite primary key
+CREATE TABLE enrollments (
+    student_id INTEGER,
+    course_id INTEGER,
+    enrollment_date DATE,
+    PRIMARY KEY (student_id, course_id)
+);
+
+-- Add primary key to existing table
+ALTER TABLE users ADD PRIMARY KEY (id);
+```
+
+### UNIQUE Constraint
+
+```sql
+-- Column level
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(100) UNIQUE,
+    username VARCHAR(50) UNIQUE NOT NULL
+);
+
+-- Table level
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(100),
+    username VARCHAR(50),
+    UNIQUE (email, username)
+);
+
+-- Add constraint
+ALTER TABLE users ADD CONSTRAINT unique_email UNIQUE (email);
+```
+
+### NOT NULL Constraint
+
+```sql
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(100) NOT NULL,
+    email VARCHAR(100) NOT NULL
+);
+
+-- Add not null constraint
+ALTER TABLE users ALTER COLUMN email SET NOT NULL;
+
+-- Remove not null constraint
+ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
+```
+
+### CHECK Constraint
+
+```sql
+-- Column level
+CREATE TABLE products (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    price DECIMAL(10, 2) CHECK (price > 0),
+    quantity INTEGER CHECK (quantity >= 0)
+);
+
+-- Table level
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(100),
+    age INTEGER,
+    CHECK (age >= 18 AND age <= 120)
+);
+```
+
+### FOREIGN KEY Constraint
+
+```sql
+CREATE TABLE categories (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100)
+);
+
+CREATE TABLE products (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    category_id INTEGER REFERENCES categories(id)
+);
+
+-- With ON DELETE/UPDATE actions
+CREATE TABLE products (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    category_id INTEGER REFERENCES categories(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
+
+-- Actions: CASCADE, SET NULL, SET DEFAULT, RESTRICT, NO ACTION
+```
+
+### DEFAULT Constraint
+
+```sql
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(20) DEFAULT 'active',
+    is_verified BOOLEAN DEFAULT FALSE
+);
+```
+
+---
+
+## Indexes
+
+### Understanding Indexes
+
+Indexes are data structures that improve query performance by allowing fast data retrieval.
+
+**Types of Indexes**:
+- **B-Tree**: Default, good for equality and range queries
+- **Hash**: Good for equality queries only
+- **GiST**: Good for geometric and full-text search
+- **GIN**: Good for array and JSON queries
+- **BRIN**: Good for very large tables
+
+### Creating Indexes
+
+```sql
+-- Single column index
+CREATE INDEX idx_users_username ON users(username);
+
+-- Composite index
+CREATE INDEX idx_users_email_username ON users(email, username);
+
+-- Unique index
+CREATE UNIQUE INDEX idx_users_email ON users(email);
+
+-- Hash index
+CREATE INDEX idx_products_name USING HASH ON products(name);
+
+-- Expression index
+CREATE INDEX idx_users_upper_username ON users(UPPER(username));
+
+-- Partial index (only index rows meeting condition)
+CREATE INDEX idx_active_users ON users(username) WHERE status = 'active';
+
+-- List indexes
+\d users
+
+-- Drop index
+DROP INDEX idx_users_username;
+
+-- Analyze index usage
+EXPLAIN SELECT * FROM users WHERE username = 'john';
+```
+
+### Index Performance
+
+```sql
+-- Check if index is used
+EXPLAIN ANALYZE SELECT * FROM users WHERE username = 'john';
+
+-- Find unused indexes
+SELECT schemaname, tablename, indexname 
+FROM pg_indexes 
+WHERE schemaname NOT IN ('pg_catalog', 'information_schema');
+
+-- Index size
+SELECT indexname, pg_size_pretty(pg_relation_size(indexrelid)) 
+FROM pg_indexes 
+JOIN pg_class ON indexname = relname
+WHERE tablename = 'users';
+```
+
+---
+
+## Relationships & Joins
+
+### Types of Relationships
+
+#### One-to-Many
+```sql
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(100)
+);
+
+CREATE TABLE posts (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255),
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE
+);
+```
+
+#### One-to-One
+```sql
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(100)
+);
+
+CREATE TABLE user_profiles (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    bio TEXT
+);
+```
+
+#### Many-to-Many
+```sql
+CREATE TABLE students (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100)
+);
+
+CREATE TABLE courses (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(100)
+);
+
+CREATE TABLE enrollments (
+    student_id INTEGER REFERENCES students(id) ON DELETE CASCADE,
+    course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
+    enrollment_date DATE,
+    PRIMARY KEY (student_id, course_id)
+);
+```
+
+### JOIN Operations
+
+#### INNER JOIN
+Returns rows that have matches in both tables.
+
+```sql
+SELECT u.username, p.title
+FROM users u
+INNER JOIN posts p ON u.id = p.user_id;
+
+-- Shorthand: JOIN (default is INNER)
+SELECT u.username, p.title
+FROM users u
+JOIN posts p ON u.id = p.user_id;
+```
+
+#### LEFT JOIN (LEFT OUTER JOIN)
+Returns all rows from left table, matching rows from right table.
+
+```sql
+SELECT u.username, p.title
+FROM users u
+LEFT JOIN posts p ON u.id = p.user_id;
+
+-- Include users with no posts
+```
+
+#### RIGHT JOIN
+Returns all rows from right table, matching rows from left table.
+
+```sql
+SELECT u.username, p.title
+FROM users u
+RIGHT JOIN posts p ON u.id = p.user_id;
+```
+
+#### FULL OUTER JOIN
+Returns all rows from both tables.
+
+```sql
+SELECT u.username, p.title
+FROM users u
+FULL OUTER JOIN posts p ON u.id = p.user_id;
+```
+
+#### CROSS JOIN
+Returns Cartesian product.
+
+```sql
+SELECT u.username, p.title
+FROM users u
+CROSS JOIN posts p;
+
+-- All combinations of users and posts
+```
+
+#### SELF JOIN
+Join a table with itself.
+
+```sql
+CREATE TABLE employees (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    manager_id INTEGER REFERENCES employees(id)
+);
+
+SELECT e.name, m.name AS manager_name
+FROM employees e
+LEFT JOIN employees m ON e.manager_id = m.id;
+```
+
+#### Multiple Joins
+
+```sql
+SELECT u.username, p.title, c.name
+FROM users u
+JOIN posts p ON u.id = p.user_id
+JOIN categories c ON p.category_id = c.id;
+```
+
+---
+
+## Aggregation & Grouping
+
+### GROUP BY Clause
+
+Groups rows by one or more columns and applies aggregate functions.
+
+```sql
+-- Count posts per user
+SELECT user_id, COUNT(*) as post_count
+FROM posts
+GROUP BY user_id;
+
+-- Multiple columns
+SELECT user_id, category_id, COUNT(*) as post_count
+FROM posts
+GROUP BY user_id, category_id;
+
+-- With aggregate functions
+SELECT 
+    user_id,
+    COUNT(*) as post_count,
+    AVG(views) as avg_views,
+    MAX(views) as max_views
+FROM posts
+GROUP BY user_id;
+```
+
+### HAVING Clause
+
+Filters groups based on conditions (like WHERE but for groups).
+
+```sql
+-- Users with more than 5 posts
+SELECT user_id, COUNT(*) as post_count
+FROM posts
+GROUP BY user_id
+HAVING COUNT(*) > 5;
+
+-- Multiple conditions
+SELECT 
+    user_id,
+    COUNT(*) as post_count,
+    AVG(views) as avg_views
+FROM posts
+GROUP BY user_id
+HAVING COUNT(*) > 5 AND AVG(views) > 100;
+```
+
+### Aggregate Functions with Filtering
+
+```sql
+-- Count only active users
+SELECT COUNT(*) FILTER (WHERE status = 'active') as active_count
+FROM users;
+
+-- Sum with condition
+SELECT SUM(price) FILTER (WHERE status = 'completed') as revenue
+FROM orders;
+```
+
+### Complete Example
+
+```sql
+SELECT 
+    u.username,
+    COUNT(p.id) as total_posts,
+    AVG(p.views) as avg_views,
+    MAX(p.views) as max_views,
+    COUNT(DISTINCT p.category_id) as categories
+FROM users u
+LEFT JOIN posts p ON u.id = p.user_id
+WHERE u.status = 'active'
+GROUP BY u.id, u.username
+HAVING COUNT(p.id) > 0
+ORDER BY total_posts DESC;
+```
+
+---
+
+## Subqueries
+
+### Scalar Subqueries
+Returns a single value.
+
+```sql
+-- Get average price
+SELECT * FROM products 
+WHERE price > (SELECT AVG(price) FROM products);
+
+-- Get user with most posts
+SELECT username FROM users
+WHERE id = (SELECT user_id FROM posts GROUP BY user_id ORDER BY COUNT(*) DESC LIMIT 1);
+```
+
+### IN Subquery
+Returns multiple values.
+
+```sql
+-- Get products in categories with high views
+SELECT * FROM products 
+WHERE category_id IN (
+    SELECT DISTINCT category_id FROM posts WHERE views > 1000
+);
+
+-- Get users who have posted
+SELECT * FROM users 
+WHERE id IN (
+    SELECT DISTINCT user_id FROM posts
+);
+```
+
+### EXISTS Subquery
+Checks if rows exist.
+
+```sql
+-- Get users who have posted
+SELECT u.* FROM users u
+WHERE EXISTS (
+    SELECT 1 FROM posts p WHERE p.user_id = u.id
+);
+
+-- Get users who have NOT posted
+SELECT u.* FROM users u
+WHERE NOT EXISTS (
+    SELECT 1 FROM posts p WHERE p.user_id = u.id
+);
+```
+
+### Correlated Subqueries
+Subquery references columns from outer query.
+
+```sql
+-- Get top post per user
+SELECT u.username, p.title, p.views
+FROM users u
+JOIN posts p ON u.id = p.user_id
+WHERE p.views = (
+    SELECT MAX(views) FROM posts WHERE user_id = u.id
+);
+```
+
+### FROM Clause Subquery (Derived Table)
+
+```sql
+-- Use subquery result as table
+SELECT category_id, avg_views
+FROM (
+    SELECT category_id, AVG(views) as avg_views
+    FROM posts
+    GROUP BY category_id
+) category_stats
+WHERE avg_views > 500;
+```
+
+### WITH Clause (Common Table Expression - CTE)
+
+```sql
+-- Simple CTE
+WITH active_users AS (
+    SELECT * FROM users WHERE status = 'active'
+)
+SELECT * FROM active_users WHERE age > 30;
+
+-- Multiple CTEs
+WITH user_posts AS (
+    SELECT user_id, COUNT(*) as post_count
+    FROM posts
+    GROUP BY user_id
+),
+top_users AS (
+    SELECT user_id FROM user_posts WHERE post_count > 10
+)
+SELECT u.username, up.post_count
+FROM users u
+JOIN user_posts up ON u.id = up.user_id
+WHERE u.id IN (SELECT user_id FROM top_users);
+
+-- Recursive CTE
+WITH RECURSIVE numbers AS (
+    SELECT 1 as n
+    UNION ALL
+    SELECT n + 1 FROM numbers WHERE n < 10
+)
+SELECT * FROM numbers;
+```
+
+---
+
+## Views
+
+### Creating Views
+
+A view is a virtual table based on a query result.
+
+```sql
+-- Simple view
+CREATE VIEW active_users_view AS
+SELECT id, username, email
+FROM users
+WHERE status = 'active';
+
+-- Query view
+SELECT * FROM active_users_view;
+
+-- View with joins
+CREATE VIEW user_post_stats AS
+SELECT 
+    u.id,
+    u.username,
+    COUNT(p.id) as post_count,
+    AVG(p.views) as avg_views
+FROM users u
+LEFT JOIN posts p ON u.id = p.user_id
+GROUP BY u.id, u.username;
+```
+
+### Materialized Views
+
+Views with stored results, need manual refresh.
+
+```sql
+-- Create materialized view
+CREATE MATERIALIZED VIEW user_post_stats_mv AS
+SELECT 
+    u.id,
+    u.username,
+    COUNT(p.id) as post_count,
+    AVG(p.views) as avg_views
+FROM users u
+LEFT JOIN posts p ON u.id = p.user_id
+GROUP BY u.id, u.username;
+
+-- Refresh materialized view
+REFRESH MATERIALIZED VIEW user_post_stats_mv;
+
+-- Refresh concurrently (non-blocking)
+REFRESH MATERIALIZED VIEW CONCURRENTLY user_post_stats_mv;
+```
+
+### View Management
+
+```sql
+-- Update view
+CREATE OR REPLACE VIEW active_users_view AS
+SELECT id, username, email, created_at
+FROM users
+WHERE status = 'active';
+
+-- Drop view
+DROP VIEW active_users_view;
+
+-- Drop with dependencies
+DROP VIEW active_users_view CASCADE;
+
+-- List views
+SELECT * FROM information_schema.views WHERE table_schema = 'public';
+```
+
+### Updatable Views
+
+```sql
+-- Create updatable view (must be based on single table)
+CREATE VIEW user_emails AS
+SELECT id, username, email FROM users;
+
+-- Insert through view
+INSERT INTO user_emails (username, email) VALUES ('john', 'john@example.com');
+
+-- Update through view
+UPDATE user_emails SET email = 'newemail@example.com' WHERE username = 'john';
+
+-- Delete through view
+DELETE FROM user_emails WHERE username = 'john';
+```
+
+---
+
+## Transactions
+
+### Understanding Transactions
+
+A transaction is a sequence of SQL statements that execute as a single unit.
+
+```sql
+-- Basic transaction
+BEGIN;
+  UPDATE accounts SET balance = balance - 100 WHERE id = 1;
+  UPDATE accounts SET balance = balance + 100 WHERE id = 2;
+COMMIT;
+
+-- If error occurs
+BEGIN;
+  UPDATE accounts SET balance = balance - 100 WHERE id = 1;
+  -- Error occurs here
+ROLLBACK; -- Undo all changes
+```
+
+### Transaction Control
+
+```sql
+-- BEGIN TRANSACTION (same as BEGIN)
+BEGIN TRANSACTION;
+
+-- COMMIT saves changes
+COMMIT;
+
+-- ROLLBACK undoes changes
+ROLLBACK;
+
+-- SAVEPOINT creates checkpoint
+BEGIN;
+  UPDATE users SET age = 30 WHERE id = 1;
+  SAVEPOINT sp1;
+  
+  UPDATE users SET age = 35 WHERE id = 2;
+  -- Error occurs
+  
+ROLLBACK TO SAVEPOINT sp1; -- Undo to sp1, first update remains
+COMMIT;
+```
+
+### Isolation Levels
+
+PostgreSQL supports four isolation levels:
+
+#### Read Uncommitted (Same as Read Committed in PostgreSQL)
+Allows reading uncommitted changes.
+
+#### Read Committed (Default)
+Only reads committed changes.
+
+```sql
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+BEGIN;
+  -- Statements here
+COMMIT;
+```
+
+#### Repeatable Read
+Same data throughout transaction.
+
+```sql
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+BEGIN;
+  SELECT * FROM users WHERE id = 1; -- First read
+  -- Other transaction modifies data
+  SELECT * FROM users WHERE id = 1; -- Same data as first read
+COMMIT;
+```
+
+#### Serializable
+Most strict, transactions execute serially.
+
+```sql
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+BEGIN;
+  -- Most expensive but safest
+COMMIT;
+```
+
+### Transaction Example
+
+```sql
+-- Money transfer
+BEGIN;
+  UPDATE accounts SET balance = balance - 500 WHERE id = 1;
+  UPDATE accounts SET balance = balance + 500 WHERE id = 2;
+  
+  -- Verify update
+  SELECT balance FROM accounts WHERE id = 1;
+  
+COMMIT;
+
+-- Check if committed
+SELECT balance FROM accounts WHERE id = 1;
+```
+
+---
+
+## Stored Procedures & Functions
+
+### User-Defined Functions
+
+```sql
+-- Simple function
+CREATE FUNCTION add(a INT, b INT)
+RETURNS INT
+AS $$
+BEGIN
+  RETURN a + b;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Call function
+SELECT add(5, 3); -- 8
+```
+
+### Functions with Variables
+
+```sql
+CREATE FUNCTION get_user_post_count(user_id INT)
+RETURNS INT
+AS $$
+DECLARE
+  post_count INT;
+BEGIN
+  SELECT COUNT(*) INTO post_count FROM posts WHERE posts.user_id = user_id;
+  RETURN post_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Call
+SELECT get_user_post_count(1);
+```
+
+### Functions Returning Rows
+
+```sql
+-- Returns single row
+CREATE FUNCTION get_user(user_id INT)
+RETURNS RECORD
+AS $$
+BEGIN
+  RETURN (SELECT id, username, email FROM users WHERE id = user_id);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Better approach with RETURNS TABLE
+CREATE FUNCTION get_active_users()
+RETURNS TABLE(id INT, username VARCHAR, email VARCHAR)
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT users.id, users.username, users.email
+  FROM users
+  WHERE status = 'active';
+END;
+$$ LANGUAGE plpgsql;
+
+-- Call
+SELECT * FROM get_active_users();
+```
+
+### Functions with Control Flow
+
+```sql
+CREATE FUNCTION discount_price(price DECIMAL, customer_type VARCHAR)
+RETURNS DECIMAL
+AS $$
+DECLARE
+  discount DECIMAL;
+BEGIN
+  IF customer_type = 'premium' THEN
+    discount := 0.20;
+  ELSIF customer_type = 'regular' THEN
+    discount := 0.10;
+  ELSE
+    discount := 0;
+  END IF;
+  
+  RETURN price * (1 - discount);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Call
+SELECT discount_price(100, 'premium'); -- 80
+```
+
+### Functions with Loops
+
+```sql
+CREATE FUNCTION generate_series_custom(start_num INT, end_num INT)
+RETURNS TABLE(num INT)
+AS $$
+DECLARE
+  current_num INT;
+BEGIN
+  current_num := start_num;
+  WHILE current_num <= end_num LOOP
+    num := current_num;
+    RETURN NEXT;
+    current_num := current_num + 1;
+  END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+### Stored Procedures
+
+```sql
+-- Procedure (doesn't return value but can modify data)
+CREATE PROCEDURE transfer_money(from_account INT, to_account INT, amount DECIMAL)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  UPDATE accounts SET balance = balance - amount WHERE id = from_account;
+  UPDATE accounts SET balance = balance + amount WHERE id = to_account;
+  COMMIT;
+END;
+$$;
+
+-- Call procedure
+CALL transfer_money(1, 2, 500);
+```
+
+### Managing Functions
+
+```sql
+-- List functions
+\df
+
+-- Drop function
+DROP FUNCTION add(INT, INT);
+
+-- Drop with RESTRICT (default)
+DROP FUNCTION get_user(INT) RESTRICT;
+
+-- Drop with CASCADE (also drops dependent objects)
+DROP FUNCTION get_active_users() CASCADE;
+```
+
+---
+
+## Triggers
+
+### Understanding Triggers
+
+A trigger is a special function that automatically executes in response to specific events.
+
+```sql
+-- Create trigger function
+CREATE FUNCTION update_user_modified()
+RETURNS TRIGGER
+AS $$
+BEGIN
+  NEW.modified_at = CURRENT_TIMESTAMP;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger
+CREATE TRIGGER user_modified_trigger
+BEFORE UPDATE ON users
+FOR EACH ROW
+EXECUTE FUNCTION update_user_modified();
+```
+
+### Trigger Types
+
+#### BEFORE INSERT Trigger
+
+```sql
+CREATE FUNCTION validate_user()
+RETURNS TRIGGER
+AS $$
+BEGIN
+  IF NEW.age < 18 THEN
+    RAISE EXCEPTION 'User must be at least 18 years old';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER validate_user_trigger
+BEFORE INSERT ON users
+FOR EACH ROW
+EXECUTE FUNCTION validate_user();
+```
+
+#### AFTER INSERT Trigger
+
+```sql
+CREATE FUNCTION create_user_profile()
+RETURNS TRIGGER
+AS $$
+BEGIN
+  INSERT INTO user_profiles (user_id, created_at)
+  VALUES (NEW.id, CURRENT_TIMESTAMP);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER create_profile_trigger
+AFTER INSERT ON users
+FOR EACH ROW
+EXECUTE FUNCTION create_user_profile();
+```
+
+#### BEFORE DELETE Trigger (Audit Trail)
+
+```sql
+CREATE TABLE user_audit (
+  id SERIAL PRIMARY KEY,
+  user_id INT,
+  action VARCHAR(20),
+  deleted_at TIMESTAMP
+);
+
+CREATE FUNCTION audit_user_deletion()
+RETURNS TRIGGER
+AS $$
+BEGIN
+  INSERT INTO user_audit (user_id, action, deleted_at)
+  VALUES (OLD.id, 'DELETE', CURRENT_TIMESTAMP);
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER audit_delete_trigger
+BEFORE DELETE ON users
+FOR EACH ROW
+EXECUTE FUNCTION audit_user_deletion();
+```
+
+#### AFTER UPDATE Trigger (Update Count)
+
+```sql
+CREATE TABLE product_stats (
+  id SERIAL PRIMARY KEY,
+  product_id INT,
+  update_count INT DEFAULT 0
+);
+
+CREATE FUNCTION increment_update_count()
+RETURNS TRIGGER
+AS $$
+BEGIN
+  UPDATE product_stats 
+  SET update_count = update_count + 1
+  WHERE product_id = NEW.id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_count_trigger
+AFTER UPDATE ON products
+FOR EACH ROW
+EXECUTE FUNCTION increment_update_count();
+```
+
+### Managing Triggers
+
+```sql
+-- List triggers
+SELECT * FROM information_schema.triggers;
+
+-- List triggers for specific table
+SELECT * FROM information_schema.triggers WHERE event_object_table = 'users';
+
+-- Drop trigger
+DROP TRIGGER user_modified_trigger ON users;
+
+-- Disable trigger
+ALTER TABLE users DISABLE TRIGGER user_modified_trigger;
+
+-- Enable trigger
+ALTER TABLE users ENABLE TRIGGER user_modified_trigger;
+
+-- Drop trigger function
+DROP FUNCTION update_user_modified();
+```
+
+---
+
+## Window Functions
+
+### Understanding Window Functions
+
+Window functions perform calculations across a set of rows related to the current row.
+
+### ROW_NUMBER()
+
+```sql
+-- Assign row numbers
+SELECT 
+  ROW_NUMBER() OVER (ORDER BY salary DESC) as rank,
+  name,
+  salary
+FROM employees;
+
+-- Row numbers per department
+SELECT 
+  ROW_NUMBER() OVER (PARTITION BY department ORDER BY salary DESC) as dept_rank,
+  name,
+  department,
+  salary
+FROM employees;
+```
+
+### RANK() and DENSE_RANK()
+
+```sql
+-- RANK() - skips numbers after ties
+SELECT 
+  RANK() OVER (ORDER BY salary DESC) as rank,
+  name,
+  salary
+FROM employees;
+
+-- DENSE_RANK() - no skips after ties
+SELECT 
+  DENSE_RANK() OVER (ORDER BY salary DESC) as rank,
+  name,
+  salary
+FROM employees;
+```
+
+### LAG() and LEAD()
+
+Access previous and next rows.
+
+```sql
+-- Get previous salary
+SELECT 
+  name,
+  salary,
+  LAG(salary) OVER (ORDER BY hire_date) as prev_salary,
+  salary - LAG(salary) OVER (ORDER BY hire_date) as salary_increase
+FROM employees;
+
+-- Get next salary
+SELECT 
+  name,
+  salary,
+  LEAD(salary) OVER (ORDER BY hire_date) as next_salary
+FROM employees;
+```
+
+### FIRST_VALUE() and LAST_VALUE()
+
+```sql
+-- First salary in department
+SELECT 
+  name,
+  department,
+  salary,
+  FIRST_VALUE(salary) OVER (PARTITION BY department ORDER BY salary DESC) as highest_salary
+FROM employees;
+
+-- Last salary in department
+SELECT 
+  name,
+  department,
+  salary,
+  LAST_VALUE(salary) OVER (
+    PARTITION BY department 
+    ORDER BY salary DESC
+    RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+  ) as lowest_salary
+FROM employees;
+```
+
+### SUM() and AVG() as Window Functions
+
+```sql
+-- Running sum
+SELECT 
+  name,
+  salary,
+  SUM(salary) OVER (ORDER BY hire_date) as running_total
+FROM employees;
+
+-- Average salary per department
+SELECT 
+  name,
+  department,
+  salary,
+  AVG(salary) OVER (PARTITION BY department) as dept_avg_salary
+FROM employees;
+
+-- Percentage of department total
+SELECT 
+  name,
+  department,
+  salary,
+  ROUND(100.0 * salary / SUM(salary) OVER (PARTITION BY department), 2) as percent_of_dept
+FROM employees;
+```
+
+### NTILE()
+
+Divide rows into buckets.
+
+```sql
+-- Divide salary into quartiles
+SELECT 
+  name,
+  salary,
+  NTILE(4) OVER (ORDER BY salary DESC) as quartile
+FROM employees;
+
+-- Top 25% earners (quartile = 1)
+SELECT * FROM (
+  SELECT 
+    name,
+    salary,
+    NTILE(4) OVER (ORDER BY salary DESC) as quartile
+  FROM employees
+) ranked
+WHERE quartile = 1;
+```
+
+### Complete Window Function Example
+
+```sql
+SELECT 
+  ROW_NUMBER() OVER (PARTITION BY department ORDER BY salary DESC) as rank,
+  name,
+  department,
+  salary,
+  ROUND(AVG(salary) OVER (PARTITION BY department), 2) as dept_avg,
+  salary - LAG(salary) OVER (PARTITION BY department ORDER BY salary DESC) as diff_from_prev,
+  ROUND(100.0 * salary / SUM(salary) OVER (PARTITION BY department), 2) as percent_of_dept
+FROM employees
+ORDER BY department, rank;
+```
+
+---
+
+## Performance Optimization
+
+### EXPLAIN and EXPLAIN ANALYZE
+
+```sql
+-- See query plan
+EXPLAIN SELECT * FROM users WHERE username = 'john';
+
+-- See query plan with execution stats
+EXPLAIN ANALYZE SELECT * FROM users WHERE username = 'john';
+
+-- Full ANALYZE output
+EXPLAIN (ANALYZE, BUFFERS, VERBOSE) SELECT * FROM users WHERE username = 'john';
+```
+
+### Query Optimization Strategies
+
+#### 1. Use Appropriate Data Types
+
+```sql
+-- Bad - inefficient
+CREATE TABLE users (
+  id VARCHAR(50) PRIMARY KEY,  -- Inefficient
+  age VARCHAR(3)  -- Should be INTEGER
+);
+
+-- Good - efficient
+CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  age INTEGER
+);
+```
+
+#### 2. Index Frequently Queried Columns
+
+```sql
+-- Create indexes on commonly filtered columns
+CREATE INDEX idx_users_username ON users(username);
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_posts_user_id ON posts(user_id);
+```
+
+#### 3. Use WHERE Clauses Effectively
+
+```sql
+-- Bad - processes all rows then filters
+SELECT * FROM posts WHERE EXTRACT(YEAR FROM created_at) = 2024;
+
+-- Good - uses index-friendly condition
+SELECT * FROM posts WHERE created_at >= '2024-01-01' AND created_at < '2025-01-01';
+```
+
+#### 4. Limit Result Sets
+
+```sql
+-- Bad - returns all rows
+SELECT * FROM users;
+
+-- Good - limits results
+SELECT * FROM users LIMIT 10;
+SELECT * FROM users ORDER BY created_at DESC LIMIT 100;
+```
+
+#### 5. Use DISTINCT Carefully
+
+```sql
+-- Can be slow with large datasets
+SELECT DISTINCT user_id FROM posts;
+
+-- Alternative using GROUP BY (may be faster)
+SELECT user_id FROM posts GROUP BY user_id;
+```
+
+#### 6. Avoid SELECT *
+
+```sql
+-- Bad
+SELECT * FROM users;
+
+-- Good - select only needed columns
+SELECT id, username, email FROM users;
+```
+
+#### 7. Use Proper JOIN Conditions
+
+```sql
+-- Bad - no join condition (CROSS JOIN)
+SELECT * FROM users u, posts p WHERE u.id = p.user_id;
+
+-- Good - explicit JOIN
+SELECT * FROM users u JOIN posts p ON u.id = p.user_id;
+```
+
+#### 8. Batch Operations
+
+```sql
+-- Bad - multiple separate inserts
+INSERT INTO users (username, email) VALUES ('john', 'john@example.com');
+INSERT INTO users (username, email) VALUES ('jane', 'jane@example.com');
+INSERT INTO users (username, email) VALUES ('bob', 'bob@example.com');
+
+-- Good - single batch insert
+INSERT INTO users (username, email) VALUES 
+  ('john', 'john@example.com'),
+  ('jane', 'jane@example.com'),
+  ('bob', 'bob@example.com');
+```
+
+### Vacuuming and Analyzing
+
+```sql
+-- Vacuum removes dead rows
+VACUUM users;
+
+-- Vacuum and analyze
+VACUUM ANALYZE users;
+
+-- Analyze updates table statistics
+ANALYZE users;
+
+-- Auto vacuum (runs automatically)
+-- Check settings
+SHOW autovacuum;
+```
+
+### Table Statistics
+
+```sql
+-- Update table statistics
+ANALYZE users;
+
+-- View table size
+SELECT pg_size_pretty(pg_total_relation_size('users'));
+
+-- View index size
+SELECT indexname, pg_size_pretty(pg_relation_size(indexrelid))
+FROM pg_indexes
+WHERE tablename = 'users';
+
+-- View all table sizes
+SELECT 
+  schemaname,
+  tablename,
+  pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size
+FROM pg_tables
+WHERE schemaname NOT IN ('information_schema', 'pg_catalog')
+ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
+```
+
+---
+
+## Backup & Recovery
+
+### Backup Methods
+
+#### SQL Dump (Logical Backup)
+
+```bash
+# Full database backup
+pg_dump -U postgres database_name > backup.sql
+
+# Backup specific table
+pg_dump -U postgres -t users database_name > users_backup.sql
+
+# Backup specific schema
+pg_dump -U postgres -n schema_name database_name > schema_backup.sql
+
+# Custom format (compressed)
+pg_dump -U postgres -F c database_name > backup.dump
+
+# With verbose output
+pg_dump -U postgres -v database_name > backup.sql
+```
+
+#### Binary Backup (Physical Backup)
+
+```bash
+# Full cluster backup
+pg_basebackup -U postgres -Ft -z -P -D /path/to/backup
+```
+
+### Restore Methods
+
+#### From SQL Dump
+
+```bash
+# Restore to new database
+psql -U postgres -d new_database < backup.sql
+
+# Restore specific table
+psql -U postgres -d database_name < users_backup.sql
+
+# Restore custom format
+pg_restore -U postgres -d database_name backup.dump
+```
+
+#### From Binary Backup
+
+```bash
+# Restore from base backup
+pg_basebackup restore from backup files
+```
+
+### Point-in-Time Recovery
+
+```bash
+# Requires WAL archiving enabled
+# Configuration in postgresql.conf:
+# wal_level = replica
+# archive_mode = on
+# archive_command = 'cp %p /archive/%f'
+
+# Restore to specific time
+psql -U postgres -d database_name -c "RESTORE TO TIMELINE '2024-12-24 12:00:00';"
+```
+
+### Continuous Archiving
+
+```sql
+-- Enable WAL archiving
+-- In postgresql.conf:
+wal_level = replica
+archive_mode = on
+archive_command = 'test ! -f /archive/%f && cp %p /archive/%f'
+
+-- Monitor archiving
+SELECT * FROM pg_stat_archiver;
+```
+
+---
+
+## Security
+
+### User Management
+
+#### Create User
+
+```sql
+-- Create user with password
+CREATE USER john WITH PASSWORD 'secure_password';
+
+-- Create superuser
+CREATE USER admin WITH SUPERUSER PASSWORD 'admin_password';
+
+-- Create user with login privileges
+CREATE ROLE developer LOGIN PASSWORD 'dev_password';
+
+-- Create user without login (for roles)
+CREATE ROLE app_user NOLOGIN;
+```
+
+#### Alter User
+
+```sql
+-- Change password
+ALTER USER john WITH PASSWORD 'new_password';
+
+-- Grant superuser privilege
+ALTER USER john WITH SUPERUSER;
+
+-- Remove superuser privilege
+ALTER USER john WITH NOSUPERUSER;
+
+-- Set connection limit
+ALTER USER john CONNECTION LIMIT 10;
+```
+
+#### Drop User
+
+```sql
+DROP USER john;
+DROP USER IF EXISTS john;
+```
+
+### Privilege Management
+
+#### Grant Privileges
+
+```sql
+-- Grant all privileges on database
+GRANT ALL PRIVILEGES ON DATABASE mydb TO john;
+
+-- Grant specific privileges on table
+GRANT SELECT, INSERT, UPDATE, DELETE ON users TO john;
+
+-- Grant all privileges on table
+GRANT ALL PRIVILEGES ON users TO john;
+
+-- Grant privilege on all tables
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly_user;
+
+-- Grant privilege on future tables
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO readonly_user;
+
+-- Grant column-level privilege
+GRANT SELECT(username, email), UPDATE(email) ON users TO john;
+
+-- Grant sequence privilege (for auto-increment)
+GRANT USAGE, SELECT ON SEQUENCE users_id_seq TO john;
+```
+
+#### Revoke Privileges
+
+```sql
+-- Revoke all privileges
+REVOKE ALL PRIVILEGES ON users FROM john;
+
+-- Revoke specific privileges
+REVOKE SELECT, INSERT ON users FROM john;
+
+-- Revoke privilege on all tables
+REVOKE SELECT ON ALL TABLES IN SCHEMA public FROM john;
+```
+
+### Role Management
+
+```sql
+-- Create role
+CREATE ROLE admin;
+
+-- Grant role to user
+GRANT admin TO john;
+
+-- Remove role from user
+REVOKE admin FROM john;
+
+-- Make role inherit privileges
+ALTER ROLE john INHERIT;
+
+-- Create group role
+CREATE ROLE developers;
+GRANT developers TO john;
+GRANT developers TO jane;
+
+-- Grant privileges to role
+GRANT SELECT ON users TO developers;
+```
+
+### Audit and Access Control
+
+```sql
+-- Enable logging
+ALTER SYSTEM SET log_statement = 'all';
+
+-- Log failed attempts
+ALTER SYSTEM SET log_connections = on;
+ALTER SYSTEM SET log_disconnections = on;
+
+-- View logs (if properly configured)
+SELECT * FROM pg_log_directory;
+```
+
+### Password Security
+
+```sql
+-- Force password change
+ALTER USER john WITH PASSWORD 'temporary_password' VALID UNTIL '2024-12-31';
+
+-- Set password encryption method
+ALTER SYSTEM SET password_encryption = 'scram-sha-256';
+
+-- Create secure password
+ALTER USER john WITH PASSWORD 'MyP@ssw0rd!Complex123';
+```
+
+### SSL/TLS Connection
+
+```bash
+# In postgresql.conf
+ssl = on
+ssl_cert_file = 'server.crt'
+ssl_key_file = 'server.key'
+
+# In pg_hba.conf
+hostssl    all    all    0.0.0.0/0    scram-sha-256
+```
+
+### Row-Level Security (RLS)
+
+```sql
+-- Enable RLS on table
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+
+-- Create policy
+CREATE POLICY user_isolation ON users
+  USING (id = current_user_id());
+
+-- Policy allows users to see only their own data
+CREATE POLICY user_own_data ON users
+  FOR SELECT
+  USING (id = (SELECT user_id FROM sessions WHERE session_id = current_setting('app.current_user')));
+
+-- Admin bypass policy
+CREATE POLICY admin_access ON users
+  FOR ALL
+  USING (current_user IN (SELECT user_id FROM admin_users));
+```
+
+---
+
+## Advanced Topics
+
+### Full-Text Search
+
+Full-text search allows efficient searching through large text documents.
+
+#### Basic Full-Text Search
+
+```sql
+-- Create table with tsvector column
+CREATE TABLE documents (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255),
+    content TEXT,
+    search_vector TSVECTOR
+);
+
+-- Generate search vector
+UPDATE documents 
+SET search_vector = to_tsvector('english', title || ' ' || content);
+
+-- Query using full-text search
+SELECT id, title 
+FROM documents 
+WHERE search_vector @@ to_tsquery('english', 'database & postgresql');
+
+-- Using @@ operator (matches)
+SELECT * FROM documents 
+WHERE to_tsvector('english', content) @@ to_tsquery('english', 'search');
+
+-- Using @@@ operator (contains)
+SELECT * FROM documents 
+WHERE search_vector @@@ 'search'::text;
+```
+
+#### Full-Text Search with Ranking
+
+```sql
+-- Rank search results
+SELECT 
+    id,
+    title,
+    ts_rank(search_vector, query) as rank
+FROM documents,
+to_tsquery('english', 'postgresql & database') query
+WHERE search_vector @@ query
+ORDER BY rank DESC;
+
+-- Headline (show context around matches)
+SELECT 
+    id,
+    title,
+    ts_headline('english', content, query, 'StartSel=<mark>, StopSel=</mark>')
+FROM documents,
+to_tsquery('english', 'postgresql') query
+WHERE search_vector @@ query;
+```
+
+#### GIN Index for Full-Text Search
+
+```sql
+-- Create index for faster searches
+CREATE INDEX idx_documents_search ON documents USING GIN(search_vector);
+
+-- Automatic update with trigger
+CREATE FUNCTION update_search_vector()
+RETURNS TRIGGER
+AS $$
+BEGIN
+  NEW.search_vector = to_tsvector('english', NEW.title || ' ' || NEW.content);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_search_trigger
+BEFORE INSERT OR UPDATE ON documents
+FOR EACH ROW
+EXECUTE FUNCTION update_search_vector();
+```
+
+---
+
+### JSON/JSONB Operations
+
+Working with JSON data in PostgreSQL.
+
+#### Basic JSON Operations
+
+```sql
+-- Store JSON data
+CREATE TABLE users_json (
+    id SERIAL PRIMARY KEY,
+    data JSON
+);
+
+-- Insert JSON
+INSERT INTO users_json (data) VALUES 
+('{"name":"John","age":30,"city":"NYC"}');
+
+-- Access JSON field
+SELECT data->'name' FROM users_json; -- Returns "John" (with quotes)
+SELECT data->>'name' FROM users_json; -- Returns John (without quotes)
+
+-- Access nested field
+SELECT data->'address'->'city' FROM users_json;
+
+-- Access array element
+SELECT data->'hobbies'->0 FROM users_json;
+```
+
+#### JSONB Operations
+
+```sql
+-- JSONB (binary format, faster, supports indexing)
+CREATE TABLE products_jsonb (
+    id SERIAL PRIMARY KEY,
+    data JSONB
+);
+
+-- Insert JSONB
+INSERT INTO products_jsonb (data) VALUES 
+('{"name":"Laptop","price":999.99,"tags":["electronics","computers"]}');
+
+-- Query JSONB
+SELECT * FROM products_jsonb 
+WHERE data->>'name' = 'Laptop';
+
+-- Check key existence
+SELECT * FROM products_jsonb 
+WHERE data ? 'price';
+
+-- Check if array contains value
+SELECT * FROM products_jsonb 
+WHERE data->'tags' ? 'electronics';
+
+-- Contains operator
+SELECT * FROM products_jsonb 
+WHERE data @> '{"price":999.99}';
+
+-- Is contained by operator
+SELECT * FROM products_jsonb 
+WHERE '{"name":"Laptop"}' <@ data;
+```
+
+#### JSONB Functions
+
+```sql
+-- Get all keys
+SELECT jsonb_object_keys(data) as key FROM products_jsonb LIMIT 1;
+
+-- Get values
+SELECT jsonb_each(data) as key_value FROM products_jsonb;
+
+-- Convert to array
+SELECT jsonb_array_elements(data->'tags') as tag FROM products_jsonb;
+
+-- Merge JSONB objects
+SELECT jsonb_merge(
+    '{"a":1}'::jsonb,
+    '{"b":2}'::jsonb
+); -- {"a":1,"b":2}
+
+-- Set value
+SELECT jsonb_set(
+    '{"a":1}'::jsonb,
+    '{b}',
+    '2'::jsonb
+); -- {"a":1,"b":2}
+
+-- Delete key
+SELECT '{"a":1,"b":2}'::jsonb - 'a'; -- {"b":2}
+
+-- Pretty print
+SELECT jsonb_pretty(data) FROM products_jsonb;
+```
+
+#### JSONB with Indexes
+
+```sql
+-- GIN index for JSONB searches
+CREATE INDEX idx_products_data ON products_jsonb USING GIN(data);
+
+-- JSONB path index
+CREATE INDEX idx_products_name ON products_jsonb USING GIN(data jsonb_path_ops);
+
+-- Fast queries with index
+SELECT * FROM products_jsonb 
+WHERE data @> '{"status":"active"}';
+```
+
+---
+
+### Partitioning
+
+Divide large tables into smaller, more manageable pieces.
+
+#### Range Partitioning
+
+```sql
+-- Create partitioned table
+CREATE TABLE orders (
+    order_id SERIAL,
+    order_date DATE,
+    amount DECIMAL(10,2),
+    customer_id INT,
+    PRIMARY KEY (order_id, order_date)
+) PARTITION BY RANGE (EXTRACT(YEAR FROM order_date));
+
+-- Create partitions
+CREATE TABLE orders_2023 PARTITION OF orders
+    FOR VALUES FROM (2023) TO (2024);
+
+CREATE TABLE orders_2024 PARTITION OF orders
+    FOR VALUES FROM (2024) TO (2025);
+
+CREATE TABLE orders_2025 PARTITION OF orders
+    FOR VALUES FROM (2025) TO (2026);
+
+-- Insert data (automatically routed to correct partition)
+INSERT INTO orders (order_date, amount, customer_id)
+VALUES 
+    ('2023-06-15', 150.00, 1),
+    ('2024-01-20', 250.00, 2),
+    ('2025-03-10', 350.00, 3);
+
+-- Query (only searches relevant partitions)
+SELECT * FROM orders WHERE order_date >= '2024-01-01' AND order_date < '2025-01-01';
+```
+
+#### List Partitioning
+
+```sql
+CREATE TABLE sales (
+    sale_id SERIAL,
+    region VARCHAR(50),
+    amount DECIMAL(10,2),
+    PRIMARY KEY (sale_id, region)
+) PARTITION BY LIST (region);
+
+-- Create partitions by region
+CREATE TABLE sales_na PARTITION OF sales
+    FOR VALUES IN ('USA', 'Canada', 'Mexico');
+
+CREATE TABLE sales_eu PARTITION OF sales
+    FOR VALUES IN ('UK', 'France', 'Germany', 'Spain');
+
+CREATE TABLE sales_asia PARTITION OF sales
+    FOR VALUES IN ('India', 'Japan', 'China', 'Singapore');
+
+-- Query
+SELECT * FROM sales WHERE region IN ('USA', 'Canada');
+```
+
+#### Hash Partitioning
+
+```sql
+CREATE TABLE user_activity (
+    user_id INT,
+    activity_date DATE,
+    activity_type VARCHAR(50),
+    PRIMARY KEY (user_id, activity_date)
+) PARTITION BY HASH (user_id);
+
+-- Create partitions
+CREATE TABLE user_activity_0 PARTITION OF user_activity
+    FOR VALUES WITH (MODULUS 4, REMAINDER 0);
+
+CREATE TABLE user_activity_1 PARTITION OF user_activity
+    FOR VALUES WITH (MODULUS 4, REMAINDER 1);
+
+CREATE TABLE user_activity_2 PARTITION OF user_activity
+    FOR VALUES WITH (MODULUS 4, REMAINDER 2);
+
+CREATE TABLE user_activity_3 PARTITION OF user_activity
+    FOR VALUES WITH (MODULUS 4, REMAINDER 3);
+```
+
+---
+
+### Common Table Expressions (CTEs) - Advanced
+
+Advanced CTE patterns and use cases.
+
+#### Hierarchical Queries (Recursive CTE)
+
+```sql
+-- Create organizational structure
+CREATE TABLE employees (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    manager_id INT REFERENCES employees(id)
+);
+
+INSERT INTO employees (name, manager_id) VALUES
+    ('CEO', NULL),
+    ('VP Sales', 1),
+    ('VP Engineering', 1),
+    ('Sales Rep', 2),
+    ('Engineer', 3),
+    ('Senior Engineer', 3);
+
+-- Find hierarchy starting from CEO
+WITH RECURSIVE org_chart AS (
+    -- Base case: start with CEO
+    SELECT id, name, manager_id, 0 as level
+    FROM employees
+    WHERE manager_id IS NULL
+    
+    UNION ALL
+    
+    -- Recursive case: add direct reports
+    SELECT e.id, e.name, e.manager_id, oc.level + 1
+    FROM employees e
+    JOIN org_chart oc ON e.manager_id = oc.id
+)
+SELECT 
+    REPEAT('  ', level) || name as position_hierarchy,
+    level
+FROM org_chart
+ORDER BY level, name;
+```
+
+#### Path Building in Recursive CTEs
+
+```sql
+-- Build full paths
+WITH RECURSIVE paths AS (
+    SELECT id, name, manager_id, ARRAY[id] as path, 0 as depth
+    FROM employees
+    WHERE manager_id IS NULL
+    
+    UNION ALL
+    
+    SELECT e.id, e.name, e.manager_id, path || e.id, depth + 1
+    FROM employees e
+    JOIN paths p ON e.manager_id = p.id
+    WHERE depth < 10  -- Prevent infinite loops
+)
+SELECT id, name, path
+FROM paths
+WHERE id = 6; -- Get path to Engineer
+```
+
+#### Multiple Recursive CTEs
+
+```sql
+WITH RECURSIVE
+-- CTE 1: All team members
+team_members AS (
+    SELECT id, name, manager_id
+    FROM employees
+    WHERE manager_id = 2 -- VP Sales
+    
+    UNION ALL
+    
+    SELECT e.id, e.name, e.manager_id
+    FROM employees e
+    JOIN team_members tm ON e.manager_id = tm.id
+),
+
+-- CTE 2: Count by team
+team_stats AS (
+    SELECT COUNT(*) as team_size
+    FROM team_members
+)
+
+SELECT tm.name, ts.team_size
+FROM team_members tm
+CROSS JOIN team_stats ts;
+```
+
+---
+
+### Materialized Views with Concurrent Refresh
+
+Advanced materialized view patterns.
+
+#### Efficient Materialization
+
+```sql
+-- Create heavily aggregated materialized view
+CREATE MATERIALIZED VIEW sales_summary_mv AS
+SELECT 
+    DATE_TRUNC('day', sale_date)::date as sale_day,
+    region,
+    COUNT(*) as total_sales,
+    SUM(amount) as total_amount,
+    AVG(amount) as avg_amount,
+    MIN(amount) as min_amount,
+    MAX(amount) as max_amount
+FROM sales
+GROUP BY DATE_TRUNC('day', sale_date)::date, region;
+
+-- Create unique index for concurrent refresh
+CREATE UNIQUE INDEX idx_sales_summary_mv 
+ON sales_summary_mv(sale_day, region);
+
+-- Concurrent refresh (non-blocking)
+REFRESH MATERIALIZED VIEW CONCURRENTLY sales_summary_mv;
+
+-- Monitor refresh progress
+SELECT * FROM pg_stat_activity WHERE query LIKE '%REFRESH%';
+```
+
+#### Incremental View Updates
+
+```sql
+-- Track last update time
+CREATE TABLE mv_metadata (
+    view_name VARCHAR(100) PRIMARY KEY,
+    last_refresh TIMESTAMP
+);
+
+-- Stored procedure for incremental refresh
+CREATE PROCEDURE refresh_sales_summary()
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    REFRESH MATERIALIZED VIEW CONCURRENTLY sales_summary_mv;
+    UPDATE mv_metadata 
+    SET last_refresh = CURRENT_TIMESTAMP
+    WHERE view_name = 'sales_summary_mv';
+    COMMIT;
+END;
+$$;
+
+-- Call procedure
+CALL refresh_sales_summary();
+```
+
+---
+
+### Geospatial Queries
+
+Using PostGIS extension for location-based queries.
+
+#### Enable PostGIS
+
+```sql
+-- Install extension
+CREATE EXTENSION IF NOT EXISTS postgis;
+
+-- Verify installation
+SELECT postgis_version();
+```
+
+#### Geospatial Data Types
+
+```sql
+-- Create table with geospatial data
+CREATE TABLE locations (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    position GEOMETRY(POINT, 4326), -- Point type with SRID 4326 (WGS84)
+    coverage GEOMETRY(POLYGON, 4326)
+);
+
+-- Insert point data (longitude, latitude)
+INSERT INTO locations (name, position) VALUES
+    ('New York', ST_GeomFromText('POINT(-74.006 40.7128)', 4326)),
+    ('Los Angeles', ST_GeomFromText('POINT(-118.2437 34.0522)', 4326)),
+    ('Chicago', ST_GeomFromText('POINT(-87.6298 41.8781)', 4326));
+
+-- Query nearby locations
+SELECT name, ST_AsText(position) as coordinates
+FROM locations
+WHERE ST_DWithin(
+    position,
+    ST_GeomFromText('POINT(-74.006 40.7128)', 4326),
+    1000000 -- 1000 km
+);
+
+-- Calculate distance
+SELECT 
+    l1.name,
+    l2.name,
+    ST_Distance(l1.position, l2.position) as distance_meters,
+    ST_Distance(l1.position, l2.position) / 1000 as distance_km
+FROM locations l1
+JOIN locations l2 ON l1.id < l2.id;
+
+-- Find closest location
+SELECT name
+FROM locations
+ORDER BY position <-> ST_GeomFromText('POINT(-74.006 40.7128)', 4326)
+LIMIT 1;
+```
+
+---
+
+### Connection Pooling and Tuning
+
+Optimize PostgreSQL for application connections.
+
+#### Connection Settings
+
+```sql
+-- Check current settings
+SHOW max_connections;
+SHOW max_parallel_workers_per_gather;
+SHOW max_parallel_workers;
+
+-- Set connection limit per user
+ALTER USER app_user CONNECTION LIMIT 50;
+
+-- View current connections
+SELECT datname, usename, count(*) 
+FROM pg_stat_activity 
+GROUP BY datname, usename;
+
+-- View long-running queries
+SELECT pid, datname, usename, application_name, query_start, query
+FROM pg_stat_activity
+WHERE state = 'active'
+ORDER BY query_start DESC;
+
+-- Kill idle connections
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE state = 'idle'
+AND query_start < CURRENT_TIMESTAMP - INTERVAL '10 minutes';
+```
+
+#### Configuration Parameters
+
+```bash
+# In postgresql.conf
+shared_buffers = 256MB
+effective_cache_size = 1GB
+maintenance_work_mem = 64MB
+checkpoint_completion_target = 0.9
+wal_buffers = 16MB
+default_statistics_target = 100
+random_page_cost = 1.1
+```
+
+---
+
+### Replication and High Availability
+
+Setting up PostgreSQL replication.
+
+#### Streaming Replication Setup
+
+```sql
+-- On Primary Server
+CREATE USER replicator WITH REPLICATION ENCRYPTED PASSWORD 'password';
+
+-- In postgresql.conf on primary
+wal_level = replica
+max_wal_senders = 10
+max_replication_slots = 10
+wal_keep_size = 1GB
+
+-- In pg_hba.conf on primary
+host    replication    replicator    replica_ip/32    scram-sha-256
+
+-- On Replica Server
+pg_basebackup -h primary_ip -U replicator -D /var/lib/postgresql/14/main -P -v
+
+-- Create recovery.conf on replica
+standby_mode = 'on'
+primary_conninfo = 'host=primary_ip user=replicator password=password'
+```
+
+#### Monitoring Replication
+
+```sql
+-- Check replication status on primary
+SELECT slot_name, slot_type, active, restart_lsn 
+FROM pg_replication_slots;
+
+-- Check replication progress
+SELECT client_addr, state, write_lag, flush_lag, replay_lag
+FROM pg_stat_replication;
+
+-- Promote standby to primary
+SELECT pg_promote();
+```
+
+---
+
+### Event Triggers (DDL Logging)
+
+Capture DDL statements for auditing.
+
+```sql
+-- Create DDL audit table
+CREATE TABLE ddl_audit (
+    id SERIAL PRIMARY KEY,
+    event_type VARCHAR(50),
+    object_type VARCHAR(50),
+    object_name VARCHAR(100),
+    command_text TEXT,
+    executed_by VARCHAR(50),
+    executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create event trigger function
+CREATE FUNCTION log_ddl_events()
+RETURNS event_trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    INSERT INTO ddl_audit (event_type, object_type, object_name, command_text, executed_by)
+    VALUES (tg_event, tg_tag, current_database(), current_query(), current_user);
+END;
+$$;
+
+-- Create event trigger
+CREATE EVENT TRIGGER log_ddl_trigger
+ON ddl_command_end
+EXECUTE FUNCTION log_ddl_events();
+
+-- View DDL logs
+SELECT * FROM ddl_audit ORDER BY executed_at DESC;
+
+-- Drop event trigger
+DROP EVENT TRIGGER log_ddl_trigger;
+```
+
+---
+
+### Database Extensions
+
+Popular PostgreSQL extensions.
+
+```sql
+-- List available extensions
+SELECT * FROM pg_available_extensions;
+
+-- List installed extensions
+SELECT * FROM pg_extension;
+
+-- Install UUID extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Install PostGIS for geospatial data
+CREATE EXTENSION IF NOT EXISTS postgis;
+
+-- Install pgcrypto for encryption
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- Install hstore for key-value storage
+CREATE EXTENSION IF NOT EXISTS hstore;
+
+-- Using pgcrypto
+-- Hash password
+INSERT INTO users (username, password_hash)
+VALUES ('john', crypt('mypassword', gen_salt('bf')));
+
+-- Verify password
+SELECT * FROM users
+WHERE username = 'john' AND password_hash = crypt('mypassword', password_hash);
+
+-- Generate random string
+SELECT gen_random_uuid(); -- Generate UUID
+SELECT encode(gen_random_bytes(16), 'hex'); -- Generate random hex
+
+-- Using hstore
+CREATE TABLE settings (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    config hstore
+);
+
+INSERT INTO settings (name, config)
+VALUES ('app', 'theme=>dark, language=>en, notifications=>true'::hstore);
+
+SELECT config->'theme' FROM settings WHERE name = 'app';
+```
+
+---
+
+### Query Optimization Techniques
+
+#### Statistics and Analyze
+
+```sql
+-- Update statistics for better query planning
+ANALYZE;
+
+-- Analyze specific table
+ANALYZE users;
+
+-- View table statistics
+SELECT attname, n_distinct, null_frac
+FROM pg_stats
+WHERE tablename = 'users';
+
+-- Enable logging of query statistics
+ALTER SYSTEM SET track_io_timing = on;
+ALTER SYSTEM SET log_min_duration_statement = 1000; -- Log queries > 1 second
+
+-- Reload configuration
+SELECT pg_reload_conf();
+```
+
+#### EXPLAIN Query Plans
+
+```sql
+-- Detailed execution plan
+EXPLAIN (ANALYZE, BUFFERS, VERBOSE, TIMING) 
+SELECT * FROM users WHERE id = 1;
+
+-- Understanding output metrics
+-- Seq Scan: Full table scan
+-- Index Scan: Using index
+-- Join algorithms: Hash Join, Nested Loop, Merge Join
+-- Buffers: Shows cache efficiency (hits vs reads)
+
+-- Compare plans before and after optimization
+EXPLAIN SELECT * FROM users WHERE username = 'john';
+EXPLAIN SELECT * FROM users WHERE username = 'john' AND status = 'active';
+```
+
+#### Query Optimization Examples
+
+```sql
+-- BEFORE: Slow with calculated field
+EXPLAIN ANALYZE
+SELECT * FROM users 
+WHERE EXTRACT(YEAR FROM created_at) = 2024;
+
+-- AFTER: Fast with range condition
+EXPLAIN ANALYZE
+SELECT * FROM users 
+WHERE created_at >= '2024-01-01' AND created_at < '2025-01-01';
+
+-- Create index for better performance
+CREATE INDEX idx_users_created_at ON users(created_at);
+
+-- BEFORE: Slow with OR on separate columns
+EXPLAIN ANALYZE
+SELECT * FROM products
+WHERE category = 'electronics' OR category = 'computers';
+
+-- AFTER: Fast with IN clause
+EXPLAIN ANALYZE
+SELECT * FROM products
+WHERE category IN ('electronics', 'computers');
+
+-- BEFORE: Slow with LIKE at beginning
+EXPLAIN ANALYZE
+SELECT * FROM users WHERE username LIKE '%john%';
+
+-- AFTER: Fast with wildcard at end
+EXPLAIN ANALYZE
+SELECT * FROM users WHERE username LIKE 'john%';
+
+-- Use indexes efficiently
+CREATE INDEX idx_products_category_price ON products(category, price);
+
+-- Query benefits from index
+SELECT * FROM products
+WHERE category = 'electronics' AND price > 1000;
+```
+
+---
+
+### Monitoring and Diagnostics
+
+```sql
+-- Current database size
+SELECT pg_size_pretty(pg_database_size(current_database()));
+
+-- Table sizes
+SELECT 
+    schemaname,
+    tablename,
+    pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size
+FROM pg_tables
+WHERE schemaname = 'public'
+ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
+
+-- Index usage statistics
+SELECT 
+    schemaname,
+    tablename,
+    indexname,
+    idx_scan,
+    idx_tup_read,
+    idx_tup_fetch
+FROM pg_stat_user_indexes
+ORDER BY idx_scan DESC;
+
+-- Find unused indexes
+SELECT 
+    schemaname,
+    tablename,
+    indexname
+FROM pg_stat_user_indexes
+WHERE idx_scan = 0
+AND indexname NOT LIKE 'pg_toast%';
+
+-- Table activity statistics
+SELECT 
+    schemaname,
+    tablename,
+    seq_scan,
+    seq_tup_read,
+    idx_scan,
+    n_tup_ins,
+    n_tup_upd,
+    n_tup_del,
+    last_vacuum,
+    last_autovacuum
+FROM pg_stat_user_tables
+ORDER BY seq_scan DESC;
+
+-- Missing indexes
+SELECT schemaname, tablename, attname, n_distinct, correlation
+FROM pg_stats
+WHERE schemaname = 'public'
+AND n_distinct > 100
+AND correlation < 0.1
+ORDER BY n_distinct DESC;
+```
+
+---
+
+### Error Handling and Recovery
+
+```sql
+-- Handling errors in functions
+CREATE FUNCTION safe_divide(a DECIMAL, b DECIMAL)
+RETURNS DECIMAL
+AS $$
+BEGIN
+    IF b = 0 THEN
+        RAISE EXCEPTION 'Division by zero not allowed';
+    END IF;
+    RETURN a / b;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Error occurred: %', SQLERRM;
+        RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Get last error message
+SELECT SQLERRM;
+
+-- Trap specific errors
+CREATE FUNCTION insert_user(username VARCHAR)
+RETURNS INT
+AS $$
+DECLARE
+    new_id INT;
+BEGIN
+    INSERT INTO users (username) VALUES (username)
+    RETURNING id INTO new_id;
+    RETURN new_id;
+EXCEPTION
+    WHEN unique_violation THEN
+        RAISE EXCEPTION 'Username already exists';
+    WHEN NOT_NULL_VIOLATION THEN
+        RAISE EXCEPTION 'Username cannot be null';
+    WHEN OTHERS THEN
+        RAISE EXCEPTION 'Unexpected error: %', SQLERRM;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+---
+
+### Advanced Constraint Patterns
+
+```sql
+-- Conditional constraints using triggers
+CREATE TABLE orders (
+    id SERIAL PRIMARY KEY,
+    amount DECIMAL(10,2),
+    status VARCHAR(20),
+    payment_date DATE
+);
+
+CREATE FUNCTION validate_order()
+RETURNS TRIGGER
+AS $$
+BEGIN
+    -- If status is paid, payment_date must be set
+    IF NEW.status = 'paid' AND NEW.payment_date IS NULL THEN
+        RAISE EXCEPTION 'payment_date is required when status is paid';
+    END IF;
+    
+    -- Amount must be positive
+    IF NEW.amount <= 0 THEN
+        RAISE EXCEPTION 'Amount must be greater than 0';
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER order_validation_trigger
+BEFORE INSERT OR UPDATE ON orders
+FOR EACH ROW
+EXECUTE FUNCTION validate_order();
+
+-- Unique constraint with conditions
+CREATE UNIQUE INDEX idx_active_users_email ON users(email)
+WHERE status = 'active';
+-- Only active users must have unique email, inactive can share
+```
+
+---
+
+## Interview Questions & Answers
+
+### Basic Level Questions
+
+#### Q1: What is PostgreSQL and what are its main features?
+
+**Answer:**
+PostgreSQL is an open-source, object-relational database management system (ORDBMS) known for:
+- **ACID Compliance**: Ensures data integrity
+- **Advanced Data Types**: JSON, Arrays, UUID, Range types, Geometric types
+- **Full-Text Search**: Native full-text search capabilities
+- **Extensibility**: Support for custom types, operators, and functions
+- **JSON/JSONB Support**: Native JSON handling with performance optimization
+- **Reliability**: Mature, battle-tested system used in production
+- **Compliance**: Adheres to SQL standards
+- **Replication**: Built-in streaming replication
+- **Partitioning**: Table partitioning for performance
+
+**Key Differences from Other Databases:**
+- More feature-rich than MySQL
+- Open source (unlike SQL Server, Oracle)
+- Better compliance with SQL standards
+- Superior support for complex queries
+
+---
+
+#### Q2: Explain the difference between DELETE, TRUNCATE, and DROP.
+
+**Answer:**
+
+| Operation | Target | Speed | Rollback | Triggers | Use Case |
+|-----------|--------|-------|----------|----------|----------|
+| DELETE | Rows | Slow | Yes | Fired | Remove specific rows |
+| TRUNCATE | All rows | Fast | Yes (with transaction) | Not fired | Remove all data, keep structure |
+| DROP | Table | Fastest | Yes (with transaction) | N/A | Remove entire table |
+
+```sql
+-- DELETE - removes specific rows, fires triggers
+DELETE FROM users WHERE age < 18;
+-- Can be rolled back
+
+-- TRUNCATE - removes all rows, faster, doesn't fire triggers
+TRUNCATE TABLE users;
+-- Can be rolled back in transaction
+
+-- DROP - removes entire table structure
+DROP TABLE users;
+-- Can be rolled back in transaction
+```
+
+**Key Points:**
+- DELETE is slowest but most flexible (can delete specific rows)
+- TRUNCATE is faster (resets identity)
+- DROP removes everything including structure
+- All can be rolled back within transactions
+
+---
+
+#### Q3: What is normalization and why is it important?
+
+**Answer:**
+Normalization is the process of organizing data in a database to reduce redundancy and improve integrity.
+
+**Normal Forms:**
+
+**First Normal Form (1NF)**
+- Remove repeating groups
+- All values are atomic (indivisible)
+
+```sql
+-- NOT 1NF: phone contains multiple values
+CREATE TABLE users (
+    id INT,
+    name VARCHAR(100),
+    phones VARCHAR(100) -- "123-456-7890, 098-765-4321"
+);
+
+-- 1NF: separate table for phones
+CREATE TABLE user_phones (
+    user_id INT,
+    phone VARCHAR(20),
+    PRIMARY KEY (user_id, phone)
+);
+```
+
+**Second Normal Form (2NF)**
+- Must be in 1NF
+- Remove partial dependencies (all non-key attributes depend on entire primary key)
+
+```sql
+-- NOT 2NF: department_name depends only on department_id
+CREATE TABLE employees (
+    emp_id INT PRIMARY KEY,
+    name VARCHAR(100),
+    dept_id INT,
+    dept_name VARCHAR(100) -- Depends on dept_id, not emp_id
+);
+
+-- 2NF: separate department table
+CREATE TABLE departments (
+    dept_id INT PRIMARY KEY,
+    dept_name VARCHAR(100)
+);
+
+CREATE TABLE employees (
+    emp_id INT PRIMARY KEY,
+    name VARCHAR(100),
+    dept_id INT REFERENCES departments(dept_id)
+);
+```
+
+**Third Normal Form (3NF)**
+- Must be in 2NF
+- Remove transitive dependencies (non-key attributes should depend only on primary key)
+
+```sql
+-- NOT 3NF: city depends on zip_code, not on customer_id
+CREATE TABLE customers (
+    cust_id INT PRIMARY KEY,
+    name VARCHAR(100),
+    zip_code VARCHAR(10),
+    city VARCHAR(50) -- Depends on zip_code, not cust_id
+);
+
+-- 3NF: separate zip_code table
+CREATE TABLE zip_codes (
+    zip_code VARCHAR(10) PRIMARY KEY,
+    city VARCHAR(50)
+);
+
+CREATE TABLE customers (
+    cust_id INT PRIMARY KEY,
+    name VARCHAR(100),
+    zip_code VARCHAR(10) REFERENCES zip_codes(zip_code)
+);
+```
+
+**Benefits:**
+- Reduces data redundancy
+- Improves data integrity
+- Saves storage space
+- Makes queries efficient
+
+---
+
+#### Q4: What is the difference between INNER JOIN and LEFT JOIN?
+
+**Answer:**
+
+**INNER JOIN**: Returns only rows that have matches in both tables
+
+```sql
+SELECT users.name, orders.order_id
+FROM users
+INNER JOIN orders ON users.id = orders.user_id;
+-- Returns only users who have placed orders
+```
+
+**LEFT JOIN**: Returns all rows from left table, matching rows from right table (NULLs for non-matches)
+
+```sql
+SELECT users.name, orders.order_id
+FROM users
+LEFT JOIN orders ON users.id = orders.user_id;
+-- Returns all users, with NULL for orders if they haven't placed any
+```
+
+**Visual Comparison:**
+```
+Users:  [id=1, id=2, id=3]
+Orders: [user_id=1, user_id=2]
+
+INNER JOIN result:     id=1, id=2
+LEFT JOIN result:      id=1, id=2, id=3 (with NULLs for id=3)
+RIGHT JOIN result:     id=1, id=2
+FULL OUTER JOIN:       id=1, id=2, id=3
+```
+
+---
+
+#### Q5: What is an INDEX and why is it important?
+
+**Answer:**
+An INDEX is a data structure that improves query performance by allowing fast data retrieval, similar to a book index.
+
+**Benefits:**
+- Speeds up WHERE clauses
+- Speeds up JOIN conditions
+- Speeds up ORDER BY and GROUP BY
+- Can slow down INSERT, UPDATE, DELETE (must update index too)
+
+**Types of Indexes:**
+- **B-Tree** (default): Good for equality and range queries
+- **Hash**: Good for equality only
+- **GIN**: Good for array, JSON, full-text search
+- **GIST**: Good for geometric data and full-text search
+- **BRIN**: Good for very large tables
+
+```sql
+-- Single column index
+CREATE INDEX idx_users_email ON users(email);
+
+-- Composite index
+CREATE INDEX idx_orders_user_date ON orders(user_id, order_date);
+
+-- Unique index
+CREATE UNIQUE INDEX idx_users_username ON users(username);
+
+-- Partial index (only index certain rows)
+CREATE INDEX idx_active_users ON users(email) WHERE status = 'active';
+
+-- Index on expression
+CREATE INDEX idx_users_lower_email ON users(LOWER(email));
+
+-- GIN index for JSON
+CREATE INDEX idx_settings ON users USING GIN(settings);
+```
+
+**Cost of Indexes:**
+- Takes disk space
+- Slows down INSERT/UPDATE/DELETE
+- Requires maintenance
+
+**When to Create Indexes:**
+- Columns frequently used in WHERE clauses
+- Columns used in JOIN conditions
+- Columns used in ORDER BY
+- Columns used in GROUP BY
+
+---
+
+### Intermediate Level Questions
+
+#### Q6: What is a VIEW and what are the advantages?
+
+**Answer:**
+A VIEW is a virtual table based on the result of a SELECT query.
+
+**Advantages:**
+- Simplifies complex queries
+- Provides security (hide sensitive columns)
+- Provides abstraction layer
+- Can be used like regular tables in SELECT
+
+```sql
+-- Create view to hide sensitive columns
+CREATE VIEW user_public_info AS
+SELECT id, username, email
+FROM users
+WHERE status = 'active';
+
+-- Grant access to view instead of table
+GRANT SELECT ON user_public_info TO public_user;
+
+-- Users can't see other sensitive columns
+SELECT * FROM user_public_info; -- Works
+SELECT password_hash FROM users; -- Permission denied
+```
+
+**Difference between View and Materialized View:**
+
+| Feature | View | Materialized View |
+|---------|------|-------------------|
+| Storage | Virtual (no storage) | Stores results |
+| Updates | Always fresh | Manual refresh needed |
+| Performance | Slower (computes each time) | Faster (pre-computed) |
+| Use Case | Complex queries, security | Heavy aggregations |
+
+```sql
+-- Regular view (computed on each access)
+CREATE VIEW user_stats AS
+SELECT user_id, COUNT(*) as post_count
+FROM posts
+GROUP BY user_id;
+
+-- Materialized view (stores results)
+CREATE MATERIALIZED VIEW user_stats_mv AS
+SELECT user_id, COUNT(*) as post_count
+FROM posts
+GROUP BY user_id;
+
+-- Must refresh materialized view
+REFRESH MATERIALIZED VIEW user_stats_mv;
+```
+
+---
+
+#### Q7: Explain the concept of ACID properties with examples.
+
+**Answer:**
+ACID properties ensure database reliability and data integrity.
+
+**Atomicity**: Transaction is all-or-nothing
+```sql
+-- Both statements execute or both rollback
+BEGIN;
+  UPDATE accounts SET balance = balance - 100 WHERE id = 1;
+  UPDATE accounts SET balance = balance + 100 WHERE id = 2;
+COMMIT; -- Both succeed or both fail
+```
+
+**Consistency**: Database moves from one valid state to another
+```sql
+-- Constraints are checked
+CREATE TABLE accounts (
+    id INT PRIMARY KEY,
+    balance DECIMAL CHECK (balance >= 0) -- Consistency rule
+);
+
+-- This fails - would violate constraint
+BEGIN;
+  UPDATE accounts SET balance = -100; -- Violates CHECK
+ROLLBACK; -- Automatically rolled back
+```
+
+**Isolation**: Concurrent transactions don't interfere
+```sql
+-- Transaction 1
+BEGIN;
+  SELECT balance FROM accounts WHERE id = 1; -- 1000
+
+-- Transaction 2 (concurrent)
+BEGIN;
+  UPDATE accounts SET balance = 500 WHERE id = 1;
+  COMMIT;
+
+-- Back to Transaction 1
+  SELECT balance FROM accounts WHERE id = 1; 
+  -- Depending on isolation level, may see 1000 or 500
+```
+
+**Durability**: Committed data persists even if system crashes
+```sql
+BEGIN;
+  UPDATE accounts SET balance = balance - 100 WHERE id = 1;
+COMMIT; -- Data persists even if server crashes immediately after
+```
+
+---
+
+#### Q8: What is a FOREIGN KEY and what are its constraints?
+
+**Answer:**
+A FOREIGN KEY ensures referential integrity by linking one table to another.
+
+```sql
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(100)
+);
+
+CREATE TABLE posts (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255),
+    user_id INTEGER REFERENCES users(id)
+);
+```
+
+**ON DELETE and ON UPDATE Actions:**
+
+```sql
+-- CASCADE: Delete/update child when parent changes
+CREATE TABLE posts (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE
+);
+-- When user is deleted, their posts are too
+
+-- SET NULL: Set to NULL when parent changes
+CREATE TABLE comments (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+-- When user is deleted, user_id becomes NULL
+
+-- SET DEFAULT: Set to default when parent changes
+CREATE TABLE ratings (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER DEFAULT 1 REFERENCES users(id) ON DELETE SET DEFAULT
+);
+
+-- RESTRICT: Prevent deletion if child exists
+CREATE TABLE orders (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE RESTRICT
+);
+-- Can't delete user if they have orders
+
+-- NO ACTION: Similar to RESTRICT, checked at end of statement
+CREATE TABLE subscriptions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE NO ACTION
+);
+```
+
+**Benefits:**
+- Prevents orphaned records
+- Maintains data integrity
+- Documents relationships
+- Can automatically handle deletions
+
+---
+
+#### Q9: What are Stored Procedures and Functions? What's the difference?
+
+**Answer:**
+
+**Functions**:
+- Return a value
+- Can be used in SELECT statements
+- Primarily for computation
+
+```sql
+CREATE FUNCTION get_user_age(user_id INT)
+RETURNS INT
+AS $$
+BEGIN
+    RETURN (SELECT EXTRACT(YEAR FROM AGE(dob)) FROM users WHERE id = user_id);
+END;
+$$ LANGUAGE plpgsql;
+
+SELECT get_user_age(1); -- Can be used in SELECT
+SELECT * FROM users WHERE get_user_age(id) > 18;
+```
+
+**Procedures**:
+- Don't return value (or return via OUT parameters)
+- Called with CALL statement
+- Primarily for data modification
+
+```sql
+CREATE PROCEDURE transfer_money(from_id INT, to_id INT, amount DECIMAL)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    UPDATE accounts SET balance = balance - amount WHERE id = from_id;
+    UPDATE accounts SET balance = balance + amount WHERE id = to_id;
+    COMMIT;
+END;
+$$;
+
+CALL transfer_money(1, 2, 100); -- Called with CALL
+```
+
+**Comparison:**
+
+| Feature | Function | Procedure |
+|---------|----------|-----------|
+| Return Value | Yes | No (or OUT) |
+| Callable in SELECT | Yes | No |
+| Used in WHERE | Yes | No |
+| COMMIT/ROLLBACK | Limited | Full control |
+| Use Case | Computations | Data changes |
+
+---
+
+#### Q10: What is normalization vs denormalization?
+
+**Answer:**
+
+**Normalization**: Organizing data to eliminate redundancy
+- Reduces storage space
+- Improves data integrity
+- Can slow down queries (more JOINs needed)
+- Better for OLTP (Online Transaction Processing)
+
+**Denormalization**: Adding redundancy to improve query performance
+- Takes more storage
+- Risk of data inconsistency
+- Faster queries (fewer JOINs)
+- Better for OLAP (Online Analytical Processing)
+
+```sql
+-- NORMALIZED: Multiple tables
+SELECT u.username, COUNT(p.id) as post_count
+FROM users u
+LEFT JOIN posts p ON u.id = p.user_id
+GROUP BY u.id, u.username;
+
+-- DENORMALIZED: Redundant column
+CREATE TABLE users (
+    id INT PRIMARY KEY,
+    username VARCHAR(100),
+    post_count INT -- Redundant, must be updated
+);
+
+-- When adding post, must also update user's post_count
+INSERT INTO posts (user_id, title) VALUES (1, 'New Post');
+UPDATE users SET post_count = post_count + 1 WHERE id = 1; -- Extra step
+```
+
+**When to Denormalize:**
+- Very heavy read workload
+- Real-time analytics needed
+- Can maintain data consistency via triggers
+
+```sql
+-- Use trigger to keep denormalized data in sync
+CREATE FUNCTION increment_post_count()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE users SET post_count = post_count + 1 WHERE id = NEW.user_id;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER post_count_trigger
+AFTER INSERT ON posts
+FOR EACH ROW
+EXECUTE FUNCTION increment_post_count();
+```
+
+---
+
+### Advanced Level Questions
+
+#### Q11: Explain EXPLAIN ANALYZE and how to optimize slow queries.
+
+**Answer:**
+EXPLAIN ANALYZE shows how PostgreSQL executes a query and where time is spent.
+
+```sql
+-- Basic EXPLAIN
+EXPLAIN SELECT * FROM users WHERE id = 1;
+
+-- With actual execution stats
+EXPLAIN ANALYZE SELECT * FROM users WHERE id = 1;
+
+-- Full details
+EXPLAIN (ANALYZE, BUFFERS, VERBOSE) SELECT * FROM users WHERE id = 1;
+```
+
+**Output Components:**
+
+```
+Seq Scan on users (cost=0.00..1000.00 rows=50000 width=100)
+  Filter: (id = 1)
+  Buffers: shared hit=10
+  Actual time: 0.01..5.23 rows=1
+```
+
+- **Seq Scan**: Sequential scan of entire table (slow for large tables)
+- **Index Scan**: Using an index (faster)
+- **cost**: Estimated query cost (lower is better)
+- **rows**: Estimated number of rows returned
+- **Buffers**: Memory usage statistics
+- **Actual time**: Real execution time
+
+**Optimization Strategies:**
+
+```sql
+-- PROBLEM 1: Seq Scan when index should be used
+EXPLAIN ANALYZE SELECT * FROM users WHERE username = 'john';
+-- Solution: Create index
+CREATE INDEX idx_users_username ON users(username);
+
+-- PROBLEM 2: Function in WHERE clause prevents index use
+EXPLAIN ANALYZE SELECT * FROM users WHERE UPPER(username) = 'JOHN';
+-- Solution: Create expression index
+CREATE INDEX idx_users_upper_username ON users(UPPER(username));
+
+-- PROBLEM 3: Multiple conditions, only one indexed
+EXPLAIN ANALYZE SELECT * FROM orders WHERE user_id = 1 AND status = 'pending';
+-- Solution: Composite index
+CREATE INDEX idx_orders_user_status ON orders(user_id, status);
+
+-- PROBLEM 4: OR condition
+EXPLAIN ANALYZE SELECT * FROM products WHERE category = 'A' OR category = 'B';
+-- Solution: Use IN clause (often faster)
+SELECT * FROM products WHERE category IN ('A', 'B');
+
+-- PROBLEM 5: LIKE with leading wildcard
+EXPLAIN ANALYZE SELECT * FROM users WHERE email LIKE '%@gmail.com';
+-- Solution: Different approach or trigram index
+CREATE INDEX idx_email_trigram ON users USING GIN(email gin_trgm_ops);
+```
+
+**Query Optimization Checklist:**
+1. Identify slow queries with EXPLAIN ANALYZE
+2. Check if indexes exist on filtered columns
+3. Use appropriate data types
+4. Avoid functions in WHERE when possible
+5. Use LIMIT for large result sets
+6. Batch operations
+7. Consider denormalization for heavy reads
+8. Update statistics with ANALYZE
+
+---
+
+#### Q12: What are Transactions and Isolation Levels?
+
+**Answer:**
+Transactions group SQL statements into atomic units. Isolation Levels determine how concurrent transactions interact.
+
+**Four Isolation Levels:**
+
+```sql
+-- 1. READ UNCOMMITTED (PostgreSQL actually uses READ COMMITTED)
+-- Can read uncommitted changes from other transactions
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+
+-- 2. READ COMMITTED (Default)
+-- Can only read committed changes
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+BEGIN;
+  SELECT balance FROM accounts WHERE id = 1; -- 1000
+  -- Other transaction commits an update to 500
+  SELECT balance FROM accounts WHERE id = 1; -- Now sees 500
+COMMIT;
+
+-- 3. REPEATABLE READ
+-- Same data throughout transaction
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+BEGIN;
+  SELECT balance FROM accounts WHERE id = 1; -- 1000
+  -- Other transaction commits an update to 500
+  SELECT balance FROM accounts WHERE id = 1; -- Still sees 1000
+COMMIT;
+
+-- 4. SERIALIZABLE
+-- Most strict, acts as if transactions run sequentially
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+BEGIN;
+  -- No conflicts with concurrent transactions possible
+COMMIT;
+```
+
+**Transaction Example with Savepoints:**
+
+```sql
+BEGIN;
+  UPDATE accounts SET balance = balance - 100 WHERE id = 1;
+  SAVEPOINT before_second_update;
+  
+  UPDATE accounts SET balance = balance + 100 WHERE id = 2; -- Error
+  
+  ROLLBACK TO SAVEPOINT before_second_update; -- Undo second update
+  -- First update still stands
+  
+COMMIT;
+```
+
+**Isolation Level Effects:**
+
+| Issue | READ COMMITTED | REPEATABLE READ | SERIALIZABLE |
+|-------|---|---|---|
+| Dirty Read | No | No | No |
+| Non-Repeatable Read | Yes | No | No |
+| Phantom Read | Yes | Yes | No |
+
+---
+
+#### Q13: What are Window Functions and when to use them?
+
+**Answer:**
+Window Functions perform calculations across related rows without collapsing them into a single row.
+
+```sql
+-- ROW_NUMBER: Unique number for each row
+SELECT 
+  ROW_NUMBER() OVER (ORDER BY salary DESC) as rank,
+  name, salary
+FROM employees;
+
+-- RANK: Same rank for equal values, skips numbers
+SELECT 
+  RANK() OVER (ORDER BY salary DESC) as rank,
+  name, salary
+FROM employees;
+
+-- DENSE_RANK: Same rank for equal values, no skips
+SELECT 
+  DENSE_RANK() OVER (ORDER BY salary DESC) as rank,
+  name, salary
+FROM employees;
+
+-- LAG/LEAD: Access previous/next row
+SELECT 
+  name,
+  salary,
+  LAG(salary) OVER (ORDER BY hire_date) as prev_salary,
+  LEAD(salary) OVER (ORDER BY hire_date) as next_salary
+FROM employees;
+
+-- Running total
+SELECT 
+  name,
+  salary,
+  SUM(salary) OVER (ORDER BY hire_date) as running_total
+FROM employees;
+
+-- Percentage within group
+SELECT 
+  name,
+  department,
+  salary,
+  ROUND(100.0 * salary / SUM(salary) OVER (PARTITION BY department), 2) as pct_of_dept
+FROM employees;
+```
+
+**Use Cases:**
+- Ranking and numbering rows
+- Running totals and moving averages
+- Comparing current row with previous/next
+- Top N per group queries
+- Calculating percentages within groups
+
+**Top 3 Employees per Department:**
+
+```sql
+SELECT * FROM (
+  SELECT 
+    name,
+    department,
+    salary,
+    ROW_NUMBER() OVER (PARTITION BY department ORDER BY salary DESC) as rank
+  FROM employees
+) ranked
+WHERE rank <= 3;
+```
+
+---
+
+#### Q14: What are Triggers and their use cases?
+
+**Answer:**
+Triggers are functions that automatically execute in response to specific events (INSERT, UPDATE, DELETE).
+
+**Use Cases:**
+
+1. **Audit Trail**
+```sql
+CREATE TABLE user_audit (
+  id SERIAL PRIMARY KEY,
+  user_id INT,
+  action VARCHAR(50),
+  changed_at TIMESTAMP
+);
+
+CREATE FUNCTION audit_user_changes()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO user_audit (user_id, action, changed_at)
+  VALUES (NEW.id, TG_OP, CURRENT_TIMESTAMP);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER user_audit_trigger
+AFTER INSERT OR UPDATE OR DELETE ON users
+FOR EACH ROW
+EXECUTE FUNCTION audit_user_changes();
+```
+
+2. **Enforce Business Rules**
+```sql
+CREATE FUNCTION validate_age()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.age < 18 THEN
+    RAISE EXCEPTION 'Users must be at least 18 years old';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER age_validation_trigger
+BEFORE INSERT OR UPDATE ON users
+FOR EACH ROW
+EXECUTE FUNCTION validate_age();
+```
+
+3. **Update Denormalized Data**
+```sql
+CREATE FUNCTION update_user_post_count()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    UPDATE users SET post_count = post_count + 1 WHERE id = NEW.user_id;
+  ELSIF TG_OP = 'DELETE' THEN
+    UPDATE users SET post_count = post_count - 1 WHERE id = OLD.user_id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER post_count_trigger
+AFTER INSERT OR DELETE ON posts
+FOR EACH ROW
+EXECUTE FUNCTION update_user_post_count();
+```
+
+4. **Auto-update Timestamps**
+```sql
+CREATE FUNCTION update_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = CURRENT_TIMESTAMP;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER timestamp_trigger
+BEFORE UPDATE ON users
+FOR EACH ROW
+EXECUTE FUNCTION update_timestamp();
+```
+
+**Trigger Timing:**
+- **BEFORE**: Execute before change is applied
+- **AFTER**: Execute after change is applied
+- **INSTEAD OF**: Execute instead of the change
+
+---
+
+#### Q15: What is the N+1 Query Problem and how to solve it?
+
+**Answer:**
+The N+1 Problem occurs when you need to query the database once for each related entity, causing N+1 queries total.
+
+**Problem Example:**
+
+```sql
+-- Get all users
+SELECT * FROM users; -- Query 1
+
+-- For EACH user, get their posts
+-- This executes N times (once per user)
+SELECT * FROM posts WHERE user_id = 1;
+SELECT * FROM posts WHERE user_id = 2;
+-- ... N more queries
+-- Total: 1 + N queries
+```
+
+**Solution 1: Use JOIN**
+
+```sql
+-- Single query with JOIN
+SELECT u.*, p.*
+FROM users u
+LEFT JOIN posts p ON u.id = p.user_id;
+```
+
+**Solution 2: Use Subquery**
+
+```sql
+SELECT u.*, 
+  (SELECT array_agg(p) FROM posts p WHERE p.user_id = u.id) as posts
+FROM users u;
+```
+
+**Solution 3: Use Aggregate Function**
+
+```sql
+SELECT 
+  u.*,
+  COUNT(p.id) as post_count,
+  array_agg(p.title) as post_titles
+FROM users u
+LEFT JOIN posts p ON u.id = p.user_id
+GROUP BY u.id;
+```
+
+**Solution 4: In Application Code (with batching)**
+
+```sql
+-- Instead of: for each user ID, query posts
+-- Do this: query all posts at once
+SELECT * FROM posts WHERE user_id = ANY(ARRAY[1,2,3,4,5]);
+
+-- Then in application, associate posts to users
+```
+
+**Best Practice: Use Eager Loading**
+- Load related data upfront
+- Use JOINs or specific queries
+- Avoid lazy loading in loops
+- Consider caching for frequently accessed data
+
+---
+
+#### Q16: What are the best practices for database design?
+
+**Answer:**
+
+**1. Use Appropriate Data Types**
+```sql
+-- Bad
+CREATE TABLE products (
+  id VARCHAR(50),          -- Should be INT or SERIAL
+  price VARCHAR(100),      -- Should be DECIMAL
+  is_active VARCHAR(10)    -- Should be BOOLEAN
+);
+
+-- Good
+CREATE TABLE products (
+  id SERIAL PRIMARY KEY,
+  price DECIMAL(10,2),
+  is_active BOOLEAN DEFAULT TRUE
+);
+```
+
+**2. Normalize Your Database**
+```sql
+-- Bad: Repeating groups
+CREATE TABLE employees (
+  id INT PRIMARY KEY,
+  name VARCHAR(100),
+  skills VARCHAR(255) -- "Java, Python, Go"
+);
+
+-- Good: Separate table
+CREATE TABLE employee_skills (
+  employee_id INT,
+  skill VARCHAR(100),
+  PRIMARY KEY (employee_id, skill)
+);
+```
+
+**3. Use Constraints**
+```sql
+CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  username VARCHAR(100) NOT NULL UNIQUE,
+  email VARCHAR(100) NOT NULL UNIQUE,
+  age INTEGER CHECK (age >= 0),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE orders (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  amount DECIMAL(10,2) CHECK (amount > 0)
+);
+```
+
+**4. Index Strategically**
+```sql
+-- Columns in WHERE clauses
+CREATE INDEX idx_users_email ON users(email);
+
+-- Columns in JOIN conditions
+CREATE INDEX idx_orders_user_id ON orders(user_id);
+
+-- Composite indexes for common queries
+CREATE INDEX idx_orders_user_date ON orders(user_id, order_date);
+
+-- Don't over-index
+-- Each index slows INSERT/UPDATE/DELETE
+```
+
+**5. Use Transactions**
+```sql
+BEGIN;
+  INSERT INTO orders (user_id, amount) VALUES (1, 100);
+  INSERT INTO order_items (order_id, product_id) VALUES (LASTVAL(), 5);
+COMMIT;
+```
+
+**6. Plan for Growth**
+```sql
+-- Use SERIAL or BIGSERIAL instead of random IDs
+CREATE TABLE large_table (
+  id BIGSERIAL PRIMARY KEY, -- Can grow very large
+  data TEXT
+);
+
+-- Partition large tables
+CREATE TABLE events (
+  id SERIAL,
+  event_date DATE,
+  data TEXT,
+  PRIMARY KEY (id, event_date)
+) PARTITION BY RANGE (EXTRACT(YEAR FROM event_date));
+```
+
+**7. Security**
+```sql
+-- Use row-level security
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY user_isolation ON users
+  USING (id = current_user_id());
+
+-- Encrypt sensitive data
+CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  password_hash VARCHAR(255), -- Use pgcrypto for hashing
+  ssn BYTEA -- Encrypt with pgcrypto
+);
+```
+
+**8. Documentation**
+```sql
+-- Add comments to tables and columns
+COMMENT ON TABLE users IS 'Stores user account information';
+COMMENT ON COLUMN users.email IS 'Unique email address';
+
+-- View comments
+SELECT * FROM information_schema.tables WHERE table_name = 'users';
+```
+
+---
+
+#### Q17: What are CTEs (Common Table Expressions) and their benefits?
+
+**Answer:**
+CTEs are temporary named result sets that can be referenced in SELECT, INSERT, UPDATE, DELETE, or CREATE VIEW statements.
+
+**Simple CTE:**
+```sql
+WITH active_users AS (
+  SELECT * FROM users WHERE status = 'active'
+)
+SELECT * FROM active_users WHERE age > 30;
+```
+
+**Multiple CTEs:**
+```sql
+WITH 
+user_posts AS (
+  SELECT user_id, COUNT(*) as post_count
+  FROM posts
+  GROUP BY user_id
+),
+active_users AS (
+  SELECT * FROM users WHERE status = 'active'
+)
+SELECT u.username, up.post_count
+FROM active_users u
+JOIN user_posts up ON u.id = up.user_id;
+```
+
+**Recursive CTE (Hierarchical Data):**
+```sql
+-- Find all managers and reports
+WITH RECURSIVE org_chart AS (
+  -- Base case: CEO (no manager)
+  SELECT id, name, manager_id, 0 as level
+  FROM employees
+  WHERE manager_id IS NULL
+  
+  UNION ALL
+  
+  -- Recursive case: add all reports
+  SELECT e.id, e.name, e.manager_id, oc.level + 1
+  FROM employees e
+  JOIN org_chart oc ON e.manager_id = oc.id
+)
+SELECT * FROM org_chart;
+```
+
+**Benefits of CTEs:**
+1. **Readability**: Break complex queries into logical parts
+2. **Reusability**: Reference same CTE multiple times
+3. **Maintainability**: Easier to modify and debug
+4. **Performance**: Can be materialized or optimized by query planner
+
+**CTE vs Subquery:**
+```sql
+-- Subquery (can be hard to read)
+SELECT * FROM (
+  SELECT user_id, COUNT(*) as post_count
+  FROM posts
+  GROUP BY user_id
+) post_counts
+WHERE post_count > 10;
+
+-- CTE (clearer intent)
+WITH post_counts AS (
+  SELECT user_id, COUNT(*) as post_count
+  FROM posts
+  GROUP BY user_id
+)
+SELECT * FROM post_counts
+WHERE post_count > 10;
+```
+
+---
+
+#### Q18: How do you handle pagination in PostgreSQL?
+
+**Answer:**
+
+**Basic Pagination with LIMIT and OFFSET:**
+```sql
+-- Page 1 (10 items per page)
+SELECT * FROM products
+ORDER BY id
+LIMIT 10 OFFSET 0;
+
+-- Page 2
+SELECT * FROM products
+ORDER BY id
+LIMIT 10 OFFSET 10;
+
+-- Page 3
+SELECT * FROM products
+ORDER BY id
+LIMIT 10 OFFSET 20;
+```
+
+**Problem with OFFSET:**
+- Gets slower with larger offsets
+- OFFSET 1000000 LIMIT 10 has to skip 1 million rows
+
+**Solution 1: Keyset Pagination (Cursor-based)**
+```sql
+-- First page (get first 10 items)
+SELECT * FROM products
+WHERE id > 0
+ORDER BY id
+LIMIT 11; -- Get 11 to determine if more exist
+
+-- Next page (using last ID from previous page as cursor)
+-- If last ID was 10
+SELECT * FROM products
+WHERE id > 10
+ORDER BY id
+LIMIT 11;
+
+-- Much faster for large offsets
+```
+
+**Solution 2: Use Row Numbers**
+```sql
+SELECT * FROM (
+  SELECT *, ROW_NUMBER() OVER (ORDER BY id) as row_num
+  FROM products
+) ranked
+WHERE row_num BETWEEN 11 AND 20; -- Get rows 11-20 (page 2)
+```
+
+**Solution 3: Count Total Pages**
+```sql
+-- With total count
+SELECT 
+  *,
+  (SELECT COUNT(*) FROM products) as total_count,
+  CEIL((SELECT COUNT(*) FROM products)::numeric / 10) as total_pages
+FROM products
+ORDER BY id
+LIMIT 10 OFFSET 0;
+```
+
+**Best Practice for APIs:**
+```sql
+-- Use cursor (keyset) pagination
+-- Instead of: ?page=2&per_page=10
+-- Use: ?cursor=last_id&per_page=10
+
+-- In application:
+-- 1. Always order by a unique column
+-- 2. Remember the last value seen
+-- 3. Use it to get next batch
+-- 4. Much faster and more efficient
+```
+
+---
+
+#### Q19: Explain Deadlocks and how to prevent them.
+
+**Answer:**
+A deadlock occurs when two transactions wait for each other to release locks, causing both to hang indefinitely.
+
+**Deadlock Example:**
+```
+Transaction A: Locks Table 1, waits for Table 2
+Transaction B: Locks Table 2, waits for Table 1
+Result: Both wait forever (deadlock)
+```
+
+**Code Example of Deadlock:**
+```sql
+-- Connection 1 (Transaction A)
+BEGIN;
+  UPDATE users SET balance = balance - 100 WHERE id = 1;
+  -- Now waiting for Transaction B to release id = 2
+  UPDATE users SET balance = balance + 100 WHERE id = 2;
+COMMIT;
+
+-- Connection 2 (Transaction B) - Concurrent
+BEGIN;
+  UPDATE users SET balance = balance - 100 WHERE id = 2;
+  -- Now waiting for Transaction A to release id = 1
+  UPDATE users SET balance = balance + 100 WHERE id = 1;
+COMMIT;
+
+-- Result: Deadlock!
+```
+
+**Prevention Strategies:**
+
+**1. Consistent Lock Order**
+```sql
+-- Always access records in same order
+-- Connection 1
+BEGIN;
+  UPDATE users SET balance = balance - 100 WHERE id = 1; -- id = 1 first
+  UPDATE users SET balance = balance + 100 WHERE id = 2; -- id = 2 second
+COMMIT;
+
+-- Connection 2 (must use same order)
+BEGIN;
+  UPDATE users SET balance = balance - 100 WHERE id = 1; -- id = 1 first
+  UPDATE users SET balance = balance + 100 WHERE id = 2; -- id = 2 second
+COMMIT;
+```
+
+**2. Use Explicit Locking**
+```sql
+BEGIN;
+  -- Lock in consistent order
+  SELECT * FROM users WHERE id IN (1, 2) FOR UPDATE ORDER BY id;
+  UPDATE users SET balance = balance - 100 WHERE id = 1;
+  UPDATE users SET balance = balance + 100 WHERE id = 2;
+COMMIT;
+```
+
+**3. Short Transactions**
+```sql
+-- Bad: Long transaction increases lock time
+BEGIN;
+  UPDATE users SET balance = balance - 100 WHERE id = 1;
+  -- Long running operation
+  PERFORM sleep(5);
+  UPDATE users SET balance = balance + 100 WHERE id = 2;
+COMMIT;
+
+-- Good: Do operations outside transaction
+UPDATE users SET balance = balance - 100 WHERE id = 1;
+PERFORM sleep(5); -- Outside transaction
+UPDATE users SET balance = balance + 100 WHERE id = 2;
+```
+
+**4. Timeout**
+```sql
+-- Set lock timeout
+SET lock_timeout = '3s'; -- Kill transaction after 3 seconds waiting
+BEGIN;
+  UPDATE users SET balance = balance - 100 WHERE id = 1;
+  UPDATE users SET balance = balance + 100 WHERE id = 2;
+COMMIT;
+```
+
+**5. Retry Logic in Application**
+```sql
+-- Application retries transaction if deadlock occurs
+MAX_RETRIES = 5
+for attempt in range(MAX_RETRIES):
+    try:
+        execute_transaction()
+        break
+    except DeadlockError:
+        if attempt < MAX_RETRIES - 1:
+            wait(2^attempt)  # Exponential backoff
+            continue
+        else:
+            raise
+```
+
+---
+
+#### Q20: What is the difference between SQL Injection and how to prevent it?
+
+**Answer:**
+SQL Injection is a security vulnerability where attackers insert malicious SQL code into input fields.
+
+**Vulnerable Code:**
+```sql
+-- Bad: String concatenation (SQL Injection vulnerable)
+user_input = "John'; DROP TABLE users; --"
+query = "SELECT * FROM users WHERE username = '" + user_input + "'"
+-- Results in: SELECT * FROM users WHERE username = 'John'; DROP TABLE users; --'
+-- Drops the entire users table!
+```
+
+**Prevention Method 1: Parameterized Queries (Prepared Statements)**
+```sql
+-- Good: Use placeholders
+PREPARE user_query (VARCHAR) AS
+SELECT * FROM users WHERE username = $1;
+
+EXECUTE user_query('John');
+EXECUTE user_query('John''; DROP TABLE users; --'); -- Safe, treated as string
+```
+
+**Prevention Method 2: Use ORM/Query Builders**
+```javascript
+// In Node.js with parameterized queries
+const query = 'SELECT * FROM users WHERE username = $1';
+const result = await db.query(query, [username]);
+```
+
+**Prevention Method 3: Input Validation**
+```sql
+-- Validate input format before using
+CREATE FUNCTION is_valid_username(input VARCHAR)
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN input ~ '^[a-zA-Z0-9_]{3,50}$'; -- Only alphanumeric and underscore
+END;
+$$ LANGUAGE plpgsql;
+
+SELECT * FROM users WHERE is_valid_username(input) AND username = input;
+```
+
+**Prevention Method 4: Stored Procedures with Validation**
+```sql
+CREATE PROCEDURE get_user_safe(
+  IN username_input VARCHAR,
+  OUT user_id INT,
+  OUT username VARCHAR
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  -- Validate input
+  IF username_input ~ '^[a-zA-Z0-9_]+$' THEN
+    SELECT id, username INTO user_id, username
+    FROM users
+    WHERE username = username_input;
+  ELSE
+    RAISE EXCEPTION 'Invalid username format';
+  END IF;
+END;
+$$;
+
+CALL get_user_safe('john', user_id, username);
+```
+
+**Prevention Checklist:**
+1. ✅ Always use parameterized queries
+2. ✅ Never concatenate user input into SQL
+3. ✅ Validate and sanitize input
+4. ✅ Use ORMs/Query builders
+5. ✅ Follow principle of least privilege (limited DB user permissions)
+6. ✅ Use prepared statements
+7. ✅ Log suspicious queries
+8. ✅ Use Web Application Firewall (WAF)
+
+---
+
+## Conclusion
+
+PostgreSQL is a powerful relational database with advanced features suitable for complex applications. Key takeaways:
+
+1. **Design**: Normalize database schema, use appropriate data types and constraints
+2. **Indexing**: Create indexes on frequently queried columns, use partial and expression indexes
+3. **Optimization**: Use EXPLAIN ANALYZE to understand query performance, partition large tables
+4. **Security**: Implement proper authentication, authorization, encryption, and audit trails
+5. **Backup**: Regular backups ensure data recovery, use continuous archiving for point-in-time recovery
+6. **Transactions**: Use transactions for data consistency, understand isolation levels
+7. **Advanced Features**: Utilize views, triggers, stored procedures, window functions, CTEs
+8. **Extensions**: Leverage PostGIS for geospatial queries, pgcrypto for encryption, JSON for flexible data
+9. **Replication**: Setup streaming replication for high availability
+10. **Monitoring**: Use system views to monitor performance, identify bottlenecks, and optimize
+
+Practice regularly and explore PostgreSQL documentation for deeper understanding of each topic. Start with fundamentals, progressively move to intermediate topics, and master advanced techniques for production-grade applications.
