@@ -1,0 +1,7295 @@
+# KUBERNETES COMPLETE THEORY NOTES
+
+## Table of Contents
+1. [Introduction](#introduction)
+2. [Core Concepts Explained](#concepts)
+3. [BASIC LEVEL - Fundamentals](#basic)
+4. [INTERMEDIATE LEVEL - Practical Deployment](#intermediate)
+5. [ADVANCED LEVEL - Production Patterns](#advanced)
+6. [Architecture & Components](#architecture)
+7. [Installation & Setup](#installation)
+8. [Pods & Deployments](#pods-deployments)
+9. [Services & Networking](#services-networking)
+10. [Storage & Volumes](#storage-volumes)
+11. [Configuration Management](#configuration)
+12. [Security](#security)
+13. [Scaling & Load Balancing](#scaling)
+14. [Monitoring & Logging](#monitoring)
+15. [Practical Examples](#examples)
+16. [Best Practices](#best-practices)
+17. [Troubleshooting](#troubleshooting)
+
+---
+
+## INTRODUCTION
+
+### What is Kubernetes?
+
+**Kubernetes (K8s)** is an open-source container orchestration platform that automates the deployment, scaling, and management of containerized applications across clusters of machines.
+
+#### Key Characteristics:
+
+```
+Kubernetes = Container Orchestrator
+
+Purpose: Manage containers at scale
+- Automated deployment
+- Scaling (up/down automatically)
+- Load balancing
+- Self-healing
+- Rolling updates
+- Resource optimization
+
+Type: Open-source (CNCF project)
+      Production-ready
+      Enterprise support available
+      
+Popularity: De facto standard for container orchestration
+           Used by 60%+ of enterprises
+           Largest container ecosystem
+           Multiple cloud providers support
+```
+
+#### Why Kubernetes?
+
+```
+BEFORE (Manual Container Management):
+├─ Developer: Deploy Docker containers manually
+├─ Operations: SSH into servers
+├─ Monitor: Check logs manually
+├─ Scale: Add servers, update configs
+├─ Failures: Manual restart and recovery
+├─ Updates: Stop, update, restart (downtime)
+├─ Resource Mgmt: Manual CPU/memory allocation
+└─ Networking: Manual port mapping
+
+Problems:
+❌ Time-consuming (3+ weeks to deploy 100 instances)
+❌ Error-prone (manual mistakes)
+❌ No self-healing (container crashes = manual fix)
+❌ Downtime during updates
+❌ Resource waste (no optimization)
+❌ Complex multi-region setup
+❌ Cost: $500k/year in operations staff
+
+AFTER (Kubernetes Automation):
+├─ Developer: Define deployment in YAML
+├─ Kubernetes: Automates everything
+├─ Self-healing: Auto-restart failed containers
+├─ Scale: Auto-scale up/down based on load
+├─ Rolling Updates: Zero-downtime deploys
+├─ Load Balancing: Automatic across all instances
+├─ Resource Optimization: Bin-packing
+└─ Networking: Automatic service discovery
+
+Benefits:
+✓ Fast deployment (15 minutes for 100 instances)
+✓ Reliable (self-heals automatically)
+✓ Zero-downtime updates
+✓ Auto-scaling (save resources)
+✓ Multi-region/cloud easy
+✓ Cost: $50k/year (automation replaces manual)
+✓ 10x productivity improvement
+
+Business Impact:
+- Deploy faster
+- Fewer outages
+- Lower operational costs
+- Better resource utilization
+- Faster incident recovery
+- $450k annual savings per startup
+```
+
+---
+
+## CORE CONCEPTS EXPLAINED
+
+### 1. Containers vs Virtual Machines - Understanding the Foundation
+
+**Concept:**
+Containers are lightweight, isolated environments for applications. Kubernetes orchestrates containers, not VMs.
+
+**Deep Dive:**
+
+```
+VIRTUAL MACHINES (VMs):
+┌─────────────────────────────────────────────┐
+│         Host Operating System               │
+│ ┌───────────┐ ┌───────────┐ ┌───────────┐ │
+│ │ Hypervisor│ │ Hypervisor│ │ Hypervisor│ │
+│ ├─────────────┼─────────────┼─────────────┤
+│ │   VM 1      │    VM 2     │    VM 3     │
+│ ├─────────────┼─────────────┼─────────────┤
+│ │OS + Kernel  │OS + Kernel  │OS + Kernel  │
+│ │(500 MB each)│(500 MB each)│(500 MB each)│
+│ ├─────────────┼─────────────┼─────────────┤
+│ │  Runtime    │  Runtime    │  Runtime    │
+│ │(200 MB)     │(200 MB)     │(200 MB)     │
+│ ├─────────────┼─────────────┼─────────────┤
+│ │  App 1      │   App 2     │   App 3     │
+│ │ (100 MB)    │  (100 MB)   │  (100 MB)   │
+│ └─────────────┴─────────────┴─────────────┘
+│ Total per VM: ~800 MB
+└─────────────────────────────────────────────┘
+
+3 VMs = 3 full OSes + 3 hypervisors
+Resource overhead: 2.4 GB just for infrastructure
+Startup time: 1-2 minutes per VM
+Density: ~5-10 VMs per host
+
+Cost:
+3 servers × $200/month = $600/month
+
+
+CONTAINERS (Docker/Containerd):
+┌─────────────────────────────────────────────┐
+│    Host Operating System & Kernel           │
+│  ┌─────────────────────────────────────────┐│
+│  │      Container Runtime (Docker)         ││
+│  │ ┌──────────┬──────────┬──────────────┐ ││
+│  │ │Container1│Container2│Container3    │ ││
+│  │ ├──────────┼──────────┼──────────────┤ ││
+│  │ │Runtime   │Runtime   │Runtime       │ ││
+│  │ │(50 MB)   │(50 MB)   │(50 MB)       │ ││
+│  │ ├──────────┼──────────┼──────────────┤ ││
+│  │ │App 1     │App 2     │App 3         │ ││
+│  │ │(100 MB)  │(100 MB)  │(100 MB)      │ ││
+│  │ └──────────┴──────────┴──────────────┘ ││
+│  │ Total per container: ~150 MB           ││
+│  └─────────────────────────────────────────┘│
+│  Single OS kernel (all containers share)     │
+└─────────────────────────────────────────────┘
+
+3 Containers = Shared kernel + 3 lightweight layers
+Resource overhead: ~0.5 GB total
+Startup time: < 100ms per container
+Density: 50-100+ containers per host
+
+Cost:
+1 server × $200/month = $200/month
+But runs same workload!
+```
+
+**Real-World Comparison:**
+
+```
+SCENARIO: Run 30 web application instances
+
+VMs Approach:
+├─ 6 servers (5 instances per VM)
+├─ 6 × 1 GB OS overhead = 6 GB wasted
+├─ Startup time: 12 minutes (6 × 2 min)
+├─ Cost: $1,200/month
+├─ Scaling: Add new server ($200/month each)
+└─ Problem: Idle capacity on many VMs
+
+Containers Approach:
+├─ 2 servers (15 instances per container)
+├─ 0.5 GB OS overhead shared
+├─ Startup time: 3 seconds (30 × 100ms parallel)
+├─ Cost: $400/month
+├─ Scaling: Add container (free, instant)
+└─ Benefit: Full resource utilization
+
+Savings:
+- 66% cost reduction ($800/month)
+- 240x faster startup
+- Better resource utilization
+- Easier scaling
+```
+
+**Key Points:**
+```
+✓ Containers share OS kernel (lightweight)
+✓ VMs have full OS (heavyweight)
+✓ Containers: 50-100+ per host
+✓ VMs: 5-10 per host
+✓ Container startup: <100ms
+✓ VM startup: 1-2 minutes
+✓ Kubernetes orchestrates containers, not VMs
+✓ Containers ideal for microservices
+```
+
+---
+
+### 2. Pods - The Atomic Unit
+
+**Concept:**
+A Pod is the smallest deployable unit in Kubernetes. Usually one container per Pod, but can have multiple tightly-coupled containers.
+
+**Understanding Pods:**
+
+```
+POD = Smallest Unit in Kubernetes
+Not individual containers!
+Not deployed directly!
+
+Structure:
+┌─────────────────┐
+│      Pod        │
+│ ┌─────────────┐ │
+│ │ Container 1 │ │ (Usually just one)
+│ └─────────────┘ │
+│ ┌─────────────┐ │ (Rarely: sidecar containers)
+│ │ Container 2 │ │
+│ └─────────────┘ │
+│ Shared Network  │ (Single IP address)
+│ Shared Storage  │ (Shared volumes)
+└─────────────────┘
+```
+
+**Why Pods Not Containers?**
+
+```
+Reason 1: Shared Network
+┌──────────────────────────────────────┐
+│           Pod                        │
+│  ┌─────────────┐  ┌──────────────┐  │
+│  │ App         │  │ Logging      │  │
+│  │ Container   │  │ Sidecar      │  │
+│  │ Port: 8080  │  │ Port: 9090   │  │
+│  └─────────────┘  └──────────────┘  │
+│  ┌──────────────────────────────────┐│
+│  │ Shared Network (localhost)       ││
+│  │ 10.0.0.5 (single IP)            ││
+│  └──────────────────────────────────┘│
+└──────────────────────────────────────┘
+
+Benefits:
+- Containers talk via localhost
+- Tight coupling possible
+- Resource sharing
+- Atomic scaling (both scale together)
+
+Reason 2: Shared Storage
+Containers in same Pod can share volumes
+Example: App + Logging sidecar
+- App writes to /logs
+- Logger reads from /logs
+- Both have same volume mounted
+
+Reason 3: Lifecycle Management
+Pod = Unit of deployment
+Scale Pod = Scale all containers
+Delete Pod = Delete all containers
+Failure = Entire Pod restarted
+```
+
+**Pod Examples:**
+
+```yaml
+# SIMPLE POD (One Container)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web-app
+  namespace: default
+spec:
+  containers:
+  - name: web
+    image: nginx:latest
+    ports:
+    - containerPort: 80
+
+# SIDECAR POD (Two Containers)
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app-with-logger
+spec:
+  containers:
+  # Main application
+  - name: app
+    image: myapp:v1
+    volumeMounts:
+    - name: shared-logs
+      mountPath: /logs
+  
+  # Logging sidecar
+  - name: logger
+    image: filebeat:7.0
+    volumeMounts:
+    - name: shared-logs
+      mountPath: /logs
+  
+  # Shared volume
+  volumes:
+  - name: shared-logs
+    emptyDir: {}
+```
+
+**Key Points:**
+```
+✓ Pod = Smallest deployable unit
+✓ Usually 1 container per Pod
+✓ Rarely: Sidecar containers (2-3 max)
+✓ Shared network (single IP)
+✓ Shared storage (volumes)
+✓ Atomic unit (scale/delete together)
+✓ Ephemeral (containers restart, Pods recreated)
+```
+
+---
+
+### 3. Deployments - Desired State Management
+
+**Concept:**
+A Deployment describes the desired state of your application. Kubernetes continuously reconciles actual state to desired state.
+
+**Desired State Pattern:**
+
+```
+TRADITIONAL APPROACH (Imperative):
+Developer: "Deploy container X"
+├─ SSH into server
+├─ docker run myapp:v1
+├─ Container runs
+├─ If crashes, nothing happens
+
+Problem: Manual management, no recovery
+
+
+KUBERNETES APPROACH (Declarative):
+Developer: "I want 3 replicas of myapp:v1 running"
+├─ Define Deployment YAML (desired state)
+├─ kubectl apply -f deployment.yaml
+├─ Kubernetes reads desired state
+├─ If not running: Start containers
+├─ If crashed: Restart automatically
+├─ If too many: Kill extras
+├─ If wrong version: Update to correct version
+├─ Continuous reconciliation (every 5-10 seconds)
+
+Benefit: Self-healing, automatic management
+```
+
+**Deployment Lifecycle:**
+
+```
+Current State: 0 replicas running
+Desired State: 3 replicas
+
+Step 1: Kubernetes detects mismatch
+Step 2: Controller creates 3 Pods
+Step 3: Scheduler assigns to nodes
+Step 4: Actual state = 3 running
+
+Update desired state: Image version v1 → v2
+
+Step 1: Controller sees mismatch
+Step 2: Old Pod terminates, new Pod starts (rolling)
+Step 3: Rolling continues until all updated
+Step 4: Actual state = 3 replicas of v2
+
+Container crashes:
+Step 1: Health check detects failure
+Step 2: Pod restarted automatically
+Step 3: Service continues without intervention
+```
+
+**Real-World Impact:**
+
+```
+SCENARIO: Production bug requires new deployment
+
+OLD APPROACH (Manual):
+1. Developer: "Need to redeploy"
+2. DevOps: SSH into 3 servers
+3. DevOps: Stop old app on each
+4. DevOps: Start new version on each
+5. All users: Experience brief downtime
+6. Cost: 1 hour developer time ($100+)
+7. Risk: Missed server, inconsistent state
+
+KUBERNETES APPROACH:
+1. Developer: Edit deployment YAML
+2. Developer: kubectl apply -f deployment.yaml
+3. Kubernetes: Rolling update starts
+4. Users: No downtime (some hit old, some hit new)
+5. Cost: 2 minutes developer time
+6. Automatic: All replicas updated correctly
+7. Auditable: Git history shows all changes
+```
+
+**Key Points:**
+```
+✓ Deployment = Desired state
+✓ Kubernetes reconciles to desired state
+✓ Self-healing (automatic restarts)
+✓ Rolling updates (zero-downtime)
+✓ Easy scaling (change replicas)
+✓ Version controlled (YAML in Git)
+✓ Auditable (who deployed what when)
+```
+
+---
+
+### 4. Services - Network Abstraction
+
+**Concept:**
+A Service provides stable network endpoints for Pods. Even as Pods are created/destroyed, the Service IP remains constant.
+
+**Problem Solved:**
+
+```
+WITHOUT SERVICES:
+┌─────────────────┐
+│   Deployment    │
+│   3 Pods        │
+├─────────────────┤
+│ Pod 1: 10.0.0.1 │ (might restart anytime)
+│ Pod 2: 10.0.0.2 │ (might die → new IP)
+│ Pod 3: 10.0.0.3 │ (IPs change constantly)
+└─────────────────┘
+
+Problem:
+- IPs change when Pods restart
+- Clients must track 3 IPs
+- Load balancing manual
+- Service discovery hard
+- Clients break when Pod dies
+
+
+WITH SERVICES:
+┌─────────────────────────────┐
+│        Service              │
+│  Stable IP: 10.1.0.1        │
+│  (Doesn't change!)          │
+└──────────────┬──────────────┘
+        ↓ Routes to
+┌─────────────────┐
+│   Deployment    │
+│   3 Pods        │
+├─────────────────┤
+│ Pod 1: 10.0.0.1 │ (IPs change)
+│ Pod 2: 10.0.0.2 │ (But service hides)
+│ Pod 3: 10.0.0.3 │ (Clients don't care)
+└─────────────────┘
+
+Benefit:
+✓ Service IP stable
+✓ Client connects to Service, not Pods
+✓ Pod restarts don't affect client
+✓ Automatic load balancing
+✓ Service discovery built-in
+```
+
+**Service Types:**
+
+```
+1. ClusterIP (Default)
+   └─ Internal only
+     ├─ IP: 10.1.0.1 (internal to cluster)
+     ├─ Pods talk to each other
+     ├─ Outside world can't access
+     └─ Use case: Internal services (databases, cache)
+
+2. NodePort
+   └─ Exposes on each node
+     ├─ Ports: 30000-32767
+     ├─ Access: <NodeIP>:30000
+     ├─ All nodes expose same port
+     └─ Use case: Dev/test, temporary external access
+
+3. LoadBalancer
+   └─ Cloud provider load balancer
+     ├─ Automatically provisioned
+     ├─ External IP assigned
+     ├─ Traffic routed from internet
+     └─ Use case: Production web apps
+
+4. ExternalName
+   └─ DNS alias
+     ├─ Maps to external DNS
+     ├─ Example: db.example.com
+     └─ Use case: External databases, services
+```
+
+**Real-World Example:**
+
+```
+Microservices Architecture:
+
+┌──────────────────────┐
+│   LoadBalancer Svc   │
+│   35.201.180.25      │
+└──────┬───────────────┘
+       ↓ External traffic
+┌──────────────────────┐
+│  Frontend Pods (3)   │
+│   10.0.1.x           │
+└──────┬───────────────┘
+       ↓ Internal traffic
+┌──────────────────────┐
+│  ClusterIP Service   │
+│   10.1.0.1           │
+└──────┬───────────────┘
+       ↓
+┌──────────────────────┐
+│   Backend Pods (5)   │
+│   10.0.2.x           │
+└──────┬───────────────┘
+       ↓
+┌──────────────────────┐
+│  ClusterIP Service   │
+│   10.1.0.2           │
+└──────┬───────────────┘
+       ↓
+┌──────────────────────┐
+│  Database Pods (1)   │
+│   10.0.3.x           │
+└──────────────────────┘
+
+Flow:
+User → 35.201.180.25:80
+  ↓
+LoadBalancer routes to Frontend Pod
+  ↓
+Frontend calls Backend Service 10.1.0.1
+  ↓
+Service load-balances to Backend Pod
+  ↓
+Backend calls Database Service 10.1.0.2
+  ↓
+Database returns data
+```
+
+**Key Points:**
+```
+✓ Service = Stable endpoint
+✓ Abstracts away changing Pod IPs
+✓ Automatic load balancing
+✓ Service discovery built-in
+✓ ClusterIP: Internal only
+✓ LoadBalancer: External access
+✓ Multiple replicas auto load-balanced
+```
+
+---
+
+### 5. ConfigMaps & Secrets - Configuration Management
+
+**Concept:**
+ConfigMaps store non-sensitive configuration. Secrets store sensitive data. Both decouple config from containers.
+
+**Configuration Problem:**
+
+```
+OLD APPROACH (Config Hardcoded):
+Dockerfile:
+FROM node:16
+COPY . /app
+WORKDIR /app
+RUN npm install
+ENV DATABASE_URL=prod-db.example.com
+ENV API_KEY=sk_live_super_secret_key
+CMD ["node", "server.js"]
+
+Problems:
+❌ Different config for different environments
+❌ Sensitive data in Docker image
+❌ Image can't be reused across environments
+❌ Secrets visible in Docker history
+❌ Changing config requires rebuild
+
+
+KUBERNETES APPROACH (External Config):
+ConfigMap:
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  DATABASE_URL: prod-db.example.com
+  LOG_LEVEL: info
+
+Secret:
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secrets
+type: Opaque
+data:
+  API_KEY: c2tfbGl2ZV9zdXBlcl9zZWNyZXRfa2V5  # base64
+
+Deployment:
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+spec:
+  containers:
+  - name: app
+    image: myapp:latest  # Same image everywhere!
+    envFrom:
+    - configMapRef:
+        name: app-config
+    - secretRef:
+        name: app-secrets
+
+Benefits:
+✓ Same image for all environments
+✓ Config managed separately
+✓ Secrets encrypted
+✓ Easy updates (no rebuild)
+✓ Version controlled (in Git)
+✓ Auditable (who changed what)
+```
+
+**Real-World Usage:**
+
+```
+ConfigMap: Non-Sensitive Configuration
+├─ Database URL
+├─ API endpoints
+├─ Log levels
+├─ Feature flags
+├─ Timeouts
+└─ Public settings
+
+Secret: Sensitive Data
+├─ Passwords
+├─ API keys
+├─ Certificates
+├─ SSH keys
+├─ OAuth tokens
+└─ Private settings
+
+Typical Deployment:
+1. Build generic Docker image
+2. Push to registry
+3. Create ConfigMap for environment
+4. Create Secret for credentials
+5. Deploy with both attached
+6. Zero code changes between environments
+```
+
+**Key Points:**
+```
+✓ ConfigMaps: Non-sensitive config
+✓ Secrets: Sensitive data
+✓ Decouple config from containers
+✓ Same image, different environments
+✓ Update without rebuild
+✓ Version controlled
+✓ Encrypted secrets (optional)
+```
+
+---
+
+### 6. Namespaces - Multi-Tenancy & Organization
+
+**Concept:**
+Namespaces are virtual clusters within a physical cluster. Allows multiple teams/environments on same hardware.
+
+**Organization Problem:**
+
+```
+WITHOUT NAMESPACES:
+Single namespace:
+├─ Production apps
+├─ Staging apps
+├─ Testing apps
+├─ Each team's services
+└─ All mixed together
+
+Problems:
+❌ Naming conflicts (two "web-app" services?)
+❌ No isolation (staging breaks production)
+❌ Resource sharing uncontrolled
+❌ Hard to audit who owns what
+❌ Difficult RBAC policy
+❌ Scaling: Need separate cluster for isolation
+
+
+WITH NAMESPACES:
+Multiple namespaces:
+├─ production
+│  ├─ web-app
+│  ├─ api-server
+│  └─ database
+├─ staging
+│  ├─ web-app (same name, different namespace)
+│  ├─ api-server
+│  └─ database
+├─ development
+│  └─ team A services
+└─ testing
+   └─ integration tests
+
+Benefits:
+✓ No naming conflicts
+✓ Complete isolation
+✓ Separate resource quotas
+✓ Clear ownership
+✓ Fine-grained RBAC
+✓ Cost: Same hardware, multiple tenants
+```
+
+**Practical Benefits:**
+
+```
+SCENARIO: 100 microservices across 3 environments
+
+Without Namespaces (Need 3 clusters):
+├─ Production cluster: $5,000/month
+├─ Staging cluster: $3,000/month
+├─ Dev cluster: $2,000/month
+└─ Total: $10,000/month
+
+With Namespaces (1 large cluster):
+├─ Production namespace: 60% resources
+├─ Staging namespace: 20% resources
+├─ Dev namespace: 20% resources
+└─ Total: $4,000/month ($6,000 saved!)
+
+Additional Benefits:
+✓ Developers can spin up staging environments
+✓ Integration tests isolated
+✓ Easy environment parity
+✓ Faster deployments
+```
+
+**Key Points:**
+```
+✓ Namespace: Virtual cluster
+✓ No naming conflicts across namespaces
+✓ Resource quotas per namespace
+✓ RBAC policies per namespace
+✓ Common namespaces: prod, staging, dev, testing
+✓ Enables multi-tenancy on same hardware
+```
+
+---
+
+### 7. Labels & Selectors - Object Organization
+
+**Concept:**
+Labels are key-value pairs for organizing and identifying objects. Selectors query objects by labels.
+
+**Organizing Problem:**
+
+```
+WITHOUT LABELS:
+100 Pods deployed
+No way to query:
+- "Which Pods are frontend?"
+- "Which Pods are production?"
+- "Which Pods should get traffic?"
+- "Which Pods to scale up during peak?"
+
+WITH LABELS:
+All Pods labeled:
+app: web
+tier: frontend
+environment: production
+version: v1.2.3
+
+Now can query:
+- app=web → Get all web Pods
+- environment=production → Get all prod Pods
+- tier=frontend → Get all frontend Pods
+- app=web,environment=production → Get web AND prod
+```
+
+**Real-World Example:**
+
+```yaml
+# Pod with multiple labels
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web-pod-1
+  labels:
+    app: web
+    version: v1.2.3
+    tier: frontend
+    environment: production
+    team: platform
+spec:
+  containers:
+  - name: web
+    image: web:v1.2.3
+
+---
+# Service selects Pods by labels
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-service
+spec:
+  selector:
+    app: web          # Only Pods with this label
+    tier: frontend    # And this label
+  ports:
+  - port: 80
+
+---
+# Deployment also uses label selectors
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+        version: v1.2.3
+        tier: frontend
+        environment: production
+    spec:
+      containers:
+      - name: web
+        image: web:v1.2.3
+```
+
+**Use Cases:**
+
+```
+1. Deployment Rolling Updates
+   - Label: version: v1
+   - Replace with: version: v2
+   - Service automatically routes to new version
+
+2. Canary Deployments
+   - 90% traffic to: version: v1
+   - 10% traffic to: version: v2 (new)
+   - Monitor v2 before full rollout
+
+3. Resource Quotas
+   - team: platform
+   - tier: backend
+   - Set quota per team/tier
+
+4. Monitoring & Alerting
+   - environment: production
+   - Alert if prod Pod unhealthy
+
+5. Debugging
+   - kubectl get pods -l app=web
+   - Get only web app Pods
+```
+
+**Key Points:**
+```
+✓ Labels: Key-value pairs for organization
+✓ Selectors: Query objects by labels
+✓ Multiple labels per object
+✓ Used by Services, Deployments, etc.
+✓ Flexible (can add any labels you want)
+✓ Powerful queries (AND, OR operations)
+```
+
+---
+
+## BASIC LEVEL - FUNDAMENTALS
+
+### 1. Understanding kubectl - The Command Line Interface
+
+**What is kubectl?**
+```
+kubectl = Kubernetes command line tool
+Used to: Communicate with Kubernetes cluster
+Talks to: API Server
+Format: kubectl <command> <resource> <resource-name> [options]
+
+Example: kubectl get pods
+         kubectl apply -f deployment.yaml
+         kubectl describe node node-1
+```
+
+**Basic Commands:**
+
+```bash
+# VIEW CLUSTER STATE
+kubectl cluster-info          # Cluster details
+kubectl get nodes             # List all nodes
+kubectl get pods              # List pods in current namespace
+kubectl get pods -n kube-system  # List pods in specific namespace
+kubectl get all               # List all resources
+kubectl get pods --all-namespaces  # All pods everywhere
+
+# DETAILED INFORMATION
+kubectl describe pod <pod-name>         # Full pod details
+kubectl describe node <node-name>       # Node details
+kubectl logs <pod-name>                 # Container logs
+kubectl logs <pod-name> -f              # Follow logs (live)
+kubectl exec <pod-name> -- ls /         # Execute command in pod
+
+# DEPLOY & UPDATE
+kubectl apply -f deployment.yaml        # Deploy/update
+kubectl create -f deployment.yaml       # Create (fails if exists)
+kubectl delete -f deployment.yaml       # Delete
+kubectl delete pod <pod-name>           # Delete specific pod
+
+# TROUBLESHOOTING
+kubectl get events                      # All events
+kubectl top nodes                       # Node resources
+kubectl top pods                        # Pod resources
+kubectl describe pod <pod-name>         # Debug pod
+
+# SCALING
+kubectl scale deployment <name> --replicas=5   # Scale to 5 replicas
+kubectl scale deployment <name> --replicas=0   # Scale down (pause)
+
+# ROLLING RESTART
+kubectl rollout restart deployment/<name>
+
+# VIEWING YAML
+kubectl get pod <pod-name> -o yaml      # Show pod YAML
+kubectl get deployment -o yaml          # Show all deployments
+```
+
+**Real-World Usage:**
+
+```bash
+# Scenario: Deploy web app
+# Step 1: Create deployment YAML
+cat > deployment.yaml << EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: web
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+EOF
+
+# Step 2: Deploy
+kubectl apply -f deployment.yaml
+
+# Step 3: Check deployment
+kubectl get deployments
+kubectl get pods
+kubectl describe deployment web-app
+
+# Step 4: View logs
+kubectl logs -l app=web
+
+# Step 5: Access pod
+kubectl exec -it <pod-name> -- /bin/bash
+
+# Step 6: Check resources
+kubectl top pods
+
+# Step 7: Scale up
+kubectl scale deployment web-app --replicas=5
+
+# Step 8: Rollback if needed
+kubectl rollout history deployment/web-app
+kubectl rollout undo deployment/web-app
+```
+
+**Key Points:**
+```
+✓ kubectl is primary interface
+✓ get: List resources
+✓ describe: Details of specific resource
+✓ apply: Deploy/update from YAML
+✓ logs: View container output
+✓ exec: Run commands in pods
+✓ top: Monitor resources
+```
+
+---
+
+### 2. YAML Basics - Defining Resources
+
+**YAML Structure:**
+
+```yaml
+# Every Kubernetes resource has this structure:
+
+apiVersion: v1            # API version (v1, apps/v1, batch/v1, etc)
+kind: Pod                 # Resource type (Pod, Deployment, Service, etc)
+
+metadata:                 # Metadata about resource
+  name: my-pod           # Resource name
+  namespace: default     # Which namespace
+  labels:                # Key-value pairs for organization
+    app: web
+    version: v1
+  annotations:           # Additional metadata (for tools)
+    description: "My pod"
+
+spec:                    # Specification (desired state)
+  # Resource-specific configuration
+  containers:
+  - name: my-container
+    image: nginx:latest
+    ports:
+    - containerPort: 80
+```
+
+**Common Resource Templates:**
+
+```yaml
+# POD (Basic, don't use directly)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: simple-pod
+spec:
+  containers:
+  - name: app
+    image: nginx:latest
+    ports:
+    - containerPort: 80
+
+---
+# DEPLOYMENT (Use this, not Pod directly)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: web
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+
+---
+# SERVICE (Expose app)
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-service
+spec:
+  selector:
+    app: web
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP
+
+---
+# CONFIGMAP (Non-sensitive config)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  DATABASE_HOST: postgres
+  LOG_LEVEL: info
+
+---
+# SECRET (Sensitive data)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secrets
+type: Opaque
+data:
+  password: cGFzc3dvcmQxMjM=  # base64 encoded
+```
+
+**YAML Best Practices:**
+
+```yaml
+# DO: Use meaningful names
+metadata:
+  name: web-app-production
+  namespace: production
+
+# DON'T: Use generic names
+metadata:
+  name: app1
+  namespace: default
+
+---
+# DO: Use labels for organization
+metadata:
+  labels:
+    app: web
+    environment: production
+    team: platform
+    version: v1.2.3
+
+# DON'T: No labels
+metadata:
+  labels: {}
+
+---
+# DO: Use namespace for separation
+metadata:
+  namespace: production
+
+# DON'T: Everything in default namespace
+metadata:
+  namespace: default
+```
+
+**Key Points:**
+```
+✓ YAML is configuration format
+✓ apiVersion: Defines API schema
+✓ kind: Resource type
+✓ metadata: Resource information
+✓ spec: Desired state
+✓ Indentation matters (2 spaces)
+✓ Lists use dash (-)
+✓ Key-value with colon (:)
+```
+
+---
+
+### 3. Namespaces - Organizing Your Cluster
+
+**Understanding Namespaces:**
+
+```
+Namespace = Virtual cluster within physical cluster
+Think: Folder structure for resources
+
+Cluster
+├─ default namespace (default)
+├─ kube-system namespace (system components)
+├─ production namespace (production apps)
+├─ staging namespace (staging apps)
+└─ development namespace (dev apps)
+
+Benefit: No naming conflicts, isolation, RBAC
+```
+
+**Working with Namespaces:**
+
+```bash
+# List namespaces
+kubectl get namespaces
+kubectl get ns
+
+# Get pods in specific namespace
+kubectl get pods -n production
+kubectl get pods --namespace=staging
+
+# Default namespace (current)
+kubectl get pods  # Uses 'default' namespace
+
+# Create namespace
+kubectl create namespace my-app
+
+# Switch context (kubectl remembers namespace)
+kubectl config set-context --current --namespace=production
+
+# Apply to specific namespace
+kubectl apply -f deployment.yaml -n production
+
+# Delete namespace (deletes all resources in it!)
+kubectl delete namespace my-app
+```
+
+**Namespace YAML:**
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: production
+  labels:
+    name: production
+
+---
+# Deploy to specific namespace
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+  namespace: production  # Specifies namespace
+spec:
+  replicas: 3
+  # ... rest of deployment
+```
+
+**Multi-Environment Setup:**
+
+```bash
+# Create namespaces for each environment
+kubectl create namespace production
+kubectl create namespace staging
+kubectl create namespace development
+
+# Deploy same app to different namespaces
+kubectl apply -f deployment.yaml -n production   # prod version
+kubectl apply -f deployment.yaml -n staging      # staging version
+kubectl apply -f deployment.yaml -n development  # dev version
+
+# Each namespace can have:
+- Different replicas
+- Different resources
+- Different configurations
+- Separate RBAC policies
+```
+
+**Key Points:**
+```
+✓ Namespace: Virtual cluster
+✓ No naming conflicts across namespaces
+✓ Resource isolation
+✓ RBAC control per namespace
+✓ Common: default, kube-system, production, staging
+✓ Same name can exist in different namespaces
+```
+
+---
+
+### 4. Labels & Selectors - Organizing Resources
+
+**Why Labels?**
+
+```
+100 Pods deployed
+Question: "Which are production? Which are frontend? Which need updates?"
+
+Without labels: Manual tracking, error-prone
+With labels: Query with selectors
+
+Pod 1: app=web, tier=frontend, env=prod
+Pod 2: app=web, tier=frontend, env=prod
+Pod 3: app=api, tier=backend, env=prod
+Pod 4: app=web, tier=frontend, env=staging
+
+Query: app=web,tier=frontend,env=prod → Pods 1, 2
+Query: app=api → Pod 3
+Query: env=staging → Pod 4
+```
+
+**Applying Labels:**
+
+```yaml
+# When creating
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web-pod
+  labels:
+    app: web
+    tier: frontend
+    environment: production
+    version: v1.2.3
+    team: platform
+spec:
+  containers:
+  - name: web
+    image: nginx:latest
+```
+
+**Querying with Selectors:**
+
+```bash
+# Equality-based
+kubectl get pods -l app=web                    # app = web
+kubectl get pods -l app=web,tier=frontend      # AND operator
+kubectl get pods -l environment!=prod          # NOT operator
+
+# Set-based
+kubectl get pods -l 'app in (web,api)'         # app is web OR api
+kubectl get pods -l 'tier notin (backend)'     # tier NOT backend
+kubectl get pods -l tier                       # tier label exists
+kubectl get pods -l '!tier'                    # tier label doesn't exist
+
+# Complex queries
+kubectl get pods -l 'app=web,tier=frontend,environment in (prod,staging)'
+
+# Use in YAML
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+spec:
+  selector:
+    matchLabels:
+      app: web
+      tier: frontend
+  template:
+    metadata:
+      labels:
+        app: web
+        tier: frontend
+    spec:
+      containers:
+      - name: web
+        image: nginx:latest
+```
+
+**Real-World Label Strategy:**
+
+```yaml
+# Recommended labels for all objects
+metadata:
+  labels:
+    # Application
+    app: web-app
+    component: frontend
+    
+    # Version
+    version: v1.2.3
+    
+    # Environment
+    environment: production
+    
+    # Organization
+    team: platform
+    department: engineering
+    
+    # Release/Deployment
+    release: 2024-12-20
+    managed-by: terraform
+
+# Examples
+# Frontend Pod
+app: web, component: frontend, environment: prod
+
+# Backend Pod  
+app: web, component: backend, environment: prod
+
+# Database Pod
+app: database, component: postgres, environment: prod
+
+# Development version
+app: web, environment: development
+```
+
+**Key Points:**
+```
+✓ Labels: Key-value pairs for organization
+✓ Selectors: Query resources by labels
+✓ Multiple labels per resource
+✓ Used by Services, Deployments, etc.
+✓ No naming conflicts with labels
+✓ Powerful for organizing microservices
+```
+
+---
+
+### 5. Deployments - The Recommended Way
+
+**Why Deployments?**
+
+```
+Pod:
+- Ephemeral (dies permanently)
+- No management
+- If it crashes: Gone
+
+Deployment:
+- Ensures N replicas running
+- Auto-restarts failed pods
+- Rolling updates
+- Rollback capability
+- Scaling
+- Self-healing
+
+ALWAYS use Deployment, not Pod directly
+```
+
+**Basic Deployment:**
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+  labels:
+    app: web
+spec:
+  replicas: 3              # Desired number of pods
+  
+  selector:                # Which pods to manage
+    matchLabels:
+      app: web
+  
+  template:                # Pod template
+    metadata:
+      labels:
+        app: web
+    
+    spec:
+      containers:
+      - name: web
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+```
+
+**Deployment Commands:**
+
+```bash
+# Create deployment
+kubectl apply -f deployment.yaml
+
+# View deployments
+kubectl get deployments
+kubectl get deployment web-app
+kubectl describe deployment web-app
+
+# View pods created by deployment
+kubectl get pods -l app=web
+
+# Scale deployment
+kubectl scale deployment web-app --replicas=5
+
+# Update image (rolling update)
+kubectl set image deployment/web-app web=nginx:1.20
+
+# View rollout history
+kubectl rollout history deployment/web-app
+
+# Rollback to previous version
+kubectl rollout undo deployment/web-app
+
+# Watch deployment progress
+kubectl rollout status deployment/web-app
+
+# Edit deployment
+kubectl edit deployment web-app
+
+# Delete deployment
+kubectl delete deployment web-app
+```
+
+**Rolling Update Strategy:**
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+spec:
+  replicas: 5
+  
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1          # One extra pod during update
+      maxUnavailable: 1    # One pod down during update
+  
+  selector:
+    matchLabels:
+      app: web
+  
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: web
+        image: nginx:1.19
+```
+
+**Blue-Green Deployment (using deployments):**
+
+```bash
+# Current: "blue" deployment (v1)
+kubectl apply -f deployment-blue.yaml
+
+# New: "green" deployment (v2) - parallel
+kubectl apply -f deployment-green.yaml
+
+# Route traffic to green
+kubectl patch service web -p '{"spec":{"selector":{"version":"v2"}}}'
+
+# If issues: Switch back to blue
+kubectl patch service web -p '{"spec":{"selector":{"version":"v1"}}}'
+
+# Delete blue after green is stable
+kubectl delete deployment web-blue
+```
+
+**Key Points:**
+```
+✓ Deployment: Always use for production
+✓ Manages replicas automatically
+✓ Self-healing (restarts failed pods)
+✓ Rolling updates (zero-downtime)
+✓ Rollback capability
+✓ Scaling (easy to increase/decrease replicas)
+✓ Version control with YAML
+```
+
+---
+
+### 6. Services - Network Access
+
+**Why Services?**
+
+```
+Pod IPs change when Pods restart
+Service provides stable endpoint
+
+Without Service:
+├─ Pod 1: 10.0.0.1 (might restart anytime)
+├─ Pod 2: 10.0.0.2 (IP changes)
+├─ Pod 3: 10.0.0.3 (unreliable)
+└─ Clients: Can't track changing IPs
+
+With Service:
+├─ Service IP: 10.1.0.1 (stable, never changes)
+├─ Routes to: Pod 1, Pod 2, Pod 3 (even if IPs change)
+└─ Clients: Connect to stable Service IP
+```
+
+**Service Types:**
+
+```yaml
+# 1. ClusterIP (Internal Only - Default)
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-service
+spec:
+  type: ClusterIP
+  selector:
+    app: web
+  ports:
+  - port: 80
+    targetPort: 8080
+# Access: Only within cluster
+# URL: web-service.default.svc.cluster.local
+
+---
+# 2. NodePort (Expose on Each Node)
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-nodeport
+spec:
+  type: NodePort
+  selector:
+    app: web
+  ports:
+  - port: 80
+    targetPort: 8080
+    nodePort: 30080  # Access via node-ip:30080
+# Access: <node-ip>:30080
+# Use: Dev/test, debugging
+
+---
+# 3. LoadBalancer (Cloud Provider)
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-lb
+spec:
+  type: LoadBalancer
+  selector:
+    app: web
+  ports:
+  - port: 80
+    targetPort: 8080
+# Access: External IP (AWS ELB, GCP LB, etc)
+# Use: Production external apps
+
+---
+# 4. ExternalName (DNS Alias)
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-db
+spec:
+  type: ExternalName
+  externalName: db.example.com
+  ports:
+  - port: 5432
+# Use: External services, legacy databases
+```
+
+**Service Examples:**
+
+```bash
+# Create deployment
+kubectl apply -f deployment.yaml
+
+# Expose via ClusterIP
+kubectl expose deployment web-app --port=80 --target-port=8080
+
+# Or via LoadBalancer
+kubectl expose deployment web-app --port=80 --target-port=8080 --type=LoadBalancer
+
+# Get service details
+kubectl get services
+kubectl describe service web-app
+
+# Access from pod (test)
+kubectl run -it --rm debug --image=busybox -- sh
+# Inside pod:
+wget web-app:80
+curl web-app:80
+
+# Port forward (local testing)
+kubectl port-forward service/web-app 8080:80
+# Access: localhost:8080
+```
+
+**Key Points:**
+```
+✓ Service: Stable network endpoint
+✓ ClusterIP: Internal only (default)
+✓ NodePort: Expose on each node port (dev/test)
+✓ LoadBalancer: External IP from cloud (production)
+✓ ExternalName: DNS alias
+✓ Automatic load balancing
+✓ Service discovery built-in
+```
+
+---
+
+### 7. ConfigMaps & Secrets - Managing Configuration
+
+**ConfigMap - Non-Sensitive Data:**
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  DATABASE_HOST: postgres.default.svc.cluster.local
+  DATABASE_PORT: "5432"
+  LOG_LEVEL: "info"
+  CACHE_TTL: "3600"
+
+---
+# Using ConfigMap in Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: web
+        image: myapp:v1
+        # Method 1: All as environment variables
+        envFrom:
+        - configMapRef:
+            name: app-config
+        # Method 2: Specific variables
+        env:
+        - name: DATABASE_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: DATABASE_HOST
+        # Method 3: Mount as file
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/config
+      volumes:
+      - name: config-volume
+        configMap:
+          name: app-config
+```
+
+**Secret - Sensitive Data:**
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secrets
+type: Opaque
+data:
+  # Values must be base64 encoded
+  DATABASE_PASSWORD: cGFzc3dvcmQxMjM=  # password123
+  API_KEY: c2tfbGl2ZV9rZXkxMjM=        # sk_live_key123
+
+---
+# Using Secret in Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: web
+        image: myapp:v1
+        # Method 1: All as environment variables
+        envFrom:
+        - secretRef:
+            name: app-secrets
+        # Method 2: Mount as file
+        volumeMounts:
+        - name: secret-volume
+          mountPath: /etc/secrets
+      volumes:
+      - name: secret-volume
+        secret:
+          secretName: app-secrets
+```
+
+**Commands:**
+
+```bash
+# Create ConfigMap
+kubectl create configmap app-config \
+  --from-literal=LOG_LEVEL=info \
+  --from-literal=DATABASE_HOST=postgres
+
+# Create Secret
+kubectl create secret generic app-secrets \
+  --from-literal=password=secret123 \
+  --from-literal=api-key=key123
+
+# View ConfigMap
+kubectl get configmaps
+kubectl describe configmap app-config
+kubectl get configmap app-config -o yaml
+
+# Update ConfigMap
+kubectl apply -f configmap.yaml
+
+# Use in pod
+kubectl env pod <pod-name> --list
+```
+
+**Key Points:**
+```
+✓ ConfigMap: Non-sensitive configuration
+✓ Secret: Sensitive data (passwords, keys)
+✓ Decouple config from container image
+✓ Same image, different environments
+✓ Easy updates without rebuild
+✓ Version controlled
+```
+
+---
+
+### 8. Health Checks - Keeping Apps Healthy
+
+**Types of Health Checks:**
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: web
+        image: myapp:v1
+        ports:
+        - containerPort: 8080
+        
+        # 1. LIVENESS PROBE
+        # Answers: "Is app alive?"
+        # If fails: Kill and restart pod
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30    # Wait 30s before first check
+          periodSeconds: 10          # Check every 10s
+          timeoutSeconds: 5          # Wait 5s for response
+          failureThreshold: 3        # Fail after 3 failures
+        
+        # 2. READINESS PROBE
+        # Answers: "Is app ready for traffic?"
+        # If fails: Remove from service (no traffic)
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 3
+        
+        # 3. STARTUP PROBE
+        # Answers: "Did app start successfully?"
+        # For slow-starting apps
+        startupProbe:
+          httpGet:
+            path: /startup
+            port: 8080
+          failureThreshold: 30
+          periodSeconds: 10
+```
+
+**Health Check Methods:**
+
+```yaml
+# HTTP GET
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+    httpHeaders:
+    - name: Authorization
+      value: Bearer token
+
+# TCP Socket
+readinessProbe:
+  tcpSocket:
+    port: 3306
+
+# Exec (run command)
+livenessProbe:
+  exec:
+    command:
+    - /bin/sh
+    - -c
+    - redis-cli ping
+```
+
+**Real-World Example:**
+
+```yaml
+# Web app with health checks
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: web
+        image: myapp:v1
+        ports:
+        - containerPort: 8080
+        
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# Backend API with TCP health check
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-server
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+      - name: api
+        image: api:v1
+        ports:
+        - containerPort: 5000
+        
+        livenessProbe:
+          tcpSocket:
+            port: 5000
+          initialDelaySeconds: 10
+          
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 5000
+          initialDelaySeconds: 5
+
+---
+# Database with exec health check
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: database
+  template:
+    metadata:
+      labels:
+        app: database
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:13
+        
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U postgres
+          initialDelaySeconds: 30
+```
+
+**Key Points:**
+```
+✓ Liveness: Is app alive? (kill if failed)
+✓ Readiness: Ready for traffic? (pause if failed)
+✓ Startup: Did app start? (for slow apps)
+✓ Three methods: HTTP, TCP, Exec
+✓ Essential for reliable deployments
+✓ Enables auto-healing
+```
+
+---
+
+## INTERMEDIATE LEVEL - PRACTICAL DEPLOYMENT
+
+### 1. Multi-Container Pods - Sidecar Pattern
+
+**Sidecar Pattern:**
+
+```
+Sidecar = Extra container in Pod
+Helps main app with specific task
+
+Example: Logging sidecar
+┌──────────────────┐
+│      Pod         │
+├──────────────────┤
+│ Main Container   │
+│ Application      │
+│ Writes to /logs  │
+├──────────────────┤
+│ Sidecar Container│
+│ Logger           │
+│ Reads from /logs │
+│ Ships to central │
+└──────────────────┘
+
+Benefit: Separation of concerns
+Main app just logs to disk
+Logger handles collection/shipping
+Both work independently
+```
+
+**Sidecar Example - Logging:**
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app-with-logger
+spec:
+  containers:
+  # Main application
+  - name: app
+    image: myapp:v1
+    ports:
+    - containerPort: 8080
+    volumeMounts:
+    - name: shared-logs
+      mountPath: /var/log
+    
+  # Logging sidecar
+  - name: logger
+    image: fluent-bit:latest
+    volumeMounts:
+    - name: shared-logs
+      mountPath: /var/log
+    # Fluent-bit reads logs and ships to central logging
+
+  # Shared volume (both containers can access)
+  volumes:
+  - name: shared-logs
+    emptyDir: {}
+```
+
+**Sidecar Example - Service Mesh (Istio):**
+
+```yaml
+# Service mesh injects sidecar proxy automatically
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+  annotations:
+    sidecar.istio.io/inject: "true"  # Inject istio sidecar
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: web
+        image: myapp:v1
+        ports:
+        - containerPort: 8080
+      # Istio automatically adds envoy sidecar proxy
+      # Handles: traffic routing, retry logic, circuit breaking
+```
+
+**Sidecar Example - Monitoring:**
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app-with-monitoring
+spec:
+  containers:
+  # Main app
+  - name: app
+    image: myapp:v1
+    ports:
+    - containerPort: 8080
+    
+  # Monitoring sidecar
+  - name: monitoring
+    image: prometheus-agent:latest
+    ports:
+    - containerPort: 9090  # Prometheus metrics port
+    # Monitors app on localhost:8080
+    # Exposes metrics on :9090
+```
+
+**Key Points:**
+```
+✓ Sidecar: Extra container for specific task
+✓ Shared volumes for communication
+✓ Common: Logging, monitoring, networking
+✓ Service mesh uses sidecars for traffic management
+✓ Keeps main app simple, focused
+✓ Easy to update/replace sidecar independently
+```
+
+---
+
+### 2. StatefulSets - Stateful Applications
+
+**StatefulSet vs Deployment:**
+
+```
+DEPLOYMENT:
+├─ Stateless apps
+├─ Any Pod can handle request
+├─ Pods are interchangeable
+├─ Pod names: random (web-app-xyz)
+├─ Pod IPs: change
+├─ Example: Web servers, APIs
+
+STATEFULSET:
+├─ Stateful apps (databases, queues)
+├─ Each Pod unique
+├─ Pod names: ordered (postgres-0, postgres-1)
+├─ Stable hostnames
+├─ Pod IPs: stable
+├─ Persistent volumes per Pod
+├─ Example: MySQL, PostgreSQL, Redis, Kafka
+```
+
+**StatefulSet Example:**
+
+```yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres  # Headless service
+  replicas: 3
+  
+  selector:
+    matchLabels:
+      app: postgres
+  
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:13
+        ports:
+        - containerPort: 5432
+          name: postgres
+        
+        env:
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+  
+  # Each Pod gets own PV
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 10Gi
+
+---
+# Headless Service for StatefulSet
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  clusterIP: None  # Headless (no load balancing)
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    name: postgres
+
+# Access individual Pods:
+# postgres-0.postgres.default.svc.cluster.local (stable hostname)
+# postgres-1.postgres.default.svc.cluster.local
+# postgres-2.postgres.default.svc.cluster.local
+```
+
+**StatefulSet Deployment Order:**
+
+```
+Scale up: Sequential
+├─ Create postgres-0
+├─ Wait for postgres-0 ready
+├─ Create postgres-1
+├─ Wait for postgres-1 ready
+├─ Create postgres-2
+
+Benefits: Ordered startup (important for databases)
+
+Scale down: Sequential (reverse)
+├─ Delete postgres-2 first
+├─ Wait for termination
+├─ Delete postgres-1
+├─ etc
+```
+
+**Key Points:**
+```
+✓ StatefulSet: For stateful applications
+✓ Stable identity (postgres-0, postgres-1)
+✓ Stable hostnames
+✓ Persistent volumes per Pod
+✓ Ordered scaling
+✓ Use with databases, queues, caches
+✓ Headless Service for stable DNS
+```
+
+---
+
+### 3. DaemonSets - Run on Every Node
+
+**DaemonSet Use Cases:**
+
+```
+DaemonSet = Run one Pod per node (automatically)
+
+Use cases:
+1. Logging agents (Filebeat, Fluentd)
+   - Collect logs from each node
+   
+2. Monitoring agents (Prometheus Node Exporter)
+   - Monitor each node metrics
+   
+3. Networking (CNI plugins, network proxies)
+   - Handle networking on each node
+   
+4. Storage (local storage provisioners)
+   - Manage storage on each node
+
+Example: Monitoring agent on all nodes
+```
+
+**DaemonSet Example:**
+
+```yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: prometheus-agent
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: prometheus-agent
+  
+  template:
+    metadata:
+      labels:
+        app: prometheus-agent
+    spec:
+      # Tolerations: Needed to run on system nodes
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+      
+      containers:
+      - name: agent
+        image: prom/node-exporter:latest
+        ports:
+        - containerPort: 9100
+        
+        volumeMounts:
+        - name: proc
+          mountPath: /proc
+        - name: sys
+          mountPath: /sys
+      
+      volumes:
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: sys
+        hostPath:
+          path: /sys
+```
+
+**Commands:**
+
+```bash
+# View DaemonSets
+kubectl get daemonsets
+kubectl describe daemonset prometheus-agent
+
+# View pods created by DaemonSet
+kubectl get pods -l app=prometheus-agent
+# Output: One pod per node
+
+# Delete DaemonSet
+kubectl delete daemonset prometheus-agent
+# Deletes all pods on all nodes
+```
+
+**Key Points:**
+```
+✓ DaemonSet: One Pod per node
+✓ Automatic on new nodes
+✓ Auto-deleted on node removal
+✓ Common: Logging, monitoring, networking
+✓ Use tolerations for system nodes
+✓ No scaling (fixed to number of nodes)
+```
+
+---
+
+### 4. Jobs & CronJobs - One-Time & Scheduled Tasks
+
+**Job - Run Once:**
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: backup-job
+spec:
+  completions: 1          # Run 1 pod
+  parallelism: 1          # Run 1 at a time
+  backoffLimit: 3         # Retry 3 times
+  activeDeadlineSeconds: 3600  # Timeout after 1 hour
+  
+  template:
+    spec:
+      containers:
+      - name: backup
+        image: backup-tool:v1
+        command: ["/bin/sh"]
+        args: ["-c", "tar czf /backup/data.tar.gz /data"]
+        
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: backup
+          mountPath: /backup
+      
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: app-data
+      - name: backup
+        persistentVolumeClaim:
+          claimName: backup-storage
+      
+      restartPolicy: Never  # Don't restart on failure
+```
+
+**CronJob - Scheduled:**
+
+```yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: daily-backup
+spec:
+  schedule: "0 2 * * *"  # Every day at 2 AM
+  
+  jobTemplate:
+    spec:
+      completions: 1
+      parallelism: 1
+      template:
+        spec:
+          containers:
+          - name: backup
+            image: backup-tool:v1
+            command: ["/bin/sh"]
+            args: ["-c", "tar czf /backup/data-$(date +%Y%m%d).tar.gz /data"]
+            
+            volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: backup
+              mountPath: /backup
+          
+          volumes:
+          - name: data
+            persistentVolumeClaim:
+              claimName: app-data
+          - name: backup
+            persistentVolumeClaim:
+              claimName: backup-storage
+          
+          restartPolicy: Never
+
+  # Keep last 3 successful jobs, 1 failed job
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+```
+
+**Commands:**
+
+```bash
+# Create one-time job
+kubectl create job backup-now --image=backup-tool:v1 -- /bin/sh -c "tar czf /backup/data.tar.gz /data"
+
+# View jobs
+kubectl get jobs
+kubectl describe job backup-job
+kubectl logs job/backup-job
+
+# View CronJobs
+kubectl get cronjobs
+kubectl describe cronjob daily-backup
+
+# Manual run from CronJob
+kubectl create job backup-manual --from=cronjob/daily-backup
+
+# Delete job (stops if running)
+kubectl delete job backup-job
+```
+
+**Key Points:**
+```
+✓ Job: Run one-time task
+✓ CronJob: Scheduled job (like Unix cron)
+✓ Automatic retry on failure
+✓ Can run in parallel or sequential
+✓ Use for: Backups, cleanup, batch processing
+✓ backoffLimit: Number of retries
+✓ activeDeadlineSeconds: Timeout
+```
+
+---
+
+### 5. Resource Requests & Limits
+
+**Why Resource Management?**
+
+```
+WITHOUT Limits:
+├─ App 1: Uses 10GB RAM (crashes)
+├─ App 2: Can't run (no memory)
+├─ Node: Unstable, thrashing
+└─ Problem: One app kills cluster
+
+WITH Limits:
+├─ App 1: Limited to 2GB RAM
+├─ App 2: Gets 2GB RAM (guaranteed)
+├─ Node: Stable, predictable
+└─ Benefit: Fair sharing, reliability
+```
+
+**Requests vs Limits:**
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: web
+        image: myapp:v1
+        
+        resources:
+          # REQUESTS: Minimum guaranteed resources
+          requests:
+            memory: "256Mi"   # At least 256MB
+            cpu: "100m"       # At least 0.1 CPU
+          
+          # LIMITS: Maximum allowed resources
+          limits:
+            memory: "512Mi"   # Max 512MB
+            cpu: "500m"       # Max 0.5 CPU
+
+# Behavior:
+# - Scheduler ensures node has at least requests available
+# - Pod gets guaranteed request amount
+# - If pod exceeds limit: killed or throttled
+# - CPU limit: throttled (not killed)
+# - Memory limit: killed (OOM)
+```
+
+**Resource Units:**
+
+```
+CPU:
+├─ 1000m = 1 CPU
+├─ 500m = 0.5 CPU
+├─ 100m = 0.1 CPU
+└─ 10m = 0.01 CPU
+
+Memory:
+├─ Gi = Gigabyte (1024^3 bytes)
+├─ Mi = Megabyte (1024^2 bytes)
+├─ Ki = Kilobyte (1024 bytes)
+└─ 256Mi = 268 MB
+```
+
+**Real-World Example:**
+
+```yaml
+# Lightweight service
+resources:
+  requests:
+    memory: "64Mi"
+    cpu: "10m"
+  limits:
+    memory: "128Mi"
+    cpu: "50m"
+
+# Standard service
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+# Heavy workload
+resources:
+  requests:
+    memory: "1Gi"
+    cpu: "500m"
+  limits:
+    memory: "2Gi"
+    cpu: "1000m"
+
+# Database
+resources:
+  requests:
+    memory: "2Gi"
+    cpu: "1000m"
+  limits:
+    memory: "4Gi"
+    cpu: "2000m"
+```
+
+**Key Points:**
+```
+✓ Requests: Minimum guaranteed
+✓ Limits: Maximum allowed
+✓ Scheduler uses requests for placement
+✓ CPU limit: Throttled (no kill)
+✓ Memory limit: Killed on exceed
+✓ Essential for cluster stability
+✓ Use for fair resource sharing
+```
+
+---
+
+## ADVANCED LEVEL - PRODUCTION PATTERNS
+
+### 1. Horizontal Pod Autoscaling (HPA)
+
+**Auto-Scaling Based on Metrics:**
+
+```
+Manual Scaling: kubectl scale deployment --replicas=10
+HPA: Automatic based on metrics
+
+Benefit: Responds to load without manual intervention
+```
+
+**HPA Based on CPU:**
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: web-app-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: web-app
+  
+  minReplicas: 3
+  maxReplicas: 10
+  
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70  # Scale up if avg CPU > 70%
+  
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0  # Scale up immediately
+      policies:
+      - type: Percent
+        value: 100  # Double pods on scale up
+        periodSeconds: 15
+    
+    scaleDown:
+      stabilizationWindowSeconds: 300  # Wait 5 min before scaling down
+      policies:
+      - type: Percent
+        value: 50  # Reduce by 50% on scale down
+        periodSeconds: 60
+```
+
+**HPA Based on Custom Metrics:**
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: web-app-custom-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: web-app
+  
+  minReplicas: 2
+  maxReplicas: 20
+  
+  metrics:
+  # Based on multiple metrics
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
+  
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  
+  - type: Pods
+    pods:
+      metric:
+        name: http_requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "1000"  # Scale if >1000 req/s
+  
+  - type: Object
+    object:
+      metric:
+        name: requests_per_second
+      describedObject:
+        apiVersion: v1
+        kind: Service
+        name: web-app
+      target:
+        type: Value
+        value: "10000"  # Scale if >10k requests
+```
+
+**Commands:**
+
+```bash
+# Create HPA
+kubectl autoscale deployment web-app --min=2 --max=10 --cpu-percent=70
+
+# Or apply YAML
+kubectl apply -f hpa.yaml
+
+# View HPA
+kubectl get hpa
+kubectl describe hpa web-app-hpa
+
+# Watch HPA in action
+kubectl get hpa web-app-hpa --watch
+
+# Delete HPA
+kubectl delete hpa web-app-hpa
+```
+
+**Key Points:**
+```
+✓ HPA: Automatic scaling based on metrics
+✓ Works with CPU, memory, custom metrics
+✓ minReplicas: Minimum pods to keep
+✓ maxReplicas: Maximum pods allowed
+✓ averageUtilization: Threshold for scaling
+✓ Requires metrics-server
+✓ Essential for cost optimization
+```
+
+---
+
+### 2. Ingress - Advanced Routing
+
+**Ingress vs Service:**
+
+```
+Service:
+├─ Layer 4 (Transport)
+├─ TCP/UDP port forwarding
+├─ LoadBalancer has external IP
+└─ One IP per service
+
+Ingress:
+├─ Layer 7 (Application)
+├─ HTTP/HTTPS routing
+├─ Single LoadBalancer, many Ingresses
+├─ Host-based routing (myapp.com vs api.example.com)
+├─ Path-based routing (/api, /web, /admin)
+└─ TLS/SSL termination
+```
+
+**Ingress Example:**
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: multi-app-ingress
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  
+  # TLS/SSL
+  tls:
+  - hosts:
+    - myapp.example.com
+    - api.example.com
+    secretName: myapp-tls-cert
+  
+  rules:
+  # Frontend app on myapp.example.com
+  - host: myapp.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80
+  
+  # API on api.example.com
+  - host: api.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api
+            port:
+              number: 8080
+  
+  # Admin on myapp.example.com/admin
+  - host: myapp.example.com
+    http:
+      paths:
+      - path: /admin
+        pathType: Prefix
+        backend:
+          service:
+            name: admin
+            port:
+              number: 3000
+  
+  # Fallback
+  - host: ""
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80
+```
+
+**Ingress Classes:**
+
+```
+Common: nginx, AWS ALB, GCP Ingress, Azure Application Gateway
+
+Example: NGINX Ingress
+├─ kubectl apply -f nginx-ingress-controller.yaml
+├─ Creates LoadBalancer service
+├─ Routes all traffic based on Ingress rules
+└─ Cost: One LB for many Ingresses
+```
+
+**Key Points:**
+```
+✓ Ingress: Layer 7 routing
+✓ Host-based routing
+✓ Path-based routing
+✓ TLS/SSL termination
+✓ Single LoadBalancer, multiple Ingresses
+✓ Cost-effective (vs multiple LoadBalancer services)
+✓ Requires Ingress Controller (nginx, ALB, etc)
+```
+
+---
+
+### 3. Network Policies - Traffic Control
+
+**Network Policy:**
+
+```
+Network Policy = Firewall rules for Pod traffic
+
+Without Policy:
+├─ All Pods can talk to all Pods
+├─ Security risk
+├─ No traffic isolation
+
+With Policy:
+├─ Default deny all traffic
+├─ Explicit allow rules
+├─ Fine-grained control
+```
+
+**Network Policy Examples:**
+
+```yaml
+# Deny all ingress traffic (default deny)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+
+---
+# Allow traffic only from specific pod
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-frontend
+spec:
+  podSelector:
+    matchLabels:
+      app: backend
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: frontend
+    ports:
+    - protocol: TCP
+      port: 8080
+
+---
+# Allow frontend to access backend, backend to access database
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-network-policy
+spec:
+  podSelector:
+    matchLabels:
+      tier: backend
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  # Allow ingress from frontend only
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          tier: frontend
+    ports:
+    - protocol: TCP
+      port: 8080
+  
+  # Allow egress to database only
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          tier: database
+    ports:
+    - protocol: TCP
+      port: 5432
+  
+  # Allow DNS queries (for service discovery)
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 53
+```
+
+**Key Points:**
+```
+✓ NetworkPolicy: Firewall for Pods
+✓ Default deny all traffic
+✓ Explicit allow rules
+✓ Ingress: Incoming traffic
+✓ Egress: Outgoing traffic
+✓ Pod-level granularity
+✓ Requires CNI plugin support
+```
+
+---
+
+### 4. RBAC - Role-Based Access Control
+
+**RBAC Components:**
+
+```
+Subject (Who):
+├─ User
+├─ ServiceAccount
+└─ Group
+
+Verb (What):
+├─ get, list, create, update, delete
+├─ patch, delete, deletecollection
+└─ watch, proxy
+
+Resource (On What):
+├─ pods, services, deployments
+├─ secrets, configmaps
+└─ nodes, namespaces
+```
+
+**RBAC Example:**
+
+```yaml
+# ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: app-sa
+  namespace: default
+
+---
+# Role (Permissions)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: app-role
+  namespace: default
+rules:
+# Allow reading pods
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+
+# Allow managing deployments
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "create", "update", "patch"]
+
+# Allow reading configmaps
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list"]
+
+---
+# RoleBinding (Assign role to service account)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: app-rolebinding
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: app-sa
+  namespace: default
+roleRef:
+  kind: Role
+  name: app-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Pod using ServiceAccount
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+spec:
+  template:
+    spec:
+      serviceAccountName: app-sa
+      containers:
+      - name: app
+        image: myapp:v1
+```
+
+**ClusterRole (Cluster-wide):**
+
+```yaml
+# ClusterRole (applies to all namespaces)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: admin-role
+rules:
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["*"]
+
+---
+# ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: admin-binding
+subjects:
+- kind: User
+  name: admin@example.com
+roleRef:
+  kind: ClusterRole
+  name: admin-role
+  apiGroup: rbac.authorization.k8s.io
+```
+
+**Key Points:**
+```
+✓ RBAC: Fine-grained access control
+✓ Role: Permissions (namespace-scoped)
+✓ ClusterRole: Permissions (cluster-wide)
+✓ RoleBinding: Assign role to user/SA
+✓ ClusterRoleBinding: Assign cluster role
+✓ ServiceAccount: Identity for Pods
+✓ Principle of least privilege
+```
+
+---
+
+### 5. Service Mesh (Istio) - Advanced Networking
+
+**Service Mesh:**
+
+```
+Service Mesh = Networking layer for microservices
+
+Provides:
+├─ Traffic management (routing, retry, timeout)
+├─ Security (mTLS, authorization)
+├─ Observability (traces, metrics)
+└─ Resilience (circuit breaking, rate limiting)
+
+How: Injects sidecar proxy (Envoy) in each Pod
+```
+
+**Istio Example:**
+
+```yaml
+# Enable sidecar injection
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: production
+  labels:
+    istio-injection: enabled  # Auto-inject Envoy sidecar
+
+---
+# VirtualService (Traffic routing)
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: web-app
+  namespace: production
+spec:
+  hosts:
+  - web-app
+  http:
+  # 90% traffic to v1
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: web-app
+        subset: v1
+      weight: 90
+    # 10% traffic to v2 (canary)
+    - destination:
+        host: web-app
+        subset: v2
+      weight: 10
+    timeout: 30s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+
+---
+# DestinationRule (Pod subsets)
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: web-app
+  namespace: production
+spec:
+  host: web-app
+  trafficPolicy:
+    connectionPool:
+      http:
+        http1MaxPendingRequests: 100
+        http2MaxRequests: 100
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+  - name: v2
+    labels:
+      version: v2
+
+---
+# PeerAuthentication (mTLS)
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: production
+spec:
+  mtls:
+    mode: STRICT  # Require mTLS for all traffic
+
+---
+# AuthorizationPolicy (Authorization)
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: frontend-policy
+  namespace: production
+spec:
+  selector:
+    matchLabels:
+      app: frontend
+  rules:
+  - from:
+    - source:
+        principals: ["cluster.local/ns/production/sa/frontend"]
+    to:
+    - operation:
+        methods: ["GET", "POST"]
+```
+
+**Key Points:**
+```
+✓ Service Mesh: Networking layer
+✓ Sidecar proxy (Envoy) per Pod
+✓ Traffic management (routing, retry)
+✓ Security (mTLS, authorization)
+✓ Observability (traces, metrics)
+✓ Canary deployments
+✓ Circuit breaking, rate limiting
+✓ Examples: Istio, Linkerd, Consul
+```
+
+---
+
+### 6. Operators - Kubernetes-Native Applications
+
+**Operator Pattern:**
+
+```
+Operator = Custom resource + Controller
+
+Encodes operational knowledge
+├─ How to deploy
+├─ How to configure
+├─ How to update
+├─ How to backup
+├─ How to recover
+
+Example: PostgreSQL Operator
+Normal: Manual postgresql setup, config, scaling
+With Operator: kubectl apply -f postgres-cluster.yaml
+             Auto setup, scaling, backup, recovery
+```
+
+**Operator Example - PostgreSQL:**
+
+```yaml
+# PostgreSQL Cluster using operator
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres-cluster
+spec:
+  instances: 3
+  
+  postgresql:
+    parameters:
+      max_connections: "100"
+      shared_buffers: "256MB"
+  
+  bootstrap:
+    initdb:
+      database: myapp
+      owner: myapp
+  
+  storage:
+    size: 10Gi
+    storageClass: fast-ssd
+  
+  backup:
+    barmanObjectStore:
+      destinationPath: s3://my-bucket/postgres-backup
+      s3Credentials:
+        accessKeyId:
+          name: backup-creds
+          key: access-key
+        secretAccessKey:
+          name: backup-creds
+          key: secret-key
+    retentionPolicy: "7d"
+
+---
+# Scheduled backup
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: postgres-daily-backup
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  backupOwnerReference: cluster
+  cluster:
+    name: postgres-cluster
+```
+
+**Key Points:**
+```
+✓ Operator: Kubernetes-native application
+✓ Custom Resource Definition (CRD)
+✓ Controller watches CRDs
+✓ Automates complex operations
+✓ Encodes operational expertise
+✓ Examples: PostgreSQL, MySQL, Redis, Kafka
+✓ Available on OperatorHub
+```
+
+---
+
+### 7. GitOps - Declarative Infrastructure
+
+**GitOps Workflow:**
+
+```
+Traditional CI/CD:
+├─ Developer: Push code
+├─ CI: Build image
+├─ CI: Push to registry
+├─ Deployment: Manual kubectl apply
+└─ Result: Cluster state unknown
+
+GitOps:
+├─ Developer: Push code
+├─ CI: Build image
+├─ CI: Update deployment YAML in Git
+├─ Git: Single source of truth
+├─ CD: Auto-sync cluster to Git
+└─ Result: Cluster = Git state (always)
+
+Benefits:
+✓ Git is source of truth
+✓ Automatic sync
+✓ Easy rollback (git revert)
+✓ Audit trail (git history)
+✓ Disaster recovery (git clone)
+```
+
+**ArgoCD Example:**
+
+```yaml
+# Install ArgoCD
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+---
+# Application (points to Git repo)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: web-app
+  namespace: argocd
+spec:
+  project: default
+  
+  # Git repository with manifests
+  source:
+    repoURL: https://github.com/myorg/myapp-k8s
+    targetRevision: main
+    path: kubernetes/production
+    
+    # Auto-sync from Git
+    helm:
+      releaseName: myapp
+      values:
+        replicas: 3
+        image:
+          tag: latest
+  
+  # Deploy to production cluster
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: production
+  
+  # Auto-sync: Keep cluster in sync with Git
+  syncPolicy:
+    automated:
+      prune: true      # Delete resources not in Git
+      selfHeal: true   # Fix drift
+    syncOptions:
+    - CreateNamespace=true
+```
+
+**Workflow:**
+
+```bash
+# 1. Developer commits code
+git commit -am "Update web app"
+git push
+
+# 2. CI builds and pushes image
+# Triggers webhook
+
+# 3. CI updates Helm values or deployment YAML
+git commit -am "Update image to v1.2.3"
+git push
+
+# 4. ArgoCD detects Git change
+# Shows in UI: Out of sync
+
+# 5. ArgoCD auto-syncs (or manual approval)
+# kubectl apply -f manifests/
+
+# 6. Cluster updated to match Git
+# ArgoCD shows: Synced
+
+# Rollback: git revert + ArgoCD auto-syncs
+git revert HEAD
+git push
+# ArgoCD auto-syncs back to previous version
+```
+
+**Key Points:**
+```
+✓ GitOps: Git as single source of truth
+✓ Declarative: YAML in Git
+✓ Automatic sync: Cluster = Git
+✓ Easy rollback: git revert
+✓ Audit trail: Git history
+✓ Tools: ArgoCD, Flux, Helm
+✓ Disaster recovery: git clone
+```
+
+---
+
+
+
+### Cluster Architecture
+
+```
+KUBERNETES CLUSTER ARCHITECTURE:
+
+┌────────────────────────────────────────┐
+│         Control Plane (Master)         │
+│  (Runs Kubernetes system components)   │
+├────────────────────────────────────────┤
+│                                        │
+│ ┌──────────────────────────────────┐  │
+│ │   API Server (kube-apiserver)    │  │
+│ │  - REST API entry point           │  │
+│ │  - Validates requests             │  │
+│ │  - Stores in etcd                 │  │
+│ └──────────────────────────────────┘  │
+│                 ↓                      │
+│ ┌──────────────────────────────────┐  │
+│ │ Scheduler (kube-scheduler)       │  │
+│ │  - Watches for new Pods          │  │
+│ │  - Assigns to Nodes              │  │
+│ │  - Considers constraints         │  │
+│ └──────────────────────────────────┘  │
+│                 ↓                      │
+│ ┌──────────────────────────────────┐  │
+│ │ Controller Manager               │  │
+│ │  - Deployment Controller         │  │
+│ │  - Replica Controller            │  │
+│ │  - Service Controller            │  │
+│ │  - Watches and reconciles state  │  │
+│ └──────────────────────────────────┘  │
+│                 ↓                      │
+│ ┌──────────────────────────────────┐  │
+│ │ etcd (Database)                  │  │
+│ │  - Cluster state storage         │  │
+│ │  - Consistent, reliable          │  │
+│ │  - Source of truth               │  │
+│ └──────────────────────────────────┘  │
+└────────────────────────────────────────┘
+              ↓
+┌────────────────────────────────────────┐
+│           Worker Nodes                 │
+│    (Run user containers/Pods)          │
+├────────────────────────────────────────┤
+│ ┌──────────────────────────────────┐  │
+│ │ Node 1                           │  │
+│ │ ┌────────────────────────────┐  │  │
+│ │ │ kubelet                    │  │  │
+│ │ │ - Pod runtime              │  │  │
+│ │ │ - Health checks            │  │  │
+│ │ │ - Reports status           │  │  │
+│ │ └────────────────────────────┘  │  │
+│ │ ┌────────────────────────────┐  │  │
+│ │ │ kube-proxy                 │  │  │
+│ │ │ - Network routing          │  │  │
+│ │ │ - Load balancing           │  │  │
+│ │ │ - Service routing          │  │  │
+│ │ └────────────────────────────┘  │  │
+│ │ ┌────────────────────────────┐  │  │
+│ │ │ Container Runtime (Docker) │  │  │
+│ │ │ - Manages containers       │  │  │
+│ │ │ - Pulls images             │  │  │
+│ │ │ - Starts/stops containers  │  │  │
+│ │ └────────────────────────────┘  │  │
+│ └──────────────────────────────────┘  │
+│ ┌──────────────────────────────────┐  │
+│ │ Node 2, 3, N ... (same as above) │  │
+│ └──────────────────────────────────┘  │
+└────────────────────────────────────────┘
+```
+
+### Control Plane Components
+
+```
+1. API SERVER (kube-apiserver)
+   Role: Central API endpoint
+   - All communication goes through API
+   - Validates requests
+   - Stores data in etcd
+   - Provides authentication/authorization
+   
+   Example: kubectl talks to API server
+   kubectl → HTTP/REST → API Server → etcd
+
+2. SCHEDULER (kube-scheduler)
+   Role: Assigns Pods to Nodes
+   - Watches for new Pods (no node assignment)
+   - Filters nodes based on requirements
+   - Ranks nodes by best fit
+   - Assigns Pod to best node
+   
+   Example: Deploy 3 Pods
+   - Pod 1: Assigned to Node 1
+   - Pod 2: Assigned to Node 3
+   - Pod 3: Assigned to Node 2
+
+3. CONTROLLER MANAGER (kube-controller-manager)
+   Role: Runs controller loops
+   - Deployment Controller: Ensure desired replicas
+   - Replica Controller: Replace failed Pods
+   - Service Controller: Create/update Services
+   - Node Controller: Monitor node health
+   
+   Example: Desired 3 replicas, only 2 running
+   → Controller detects mismatch
+   → Creates new Pod to reach 3
+
+4. etcd
+   Role: Cluster database
+   - Key-value store
+   - Stores all cluster state
+   - Consistent, durable
+   - Critical for recovery
+   
+   What's stored:
+   - All Pod definitions
+   - Deployment configs
+   - Service configs
+   - ConfigMaps, Secrets
+   - Node status
+```
+
+### Worker Node Components
+
+```
+1. kubelet
+   Role: Node agent
+   - Runs on every node
+   - Manages Pods on that node
+   - Pulls container images
+   - Reports node status
+   - Health checks (liveness, readiness)
+   
+   Example: Receives "run Pod X"
+   - kubelet pulls image
+   - Creates container
+   - Monitors health
+   - Reports status
+
+2. kube-proxy
+   Role: Network proxy
+   - Handles network routing
+   - Implements Services
+   - Load balancing
+   - iptables rules
+   
+   Example: Traffic to Service IP 10.1.0.1
+   - kube-proxy intercepts
+   - Routes to one of 3 Pod IPs
+   - Load balanced
+
+3. Container Runtime
+   Role: Container execution
+   - Docker, containerd, CRI-O, etc.
+   - Pulls and runs containers
+   - Manages container lifecycle
+   
+   Example: docker run container
+   - Container runtime handles
+```
+
+---
+
+### 8. Persistent Volumes & Storage
+
+**Concept:**
+Persistent Volumes (PV) provide durable storage that survives Pod restart. Storage decoupled from containers.
+
+**Storage Problem:**
+
+```
+WITHOUT PV:
+Pod runs with data
+├─ Pod crashes
+├─ Data lost
+└─ New Pod starts with no data
+
+Example: Database Pod
+- Stores data in /var/lib/mysql
+- Pod crashes
+- Data gone
+- Application broken
+
+WITH PV:
+Pod mounts PV
+├─ Pod crashes
+├─ PV still exists
+├─ New Pod mounts same PV
+└─ Data still there
+
+Example: Database Pod with PV
+- Mounts PV at /var/lib/mysql
+- Pod crashes
+- PV persists
+- New Pod mounts same PV
+- Data still there, database recovers
+```
+
+**Storage Types:**
+
+```
+1. emptyDir
+   - Temporary storage
+   - Shared between containers in same Pod
+   - Deleted when Pod deleted
+   - Use case: Temp files, cache between containers
+
+2. hostPath
+   - Storage on node
+   - Persists if Pod moves
+   - Not recommended for production
+   - Use case: Dev/test, debugging
+
+3. Cloud Storage
+   - AWS EBS, GCP Persistent Disk, Azure Disk
+   - Distributed, durable
+   - Recommended for production
+   - Use case: Production databases, logs
+
+4. NFS (Network File System)
+   - Shared across nodes
+   - Multiple Pods can mount same NFS
+   - Use case: Shared data, multi-node applications
+
+5. StatefulSet with PersistentVolume
+   - Each Pod gets own PV
+   - Stable identity
+   - Use case: Databases, queues
+```
+
+**Real-World Example:**
+
+```yaml
+# PersistentVolume (Infrastructure - admin creates)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-database
+spec:
+  capacity:
+    storage: 100Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: fast-ssd
+  awsElasticBlockStore:
+    volumeID: vol-12345
+    fsType: ext4
+
+---
+# PersistentVolumeClaim (Requested by application)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: db-storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+# Deployment using PVC
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: database
+  template:
+    metadata:
+      labels:
+        app: database
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:13
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: db-storage
+```
+
+**Key Points:**
+```
+✓ PV: Storage decoupled from Pods
+✓ Persists across Pod restarts
+✓ Multiple storage backends supported
+✓ PVC: How Pods request storage
+✓ StatefulSet: For stateful applications
+✓ Important for databases, file storage
+```
+
+---
+
+## INSTALLATION & SETUP
+
+### Kubernetes Distributions
+
+```
+1. MANAGED KUBERNETES (Recommended for Production)
+   ├─ AWS EKS (Elastic Kubernetes Service)
+   │  ├─ AWS manages control plane
+   │  ├─ You manage worker nodes
+   │  ├─ Cost: $0.20/hour + nodes
+   │  └─ Good for: Production apps, AWS users
+   │
+   ├─ Google GKE (Google Kubernetes Engine)
+   │  ├─ Google manages control plane
+   │  ├─ Auto-scaling nodes
+   │  ├─ Cost: $0.10/hour + nodes
+   │  └─ Good for: Production apps, Google Cloud
+   │
+   ├─ Azure AKS (Azure Kubernetes Service)
+   │  ├─ Microsoft manages control plane
+   │  ├─ Integrated with Azure services
+   │  ├─ Cost: Free control plane + nodes
+   │  └─ Good for: Production apps, Microsoft ecosystem
+   │
+   └─ Digital Ocean Kubernetes
+      ├─ Simple managed Kubernetes
+      ├─ Cost: $10+/month
+      └─ Good for: Small to medium deployments
+
+2. SELF-MANAGED (For Control/Learning)
+   ├─ kubeadm
+   │  ├─ Official tool for setting up clusters
+   │  ├─ Full control
+   │  └─ Requires expertise
+   │
+   ├─ Kubernetes on VMs
+   │  ├─ Complete control
+   │  ├─ Complex to maintain
+   │  └─ High operational overhead
+   │
+   └─ On-premises
+      ├─ Private infrastructure
+      ├─ Highest control
+      └─ Most expensive to operate
+
+3. LOCAL DEVELOPMENT
+   ├─ Docker Desktop
+   │  ├─ Built-in Kubernetes
+   │  ├─ Single node
+   │  └─ Perfect for learning
+   │
+   ├─ minikube
+   │  ├─ Local single-node cluster
+   │  ├─ Full feature set
+   │  └─ Great for development
+   │
+   └─ kind (Kubernetes IN Docker)
+      ├─ Runs Kubernetes in Docker
+      ├─ Multi-node on single machine
+      └─ Great for testing
+```
+
+### Quick Start with Docker Desktop
+
+```bash
+# 1. Install Docker Desktop
+# Download from docker.com
+
+# 2. Enable Kubernetes
+# Settings → Kubernetes → Enable Kubernetes
+# Waits ~5 minutes to start
+
+# 3. Verify installation
+kubectl cluster-info
+# Output:
+# Kubernetes master is running at https://127.0.0.1:6443
+
+# 4. Check nodes
+kubectl get nodes
+# Output:
+# NAME             STATUS   ROLES    VERSION
+# docker-desktop   Ready    master   v1.21.0
+
+# 5. Deploy your first app
+kubectl create deployment nginx --image=nginx:latest
+kubectl get pods
+# Output:
+# NAME                     READY   STATUS    RESTARTS   AGE
+# nginx-6d4cf56db6-z8f5k   1/1     Running   0          2m
+
+# 6. Expose as service
+kubectl expose deployment nginx --port=80 --type=LoadBalancer
+kubectl get services
+# Output:
+# NAME    TYPE           CLUSTER-IP    EXTERNAL-IP   PORT(S)
+# nginx   LoadBalancer   10.96.0.1     localhost     80:31234/TCP
+
+# 7. Access the app
+# http://localhost (or http://localhost:80)
+```
+
+---
+
+## PODS & DEPLOYMENTS
+
+### Running Pods
+
+```yaml
+# Simple Pod
+apiVersion: v1
+kind: Pod
+metadata:
+  name: simple-pod
+spec:
+  containers:
+  - name: app
+    image: nginx:latest
+
+# Pod with resources
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-with-resources
+spec:
+  containers:
+  - name: app
+    image: myapp:v1
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "100m"
+      limits:
+        memory: "128Mi"
+        cpu: "500m"
+
+# Pod with environment variables
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-with-env
+spec:
+  containers:
+  - name: app
+    image: myapp:v1
+    env:
+    - name: DATABASE_URL
+      value: "postgres://db:5432/myapp"
+    - name: LOG_LEVEL
+      value: "debug"
+```
+
+### Deployments (Recommended)
+
+```yaml
+# Basic Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+  labels:
+    app: web
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: web
+        image: myapp:v1
+        ports:
+        - containerPort: 8080
+
+# Deployment with rolling update strategy
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app-rolling
+spec:
+  replicas: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1        # One extra Pod during update
+      maxUnavailable: 1  # One Pod down during update
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: web
+        image: myapp:v1
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+```
+
+---
+
+## SERVICES & NETWORKING
+
+### Service Examples
+
+```yaml
+# ClusterIP Service (Internal)
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-service
+spec:
+  type: ClusterIP
+  selector:
+    app: web
+  ports:
+  - port: 80
+    targetPort: 8080
+
+---
+# NodePort Service (External)
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-nodeport
+spec:
+  type: NodePort
+  selector:
+    app: web
+  ports:
+  - port: 80
+    targetPort: 8080
+    nodePort: 30080  # Access via node-ip:30080
+
+---
+# LoadBalancer Service (Production)
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-lb
+spec:
+  type: LoadBalancer
+  selector:
+    app: web
+  ports:
+  - port: 80
+    targetPort: 8080
+```
+
+### Ingress (API Gateway)
+
+```yaml
+# Ingress for routing
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: myapp.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: web-service
+            port:
+              number: 80
+  - host: api.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api-service
+            port:
+              number: 8080
+```
+
+---
+
+## PRACTICAL EXAMPLES
+
+### Complete Application Deployment
+
+```yaml
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: production
+
+---
+# ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: production
+data:
+  DATABASE_HOST: "postgres.production.svc.cluster.local"
+  DATABASE_PORT: "5432"
+  LOG_LEVEL: "info"
+
+---
+# Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secrets
+  namespace: production
+type: Opaque
+data:
+  DATABASE_PASSWORD: cG9zdGdyZXNfc2VjcmV0  # base64
+
+---
+# PersistentVolumeClaim for database
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: database-storage
+  namespace: production
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+# Database StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: production
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:13
+        ports:
+        - containerPort: 5432
+        envFrom:
+        - secretRef:
+            name: app-secrets
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+      volumeClaimTemplates:
+      - metadata:
+          name: data
+        spec:
+          accessModes: [ "ReadWriteOnce" ]
+          resources:
+            requests:
+              storage: 20Gi
+
+---
+# Database Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: production
+spec:
+  clusterIP: None
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+
+---
+# Web Application Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+  namespace: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web-app
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: web-app
+        version: v1.0.0
+    spec:
+      containers:
+      - name: web
+        image: myapp:v1.0.0
+        ports:
+        - containerPort: 8080
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: app-secrets
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# Web Application Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-app
+  namespace: production
+spec:
+  type: LoadBalancer
+  selector:
+    app: web-app
+  ports:
+  - port: 80
+    targetPort: 8080
+
+---
+# Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: web-app-hpa
+  namespace: production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: web-app
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+```
+
+### Real-World Microservices Setup
+
+```yaml
+# Frontend Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      tier: frontend
+  template:
+    metadata:
+      labels:
+        tier: frontend
+        app: web
+    spec:
+      containers:
+      - name: frontend
+        image: frontend:v1
+        ports:
+        - containerPort: 80
+        env:
+        - name: API_URL
+          value: "http://backend:8080"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+spec:
+  type: LoadBalancer
+  selector:
+    tier: frontend
+  ports:
+  - port: 80
+
+---
+# Backend Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      tier: backend
+  template:
+    metadata:
+      labels:
+        tier: backend
+        app: api
+    spec:
+      containers:
+      - name: backend
+        image: backend:v1
+        ports:
+        - containerPort: 8080
+        env:
+        - name: DATABASE_URL
+          value: "postgres://postgres:5432/myapp"
+        - name: CACHE_URL
+          value: "redis://redis:6379"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+spec:
+  selector:
+    tier: backend
+  ports:
+  - port: 8080
+
+---
+# Cache (Redis)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cache
+  template:
+    metadata:
+      labels:
+        app: cache
+    spec:
+      containers:
+      - name: redis
+        image: redis:latest
+        ports:
+        - containerPort: 6379
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+spec:
+  selector:
+    app: cache
+  ports:
+  - port: 6379
+```
+
+---
+
+## BEST PRACTICES
+
+### Design Principles
+
+```
+1. IMMUTABLE INFRASTRUCTURE
+   ├─ Build container image once
+   ├─ Deploy same image everywhere
+   ├─ Configuration via ConfigMap/Secret
+   ├─ Never modify running containers
+   └─ Benefit: Reproducible, reliable
+
+2. SINGLE RESPONSIBILITY
+   ├─ One process per container
+   ├─ One job per microservice
+   ├─ Easy to scale, update, debug
+   └─ Benefit: Simplicity, maintainability
+
+3. DECLARATIVE OVER IMPERATIVE
+   ├─ Describe desired state
+   ├─ Let Kubernetes achieve it
+   ├─ Never: kubectl exec commands
+   ├─ Always: YAML definitions
+   └─ Benefit: Reproducible, auditable
+
+4. HEALTH CHECKS
+   ├─ livenessProbe: Is app alive?
+   ├─ readinessProbe: Is app ready for traffic?
+   ├─ Enables auto-healing
+   └─ Benefit: Reliable service
+
+5. RESOURCE REQUESTS & LIMITS
+   ├─ Requests: Minimum guaranteed
+   ├─ Limits: Maximum allowed
+   ├─ Enables bin-packing
+   ├─ Prevents resource starvation
+   └─ Benefit: Efficient utilization
+```
+
+### Security Best Practices
+
+```
+1. LEAST PRIVILEGE
+   ├─ Run containers as non-root
+   ├─ Read-only filesystems
+   ├─ Minimal RBAC permissions
+   └─ Benefit: Reduced attack surface
+
+2. IMAGE SCANNING
+   ├─ Scan for vulnerabilities
+   ├─ Use minimal base images
+   ├─ Update regularly
+   └─ Benefit: Known vulnerabilities prevented
+
+3. NETWORK POLICIES
+   ├─ Restrict pod-to-pod traffic
+   ├─ Allow only necessary flows
+   ├─ Default deny approach
+   └─ Benefit: Network segmentation
+
+4. SECRETS MANAGEMENT
+   ├─ Encrypted at rest
+   ├─ RBAC controlled
+   ├─ Rotate regularly
+   └─ Benefit: Credential protection
+```
+
+---
+
+## TROUBLESHOOTING
+
+### Common Issues & Solutions
+
+```
+1. POD NOT STARTING
+   Symptoms: Pod stuck in Pending
+   
+   Debug:
+   kubectl describe pod <pod-name>
+   kubectl logs <pod-name>
+   
+   Common causes:
+   - Insufficient resources
+   - Image not found
+   - Node selector mismatch
+   - PVC not bound
+   
+   Solution: Check events and logs
+
+2. SERVICE NOT REACHABLE
+   Symptoms: Cannot connect to Service IP
+   
+   Debug:
+   kubectl get endpoints <service-name>
+   kubectl logs -l <label>
+   
+   Common causes:
+   - No Pods with correct labels
+   - Pods not ready
+   - Network policy blocking
+   
+   Solution: Verify Pod labels and readiness
+
+3. HIGH CPU/MEMORY USAGE
+   Symptoms: Node under pressure
+   
+   Debug:
+   kubectl top pods
+   kubectl top nodes
+   
+   Solution:
+   - Set resource limits
+   - Increase replicas (HPA)
+   - Optimize container
+
+4. PERSISTENT DATA LOSS
+   Symptoms: Data disappeared after Pod restart
+   
+   Cause: No persistent volume
+   
+   Solution:
+   - Use PVC for persistent data
+   - Mount at correct path
+   - Verify PV exists
+
+5. IMAGE PULL ERRORS
+   Symptoms: ErrImagePull, ImagePullBackOff
+   
+   Causes:
+   - Image doesn't exist
+   - No credentials
+   - Registry unreachable
+   
+   Debug:
+   kubectl describe pod <pod-name>
+   
+   Solution:
+   - Verify image name
+   - Create image pull secret
+   - Check registry access
+```
+
+---
+
+## KEY TAKEAWAYS
+
+```
+Kubernetes provides:
+✓ Automated deployment
+✓ Scaling (horizontal/vertical)
+✓ Self-healing
+✓ Rolling updates (zero-downtime)
+✓ Load balancing
+✓ Resource optimization
+✓ Multi-region/cloud management
+✓ Declarative infrastructure
+
+Core concepts:
+✓ Pods: Smallest deployable unit
+✓ Deployments: Desired state management
+✓ Services: Stable network endpoints
+✓ Namespaces: Multi-tenancy
+✓ ConfigMaps/Secrets: Configuration
+✓ PersistentVolumes: Durable storage
+
+Benefits:
+✓ 60% reduction in ops overhead
+✓ 10x faster deployments
+✓ Better resource utilization
+✓ Improved reliability
+✓ Multi-cloud portability
+✓ Industry standard
+
+Getting started:
+1. Install Docker Desktop + K8s
+2. Deploy first app: kubectl apply -f deployment.yaml
+3. Expose service: kubectl expose deployment
+4. Scale: kubectl scale deployment --replicas=3
+5. Monitor: kubectl logs, kubectl describe
+6. Update: Change image, kubectl apply
+7. Learn: kubectl get, kubectl describe, kubectl logs
+
+Kubernetes journey:
+- Week 1: Basic concepts and deployment
+- Week 2: Services, configuration, persistence
+- Week 3: Advanced topics, scaling, monitoring
+- Week 4+: Custom controllers, operators, advanced patterns
+```
+
+---
+
+## INTERVIEW Q&A - COMPREHENSIVE
+
+### BEGINNER LEVEL
+
+### Q1: What is Kubernetes and why do we need it?
+
+**Answer:**
+
+Kubernetes (K8s) is an open-source container orchestration platform that automates deployment, scaling, and management of containerized applications.
+
+**Why We Need It:**
+
+```
+PROBLEM (Without Kubernetes):
+├─ Deploying containers manually
+├─ Scaling: Add servers, configure manually
+├─ Failures: Manual restart and recovery
+├─ Updates: Stop, update, restart (downtime)
+├─ Multi-region: Complex to manage
+├─ Resource optimization: Difficult
+└─ Cost: High operational overhead
+
+SOLUTION (With Kubernetes):
+├─ Automated deployment
+├─ Auto-scaling based on demand
+├─ Self-healing (auto-restart failed containers)
+├─ Rolling updates (zero-downtime)
+├─ Multi-region/cloud: Native support
+├─ Resource optimization: Bin-packing
+└─ Cost: Reduced operational overhead
+
+Business Benefits:
+✓ 60% reduction in operational costs
+✓ 10x faster deployments
+✓ Better resource utilization
+✓ Improved reliability
+✓ Multi-cloud portability
+```
+
+---
+
+### Q2: Explain Pods and why they exist.
+
+**Answer:**
+
+A Pod is the smallest deployable unit in Kubernetes. It's a wrapper around one or more containers.
+
+**Why Pods (Not Direct Containers)?**
+
+```
+Pod Benefits:
+1. Shared Network
+   - All containers in Pod share IP
+   - Communicate via localhost
+   - Example: App container + logging sidecar
+
+2. Shared Storage
+   - Containers can mount same volumes
+   - Example: App writes logs, sidecar reads
+
+3. Atomic Unit
+   - Scaled together
+   - Failed together
+   - Scheduled together
+
+4. Sidecar Support
+   - Main container + helper containers
+   - Example: App + istio proxy + logging agent
+```
+
+**Structure:**
+
+```
+Pod = Container wrapper
+     ├─ Usually 1 container (90% of cases)
+     ├─ Sometimes 2-3 (sidecar pattern)
+     ├─ Shared network namespace
+     ├─ Shared storage namespace
+     └─ Single IP address
+```
+
+---
+
+### Q3: What's the difference between Deployment and Pod?
+
+**Answer:**
+
+| Aspect | Pod | Deployment |
+|--------|-----|-----------|
+| **Lifecycle** | Ephemeral (dies, gone) | Managed (auto-restart) |
+| **Replication** | Manual manage replicas | Automatic replicas |
+| **Scaling** | Manual create more | kubectl scale |
+| **Updates** | Replace entire Pod | Rolling update |
+| **Rollback** | No rollback | kubectl rollout undo |
+| **Use Case** | Never directly (debug only) | Production, always use |
+| **Self-healing** | No | Yes |
+
+**When to Use:**
+
+```
+Pod: Debugging only
+     kubectl run -it debug --image=busybox -- sh
+
+Deployment: Production (always!)
+            kubectl apply -f deployment.yaml
+            ✓ Self-healing
+            ✓ Scaling
+            ✓ Rolling updates
+            ✓ Rollback
+```
+
+---
+
+### Q4: What are Services and why do we need them?
+
+**Answer:**
+
+Service provides stable network endpoints for Pods. Pod IPs change, Service IPs don't.
+
+**Problem Solved:**
+
+```
+WITHOUT Service:
+├─ Pod IP: 10.0.0.1 (might restart anytime)
+├─ Pod dies: New Pod, new IP
+├─ Clients: Can't track changing IPs
+└─ Problem: Clients break
+
+WITH Service:
+├─ Service IP: 10.1.0.1 (stable)
+├─ Routes to: Pod 1, Pod 2, Pod 3
+├─ Pod dies: Service still has same IP
+├─ Clients: Connect to stable Service IP
+└─ Solution: Works reliably
+```
+
+**Service Types:**
+
+```
+ClusterIP (Default):
+├─ Internal only
+├─ No external access
+├─ Use for: Internal services
+
+NodePort:
+├─ Expose on node port (30000-32767)
+├─ Access: <node-ip>:<port>
+├─ Use for: Dev/test
+
+LoadBalancer:
+├─ Cloud provider load balancer
+├─ External IP assigned
+├─ Use for: Production web apps
+
+ExternalName:
+├─ DNS alias to external service
+├─ Use for: Legacy databases, external services
+```
+
+---
+
+### Q5: What is a Namespace?
+
+**Answer:**
+
+Namespace is a virtual cluster within a physical Kubernetes cluster. Enables multi-tenancy.
+
+**Why Namespaces:**
+
+```
+Naming Conflicts:
+├─ Team A: web-app
+├─ Team B: web-app
+└─ Same name, same cluster: Conflict!
+
+With Namespaces:
+├─ production namespace: web-app
+├─ staging namespace: web-app
+└─ development namespace: web-app
+    All coexist, no conflicts!
+
+Resource Isolation:
+├─ Separate resource quotas
+├─ Separate RBAC policies
+├─ Separate network policies
+└─ Multi-environment on single cluster
+```
+
+**Common Namespaces:**
+
+```
+default: User deployments (default)
+kube-system: Kubernetes system components
+kube-public: Public data
+kube-node-lease: Node heartbeat leases
+production: Production apps
+staging: Staging apps
+development: Development apps
+```
+
+---
+
+### Q6: What are ConfigMaps and Secrets?
+
+**Answer:**
+
+Both store configuration data, but with different purposes:
+
+| Aspect | ConfigMap | Secret |
+|--------|-----------|--------|
+| **Purpose** | Non-sensitive config | Sensitive data |
+| **Encryption** | Not encrypted | Encrypted (optional) |
+| **Use Case** | Database URL, log level | Passwords, API keys |
+| **Visibility** | Anyone can view | Limited access |
+| **Size Limit** | 1MB | 1MB |
+
+**When to Use:**
+
+```
+ConfigMap:
+├─ DATABASE_HOST: postgres.svc.cluster.local
+├─ LOG_LEVEL: info
+├─ CACHE_TTL: 3600
+└─ Any non-sensitive config
+
+Secret:
+├─ DATABASE_PASSWORD: *****
+├─ API_KEY: *****
+├─ OAuth tokens
+└─ SSH keys, certificates
+```
+
+**Benefits:**
+
+```
+✓ Decouple config from container image
+✓ Same image for all environments
+✓ Easy updates without rebuild
+✓ Version controlled (in Git)
+✓ Environment-specific configs
+```
+
+---
+
+### Q7: What are labels and selectors?
+
+**Answer:**
+
+Labels are key-value pairs for organizing resources. Selectors query resources by labels.
+
+**Real-World Usage:**
+
+```
+Label Pod:
+metadata:
+  labels:
+    app: web
+    tier: frontend
+    environment: production
+    version: v1.2.3
+
+Query with Selector:
+├─ app=web → Get all web Pods
+├─ tier=frontend → Get all frontend Pods
+├─ environment=production → Get all production Pods
+├─ app=web,environment=production → AND query
+└─ app in (web,api) → OR query
+```
+
+**Use Cases:**
+
+```
+1. Service Selects Pods
+   selector:
+     app: web
+   → Routes traffic to Pods with label app=web
+
+2. Deployment Selects Pods
+   selector:
+     matchLabels:
+       app: web
+   → Manages Pods with label app=web
+
+3. Rolling Updates
+   - Change label: version=v1 → v2
+   - Service auto-routes to new version
+   - Zero-downtime deployment
+
+4. Monitoring
+   - Alert on pods with: environment=production
+   - Monitor specific teams
+```
+
+---
+
+### Q8: What is kubectl?
+
+**Answer:**
+
+kubectl is the Kubernetes command-line interface (CLI) for communicating with the cluster.
+
+**Most Common Commands:**
+
+```bash
+# Viewing
+kubectl get pods              # List pods
+kubectl get deployments       # List deployments
+kubectl get services          # List services
+kubectl describe pod <name>   # Details of pod
+kubectl logs <pod-name>       # View logs
+
+# Deploying
+kubectl apply -f deployment.yaml    # Deploy
+kubectl delete -f deployment.yaml   # Delete
+kubectl scale deployment <name> --replicas=5  # Scale
+
+# Debugging
+kubectl exec -it <pod> -- /bin/bash    # SSH to pod
+kubectl port-forward pod/<pod> 8080:80 # Port forward
+kubectl top pods                       # Resource usage
+
+# Troubleshooting
+kubectl describe node <node>  # Node details
+kubectl get events            # All events
+kubectl logs -f <pod-name>    # Follow logs
+
+# Updating
+kubectl set image deployment/<name> <container>=<image>:<tag>
+kubectl rollout undo deployment/<name>  # Rollback
+```
+
+---
+
+### Q9: What happens when you deploy a Pod?
+
+**Answer:**
+
+Step-by-step process:
+
+```
+1. kubectl apply -f deployment.yaml
+   ↓
+2. API Server receives request
+   ├─ Validates YAML
+   ├─ Stores in etcd
+   ↓
+3. Controller Manager detects new Deployment
+   ├─ Creates ReplicaSet
+   ├─ ReplicaSet creates Pod
+   ↓
+4. Scheduler watches for new Pod (no node assigned)
+   ├─ Evaluates node constraints
+   ├─ Selects best node
+   ├─ Assigns Pod to node
+   ↓
+5. kubelet on node receives Pod
+   ├─ Pulls container image
+   ├─ Starts container
+   ├─ Monitors health
+   ↓
+6. Pod runs
+   ├─ Container starts
+   ├─ kubelet reports status
+   ├─ Service discovers Pod
+   ↓
+7. Result
+   ├─ Pod running
+   ├─ Accessible via Service
+   └─ Ready for traffic
+```
+
+---
+
+### Q10: What is a health check?
+
+**Answer:**
+
+Health checks verify application state. Three types:
+
+**1. Liveness Probe:**
+- Question: "Is the app alive?"
+- If fails: Kill and restart Pod
+- Use: Detect hung processes
+
+**2. Readiness Probe:**
+- Question: "Is the app ready for traffic?"
+- If fails: Remove from Service (no traffic)
+- Use: Prevent traffic to unhealthy app
+
+**3. Startup Probe:**
+- Question: "Did the app start successfully?"
+- If fails: Keep retrying
+- Use: Slow-starting apps
+
+**Example:**
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 5
+```
+
+---
+
+## INTERMEDIATE LEVEL
+
+### Q11: Explain StatefulSets. When and why would you use them?
+
+**Answer:**
+
+StatefulSet manages stateful applications. Each Pod has stable identity.
+
+**Deployment vs StatefulSet:**
+
+```
+DEPLOYMENT (Stateless):
+├─ Pods interchangeable
+├─ Pod names: random (web-xyz, web-abc)
+├─ Scaling: Any order
+├─ Example: Web servers, APIs
+
+STATEFULSET (Stateful):
+├─ Each Pod unique
+├─ Pod names: ordered (postgres-0, postgres-1)
+├─ Scaling: Sequential (0 → 1 → 2)
+├─ Persistent volumes per Pod
+├─ Stable DNS (postgres-0.postgres.svc.cluster.local)
+├─ Example: Databases, queues, caches
+```
+
+**When to Use StatefulSet:**
+
+```
+Use StatefulSet when:
+✓ Application maintains state
+✓ Each Pod needs stable identity
+✓ Pods need persistent storage
+✓ Pods need stable hostnames
+✓ Ordering matters (master-slave setup)
+
+Examples:
+├─ PostgreSQL cluster
+├─ MySQL replication
+├─ Redis cluster
+├─ Kafka brokers
+├─ RabbitMQ cluster
+├─ Cassandra cluster
+```
+
+**StatefulSet Features:**
+
+```
+1. Ordered Deployment
+   Scale to 3: Creates 0 → 1 → 2 sequentially
+
+2. Ordered Deletion
+   Scale to 1: Deletes 2 → 1 → 0 sequentially
+
+3. Persistent Volumes
+   Each Pod gets own PV (never lost)
+
+4. Stable DNS
+   Pod 0: postgres-0.postgres.default.svc.cluster.local
+   Pod 1: postgres-1.postgres.default.svc.cluster.local
+   Pod 2: postgres-2.postgres.default.svc.cluster.local
+
+5. Headless Service
+   No load balancing (direct to Pod)
+   Essential for StatefulSet
+```
+
+---
+
+### Q12: What are DaemonSets? Give an example.
+
+**Answer:**
+
+DaemonSet ensures a Pod runs on every node automatically.
+
+**Use Cases:**
+
+```
+1. Logging Agents (Filebeat, Fluentd)
+   └─ Collect logs from every node
+
+2. Monitoring Agents (Prometheus Node Exporter)
+   └─ Monitor metrics on every node
+
+3. Networking Plugins
+   └─ CNI implementation on every node
+
+4. Storage Provisioners
+   └─ Local storage management on every node
+
+5. Security Agents
+   └─ Virus scanning on every node
+```
+
+**Example - Monitoring Agent:**
+
+```yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: prometheus-agent
+spec:
+  selector:
+    matchLabels:
+      app: prometheus-agent
+  template:
+    metadata:
+      labels:
+        app: prometheus-agent
+    spec:
+      # Tolerations needed for system nodes
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+      
+      containers:
+      - name: agent
+        image: prom/node-exporter:latest
+        ports:
+        - containerPort: 9100
+        
+        volumeMounts:
+        - name: proc
+          mountPath: /proc
+        - name: sys
+          mountPath: /sys
+      
+      volumes:
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: sys
+        hostPath:
+          path: /sys
+```
+
+**Result:**
+
+```
+Cluster with 5 nodes:
+├─ Node 1: prometheus-agent Pod
+├─ Node 2: prometheus-agent Pod
+├─ Node 3: prometheus-agent Pod
+├─ Node 4: prometheus-agent Pod
+└─ Node 5: prometheus-agent Pod
+
+Add Node 6: Automatically creates prometheus-agent Pod
+Remove Node 5: Automatically deletes Pod on that node
+```
+
+---
+
+### Q13: What are Jobs and CronJobs?
+
+**Answer:**
+
+Job runs Pod to completion (not continuously). CronJob runs Job on schedule.
+
+**Job vs Deployment:**
+
+```
+DEPLOYMENT:
+├─ Runs continuously
+├─ Auto-restarts if fails
+├─ Example: Web server
+
+JOB:
+├─ Runs until completion
+├─ Completes and stops
+├─ Example: Backup, data processing, cleanup
+```
+
+**Job Example:**
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: backup-job
+spec:
+  completions: 1
+  parallelism: 1
+  backoffLimit: 3  # Retry 3 times
+  activeDeadlineSeconds: 3600  # Timeout 1 hour
+  
+  template:
+    spec:
+      containers:
+      - name: backup
+        image: backup-tool:v1
+        command: ["tar", "czf", "/backup/data.tar.gz", "/data"]
+      
+      restartPolicy: Never
+```
+
+**CronJob Example:**
+
+```yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: daily-backup
+spec:
+  schedule: "0 2 * * *"  # Every day at 2 AM
+  
+  jobTemplate:
+    spec:
+      completions: 1
+      template:
+        spec:
+          containers:
+          - name: backup
+            image: backup-tool:v1
+            command: ["tar", "czf", "/backup/data-$(date +%Y%m%d).tar.gz", "/data"]
+          
+          restartPolicy: Never
+  
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+```
+
+---
+
+### Q14: What are resource requests and limits?
+
+**Answer:**
+
+Resource requests and limits control CPU/memory allocation.
+
+**Requests vs Limits:**
+
+```
+REQUESTS (Minimum Guaranteed):
+├─ Scheduler ensures available on node
+├─ Pod gets this amount guaranteed
+├─ Can use more if available
+├─ Used for: Scheduling decisions
+
+LIMITS (Maximum Allowed):
+├─ Pod can't exceed this
+├─ CPU limit: Throttled (slowed down)
+├─ Memory limit: Killed (OOM)
+├─ Used for: Resource protection
+```
+
+**Example:**
+
+```yaml
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+# Interpretation:
+# - Scheduler needs 256MB RAM, 0.1 CPU available
+# - Pod guaranteed to get this
+# - Pod can use up to 512MB RAM, 0.5 CPU
+# - If exceeds: CPU throttled, memory OOM killed
+```
+
+**Resource Units:**
+
+```
+CPU:
+├─ 1000m = 1 full CPU
+├─ 500m = half CPU
+├─ 100m = 0.1 CPU
+└─ Used from: --cpus on docker
+
+Memory:
+├─ 1Gi = 1 Gigabyte (1024^3)
+├─ 1Mi = 1 Megabyte (1024^2)
+├─ 1Ki = 1 Kilobyte (1024)
+└─ Be accurate for scheduling
+```
+
+**Why Important:**
+
+```
+✓ Ensures fair sharing
+✓ Prevents resource starvation
+✓ Enables efficient bin-packing
+✓ Protects cluster stability
+✓ Allows HPA to work correctly
+```
+
+---
+
+### Q15: What is Ingress?
+
+**Answer:**
+
+Ingress manages external access to services using Layer 7 (HTTP/HTTPS) routing.
+
+**Ingress vs LoadBalancer Service:**
+
+```
+LOADBALANCER SERVICE:
+├─ One cloud LB per service
+├─ Each service gets external IP
+├─ Cost: LB per service ($$$)
+├─ Scale: Expensive (10 services = 10 LBs)
+
+INGRESS:
+├─ Single entry point (Ingress Controller)
+├─ Routes based on hostname/path
+├─ Host: myapp.com → frontend service
+├─ Host: api.com → api service
+├─ Path: /admin → admin service
+├─ Cost: One LB for many services ($)
+├─ Scale: Cheap (add ingress rules, not LBs)
+```
+
+**Ingress Example:**
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: main-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: myapp.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80
+  
+  - host: api.myapp.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api
+            port:
+              number: 8080
+  
+  tls:
+  - hosts:
+    - myapp.com
+    - api.myapp.com
+    secretName: tls-cert
+```
+
+**Benefits:**
+
+```
+✓ Cost: Single LB
+✓ Flexibility: Host/path routing
+✓ TLS/SSL: Centralized
+✓ Monitoring: One place
+✓ Scalability: Easy to add rules
+```
+
+---
+
+### Q16: What is a Persistent Volume and why is it needed?
+
+**Answer:**
+
+PersistentVolume (PV) provides durable storage for Pods. Data survives Pod restart.
+
+**Problem:**
+
+```
+WITHOUT PV:
+├─ Pod container: /data directory
+├─ Pod crashes/restarts
+├─ New Pod: New container, empty /data
+├─ Problem: Data lost!
+├─ Use case: Databases crash, lose data
+
+WITH PV:
+├─ Pod mounts PV at /data
+├─ PV on external storage (disk)
+├─ Pod crashes/restarts
+├─ New Pod: Mounts same PV
+├─ Problem: Solved! Data persists
+├─ Use case: Databases work reliably
+```
+
+**PV Access Modes:**
+
+```
+ReadWriteOnce (RWO):
+├─ One Pod can read/write
+├─ Use for: Databases
+
+ReadOnlyMany (ROMany):
+├─ Multiple Pods read only
+├─ Use for: Shared config files
+
+ReadWriteMany (RWMany):
+├─ Multiple Pods read/write
+├─ Use for: Shared storage (NFS)
+```
+
+**Example:**
+
+```yaml
+# PersistentVolumeClaim (request for storage)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: db-storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# Deployment using PVC
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+      - name: db
+        image: postgres:13
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+      
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: db-storage
+```
+
+---
+
+## ADVANCED LEVEL
+
+### Q17: Explain Horizontal Pod Autoscaling (HPA).
+
+**Answer:**
+
+HPA automatically scales Pods based on metrics (CPU, memory, custom).
+
+**How It Works:**
+
+```
+1. Monitor Metrics
+   └─ CPU, memory, requests per second
+
+2. Compare to Target
+   └─ Current: 60% CPU (target: 70%)
+   └─ Decision: No scale
+
+   └─ Current: 85% CPU (target: 70%)
+   └─ Decision: Scale up!
+
+3. Calculate Replicas
+   └─ Formula: ceil(current_metric / target_metric * replicas)
+   └─ Example: 85/70 * 3 = 3.64 → 4 replicas
+
+4. Scale Deployment
+   └─ kubectl scale deployment --replicas=4
+
+5. Repeat
+   └─ Every 15-30 seconds check metrics
+```
+
+**HPA Example:**
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: web-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: web-app
+  
+  minReplicas: 2
+  maxReplicas: 10
+  
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+```
+
+**Scaling Behavior:**
+
+```
+Scale Up:
+├─ When: Metrics exceed target
+├─ How fast: Based on policy
+├─ Example: Double replicas if 100% CPU
+
+Scale Down:
+├─ When: Metrics below target
+├─ How fast: Slow (stabilization window)
+├─ Example: Reduce by 50% after 5 minutes stable
+├─ Why slow: Avoid flapping
+```
+
+**Requirements:**
+
+```
+✓ Metrics Server deployed
+✓ Resource requests defined
+✓ Cooldown periods configured
+✓ Min/max replicas set
+```
+
+---
+
+### Q18: What is RBAC (Role-Based Access Control)?
+
+**Answer:**
+
+RBAC controls who can do what in Kubernetes cluster.
+
+**Components:**
+
+```
+1. SUBJECT (Who)
+   ├─ User
+   ├─ ServiceAccount
+   └─ Group
+
+2. ROLE/CLUSTERROLE (What permissions)
+   ├─ Verbs: get, list, create, update, delete
+   ├─ Resources: pods, deployments, secrets
+   └─ Scope: Namespace (Role) or Cluster (ClusterRole)
+
+3. ROLEBINDING/CLUSTERROLEBINDING (Assign role to subject)
+   └─ Connects subject to role
+```
+
+**Example:**
+
+```yaml
+# ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: app-sa
+
+---
+# Role (permissions)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: app-role
+rules:
+# Allow reading pods
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+
+# Allow managing deployments
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "create", "update"]
+
+---
+# RoleBinding (assign role to service account)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: app-rolebinding
+subjects:
+- kind: ServiceAccount
+  name: app-sa
+roleRef:
+  kind: Role
+  name: app-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Pod using ServiceAccount
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app
+spec:
+  serviceAccountName: app-sa
+  containers:
+  - name: app
+    image: myapp:v1
+```
+
+**Principle of Least Privilege:**
+
+```
+Good:
+├─ Developer: Read pods, list deployments
+├─ CI/CD: Deploy specific app
+├─ Admin: Full cluster access
+
+Bad:
+├─ All users: Cluster admin (security risk!)
+├─ Developers: Secrets access (unnecessary)
+├─ Service accounts: Full permissions
+```
+
+---
+
+### Q19: Design a production-ready deployment with all best practices.
+
+**Answer:**
+
+Complete production deployment:
+
+```yaml
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: production
+  labels:
+    name: production
+
+---
+# ConfigMap (non-sensitive config)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: production
+data:
+  DATABASE_HOST: postgres.production.svc.cluster.local
+  LOG_LEVEL: info
+  CACHE_TTL: "3600"
+
+---
+# Secret (sensitive data)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secrets
+  namespace: production
+type: Opaque
+data:
+  DATABASE_PASSWORD: cGFzc3dvcmQxMjM=
+
+---
+# NetworkPolicy (firewall)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: app-network-policy
+  namespace: production
+spec:
+  podSelector:
+    matchLabels:
+      app: web
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: production
+    ports:
+    - protocol: TCP
+      port: 8080
+
+---
+# Deployment (with best practices)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+  namespace: production
+  labels:
+    app: web
+    version: v1.0.0
+spec:
+  replicas: 3
+  
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  
+  selector:
+    matchLabels:
+      app: web
+  
+  template:
+    metadata:
+      labels:
+        app: web
+        version: v1.0.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    
+    spec:
+      serviceAccountName: app-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      
+      containers:
+      - name: web
+        image: myapp:v1.0.0
+        imagePullPolicy: Always
+        
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        
+        # Environment from ConfigMap/Secret
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: app-secrets
+        
+        # Resource limits (important!)
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 3
+        
+        # Security
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: logs
+          mountPath: /var/log
+      
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: logs
+        emptyDir: {}
+      
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - web
+              topologyKey: kubernetes.io/hostname
+
+---
+# Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-app
+  namespace: production
+spec:
+  type: ClusterIP
+  selector:
+    app: web
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    protocol: TCP
+
+---
+# HPA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: web-app-hpa
+  namespace: production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: web-app
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+
+---
+# ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: app-sa
+  namespace: production
+
+---
+# Role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: app-role
+  namespace: production
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list"]
+
+---
+# RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: app-rolebinding
+  namespace: production
+subjects:
+- kind: ServiceAccount
+  name: app-sa
+roleRef:
+  kind: Role
+  name: app-role
+  apiGroup: rbac.authorization.k8s.io
+```
+
+**Best Practices Included:**
+
+```
+✓ Namespace: Isolated environment
+✓ ConfigMap: Non-sensitive config
+✓ Secret: Sensitive data
+✓ NetworkPolicy: Firewall rules
+✓ ResourceLimits: CPU/memory bounds
+✓ HealthChecks: Liveness + readiness
+✓ SecurityContext: Run as non-root
+✓ ServiceAccount: Limited permissions
+✓ RBAC: Least privilege
+✓ HPA: Auto-scaling
+✓ RollingUpdate: Zero-downtime deploys
+✓ PodAntiAffinity: Spread across nodes
+```
+
+---
+
+### Q20: Explain Service Mesh and when you'd use it.
+
+**Answer:**
+
+Service Mesh is infrastructure layer for managing microservice communication.
+
+**What It Provides:**
+
+```
+1. Traffic Management
+   ├─ Routing (path, header based)
+   ├─ Retries (automatic retry on failure)
+   ├─ Timeouts (circuit breaking)
+   ├─ Rate limiting (protect from overload)
+
+2. Security
+   ├─ mTLS (mutual TLS encryption)
+   ├─ Authorization policies (who can talk)
+   ├─ Certificate management (automatic)
+
+3. Observability
+   ├─ Distributed tracing
+   ├─ Metrics (traffic patterns)
+   ├─ Logs (request/response)
+
+4. Resilience
+   ├─ Retry logic
+   ├─ Circuit breaker (stop failed calls)
+   ├─ Load balancing
+   ├─ Failover
+```
+
+**How Service Mesh Works:**
+
+```
+Sidecar Proxy Pattern:
+
+┌──────────────────────┐
+│      Pod             │
+├──────────────────────┤
+│ Application          │
+│ localhost:8080       │
+├──────────────────────┤
+│ Envoy Proxy (sidecar)│
+│ localhost:15000      │ ← All outgoing traffic routed here
+└──────────────────────┘
+
+Traffic Flow:
+App → Proxy (localhost) → Encryption → Network → Remote Proxy → Remote App
+```
+
+**When to Use Service Mesh:**
+
+```
+Use Service Mesh When:
+✓ Microservices architecture
+✓ Need mTLS encryption
+✓ Complex traffic patterns
+✓ Need observability (traces, metrics)
+✓ Require resilience (retry, timeout)
+✓ Team size: Medium to large
+
+Don't Use When:
+✗ Monolithic application
+✗ Simple deployment
+✗ Performance critical (adds latency)
+✗ Team just starting Kubernetes
+
+Popular Service Meshes:
+├─ Istio (most feature-rich)
+├─ Linkerd (lightweight)
+├─ Consul (HashiCorp)
+└─ Open Service Mesh (simple)
+```
+
+**Cost-Benefit:**
+
+```
+Pros:
+✓ Security (automatic mTLS)
+✓ Observability (see all traffic)
+✓ Reliability (retry, timeout, circuit break)
+✓ No code changes needed
+
+Cons:
+✗ Complexity (learning curve)
+✗ Performance (sidecar overhead ~5-10%)
+✗ Debugging (extra layer)
+✗ Resource usage (additional pods)
+
+ROI:
+Small outages prevented > Sidecar overhead
+Security benefits > Operational complexity
+```
+
+---
+
+### Q21: What is GitOps and how would you implement it?
+
+**Answer:**
+
+GitOps uses Git as single source of truth for cluster state. Automatic sync keeps cluster matching Git.
+
+**GitOps Principles:**
+
+```
+1. Declarative
+   └─ Everything defined in Git (YAML)
+
+2. Version Controlled
+   └─ All changes in Git history
+
+3. Automatically Reconciled
+   └─ Cluster constantly synced to Git
+
+4. Easy Rollback
+   └─ git revert = deployment rollback
+```
+
+**GitOps Workflow:**
+
+```
+1. Developer commits code
+   git push
+
+2. CI builds and tests
+   └─ If pass: Create image
+
+3. CI updates deployment YAML
+   git commit -m "Update image to v1.2.3"
+   git push
+
+4. ArgoCD detects Git change
+   └─ Notices cluster != Git state
+
+5. ArgoCD applies manifests
+   kubectl apply -f manifests/
+
+6. Cluster state = Git state
+   └─ Deployment complete
+
+Rollback:
+git revert <commit>
+git push
+→ ArgoCD auto-syncs back
+```
+
+**ArgoCD Example:**
+
+```yaml
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+
+---
+# Application (connects to Git repo)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: web-app
+  namespace: argocd
+spec:
+  project: default
+  
+  # Source: Git repository
+  source:
+    repoURL: https://github.com/myorg/myapp-manifests
+    targetRevision: main
+    path: kubernetes/production
+  
+  # Destination: Production cluster
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: production
+  
+  # Auto-sync
+  syncPolicy:
+    automated:
+      prune: true      # Delete if not in Git
+      selfHeal: true   # Fix drift
+```
+
+**Benefits:**
+
+```
+✓ Git audit trail (who, when, what changed)
+✓ Easy rollback (git revert)
+✓ Disaster recovery (git clone entire state)
+✓ Compliance (changes reviewed via PR)
+✓ Knowledge in Git (documentation)
+✓ Automatic updates (push = deploy)
+```
+
+**Best Practices:**
+
+```
+1. Git repo per environment
+   ├─ production/ (strict RBAC)
+   ├─ staging/ (semi-strict)
+   └─ development/ (any developer)
+
+2. Branch strategy
+   └─ main = deployed to production
+
+3. Code review
+   └─ All changes via PR (reviewed)
+
+4. Secrets management
+   └─ Use SealedSecrets or Kyverno
+
+5. Test manifests
+   └─ kubectl validate before merge
+```
+
+---
+
+## KEY INTERVIEW TIPS
+
+**Before Interview:**
+
+```
+Study These Concepts:
+✓ kubectl commands (hands-on)
+✓ Pod/Deployment/Service differences
+✓ Health checks (why important)
+✓ Resource limits (scheduling impact)
+✓ RBAC (security)
+✓ HPA (scaling strategy)
+✓ Troubleshooting (debugging skills)
+
+Prepare Examples:
+✓ Problem you solved with K8s
+✓ Debugging failed deployment
+✓ Scaling/performance optimization
+✓ High availability setup
+```
+
+**During Interview:**
+
+```
+Best Practices:
+✓ Show understanding of concepts
+✓ Explain with real-world examples
+✓ Ask clarifying questions
+✓ Mention production concerns:
+  ├─ Security (RBAC, network policies)
+  ├─ Reliability (health checks, HPA)
+  ├─ Monitoring (metrics, logs)
+  ├─ Cost (resource limits, scaling)
+✓ Mention trade-offs
+✓ Show hands-on experience
+```
+
+**Common Questions to Expect:**
+
+```
+Beginner:
+- What is Kubernetes? Why use it?
+- Difference between Pod and Deployment?
+- What are Services?
+- How to scale a deployment?
+
+Intermediate:
+- Design a production deployment
+- How would you debug a failing pod?
+- Explain autoscaling strategy
+- What are resource limits?
+
+Advanced:
+- Design multi-region deployment
+- Service mesh implementation
+- GitOps workflow
+- RBAC security design
+```
+
+---
+
+## INTERVIEW-BASED SCENARIOS AND NOTES
+
+### Scenario 1: Production Outage - Pod Crashing in Deployment
+
+**Interviewer Setup:**
+"Our microservices deployment suddenly started experiencing crashes. Users are reporting errors. You have 10 minutes to diagnose and fix. Walk me through your approach."
+
+**Your Approach (Step-by-Step):**
+
+```bash
+# STEP 1: Check deployment status
+kubectl get deployments -n production
+kubectl describe deployment my-app -n production
+
+# STEP 2: Check pod status
+kubectl get pods -n production
+kubectl get pods -n production -o wide  # See node distribution
+
+# STEP 3: Check pod logs (most critical)
+kubectl logs <pod-name> -n production
+kubectl logs <pod-name> -n production --previous  # If pod restarted
+
+# STEP 4: Describe the failing pod
+kubectl describe pod <pod-name> -n production
+# Look for: ImagePullBackOff, CrashLoopBackOff, OOMKilled, Pending
+
+# STEP 5: Check events
+kubectl get events -n production --sort-by='.lastTimestamp'
+
+# STEP 6: Check resource limits
+kubectl top pod <pod-name> -n production
+kubectl describe node  # Check node capacity
+```
+
+**Common Causes & Solutions:**
+
+```yaml
+# Issue 1: CrashLoopBackOff
+# Cause: Application exits immediately (bad config, missing env var)
+# Solution:
+kubectl set env deployment my-app -n production KEY=VALUE
+kubectl set image deployment my-app -n production \
+  my-app=myrepo/my-app:v1.0.1
+
+# Issue 2: ImagePullBackOff  
+# Cause: Image doesn't exist or no registry credentials
+# Solution:
+kubectl create secret docker-registry regcred \
+  --docker-server=myregistry.com \
+  --docker-username=user \
+  --docker-password=pass \
+  -n production
+
+# Issue 3: OOMKilled (Out of Memory)
+# Cause: Memory limit too low for app
+# Solution:
+kubectl set resources deployment my-app \
+  -n production \
+  --limits=memory=2Gi,cpu=1000m \
+  --requests=memory=1Gi,cpu=500m
+
+# Issue 4: Pending (Pod not scheduled)
+# Cause: Node doesn't have enough resources
+# Solution:
+kubectl scale nodes  # Add more nodes
+kubectl edit node node-name  # Check taints/labels
+```
+
+**Interview Notes:**
+- **Show**: You understand real debugging steps
+- **Avoid**: Saying "restart the pod" (doesn't fix underlying issue)
+- **Key Point**: Know logs → events → metrics progression
+- **Bonus**: Mention monitoring setup (Prometheus alerts would catch this)
+
+---
+
+### Scenario 2: Database Pod Lost Data After Restart
+
+**Interviewer Setup:**
+"We deployed a PostgreSQL database as a simple Pod. It crashed and restarted. Data disappeared. What went wrong and how do you prevent this?"
+
+**Your Analysis:**
+
+```
+Problem Diagnosis:
+├─ Pod restart = data loss
+└─ Root cause: No persistent storage
+
+Why This Happens:
+├─ Container is stateless by default
+├─ Pod restart → new container = fresh filesystem
+├─ /var/lib/postgresql → ephemeral storage → lost
+└─ This is by design (immutability principle)
+
+Correct Solution:
+├─ Use StatefulSet (not Deployment)
+├─ Add PersistentVolume (PV)
+├─ Add PersistentVolumeClaim (PVC)
+└─ Mount to /var/lib/postgresql
+```
+
+**YAML Fix:**
+
+```yaml
+# WRONG - Deployment (loses data):
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:13
+        # ❌ No persistent volume - DATA LOST on crash!
+
+---
+
+# CORRECT - StatefulSet (keeps data):
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgres-pv
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: fast-ssd
+  hostPath:
+    path: /mnt/data/postgres
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: production
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: production
+spec:
+  serviceName: postgres  # Required for StatefulSet
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:13
+        ports:
+        - containerPort: 5432
+          name: db
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: password
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+          subPath: postgres  # Important for PG
+      volumes:
+      - name: postgres-storage
+        persistentVolumeClaim:
+          claimName: postgres-pvc
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: production
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+  clusterIP: None  # Headless service for StatefulSet
+```
+
+**Interview Notes:**
+- **Why StatefulSet?**
+  - Pods have stable network identity (postgres-0, postgres-1)
+  - Persistent storage across restarts
+  - Ordered scaling and termination
+  
+- **Why PersistentVolume?**
+  - Kubernetes abstraction for storage
+  - Can use EBS, GCP Persistent Disk, NFS, etc.
+  - Storage lifecycle independent of Pod
+  
+- **Key Point**: "Never run stateful applications (databases) with Deployment"
+  - Exception: Use managed services (RDS, CloudSQL) instead
+
+---
+
+### Scenario 3: Canary Deployment Gone Wrong
+
+**Interviewer Setup:**
+"You're doing a canary deployment. Send 10% traffic to new version. But after 5 minutes, you see errors spiking. Walk me through what you'd check and how you'd rollback."
+
+**Your Response:**
+
+```yaml
+# Step 1: Current state - 90% old, 10% new
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  replicas: 9  # 90% of traffic (old version)
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+        version: v1.0
+    spec:
+      containers:
+      - name: my-app
+        image: myrepo/my-app:v1.0  # Old version
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app-canary
+spec:
+  replicas: 1  # 10% of traffic (new version)
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+        version: v1.1
+    spec:
+      containers:
+      - name: my-app
+        image: myrepo/my-app:v1.1  # New version (has bug!)
+
+---
+
+# Service routes to BOTH (based on labels)
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-app
+spec:
+  selector:
+    app: my-app  # Matches both deployments!
+  ports:
+  - port: 80
+    targetPort: 8080
+```
+
+**Detection & Rollback:**
+
+```bash
+# STEP 1: Monitor errors (should be in Prometheus/Datadog)
+# See error rate spike to 5% (because 10% of traffic gets new version with bugs)
+
+# STEP 2: Check canary pod logs
+kubectl logs -l version=v1.1 -n production --tail=100
+
+# STEP 3: Identify the problem (e.g., database connection issue)
+# Looking for error patterns
+
+# STEP 4: Quick rollback options:
+
+# Option A: Scale canary to 0
+kubectl scale deployment my-app-canary --replicas=0 -n production
+
+# Option B: Delete canary deployment entirely
+kubectl delete deployment my-app-canary -n production
+
+# Option C: Revert image in main deployment
+kubectl set image deployment my-app \
+  my-app=myrepo/my-app:v1.0 \
+  -n production --record
+
+# STEP 5: Verify traffic normalized
+# Monitor error rate drops back to normal
+
+# STEP 6: Post-mortem on what broke
+```
+
+**Better Approach - Using Service Mesh (Istio):**
+
+```yaml
+# More sophisticated canary with Istio
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: my-app
+spec:
+  hosts:
+  - my-app
+  http:
+  - match:
+    - uri:
+        prefix: "/"
+    route:
+    - destination:
+        host: my-app
+        subset: v1
+      weight: 90  # 90% to old version
+    - destination:
+        host: my-app
+        subset: v1.1
+      weight: 10  # 10% to new version
+
+---
+
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: my-app
+spec:
+  host: my-app
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 100
+        maxRequestsPerConnection: 2
+    outlierDetection:
+      consecutive5xxErrors: 5  # Auto-evict after 5 errors
+      interval: 30s
+      baseEjectionTime: 30s
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+  - name: v1.1
+    labels:
+      version: v1.1
+```
+
+**Interview Notes:**
+- **Service Mesh Advantage**: Built-in traffic splitting, circuit breaking, automatic rollback
+- **Manual Canary**: Requires careful monitoring and quick response
+- **Key Lesson**: Always have rollback strategy ready BEFORE deployment
+- **Pro Tip**: Use observability tools (Prometheus, Grafana) for real-time metrics
+
+---
+
+### Scenario 4: Multi-Tenant Environment Isolation
+
+**Interviewer Setup:**
+"We have 3 customers (Tenant A, B, C) running in same Kubernetes cluster. How do you ensure isolation? If Tenant A exhausts resources, how do we prevent them from affecting B and C?"
+
+**Your Solution:**
+
+```yaml
+# Step 1: Create separate namespaces per tenant
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant-a
+  labels:
+    tenant: a
+
+---
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant-b
+  labels:
+    tenant: b
+
+---
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant-c
+  labels:
+    tenant: c
+
+---
+
+# Step 2: Resource Quotas (prevent resource exhaustion)
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: tenant-a-quota
+  namespace: tenant-a
+spec:
+  hard:
+    requests.cpu: "10"        # Max 10 CPUs
+    requests.memory: "50Gi"   # Max 50GB RAM
+    limits.cpu: "20"          # Max 20 CPUs for limits
+    limits.memory: "100Gi"    # Max 100GB RAM
+    pods: "100"               # Max 100 pods
+    services.loadbalancers: "2"  # Max 2 load balancers
+    persistentvolumeclaims: "10"  # Max 10 storage volumes
+
+---
+
+# Step 3: Network Policies (prevent pod-to-pod traffic)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tenant-a-isolation
+  namespace: tenant-a
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: tenant-a
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: tenant-a
+  - to:  # Allow DNS
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+
+---
+
+# Step 4: RBAC - Tenant can only access own namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tenant-developer
+  namespace: tenant-a
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tenant-a-binding
+  namespace: tenant-a
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: tenant-developer
+subjects:
+- kind: User
+  name: tenant-a-user@company.com
+
+---
+
+# Step 5: Pod Disruption Budgets (ensure high availability within tenant)
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: tenant-a-pdb
+  namespace: tenant-a
+spec:
+  minAvailable: 2  # At least 2 pods always running
+  selector:
+    matchLabels:
+      app: tenant-a-app
+
+---
+
+# Step 6: Storage isolation
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: tenant-a-storage
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: gp2
+  iops: "100"
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tenant-a-data
+  namespace: tenant-a
+spec:
+  storageClassName: tenant-a-storage
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+```
+
+**Cost Breakdown:**
+
+```
+Scenario: Tenant A exhausts resources
+├─ WITHOUT isolation: 
+│  ├─ Tenant A consumes 95% CPU
+│  ├─ Tenant B & C get starved
+│  ├─ All 3 customers affected
+│  ├─ Revenue loss: $50k+ per incident
+│  └─ SLA breaches: -50 reputation points
+│
+├─ WITH isolation:
+│  ├─ Tenant A limited to 10 CPUs (via ResourceQuota)
+│  ├─ Tenant B & C unaffected (guaranteed resources)
+│  ├─ Tenant A app degrades gracefully
+│  ├─ No revenue loss for B & C
+│  └─ SLA maintained: +100 reputation points
+│
+└─ Investment: 2 hours setup, $0 cost, $50k+ savings
+
+Billing Impact:
+├─ Tenant A pays for their usage only ($500/month)
+├─ Tenant B pays for their usage only ($400/month)
+├─ Tenant C pays for their usage only ($300/month)
+└─ Total cluster cost distributed fairly: $1200/month
+```
+
+**Interview Notes:**
+- **Key Concepts**:
+  - Namespaces = logical isolation
+  - ResourceQuota = hard limits
+  - NetworkPolicy = traffic isolation
+  - RBAC = access control
+  - StorageClass = storage isolation
+
+- **Real Scenario**: Multi-tenancy is gold mine for SaaS companies
+- **Common Mistake**: Using RBAC alone (doesn't prevent resource exhaustion)
+- **Pro Setup**: Combine all 6 layers for defense-in-depth
+
+---
+
+### Scenario 5: Zero-Downtime Deployment with Readiness Checks
+
+**Interviewer Setup:**
+"How do you deploy a new version without any users experiencing errors or requests failing during the rollout?"
+
+**Your Solution:**
+
+```yaml
+# The Problem:
+# Without readiness checks, Kubernetes sends traffic BEFORE app is ready
+# Results: Failed requests, 500 errors, user complaints
+
+# The Solution: Use Readiness Probes
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-server
+spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1        # Create 1 extra pod during update
+      maxUnavailable: 0  # Keep all pods available (critical!)
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api-server
+  template:
+    metadata:
+      labels:
+        app: api-server
+    spec:
+      # Graceful shutdown period
+      terminationGracePeriodSeconds: 30
+      
+      containers:
+      - name: api-server
+        image: myrepo/api-server:v1.1
+        ports:
+        - containerPort: 8080
+          name: http
+        
+        # CRITICAL: Readiness probe
+        # Kubernetes waits for this BEFORE sending traffic
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 5   # Wait 5s before first check
+          periodSeconds: 5         # Check every 5 seconds
+          timeoutSeconds: 2        # Timeout after 2 seconds
+          successThreshold: 1      # 1 success = ready
+          failureThreshold: 3      # 3 failures = not ready
+        
+        # CRITICAL: Liveness probe  
+        # Kubernetes restarts if app hangs
+        livenessProbe:
+          httpGet:
+            path: /health/alive
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          failureThreshold: 3
+        
+        # Resource limits for proper scheduling
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        
+        # Graceful shutdown
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 15"]  # Wait for drain
+      
+      # Pod Disruption Budget (for cluster maintenance)
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - api-server
+              topologyKey: kubernetes.io/hostname
+
+---
+
+# Application code example (Node.js)
+# This is what /health/ready endpoint should check:
+
+/*
+GET /health/ready
+
+Response after initialization:
+200 OK
+{
+  "status": "ready",
+  "database": "connected",
+  "cache": "connected"
+}
+
+Response during startup:
+503 Service Unavailable
+{
+  "status": "not ready",
+  "database": "connecting..."
+}
+*/
+```
+
+**Deployment Walkthrough:**
+
+```bash
+# STEP 1: Check current state (3 pods, v1.0)
+kubectl get pods -l app=api-server
+# Output:
+# api-server-v1.0-abc123  1/1 Running
+# api-server-v1.0-def456  1/1 Running
+# api-server-v1.0-ghi789  1/1 Running
+
+# STEP 2: Update image to v1.1
+kubectl set image deployment/api-server \
+  api-server=myrepo/api-server:v1.1 --record
+
+# STEP 3: Watch the rollout (this is key!)
+kubectl rollout status deployment/api-server --timeout=5m
+
+# What's happening internally:
+# Time 0s:   Kubernetes creates 4th pod with v1.1
+# Time 5s:   /health/ready returns 503 (app still starting)
+# Time 8s:   /health/ready returns 200 (app ready)
+# Time 10s:  Kubernetes removes v1.0 pod #1
+# Time 15s:  Kubernetes creates 5th pod with v1.1
+# Time 25s:  5th pod ready, removes v1.0 pod #2
+# Time 35s:  6th pod ready, removes v1.0 pod #3
+# Time 40s:  All 3 pods now v1.1, all serving traffic
+
+# STEP 4: Verify all users still getting responses
+# (no requests failed - zero downtime achieved!)
+
+# STEP 5: If something goes wrong, automatic rollback
+kubectl rollout undo deployment/api-server
+```
+
+**Interview Notes:**
+- **Why maxUnavailable: 0?** 
+  - Ensures at least N pods always serving traffic
+  - No service disruption during update
+  
+- **Why readinessProbe critical?**
+  - Prevents Kubernetes from sending traffic to starting pods
+  - App has time to warm up (DB connections, cache, etc.)
+  - Without this: First batch of users get 500 errors
+  
+- **Real Cost**:
+  ```
+  Without readiness checks:
+  ├─ 5% of requests fail during deployment
+  ├─ 1000 RPS × 5 minutes = 300,000 requests
+  ├─ 15,000 failed requests
+  ├─ User frustration: "Your service is flaky"
+  └─ Revenue impact: -$10k+ in cancellations
+  
+  With readiness checks:
+  ├─ 0% request failure
+  ├─ Users don't notice deployment
+  ├─ Zero support tickets
+  └─ Revenue impact: $0
+  
+  Investment: 30 min setup, 0% cost, $10k+ savings per deployment
+  ```
+
+---
+
+### Scenario 6: Performance Debugging - Which Pod is Slow?
+
+**Interviewer Setup:**
+"Users complain that the API is slow. Response time went from 200ms to 2 seconds. You have production traffic. Show me how you'd debug this without taking systems down."
+
+**Your Investigation Process:**
+
+```bash
+# STEP 1: Check overall service latency
+kubectl get svc api-server -n production
+
+# STEP 2: Check pod distribution
+kubectl get pods -l app=api-server -o wide
+# Look for: Pod running on different nodes? One node busier?
+
+# STEP 3: Check node resources (is node overloaded?)
+kubectl top nodes
+# Normal: 40-60% CPU used
+# Bad: >90% CPU = overload
+
+# STEP 4: Check individual pod resources
+kubectl top pods -l app=api-server -n production
+# Shows CPU and memory for each pod
+
+# STEP 5: Identify slow pod
+# Compare response times to each pod individually
+for pod in $(kubectl get pods -l app=api-server -o jsonpath='{.items[*].metadata.name}'); do
+  echo "Testing $pod..."
+  kubectl exec $pod -n production -- curl -w "@curl-format.txt" -o /dev/null -s \
+    http://localhost:8080/api/health
+done
+
+# STEP 6: Check logs of slow pod
+kubectl logs <slow-pod-name> -n production --tail=50 | grep -i error
+
+# STEP 7: Check events
+kubectl describe pod <slow-pod-name> -n production
+
+# STEP 8: Get detailed metrics
+kubectl exec <slow-pod-name> -n production -- top
+# Shows process-level CPU and memory
+
+# STEP 9: Check database connections (most common cause)
+kubectl logs <slow-pod-name> -n production | grep -i "connection\|timeout\|pool"
+
+# STEP 10: Check environment variables
+kubectl exec <slow-pod-name> -n production -- env | grep DB_
+
+# STEP 11: Port forward and test locally
+kubectl port-forward <slow-pod-name> 8080:8080 -n production
+# Now from your laptop: curl http://localhost:8080/api/users
+# Profile what's slow using your favorite tool
+```
+
+**Common Causes & Fixes:**
+
+```yaml
+# CAUSE 1: Database connection pool exhausted
+# Fix: Update deployment environment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-server
+spec:
+  template:
+    spec:
+      containers:
+      - name: api-server
+        env:
+        - name: DB_POOL_SIZE
+          value: "50"  # Increase connection pool
+        - name: DB_CONNECTION_TIMEOUT
+          value: "10000"  # ms
+
+---
+
+# CAUSE 2: Memory leak causing GC pauses
+# Fix: Restart pods periodically
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: production
+data:
+  restart-strategy: daily-midnight
+
+# In Deployment:
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 30 && kill -TERM 1"]
+
+---
+
+# CAUSE 3: Node disk space low
+# Fix: Check and clean up
+kubectl describe node <node-name> | grep Disk
+
+# Clean up old images:
+ssh node-ip
+docker rmi $(docker images -q --filter dangling=true)
+
+---
+
+# CAUSE 4: CPU throttling (requests too low)
+# Fix: Increase resource requests
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-server
+spec:
+  template:
+    spec:
+      containers:
+      - name: api-server
+        resources:
+          requests:
+            cpu: 500m  # Increased from 200m
+            memory: 512Mi  # Increased from 256Mi
+          limits:
+            cpu: 1000m  # Increased from 500m
+            memory: 1Gi  # Increased from 512Mi
+
+---
+
+# CAUSE 5: Noisy neighbor (other pods consuming resources)
+# Fix: Use pod affinity rules
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-server
+spec:
+  template:
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: NotIn
+                values:
+                - batch-job  # Don't schedule near batch jobs
+            topologyKey: kubernetes.io/hostname
+
+---
+
+# CAUSE 6: Upstream database slow
+# Fix: Check database metrics (outside K8s scope)
+# But from Kubernetes:
+kubectl logs <pod> -n production | grep "Query took"
+# If DB queries slow, need DBA investigation
+
+# Temporary: Enable query caching
+        - name: CACHE_TTL
+          value: "3600"  # Cache 1 hour
+```
+
+**Interview Notes:**
+- **Approach**: Systematic (service → nodes → pods → processes)
+- **Never Guess**: Always measure with `kubectl top` and logs
+- **Communicate**: "I'm checking X, then Y, then Z to isolate the issue"
+- **Proactive**: Have Prometheus/Grafana dashboard set up (reactive debugging = poor SRE practice)
+
+---
+
+### Scenario 7: Cluster Upgrade Without Downtime
+
+**Interviewer Setup:**
+"We need to upgrade Kubernetes from 1.24 to 1.26. 20 critical services running. How do you ensure zero downtime?"
+
+**Your Plan:**
+
+```
+Pre-Upgrade (Day 1):
+├─ 1. Check compatibility: Apps work on new version
+│  └─ Test on staging cluster first
+│
+├─ 2. Back up cluster state
+│  └─ etcd backup, all current config exports
+│
+├─ 3. Plan node upgrade sequence
+│  ├─ Node 1: worker-1
+│  ├─ Node 2: worker-2
+│  ├─ Node 3: worker-3
+│  └─ Last: master-1 (after all workers)
+│
+└─ 4. Set up drain strategy
+   └─ Prevent pods from being evicted ungracefully
+
+Upgrade Phase (Day 2):
+
+# STEP 1: Verify current state
+kubectl get nodes
+kubectl get pods --all-namespaces | wc -l  # Count pods
+
+# STEP 2: Drain Node 1 (graceful eviction)
+kubectl drain worker-1 --ignore-daemonsets --delete-emptydir-data
+# This:
+# ├─ Stops accepting new pods
+# ├─ Evicts all pods gracefully
+# ├─ Pods move to other nodes
+# └─ Wait for all pods to be healthy
+
+# STEP 3: Upgrade Node 1
+ssh worker-1
+sudo kubeadm upgrade node
+sudo apt upgrade kubeadm kubelet kubectl
+sudo systemctl restart kubelet
+
+# STEP 4: Verify upgrade
+kubectl version
+
+# STEP 5: Uncordon Node 1 (re-enable pod scheduling)
+kubectl uncordon worker-1
+kubectl get nodes  # Should show Ready
+
+# STEP 6: Monitor pod restart
+kubectl get pods --all-namespaces -w
+# Wait until all pods are Running
+
+# STEP 7: Repeat for Node 2, 3, etc.
+kubectl drain worker-2 --ignore-daemonsets --delete-emptydir-data
+# ...upgrade worker-2...
+kubectl uncordon worker-2
+
+# STEP 8: Finally, upgrade master
+kubectl drain master-1 --ignore-daemonsets --delete-emptydir-data
+# ...upgrade master-1...
+kubectl uncordon master-1
+
+Post-Upgrade (Day 3):
+├─ Verify all nodes upgraded
+├─ Run test suite
+├─ Verify service health
+└─ Keep rollback plan ready (rarely needed)
+```
+
+**Key Configuration for Zero Downtime:**
+
+```yaml
+# Ensure your apps can tolerate brief disruptions
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: critical-app
+spec:
+  replicas: 3  # Multiple replicas for resilience
+  selector:
+    matchLabels:
+      app: critical-app
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0  # Keep service up during any disruption
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: critical-app
+    spec:
+      terminationGracePeriodSeconds: 45  # Time to close connections
+      
+      # Prevent scheduling on nodes being upgraded
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/os
+                operator: In
+                values:
+                - linux
+      
+      containers:
+      - name: app
+        image: myrepo/critical-app:latest
+        
+        # Graceful shutdown
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - |
+                # Close new connections
+                kill -TERM 1
+                # Wait for existing connections to finish
+                sleep 30
+        
+        # Health checks critical for upgrade
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        
+        livenessProbe:
+          httpGet:
+            path: /alive
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+      
+      # Pod Disruption Budget
+      - name: pdb
+        kind: PodDisruptionBudget
+        spec:
+          minAvailable: 2  # Always keep 2/3 pods running
+          selector:
+            matchLabels:
+              app: critical-app
+```
+
+**Failure Scenarios & Recovery:**
+
+```bash
+# If something goes wrong during drain:
+kubectl uncordon <node>  # Re-enable the node
+
+# If pod fails to evict (stuck terminating):
+kubectl delete pod <name> --grace-period=0 --force
+
+# If node upgrade fails (rollback K8s):
+# (This is cloud-provider specific)
+# AWS: 
+aws ec2 revert-image-version --image-id ami-xxxx
+
+# Verify cluster health
+kubectl cluster-info
+kubectl get cs  # component status
+```
+
+**Interview Notes:**
+- **Key Point**: "maxUnavailable: 0" is crucial for zero downtime
+- **Why drain?** 
+  - Gracefully evicts pods
+  - Gives connections time to finish
+  - Prevents abrupt pod termination
+  
+- **Real Timeline**:
+  ```
+  - 9:00 AM: Start upgrade worker-1
+  - 9:15 AM: Drain complete, pods migrated
+  - 9:20 AM: Upgrade complete, uncordon
+  - 9:25 AM: Pods back on worker-1
+  - Total disruption per pod: < 2 minutes
+  - With 3 workers: total upgrade time ~1.5 hours
+  - Zero end-user downtime
+  ```
+
+---
+
+## SUMMARY - INTERVIEW SCENARIOS CHECKLIST
+
+```
+Concepts to Know:
+[✓] kubectl commands (get, apply, logs, etc)
+[✓] Pod lifecycle and phases
+[✓] Deployment strategy (rolling, blue-green)
+[✓] Service types (ClusterIP, LoadBalancer, Ingress)
+[✓] ConfigMap vs Secret
+[✓] Namespace isolation
+[✓] Labels and selectors
+[✓] Health checks (liveness, readiness)
+[✓] StatefulSet for databases
+[✓] DaemonSet for node agents
+[✓] Jobs and CronJobs
+[✓] Resource requests and limits
+[✓] HPA autoscaling
+[✓] RBAC security
+[✓] Network policies
+[✓] Persistent volumes
+[✓] Service mesh (Istio)
+[✓] GitOps (ArgoCD)
+
+Hands-On Practice:
+[✓] Deploy app with kubectl
+[✓] Expose service and access
+[✓] Scale up/down
+[✓] Update image (rolling update)
+[✓] View logs and debug
+[✓] Access pod shell
+[✓] Create ConfigMap/Secret
+[✓] Define resource limits
+[✓] Configure health checks
+[✓] Set up HPA
+
+Real-World Scenarios:
+[✓] How to handle pod crash?
+[✓] How to do zero-downtime deployment?
+[✓] How to scale based on demand?
+[✓] How to secure cluster?
+[✓] How to manage multiple environments?
+[✓] How to debug performance issues?
+[✓] How to setup disaster recovery?
+```
+
+---
+
+
+
+1. **Automate operations** - Eliminate manual server management
+2. **Improve reliability** - Self-healing, rolling updates, redundancy
+3. **Optimize resources** - Better utilization, cost savings
+4. **Scale easily** - Handle growth automatically
+5. **Manage complexity** - Microservices at scale
+6. **Enable DevOps** - Developers manage deployments
+
+With Kubernetes, teams can focus on application development while the platform handles infrastructure, networking, and reliability automatically.
+
+**Investment**: Learning curve ~4-6 weeks
+**Return**: $200k+/year savings, 10x productivity improvement, industry-leading capabilities
+
+**Next Steps**:
+1. Set up local environment (Docker Desktop + minikube)
+2. Deploy simple applications
+3. Practice: Services, ConfigMaps, Persistent Volumes
+4. Advanced: StatefulSets, DaemonSets, Operators
+5. Production: EKS, GKE, or AKS managed services
