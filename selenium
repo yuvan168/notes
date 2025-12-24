@@ -1,0 +1,3830 @@
+# Selenium Complete Notes - Basic to Advanced
+
+## Table of Contents
+1. [Introduction](#introduction)
+2. [Selenium Architecture](#selenium-architecture)
+3. [Setup & Installation](#setup--installation)
+4. [WebDriver Basics](#webdriver-basics)
+5. [Finding Elements](#finding-elements)
+6. [Web Element Interactions](#web-element-interactions)
+7. [Waits & Synchronization](#waits--synchronization)
+8. [Action Chains](#action-chains)
+9. [Working with Windows & Frames](#working-with-windows--frames)
+10. [JavaScript Execution](#javascript-execution)
+11. [Advanced Concepts](#advanced-concepts)
+12. [Best Practices](#best-practices)
+13. [Common Issues & Solutions](#common-issues--solutions)
+14. [Interview Questions](#interview-questions)
+
+---
+
+## Introduction
+
+### What is Selenium?
+- Open-source automation tool for web application testing
+- Supports multiple programming languages (Java, Python, C#, Ruby, JavaScript, Kotlin, Go)
+- Works across different browsers (Chrome, Firefox, Safari, Edge, IE)
+- Platform-independent (Windows, Mac, Linux)
+- Can be used for automated testing, web scraping, and RPA
+
+### History & Versions
+- **Selenium 1 (2004)**: Selenium IDE and Selenium RC
+- **Selenium 2 (2011)**: WebDriver introduced, merged with Selenium RC
+- **Selenium 3 (2016)**: WebDriver standards
+- **Selenium 4 (2021)**: Modern W3C WebDriver protocol, BiDi support, better relative locators
+
+### Key Advantages
+- Free and open-source
+- Multiple language support
+- Cross-browser compatibility
+- Active community and documentation
+- Easy to learn and use
+
+### Limitations
+- Cannot test desktop applications directly
+- Limited support for handling windows (alerts, dialogs)
+- Slow compared to API testing
+- Cannot test images directly
+- No built-in reporting mechanism
+
+---
+
+## Selenium Architecture
+
+### Architecture Overview
+```
+Test Scripts
+    ↓
+Client Libraries (Python, Java, etc.)
+    ↓
+JSON Wire Protocol / W3C WebDriver Protocol
+    ↓
+Browser Drivers (ChromeDriver, GeckoDriver, etc.)
+    ↓
+Browser (Chrome, Firefox, etc.)
+    ↓
+Web Application
+```
+
+### Detailed Architecture Theory
+
+**How Selenium Works - Communication Flow:**
+
+1. **Test Script Layer** - User writes test code in Java/Python/etc.
+2. **Client Library Layer** - Translates test code into standardized commands
+3. **WebDriver Protocol** - Sends commands over HTTP/JSON to browser driver
+4. **Browser Driver** - Receives commands and translates to browser-specific actions
+5. **Browser Automation API** - Native browser tools execute actual actions
+6. **Web Application** - Browser interacts with web application under test
+
+**Key Theory Concepts:**
+- **Remote Protocol:** Client and driver communicate via HTTP REST API
+- **Stateless:** Each command is independent and self-contained
+- **Asynchronous:** Commands are sent and responses are received
+- **JSON Format:** Data exchanged in standardized JSON format
+- **Multi-threaded:** Each WebDriver instance runs in separate process
+
+### Core Components
+
+#### 1. **Selenium Client Libraries**
+- Language bindings for Java, Python, C#, Ruby, JavaScript, etc.
+- Provides high-level API to interact with WebDriver
+- Handles serialization/deserialization of JSON requests
+- Manages WebDriver lifecycle and sessions
+
+**Key Points:**
+- Each library implements same WebDriver interface
+- Libraries handle HTTP communication internally
+- Developers use library API (not raw HTTP)
+
+#### 2. **W3C WebDriver Protocol (Selenium 4+)**
+- W3C (World Wide Web Consortium) standard specification
+- REST API using HTTP protocol
+- Replaces JSON Wire Protocol (Selenium 3)
+- Commands sent as HTTP POST requests with JSON payload
+
+**Protocol Details:**
+```
+POST /session/{sessionId}/element
+Headers: Content-Type: application/json
+Body: {"using": "id", "value": "element_id"}
+Response: {"value": {"ELEMENT": "{element-id}"}}
+```
+
+**Key Points:**
+- Language-agnostic standard
+- Ensures consistency across browsers
+- Supports parallel execution with multiple sessions
+- Each session has unique sessionId
+
+#### 3. **Browser Drivers**
+- **ChromeDriver (Chrome/Chromium):** Communicates via Chrome DevTools Protocol (CDP)
+- **GeckoDriver (Firefox):** Implements W3C WebDriver standard
+- **SafariDriver (Safari):** Native to Safari browser
+- **EdgeDriver (Microsoft Edge):** Chromium-based, similar to ChromeDriver
+- Act as intermediary between Selenium and browser
+
+**Driver Responsibilities:**
+- Receive commands from test scripts
+- Translate to browser-specific actions
+- Manage browser process lifecycle
+- Handle error responses
+- Return results back to client
+
+#### 4. **Browser Engine & Automation APIs**
+- **Chrome DevTools Protocol (CDP):** Advanced browser automation, network monitoring
+- **WebDriver BiDi:** Bidirectional protocol for real-time communication
+- **Native Browser APIs:** DOM manipulation, JavaScript execution
+
+**Key Capabilities:**
+- DOM querying and manipulation
+- JavaScript execution
+- Network request interception
+- Performance metrics collection
+- Browser DevTools features access
+
+---
+
+## Setup & Installation
+
+### Python Setup
+
+#### 1. Install Selenium
+```bash
+pip install selenium
+```
+
+#### 2. Download WebDriver
+```bash
+# ChromeDriver (https://chromedriver.chromium.org/)
+# GeckoDriver (https://github.com/mozilla/geckodriver/releases)
+# Place in PATH or specify in code
+```
+
+#### 3. Basic Test
+```python
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+
+driver = webdriver.Chrome()
+driver.get("https://www.example.com")
+print(driver.title)
+driver.quit()
+```
+
+### Java Setup
+
+#### 1. Add Maven Dependency
+```xml
+<dependency>
+    <groupId>org.seleniumhq.selenium</groupId>
+    <artifactId>selenium-java</artifactId>
+    <version>4.x.x</version>
+</dependency>
+```
+
+#### 2. Basic Test
+```java
+WebDriver driver = new ChromeDriver();
+driver.get("https://www.example.com");
+System.out.println(driver.getTitle());
+driver.quit();
+```
+
+### WebDriver Manager (Auto-Download Drivers)
+
+#### Python
+```bash
+pip install webdriver-manager
+```
+
+```python
+from selenium import webdriver
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
+
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+```
+
+#### Java
+```xml
+<dependency>
+    <groupId>io.github.bonigarcia</groupId>
+    <artifactId>webdrivermanager</artifactId>
+    <version>5.x.x</version>
+</dependency>
+```
+
+```java
+WebDriverManager.chromedriver().setup();
+WebDriver driver = new ChromeDriver();
+```
+
+---
+
+## WebDriver Basics
+
+### Theory: Understanding WebDriver Sessions and Instance Management
+
+**What is WebDriver?**
+- WebDriver is a remote control interface for automating web browsers
+- Provides high-level API for controlling browser behavior
+- Creates isolated session for each test instance
+- Communicates with browser through standardized protocol
+
+**WebDriver Session Lifecycle:**
+1. **Initialization** - WebDriver creates connection to browser driver
+2. **Authentication** - Browser driver initializes browser instance
+3. **Session Creation** - Unique sessionId assigned for tracking
+4. **Command Processing** - Test commands processed in order
+5. **Session Cleanup** - Resources released when quit() is called
+
+**Key Concepts:**
+- **Session Isolation:** Each WebDriver instance = separate browser session
+- **Stateful Communication:** Browser maintains state across commands
+- **Sequential Execution:** Commands executed in order (synchronously)
+- **Error Handling:** Exceptions thrown immediately if element not found
+- **Resource Management:** Drivers consume system resources (memory, process)
+
+**Browser Options Theory:**
+- Options configure browser behavior before launch
+- Affects entire session (cannot change mid-session)
+- Different browsers have different capabilities
+- Preferences stored in profiles or local storage
+
+### 1. Creating WebDriver Instance
+
+**Theory - Initialization Process:**
+```
+1. Create WebDriver options/capabilities
+2. Pass options to driver constructor
+3. WebDriver initiates browser driver connection
+4. Browser driver launches browser process
+5. Browser connects back to driver (confirmation)
+6. WebDriver ready to receive commands
+```
+
+**Key Theory Points:**
+- Initialization is blocking call (waits for browser startup)
+- Options applied before browser launch (immutable after)
+- Browser initialization time varies (1-5 seconds typically)
+- Driver and browser must match version for compatibility
+
+#### Chrome
+```java
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.chrome.ChromeDriver;
+import org.openqa.selenium.chrome.ChromeOptions;
+
+// Basic
+WebDriver driver = new ChromeDriver();
+
+// With options
+ChromeOptions options = new ChromeOptions();
+options.addArguments("--headless");
+options.addArguments("--no-sandbox");
+options.addArguments("--disable-dev-shm-usage");
+driver = new ChromeDriver(options);
+```
+
+#### Firefox
+```java
+import org.openqa.selenium.firefox.FirefoxDriver;
+import org.openqa.selenium.firefox.FirefoxOptions;
+
+WebDriver driver = new FirefoxDriver();
+
+FirefoxOptions options = new FirefoxOptions();
+options.addArguments("--headless");
+driver = new FirefoxDriver(options);
+```
+
+#### Safari
+```java
+import org.openqa.selenium.safari.SafariDriver;
+
+WebDriver driver = new SafariDriver();
+```
+
+### 2. Browser Options
+
+#### Important Chrome Options
+```java
+ChromeOptions options = new ChromeOptions();
+
+// Headless mode (no UI)
+options.addArguments("--headless");
+
+// Window size
+options.addArguments("--window-size=1920,1080");
+
+// Disable notifications
+options.addArguments("--disable-notifications");
+
+// Proxy
+options.addArguments("--proxy-server=http://proxy:8080");
+
+// User data directory (persistent login)
+options.addArguments("user-data-dir=/path/to/profile");
+
+// Disable images (faster)
+Map<String, Object> prefs = new HashMap<>();
+prefs.put("profile.managed_default_content_settings.images", 2);
+options.setExperimentalOption("prefs", prefs);
+
+// Incognito mode
+options.addArguments("--incognito");
+
+// Run as specific user (Linux)
+options.addArguments("--user=username");
+```
+
+### 3. Basic Methods
+
+#### Navigation
+```java
+driver.get("https://www.example.com");  // Load URL
+driver.navigate().forward();             // Move forward (browser history)
+driver.navigate().back();                // Move back (browser history)
+driver.navigate().refresh();             // Refresh page
+```
+
+#### Window Management
+```java
+driver.manage().window().maximize();         // Maximize window
+driver.manage().window().minimize();         // Minimize window
+driver.manage().window().setSize(new Dimension(1920, 1080));  // Set window size
+driver.manage().window().getSize();          // Get window size
+driver.manage().window().getPosition();      // Get window position
+
+driver.getWindowHandle();                    // Current window handle
+driver.getWindowHandles();                   // All window handles (Set<String>)
+```
+
+#### Page Information
+```java
+driver.getTitle();                       // Page title
+driver.getCurrentUrl();                  // Current URL
+driver.getPageSource();                  // Page HTML source
+driver.manage().getCookies();            // Get all cookies (Set<Cookie>)
+driver.manage().addCookie(new Cookie("name", "value"));
+driver.manage().deleteCookie("name");
+driver.manage().deleteAllCookies();
+```
+
+#### Quit & Close
+```java
+driver.quit();   // Close all windows and end session
+driver.close();  // Close current window
+```
+
+---
+
+## Finding Elements
+
+### Theory: Element Locator Strategies
+
+**What is a Locator?**
+- Locator = selector or query that identifies one or more elements in DOM
+- Selenium uses locators to find elements and interact with them
+- Different locators have different performance characteristics
+- Locator quality directly impacts test reliability and speed
+
+**Locator Selection Priority (Performance & Reliability):**
+1. **By.ID** (Fastest) - Unique identifier, direct DOM lookup
+2. **By.Name** - Efficient, commonly used for forms
+3. **By.CSS_SELECTOR** - Fast, uses browser's native CSS engine
+4. **By.XPATH** - Slower, more complex queries
+5. **By.TAG_NAME / CLASS_NAME** - Matches multiple elements
+6. **By.LINK_TEXT** - Only for links, less flexible
+
+**Key Theory Concepts:**
+
+**ID Locators:**
+- Fastest - Direct DOM lookup using unique ID
+- Most reliable - IDs should be unique per HTML spec
+- Best Practice - Preferred when ID available
+- Performance: O(1) - Direct access
+
+**CSS Selectors:**
+- Uses browser's native CSS engine (very fast)
+- Supports complex selectors and pseudo-classes
+- More readable than XPath
+- Performance: Near-instant for most selectors
+
+**XPath:**
+- Most powerful and flexible query language
+- Can traverse DOM up and down (parent, siblings, ancestors)
+- Slower than CSS (browser interprets custom language)
+- Best for complex scenarios where CSS insufficient
+- Performance: Variable, depends on complexity
+
+**By Text Locators:**
+- Useful for dynamic content
+- Fragile - text changes break tests
+- Performance: Slower - must parse all text content
+
+**Dynamic Elements Theory:**
+- Elements generated by JavaScript after page load
+- Not present in initial DOM
+- Require waits to appear before interaction
+- Require more robust locator strategies
+
+### Locator Strategy Best Practices
+
+**Robust Locator Hierarchy:**
+1. **Unique ID** - Use if available
+2. **CSS Selector** - If ID not available
+3. **Meaningful XPath** - With attributes, not text
+4. **Avoid XPath** - Complex index-based XPath fragile
+
+**Anti-patterns to Avoid:**
+- ❌ Index-based locators: `//button[5]` (brittle)
+- ❌ Text-only locators: `//button[text()='Click']` (fragile)
+- ❌ Generated IDs: `id_123456` (changes on each load)
+- ❌ Deep nested selectors: `body > div > div > div > button` (fragile)
+
+### 1. Locator Strategies
+
+#### By ID
+```java
+import org.openqa.selenium.By;
+
+WebElement element = driver.findElement(By.id("element_id"));
+```
+
+#### By Name
+```java
+WebElement element = driver.findElement(By.name("element_name"));
+```
+
+#### By Class Name
+```java
+WebElement element = driver.findElement(By.className("class_name"));
+```
+
+#### By Tag Name
+```java
+WebElement element = driver.findElement(By.tagName("div"));
+```
+
+#### By CSS Selector
+```java
+// ID: #element_id
+// Class: .class_name
+// Attribute: [attribute="value"]
+// Descendant: div span
+// Child: div > span
+
+WebElement element = driver.findElement(By.cssSelector("div.class > p"));
+```
+
+#### By XPath
+```java
+// Absolute: /html/body/div[1]
+// Relative: //div[@class="class_name"]
+// By text: //button[text()="Click Me"]
+// Partial text: //button[contains(text(), "Click")]
+// Multiple conditions: //input[@type="text" and @name="username"]
+
+WebElement element = driver.findElement(By.xpath("//button[@class='submit']"));
+```
+
+#### By Link Text
+```java
+WebElement element = driver.findElement(By.linkText("Exact Link Text"));
+```
+
+#### By Partial Link Text
+```java
+WebElement element = driver.findElement(By.partialLinkText("Partial Text"));
+```
+
+### 2. Finding Multiple Elements
+
+```java
+List<WebElement> elements = driver.findElements(By.tagName("button"));
+System.out.println("Found " + elements.size() + " buttons");
+
+for (WebElement element : elements) {
+    System.out.println(element.getText());
+}
+```
+
+### 3. Finding Nested Elements
+
+```java
+// Find parent, then child
+WebElement parent = driver.findElement(By.id("parent_id"));
+WebElement child = parent.findElement(By.tagName("button"));
+
+// Find from child upward (using XPath parent)
+WebElement childElement = driver.findElement(By.cssSelector("input"));
+WebElement parentElement = childElement.findElement(By.xpath(".."));
+```
+
+### 4. XPath Advanced
+
+#### Text-based
+```python
+# Exact text
+//button[text()="Submit"]
+
+# Partial text (case-insensitive)
+//button[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'submit')]
+
+# Text contains word
+//button[contains(text(), "Submit")]
+```
+
+#### Attribute-based
+```python
+# Attribute existence
+//input[@disabled]
+
+# Attribute value
+//input[@type="text"]
+//input[@placeholder="Enter name"]
+
+# Multiple attributes
+//input[@type="text" and @name="username"]
+
+# Partial attribute match
+//a[contains(@href, "/products")]
+```
+
+#### Position-based
+```python
+# First element
+//button[1]
+
+# Last element
+//button[last()]
+
+# Specific index
+//button[3]
+
+# Count elements
+count(//button)
+```
+
+#### Complex XPath
+```python
+# Parent-child relationship
+//div[@class="container"]/button
+
+# Ancestor
+//button/ancestor::div[@class="form"]
+
+# Following sibling
+//input[@name="username"]/following-sibling::input
+
+# Preceding sibling
+//input[@name="password"]/preceding-sibling::input
+
+# All descendants
+//div[@class="container"]//button
+
+# OR condition
+//button[@class="primary"] | //button[@class="secondary"]
+```
+
+### 5. Relative Locators (Selenium 4+)
+
+```java
+import org.openqa.selenium.support.locators.RelativeLocator;
+
+// Find element relative to another
+WebElement loginBtn = driver.findElement(
+    RelativeLocator.with(By.tagName("button"))
+        .above(driver.findElement(By.id("footer")))
+        .toLeftOf(driver.findElement(By.id("reset")))
+);
+
+// Supported relationships:
+// .above(element)
+// .below(element)
+// .toLeftOf(element)
+// .toRightOf(element)
+// .near(element)
+```
+
+### 6. Exception Handling for Finding Elements
+
+```java
+import org.openqa.selenium.NoSuchElementException;
+
+try {
+    WebElement element = driver.findElement(By.id("nonexistent"));
+} catch (NoSuchElementException e) {
+    System.out.println("Element not found");
+}
+```
+
+---
+
+## Web Element Interactions
+
+### 1. Text Operations
+
+```python
+element = driver.find_element(By.ID, "text_input")
+
+# Get text
+text = element.text                      # Inner text
+text = element.get_attribute("value")   # Input value
+text = element.get_attribute("textContent")  # All text content
+```
+
+### 2. Input Operations
+
+```python
+# Type text
+element.send_keys("Hello World")
+
+# Clear input
+element.clear()
+
+# Clear and type (combined)
+element.clear()
+element.send_keys("New Text")
+
+# Type with delay between keys
+from selenium.webdriver.common.keys import Keys
+element.send_keys("Text", Keys.TAB)  # Type then press Tab
+```
+
+### 3. Click Operations
+
+```python
+element = driver.find_element(By.ID, "button_id")
+
+# Normal click
+element.click()
+
+# JavaScript click (if regular click fails)
+driver.execute_script("arguments[0].click();", element)
+
+# Double click
+from selenium.webdriver.common.action_chains import ActionChains
+ActionChains(driver).double_click(element).perform()
+
+# Right click (context menu)
+ActionChains(driver).context_click(element).perform()
+```
+
+### 4. Dropdown/Select Operations
+
+```python
+from selenium.webdriver.support.select import Select
+
+select_element = driver.find_element(By.ID, "dropdown_id")
+select = Select(select_element)
+
+# Select by visible text
+select.select_by_visible_text("Option 1")
+
+# Select by value
+select.select_by_value("option_1")
+
+# Select by index
+select.select_by_index(0)
+
+# Get all options
+options = select.options  # Returns list of WebElement objects
+for option in options:
+    print(option.text)
+
+# Get selected option
+selected = select.first_selected_option
+print(selected.text)
+
+# Deselect (for multi-select)
+select.deselect_by_visible_text("Option 1")
+select.deselect_all()
+```
+
+### 5. Form Operations
+
+```java
+// Submit form
+WebElement form = driver.findElement(By.tagName("form"));
+form.submit();
+
+// Or click submit button
+WebElement submitBtn = driver.findElement(By.id("submit_btn"));
+submitBtn.click();
+```
+
+### 6. Attribute Operations
+
+```java
+WebElement element = driver.findElement(By.id("link_id"));
+
+// Get attribute value
+String href = element.getAttribute("href");
+String elementId = element.getAttribute("id");
+String className = element.getAttribute("class");
+String placeholder = element.getAttribute("placeholder");
+
+
+// Get property
+String value = element.getDomProperty("value");      // Input value
+String checked = element.getDomProperty("checked");  // Checkbox state
+```
+
+### 7. Element State Operations
+
+```java
+WebElement element = driver.findElement(By.id("element_id"));
+
+// Check if displayed
+boolean isDisplayed = element.isDisplayed();
+
+// Check if enabled
+boolean isEnabled = element.isEnabled();
+
+// Check if selected (checkbox, radio)
+boolean isSelected = element.isSelected();
+
+// Get element size
+Dimension size = element.getSize();  // height and width
+int height = size.getHeight();
+
+// Get element location
+Point location = element.getLocation();  // x and y
+int x = location.getX();
+
+// Get CSS value
+String color = element.getCssValue("color");
+String fontSize = element.getCssValue("font-size");
+```
+
+### 8. Special Keys
+
+```java
+import org.openqa.selenium.Keys;
+
+element.sendKeys(Keys.ENTER);        // Enter/Return
+element.sendKeys(Keys.TAB);          // Tab
+element.sendKeys(Keys.ESCAPE);       // Escape
+element.sendKeys(Keys.SPACE);        // Space
+element.sendKeys(Keys.DELETE);       // Delete
+element.sendKeys(Keys.BACK_SPACE);   // Backspace
+element.sendKeys(Keys.ARROW_DOWN);   // Down arrow
+element.sendKeys(Keys.ARROW_UP);     // Up arrow
+element.sendKeys(Keys.ARROW_LEFT);   // Left arrow
+element.sendKeys(Keys.ARROW_RIGHT);  // Right arrow
+element.sendKeys(Keys.PAGE_DOWN);    // Page down
+element.sendKeys(Keys.PAGE_UP);      // Page up
+element.sendKeys(Keys.HOME);         // Home
+element.sendKeys(Keys.END);          // End
+
+// Keyboard combinations
+element.sendKeys(Keys.chord(Keys.CONTROL, "a"));  // Ctrl+A
+element.sendKeys(Keys.chord(Keys.COMMAND, "c"));  // Cmd+C (Mac)
+```
+
+---
+
+## Waits & Synchronization
+
+### Theory: Why Synchronization is Critical
+
+**The Synchronization Problem:**
+- Web pages load asynchronously
+- JavaScript executes dynamically
+- Databases query slowly
+- Network latency unpredictable
+- Elements appear/disappear dynamically
+- Test execution is fast (code runs instantly)
+- Browser UI is slow (renders in milliseconds/seconds)
+
+**Race Condition Example:**
+```
+Test: Click button that should be visible
+Scenario 1 (Passes):
+  1. Test looks for button
+  2. Button is on page (loaded)
+  3. Button clicks successfully
+
+Scenario 2 (Fails without wait):
+  1. Test looks for button
+  2. Button not yet loaded (JavaScript delayed)
+  3. NoSuchElementException thrown
+  4. Test fails
+
+Solution: Explicit Wait
+  1. Test creates wait with 10s timeout
+  2. Wait checks for button every 500ms
+  3. Button appears after 2s
+  4. Wait returns element immediately
+  5. Button clicks successfully
+```
+
+**Key Synchronization Concepts:**
+- **Polling:** Repeatedly checking condition until true or timeout
+- **Timeout:** Maximum time to wait before throwing exception
+- **Conditions:** Specific state to wait for (presence, visibility, clickability)
+- **Element Readiness:** Element exists, visible, enabled, clickable states
+
+### 1. Implicit Wait
+
+**Theory - How Implicit Wait Works:**
+```
+Each findElement/findElements call wraps in implicit wait:
+  1. Search for element
+  2. If not found, wait 1 second
+  3. Search again
+  4. Repeat up to timeout duration
+  5. If still not found, throw NoSuchElementException
+```
+
+**Implicit Wait Characteristics:**
+- **Global:** Applies to ALL find operations
+- **Default Timeout:** Usually 0 seconds (immediate)
+- **Simple:** Single configuration for entire test
+- **Inefficient:** Applies even when element found immediately
+- **Problematic:** Slows down negative assertions
+
+**When Implicit Wait Waits:**
+- When element first requested
+- Polling interval = 500ms (default)
+- Returns as soon as element found
+- Throws exception only after timeout
+
+**Why Implicit Wait is Problematic:**
+```
+Scenario: Testing element NOT present (negative test)
+  Without implicit wait: Returns instantly (good)
+  With 10s implicit wait: Waits full 10s before throwing (bad)
+  Result: Test takes 10 seconds longer than needed
+```
+
+**Key Points:**
+- ❌ Not recommended for production use
+- ❌ Can cause unexpected delays
+- ❌ Makes tests slower overall
+- ✅ Simple configuration
+- ✅ Works as fallback for late elements
+
+### 2. Explicit Wait
+
+**Theory - How Explicit Wait Works:**
+```
+WebDriverWait wait = new WebDriverWait(driver, 10);
+wait.until(ExpectedConditions.elementToBeClickable(By.id("btn")));
+
+Execution Flow:
+  1. Create Wait object with 10s timeout
+  2. Start polling with 500ms intervals
+  3. Check condition: Is element clickable?
+  4. If YES: Return element immediately (don't wait full 10s)
+  5. If NO: Wait 500ms and check again
+  6. Repeat until element clickable OR timeout reached
+  7. If timeout: Throw TimeoutException
+```
+
+**Expected Conditions Explained:**
+
+**Presence vs Visibility:**
+```
+Presence:  Element in DOM (even if hidden by CSS)
+Visibility: Element in DOM AND visible on screen
+
+Use Case:
+  Hidden fields: Use presence
+  User interactions: Use visibility
+```
+
+**Element States:**
+- **Presence:** `visibilityOfElementLocated()` - Element appears
+- **Clickability:** `elementToBeClickable()` - Visible + Enabled
+- **Invisibility:** `invisibilityOfElementLocated()` - Element removed from DOM
+- **Text:** `textToBePresentInElement()` - Specific text appears
+- **Selection:** `elementToBeSelected()` - Checkbox/radio selected
+
+**Explicit Wait Advantages:**
+- ✅ Targeted to specific condition
+- ✅ Returns immediately when condition met
+- ✅ No unnecessary delays
+- ✅ Clear intent in test code
+- ✅ Custom expected conditions possible
+- ✅ Handles async operations properly
+
+**Key Theory Points:**
+- Polling starts immediately (not after first failure)
+- Each poll is independent check
+- Default poll interval: 250ms (can customize)
+- Timeout is maximum wait (may return sooner)
+- Preferred method in production
+
+### 3. Fluent Wait
+
+**Theory - Fluent Wait Advanced Customization:**
+```
+FluentWait provides fine-grained control:
+  - Custom polling interval
+  - Ignored exception types
+  - Customizable timeout
+  - Functional predicates
+```
+
+**When to Use Fluent Wait:**
+- Default polling interval too slow
+- Need to ignore specific exceptions
+- Custom conditions (non-standard)
+- Complex wait scenarios
+
+### 4. Custom Wait Conditions
+
+**Theory - Creating Custom Conditions:**
+```
+Standard conditions cover common cases:
+  - Element presence/visibility/clickability
+  - Text appearance
+  - URLs and titles
+  - Alerts
+
+Custom conditions for:
+  - Application-specific state
+  - Multiple element checks
+  - AJAX completion
+  - Custom loading indicators
+```
+
+### 5. Wait Best Practices
+
+**Wait Strategy Hierarchy:**
+```
+1. Use Explicit Waits (primary)
+   - Target specific condition
+   - Returns immediately when ready
+   - Clear and readable
+
+2. Use Implicit Waits (fallback only)
+   - Last resort for legacy code
+   - Set low timeout (2-3 seconds)
+   - Keep with explicit waits
+
+3. Avoid Thread.sleep() (hard waits)
+   - Always waits full duration
+   - Cannot return early
+   - Slows down all tests
+   - Only for unavoidable timing issues
+```
+
+**Timeout Configuration Guidelines:**
+```
+Short waits (1-3 seconds):
+  - Quick page interactions
+  - Element likely already present
+  - Clicking buttons, typing text
+
+Medium waits (5-10 seconds):
+  - AJAX calls expected
+  - Page transitions
+  - Element animations
+  - API responses
+
+Long waits (10-30 seconds):
+  - File downloads
+  - Complex calculations
+  - External service calls
+  - Batch operations
+```
+
+**Key Points:**
+- ❌ Never chain multiple waits (wait for element, then wait for text)
+- ✅ Single comprehensive wait (wait until clickable AND has text)
+- ❌ Don't set global implicit wait with explicit waits
+- ✅ Use either explicit OR implicit (not both)
+- ❌ Avoid hardcoded waits (Thread.sleep)
+- ✅ Use condition-based waits
+
+---
+
+## Action Chains
+
+### Theory: Understanding User Actions
+
+**Action Chains Concept:**
+- Simulates actual user interactions with web browser
+- Build chain of actions executed sequentially
+- Actions happen in real browser window (not DOM)
+- Mimics real user behavior (mouse movements, keyboard, timing)
+
+**How Action Chains Work:**
+```
+1. Create Actions object with WebDriver instance
+2. Call action methods (click, hover, type, etc.)
+3. Each action added to queue (not executed yet)
+4. Call perform() to execute entire chain
+5. Actions executed in sequence
+6. Results returned in order
+
+Example:
+  actions.moveToElement(element)  // Add to queue
+         .click()                   // Add to queue
+         .pause(2)                  // Add to queue
+         .perform()                 // Execute queue
+```
+
+**Real Browser Interaction:**
+- Actions occur in actual browser window
+- Simulates exact coordinates and timing
+- Includes keyboard modifier keys
+- Supports multi-touch interactions
+
+**Key Theory Points:**
+- **Queued Execution:** Actions buffered until perform()
+- **Sequential:** Actions execute in exact order
+- **Synchronized:** Browser waits for action completion
+- **Coordinated:** Mouse/keyboard states maintained across chain
+
+### 1. Basic Actions
+
+```java
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.chrome.ChromeDriver;
+import java.time.Duration;
+
+WebDriver driver = new ChromeDriver();
+
+// Set implicit wait (applies to all find operations)
+driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(10));
+
+// Will wait up to 10 seconds for element to appear
+WebElement element = driver.findElement(By.id("dynamic_element"));
+
+// Change implicit wait
+driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(15));
+
+// Remove implicit wait
+driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(0));
+```
+
+**Characteristics:**
+- Applies globally to all find operations
+- Waits up to specified time for element to appear
+- Returns as soon as element is found
+- Throws NoSuchElementException after timeout
+
+**Disadvantages:**
+- Applies to all findElement calls (not just dynamic ones)
+- Can slow down tests (always waits full duration if element not found)
+- Not recommended for production use
+
+### 2. Explicit Wait
+
+```java
+import org.openqa.selenium.support.ui.WebDriverWait;
+import org.openqa.selenium.support.ExpectedConditions;
+import org.openqa.selenium.TimeoutException;
+import java.time.Duration;
+
+WebDriver driver = new ChromeDriver();
+
+// Create wait instance (10 seconds timeout)
+WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+
+// Wait for element to be present (in DOM)
+try {
+    WebElement element = wait.until(
+        ExpectedConditions.presenceOfElementLocated(By.id("dynamic_element"))
+    );
+} catch (TimeoutException e) {
+    System.out.println("Element not found within 10 seconds");
+}
+
+// Wait for element to be clickable
+wait.until(ExpectedConditions.elementToBeClickable(By.id("button_id"))).click();
+
+// Wait for element to be visible
+wait.until(ExpectedConditions.visibilityOfElementLocated(By.id("element_id")));
+
+// Wait for text to appear in element
+wait.until(
+    ExpectedConditions.textToBePresentInElement(driver.findElement(By.id("message")), "Success")
+);
+```
+
+**Common Expected Conditions:**
+
+```java
+// Presence - element exists in DOM
+ExpectedConditions.presenceOfElementLocated(By.id("id"))
+
+// Visibility - element is displayed
+ExpectedConditions.visibilityOfElementLocated(By.id("id"))
+
+// Invisibility - element is not displayed
+ExpectedConditions.invisibilityOfElementLocated(By.id("id"))
+
+// Clickability - element is visible and enabled
+ExpectedConditions.elementToBeClickable(By.id("id"))
+
+// Selectability - element is selected
+ExpectedConditions.elementToBeSelected(By.id("id"))
+
+// Text conditions
+ExpectedConditions.textToBePresentInElement(element, "Text")
+ExpectedConditions.textToBePresentInElementValue(element, "Value")
+
+// Presence of multiple elements
+ExpectedConditions.presenceOfAllElementsLocatedBy(By.tagName("button"))
+
+// URL change
+ExpectedConditions.urlContains("example.com")
+ExpectedConditions.urlMatches("example\\.com/page/\\d+")
+ExpectedConditions.urlToBe("https://example.com")
+
+// Alert
+ExpectedConditions.alertIsPresent()
+
+// Title conditions
+ExpectedConditions.titleContains("Welcome")
+ExpectedConditions.titleIs("Welcome to Example")
+
+// Frame conditions
+ExpectedConditions.frameToBeAvailableAndSwitchToIt(By.id("frame_id"))
+```
+
+### 3. Fluent Wait
+
+```java
+import org.openqa.selenium.support.ui.FluentWait;
+import org.openqa.selenium.support.ExpectedConditions;
+import java.time.Duration;
+
+// Create fluent wait with custom polling
+WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+wait.pollingEvery(Duration.ofMillis(500));
+wait.ignoring(NoSuchElementException.class);
+
+// Wait with custom condition
+WebElement element = wait.until(
+    ExpectedConditions.presenceOfElementLocated(By.id("dynamic_element"))
+);
+```
+
+**Fluent Wait Features:**
+- Customizable polling interval
+- Customizable ignored exceptions
+- More flexible than explicit wait
+
+### 4. Custom Wait Conditions
+
+```java
+import java.util.List;
+
+// Custom condition using function
+WebElement element = wait.until(driver ->
+    driver.findElements(By.id("status")).stream()
+        .filter(WebElement::isDisplayed)
+        .findFirst()
+        .orElse(null)
+);
+
+// Or using Function interface
+wait.until(driver -> {
+    List<WebElement> elements = driver.findElements(By.id("loaded"));
+    return !elements.isEmpty() && elements.get(0).isDisplayed();
+});
+```
+
+# Create fluent wait with custom polling
+wait = FluentWait(driver)\
+    .with_timeout(10)\
+    .polling_every(0.5)\
+    .ignoring(NoSuchElementException)
+
+# Wait with custom condition
+element = wait.until(
+    EC.presence_of_element_located((By.ID, "dynamic_element"))
+)
+```
+
+**Fluent Wait Features:**
+- Customizable polling interval
+- Customizable ignored exceptions
+- More flexible than explicit wait
+
+### 4. Custom Wait Conditions
+
+```java
+import java.util.List;
+
+// Custom condition using function
+WebElement element = wait.until(driver ->
+    driver.findElements(By.id("status")).stream()
+        .filter(WebElement::isDisplayed)
+        .findFirst()
+        .orElse(null)
+);
+
+// Or using explicit Function
+wait.until(driver -> {
+    List<WebElement> elements = driver.findElements(By.id("loaded"));
+    return !elements.isEmpty() && elements.get(0).isDisplayed();
+});
+```
+
+### 5. Wait Best Practices
+
+```java
+// Good: Explicit wait for specific condition
+WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+wait.until(ExpectedConditions.elementToBeClickable(By.id("button"))).click();
+
+// Bad: Implicit wait everywhere
+driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(10));
+WebElement element = driver.findElement(By.id("button"));
+element.click();
+
+// Good: Combine implicit and explicit
+driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(5));  // Fallback
+wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+wait.until(ExpectedConditions.elementToBeClickable(By.id("button")));
+
+// Good: Multiple conditions
+wait.until(
+    ExpectedConditions.presenceOfAllElementsLocatedBy(By.className("item"))
+);
+```
+
+---
+
+## Action Chains
+
+### Introduction
+- ActionChains class for complex interactions
+- Simulates user actions like mouse and keyboard
+- Useful for drag-and-drop, hover, etc.
+
+### 1. Basic Actions
+
+```java
+import org.openqa.selenium.interactions.Actions;
+
+Actions actions = new Actions(driver);
+
+// Single action
+WebElement element = driver.findElement(By.id("element"));
+actions.click(element).perform();
+
+// Chained actions
+actions
+    .click(element)
+    .pause(Duration.ofSeconds(1))
+    .sendKeys("Text")
+    .perform();
+```
+
+### 2. Mouse Actions
+
+```java
+// Hover over element
+WebElement element = driver.findElement(By.id("hover_element"));
+new Actions(driver).moveToElement(element).perform();
+
+// Move by offset
+new Actions(driver).moveByOffset(100, 50).perform();
+
+// Double click
+new Actions(driver).doubleClick(element).perform();
+
+// Right click (context menu)
+new Actions(driver).contextClick(element).perform();
+
+// Click and hold
+new Actions(driver).clickAndHold(element).perform();
+
+// Release (after click and hold)
+new Actions(driver).release().perform();
+```
+
+### 3. Drag and Drop
+
+```java
+WebElement source = driver.findElement(By.id("draggable"));
+WebElement target = driver.findElement(By.id("droppable"));
+
+// Drag and drop
+new Actions(driver).dragAndDrop(source, target).perform();
+
+// Drag by offset
+new Actions(driver).dragAndDropBy(source, 100, 50).perform();
+
+// Manual drag (click, move, release)
+new Actions(driver)
+    .clickAndHold(source)
+    .moveToElement(target)
+    .release()
+    .perform();
+```
+
+### 4. Keyboard Actions
+
+```java
+// Type text
+new Actions(driver).sendKeys("Hello").perform();
+
+// Press special key
+new Actions(driver).sendKeys(Keys.TAB).perform();
+
+// Keyboard combination
+new Actions(driver)
+    .keyDown(Keys.SHIFT)
+    .sendKeys("hello")
+    .keyUp(Keys.SHIFT)
+    .perform();
+```
+
+### 5. Scroll Actions
+
+```java
+// Scroll to element
+WebElement element = driver.findElement(By.id("element"));
+((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView(true);", element);
+
+// Scroll by offset
+((JavascriptExecutor) driver).executeScript("window.scrollBy(0, 500);");
+
+// Scroll to bottom
+((JavascriptExecutor) driver).executeScript("window.scrollTo(0, document.body.scrollHeight);");
+
+// Scroll to specific position
+((JavascriptExecutor) driver).executeScript("window.scrollTo(100, 200);");
+```
+
+### 6. Pause/Wait in Chain
+
+```java
+// Pause between actions
+new Actions(driver)
+    .click(element)
+    .pause(Duration.ofSeconds(2))
+    .sendKeys("Text")
+    .perform();
+```
+
+---
+
+## Working with Windows & Frames
+
+### Theory: Window and Frame Concepts
+
+**Windows vs Frames - Key Differences:**
+
+**Windows:**
+- Separate browser windows/tabs
+- Each has unique window handle
+- Can close individual windows
+- User can interact with any window
+- Parent-child relationship (popup windows)
+- Independent DOM and JavaScript context
+
+**Frames/iFrames:**
+- Embedded documents within parent page
+- Share parent window's browser context
+- Separate JavaScript context
+- Separate DOM tree
+- Cannot close frame (only parent window)
+- Must switch context to interact
+
+**Common Use Cases:**
+```
+Windows:
+  - Popup windows (ads, alerts)
+  - New browser tabs (from clicking links)
+  - Login windows (OAuth flows)
+  - File upload dialogs
+
+Frames:
+  - Payment gateways (Stripe, PayPal)
+  - Chat widgets
+  - Ad content
+  - Third-party embedded content
+```
+
+**Window Handle Theory:**
+```
+Each window has unique identifier:
+  - Assigned by browser when window created
+  - Format: Random string (not sequential)
+  - Handle remains same for window lifetime
+  - Cannot predict handle values
+  - Must query driver.getWindowHandles()
+```
+
+### 1. Handling Multiple Windows
+
+**Theory - Window Switching Flow:**
+```
+Scenario: User clicks link opening new tab
+
+1. Test script clicks link
+2. New window/tab opens in browser
+3. WebDriver gets new window handle
+4. Test must switch to new handle to interact
+5. Once switched, all commands target that window
+
+Without switching:
+  commands directed to original window (fail)
+  
+Example:
+  driver.switchTo().window(newWindowHandle)
+  // Now all commands target new window
+```
+
+**Window Management Strategies:**
+```
+Single Window (Preferred):
+  - Avoid popups if possible
+  - Disable popups in options
+  - Mock popup behavior in tests
+
+Multiple Windows:
+  - Store main window handle immediately
+  - Switch between windows as needed
+  - Always return to main window for cleanup
+```
+
+### 2. Handling Frames/iFrames
+
+**Theory - Frame Switching Mechanism:**
+```
+When accessing element inside frame:
+
+1. Driver searches main page DOM
+2. Element not found in main DOM
+3. ERROR: NoSuchElementException
+
+Solution: Switch to frame first
+  1. Find iframe element in main DOM
+  2. driver.switchTo().frame(iframeElement)
+  3. Now searching in iframe's DOM
+  4. Find element in iframe
+  5. Click/interact with element
+  6. driver.switchTo().defaultContent()
+  7. Back to main page DOM
+```
+
+**Frame Nesting Theory:**
+```
+Frames can be nested inside frames:
+
+Main Page
+  └─ Outer Frame
+      └─ Inner Frame
+          └─ Element (target)
+
+To access nested element:
+  1. switchTo().frame("outer")  // Step into outer
+  2. switchTo().frame("inner")  // Step into inner
+  3. findElement()              // Find in inner frame
+  4. switchTo().parentFrame()   // Step back out
+  5. switchTo().defaultContent() // Back to main
+```
+
+**Frame Identification Methods:**
+```
+By Index (Fragile):
+  driver.switchTo().frame(0)  // First frame
+  driver.switchTo().frame(1)  // Second frame
+  Problem: Order can change, test breaks
+
+By Name/ID (Better):
+  driver.switchTo().frame("payment-frame")
+  Problem: Not all frames have IDs
+
+By WebElement (Best):
+  WebElement iframe = driver.findElement(By.id("content"));
+  driver.switchTo().frame(iframe)
+  Advantage: Explicit, can verify frame exists
+```
+
+**Key Points:**
+- ❌ Don't try to find elements inside frame without switching
+- ✅ Always switch to frame before interacting
+- ❌ Don't assume frame index (fragile)
+- ✅ Use frame ID/name or WebElement reference
+- ✅ Always switch back to defaultContent() when done
+
+---
+
+## JavaScript Execution
+
+### Theory: Why Execute JavaScript in Selenium
+
+**Selenium Limitations:**
+- Cannot directly access JavaScript variables/functions
+- Cannot trigger custom events  
+- Cannot access shadow DOM directly
+- Cannot wait for custom loading indicators
+- Cannot bypass UI interactions
+
+**JavaScript Execution Capabilities:**
+- Direct DOM manipulation
+- JavaScript function calls
+- Event triggering
+- Browser API access
+- Performance metrics collection
+- Custom waits and conditions
+
+**Execution Contexts:**
+```
+Synchronous (executeScript):
+  - JavaScript executes and returns immediately
+  - Blocks until execution completes
+  - Can return primitive values or elements
+  - Examples: Getting element value, clicking element
+  
+Asynchronous (executeAsyncScript):
+  - JavaScript can wait for callbacks
+  - Must call callback function with result
+  - Useful for AJAX, animations, delays
+  - Must handle timeout
+```
+
+**When NOT to Use JavaScript:**
+- ❌ For simple clicks (use element.click())
+- ❌ For standard element interactions
+- ❌ When WebDriver API sufficient
+- ❌ For test maintainability (less readable)
+- ❌ Tests should mimic real user behavior
+
+**When TO Use JavaScript (Justified Scenarios):**
+- ✅ Access application state/variables
+- ✅ Bypass visibility checks (for disabled/hidden elements)
+- ✅ Trigger custom events (application specific)
+- ✅ Disable animations for speed (test optimization)
+- ✅ Get computed styles (verification)
+- ✅ Interact with shadow DOM (if necessary)
+- ✅ Check page readiness (AJAX complete)
+
+**Key Concepts:**
+- **arguments[0]** refers to first passed element/parameter
+- **arguments[n]** refers to nth passed element
+- Return values must be JSON-serializable
+- Element objects converted to WebElement references
+- Script execution isolated to browser context
+
+**JavaScript Execution Performance:**
+```
+Synchronous Script:
+  - Executes on current thread
+  - Blocks WebDriver until complete
+  - Cannot take longer than script
+
+Asynchronous Script:
+  - Executes on browser thread
+  - WebDriver waits for callback
+  - Default timeout: 0 (must be set)
+  - Can handle long-running operations
+```
+
+### 1. Basic JavaScript Execution
+
+import org.openqa.selenium.JavascriptExecutor;
+
+JavascriptExecutor js = (JavascriptExecutor) driver;
+
+// Execute JavaScript (returns result)
+Object result = js.executeScript("return 2 + 2;");
+System.out.println(result);  // 4
+
+// Execute JavaScript (no return)
+js.executeScript("console.log('Hello');");
+
+// Execute with arguments
+WebElement element = driver.findElement(By.id("element"));
+js.executeScript("arguments[0].scrollIntoView();", element);
+```
+
+### 2. Common JavaScript Use Cases
+
+```java
+// Get element text
+String text = (String) js.executeScript(
+    "return document.getElementById('element').innerText;"
+);
+
+// Set element value
+js.executeScript(
+    "document.getElementById('input').value = 'new value';"
+);
+
+// Click element (when regular click fails)
+WebElement element = driver.findElement(By.id("button"));
+js.executeScript("arguments[0].click();", element);
+
+// Get computed style
+String color = (String) js.executeScript(
+    "return window.getComputedStyle(arguments[0]).color;", element
+);
+
+// Remove element from DOM
+js.executeScript("arguments[0].remove();", element);
+
+// Check if element is in viewport
+Boolean inViewport = (Boolean) js.executeScript("""
+    var element = arguments[0];
+    var rect = element.getBoundingClientRect();
+    return (
+        rect.top >= 0 &&
+        rect.left >= 0 &&
+        rect.bottom <= window.innerHeight &&
+        rect.right <= window.innerWidth
+    );
+""", element);
+
+// Scroll to element
+js.executeScript("arguments[0].scrollIntoView(true);", element);
+
+// Get page load status
+String readyState = (String) js.executeScript("return document.readyState;");
+// Returns: "loading", "interactive", or "complete"
+```
+
+### 3. Async JavaScript Execution
+
+```java
+// Execute async script with callback
+js.executeAsyncScript("""
+    var callback = arguments[arguments.length - 1];
+    setTimeout(function() {
+        callback("Async result");
+    }, 2000);
+""");
+```
+
+---
+
+## Working with Windows & Frames
+
+### 1. Handling Multiple Windows
+
+```java
+// Get current window handle
+String currentHandle = driver.getWindowHandle();
+
+// Get all window handles
+Set<String> allHandles = driver.getWindowHandles();
+
+// Switch to different window
+for (String handle : allHandles) {
+    driver.switchTo().window(handle);
+}
+
+// Switch back to main window
+driver.switchTo().window(allHandles.stream().findFirst().get());
+
+// Close current window
+driver.close();
+
+// Switch to latest window
+public void switchToLatestWindow(WebDriver driver) {
+    String[] handles = driver.getWindowHandles().toArray(new String[0]);
+    driver.switchTo().window(handles[handles.length - 1]);
+}
+```
+
+### 2. Handling Frames/iFrames
+
+```java
+// Switch to frame by ID
+driver.switchTo().frame("frame_id");
+
+// Switch to frame by Name
+driver.switchTo().frame("frame_name");
+
+// Switch to frame by WebElement
+WebElement frame = driver.findElement(By.tagName("iframe"));
+driver.switchTo().frame(frame);
+
+// Switch to frame by Index
+driver.switchTo().frame(0);  // First frame
+
+// Switch back to parent frame
+driver.switchTo().parentFrame();
+
+// Switch to main content (from any frame)
+driver.switchTo().defaultContent();
+
+// Find element within frame
+driver.switchTo().frame(0);
+WebElement element = driver.findElement(By.id("element_in_frame"));
+```
+
+### 3. Handling Alerts
+
+```java
+import org.openqa.selenium.Alert;
+import org.openqa.selenium.NoAlertPresentException;
+
+// Wait for alert
+WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+Alert alert = wait.until(ExpectedConditions.alertIsPresent());
+
+// Get alert text
+String alertText = alert.getText();
+
+// Accept alert (OK button)
+alert.accept();
+
+// Dismiss alert (Cancel button)
+alert.dismiss();
+
+// Send text to alert (for prompt)
+alert.sendKeys("Input text");
+alert.accept();
+
+// Handling alert safely
+try {
+    Alert alert = driver.switchTo().alert();
+    alert.accept();
+} catch (NoAlertPresentException e) {
+    System.out.println("No alert present");
+}
+```
+
+---
+
+## JavaScript Execution
+
+### Why Execute JavaScript
+- Access elements not visible in WebDriver API
+- Get computed styles
+- Trigger events
+- Bypass Selenium limitations
+
+### 1. Basic JavaScript Execution
+
+```java
+import org.openqa.selenium.JavascriptExecutor;
+
+JavascriptExecutor js = (JavascriptExecutor) driver;
+
+// Execute JavaScript (returns result)
+Object result = js.executeScript("return 2 + 2;");
+System.out.println(result);  // 4
+
+// Execute JavaScript (no return)
+js.executeScript("console.log('Hello');");
+
+// Execute with arguments
+WebElement element = driver.findElement(By.id("element"));
+js.executeScript("arguments[0].scrollIntoView();", element);
+```
+
+### 2. Common JavaScript Use Cases
+
+```java
+// Get element text
+String text = (String) js.executeScript(
+    "return document.getElementById('element').innerText;"
+);
+
+// Set element value
+js.executeScript(
+    "document.getElementById('input').value = 'new value';"
+);
+
+// Click element (when regular click fails)
+WebElement element = driver.findElement(By.id("button"));
+js.executeScript("arguments[0].click();", element);
+
+// Get computed style
+String color = (String) js.executeScript(
+    "return window.getComputedStyle(arguments[0]).color;", element
+);
+
+// Remove element from DOM
+js.executeScript("arguments[0].remove();", element);
+
+// Check if element is in viewport
+Boolean inViewport = (Boolean) js.executeScript("""
+    var element = arguments[0];
+    var rect = element.getBoundingClientRect();
+    return (
+        rect.top >= 0 &&
+        rect.left >= 0 &&
+        rect.bottom <= window.innerHeight &&
+        rect.right <= window.innerWidth
+    );
+""", element);
+
+// Scroll to element
+js.executeScript("arguments[0].scrollIntoView(true);", element);
+
+// Get page load status
+String readyState = (String) js.executeScript("return document.readyState;");
+// Returns: "loading", "interactive", or "complete"
+```
+
+### 3. Async JavaScript Execution
+
+```java
+// Execute async script with callback
+js.executeAsyncScript("""
+    var callback = arguments[arguments.length - 1];
+    setTimeout(function() {
+        callback("Async result");
+    }, 2000);
+""");
+```
+
+### 3. Handling Alerts
+
+```python
+from selenium.common.exceptions import NoAlertPresentException
+
+# Wait for alert
+wait = WebDriverWait(driver, 10)
+alert = wait.until(EC.alert_is_present())
+
+# Get alert text
+alert_text = alert.text
+
+# Accept alert (OK button)
+alert.accept()
+
+# Dismiss alert (Cancel button)
+alert.dismiss()
+
+# Send text to alert (for prompt)
+alert.send_keys("Input text")
+alert.accept()
+
+# Handling alert safely
+try:
+    alert = driver.switch_to.alert
+    alert.accept()
+except NoAlertPresentException:
+    print("No alert present")
+```
+
+---
+
+## JavaScript Execution
+
+### Why Execute JavaScript
+- Access elements not visible in WebDriver API
+- Get computed styles
+- Trigger events
+- Bypass Selenium limitations
+
+### 1. Basic JavaScript Execution
+
+```python
+# Execute JavaScript (returns result)
+result = driver.execute_script("return 2 + 2;")
+print(result)  # 4
+
+# Execute JavaScript (no return)
+driver.execute_script("console.log('Hello');")
+
+# Execute with arguments
+element = driver.find_element(By.ID, "element")
+driver.execute_script("arguments[0].scrollIntoView();", element)
+```
+
+### 2. Common JavaScript Use Cases
+
+```python
+# Get element text
+text = driver.execute_script(
+    "return document.getElementById('element').innerText;"
+)
+
+# Set element value
+driver.execute_script(
+    "document.getElementById('input').value = 'new value';"
+)
+
+# Click element (when regular click fails)
+element = driver.find_element(By.ID, "button")
+driver.execute_script("arguments[0].click();", element)
+
+# Get computed style
+color = driver.execute_script(
+    "return window.getComputedStyle(arguments[0]).color;",
+    element
+)
+
+# Remove element from DOM
+driver.execute_script("arguments[0].remove();", element)
+
+# Check if element is in viewport
+in_viewport = driver.execute_script("""
+    var element = arguments[0];
+    var rect = element.getBoundingClientRect();
+    return (
+        rect.top >= 0 &&
+        rect.left >= 0 &&
+        rect.bottom <= window.innerHeight &&
+        rect.right <= window.innerWidth
+    );
+""", element)
+
+# Scroll to element
+driver.execute_script("arguments[0].scrollIntoView(true);", element)
+
+# Get page load status
+ready_state = driver.execute_script("return document.readyState;")
+# Returns: "loading", "interactive", or "complete"
+```
+
+### 3. Async JavaScript Execution
+
+```python
+# Execute async script with callback
+driver.execute_async_script("""
+    var callback = arguments[arguments.length - 1];
+    setTimeout(function() {
+        callback("Async result");
+    }, 2000);
+""")
+```
+
+---
+
+## Advanced Concepts
+
+### Theory: Page Object Model (POM) Pattern
+
+**What is POM:**
+- Design pattern for organizing test code
+- Each webpage/component = separate Java class (Page Object)
+- Page Object = single source of truth for page UI
+- Encapsulates locators and interactions
+
+**Architecture:**
+```
+Test Layer (What we test)
+    ↓
+Page Object Layer (How to interact)
+    ↓
+WebDriver API Layer (Low-level automation)
+    ↓
+Browser
+```
+
+**Why POM Matters:**
+- **Maintainability:** UI changes only require Page Object updates, not test updates
+- **Scalability:** Large test suites need organization
+- **Reusability:** Same page objects shared across 100s of tests
+- **Debugging:** Failures clearly traced to page object or test logic
+- **Collaboration:** QA writes tests, Dev updates Page Objects
+
+**POM Principles:**
+1. **One class per page/component** - Not per test
+2. **Encapsulate locators** - Private WebElement fields
+3. **Public methods for interactions** - What users can do on page
+4. **Return meaningful types:**
+   - String for text retrieval
+   - Boolean for verification
+   - Page Object for navigation
+   - List for collections
+5. **No assertions in Page Objects** - That's test's job
+6. **No test logic in Page Objects** - Just interactions
+
+**Anti-Patterns to Avoid:**
+- ❌ Page Object with all possible assertions
+- ❌ Locators hardcoded in tests
+- ❌ Multiple classes for single page
+- ❌ Page Objects that mimic test structure
+- ❌ Methods that do multiple unrelated things
+
+**Common Pitfalls:**
+```
+Wrong:
+  pageObject.fillForm().assertSuccess().logout();
+  // Too much in one method
+
+Correct:
+  pageObject.fillForm();
+  assertTrue(pageObject.isSuccessMessageDisplayed());
+  pageObject.logout();
+  // Clear separation of responsibilities
+```
+
+### 1. Page Object Model (POM) - Implementation
+
+```java
+// LoginPage.java
+import org.openqa.selenium.By;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebElement;
+import org.openqa.selenium.support.ui.WebDriverWait;
+import org.openqa.selenium.support.ExpectedConditions;
+import java.time.Duration;
+
+public class LoginPage {
+    private WebDriver driver;
+    private WebDriverWait wait;
+    
+    // Locators
+    private By usernameInput = By.id("username");
+    private By passwordInput = By.id("password");
+    private By loginButton = By.id("login_btn");
+    private By errorMessage = By.className("error");
+    
+    public LoginPage(WebDriver driver) {
+        this.driver = driver;
+        this.wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+    }
+    
+    // Methods
+    public void enterUsername(String username) {
+        driver.findElement(usernameInput).sendKeys(username);
+    }
+    
+    public void enterPassword(String password) {
+        driver.findElement(passwordInput).sendKeys(password);
+    }
+    
+    public void clickLogin() {
+        driver.findElement(loginButton).click();
+    }
+    
+    public void login(String username, String password) {
+        enterUsername(username);
+        enterPassword(password);
+        clickLogin();
+    }
+    
+    public String getErrorMessage() {
+        return wait.until(
+            ExpectedConditions.visibilityOfElementLocated(errorMessage)
+        ).getText();
+    }
+}
+
+// LoginTest.java
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class LoginTest {
+    private WebDriver driver;
+    
+    @Test
+    public void testLoginSuccess() {
+        driver.get("https://example.com/login");
+        LoginPage loginPage = new LoginPage(driver);
+        loginPage.login("user@example.com", "password123");
+        assertEquals("https://example.com/dashboard", driver.getCurrentUrl());
+    }
+    
+    @Test
+    public void testLoginFailure() {
+        driver.get("https://example.com/login");
+        LoginPage loginPage = new LoginPage(driver);
+        loginPage.login("user@example.com", "wrong_password");
+        String errorMsg = loginPage.getErrorMessage();
+        assertTrue(errorMsg.contains("Invalid credentials"));
+    }
+}
+```
+
+def test_login_success(driver):
+    driver.get("https://example.com/login")
+    login_page = LoginPage(driver)
+    login_page.login("user@example.com", "password123")
+    assert driver.current_url == "https://example.com/dashboard"
+
+def test_login_failure(driver):
+    driver.get("https://example.com/login")
+    login_page = LoginPage(driver)
+    login_page.login("user@example.com", "wrong_password")
+    error_msg = login_page.get_error_message()
+    assert "Invalid credentials" in error_msg
+```
+
+**Benefits of POM:**
+- Maintainable and reusable code
+- Easier to locate element changes
+- Separation of concerns
+- Better test readability
+
+### Theory: Data-Driven Testing
+
+**Definition:**
+- Running same test with multiple different input data
+- Separates test logic from test data
+- One test method, multiple data sets
+
+**Why Use Data-Driven Testing:**
+- **Coverage:** Test multiple scenarios with single test
+- **Maintenance:** Update data without changing test code
+- **Efficiency:** Write once, run 100 times with different data
+- **Debugging:** Easy to isolate which data caused failure
+- **Scalability:** Add new data without adding test methods
+
+**Data Sources:**
+- Inline (hardcoded)
+- CSV files
+- Excel files
+- Database
+- JSON files
+- API responses
+
+**Test Execution Model:**
+```
+One @ParameterizedTest = Multiple Test Runs
+Each parameter set = New test instance
+Each run isolated (independent pass/fail)
+Report shows all runs separately
+```
+
+**Data Organization:**
+- Row 1: Headers (optional)
+- Each row = one test execution
+- Columns = test parameters
+- Limits: Keep manageable (50-100 rows max for UI tests)
+
+**Anti-Patterns:**
+- ❌ Hardcoding 1000s of test cases (too slow)
+- ❌ Dependent test data (each test should work independently)
+- ❌ Complex data transformations in tests
+- ❌ Test logic based on data values
+
+**Performance Considerations:**
+```
+Data-Driven Test Problems:
+  1000 test cases × 5 seconds = 83 minutes
+  Solution: Use test data strategically, parallelize tests
+  
+Recommendation:
+  - Keep parameterized tests focused
+  - Use for critical paths with various inputs
+  - Use separate test methods for edge cases
+```
+
+### 2. Data-Driven Testing - Implementation
+
+```java
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class LoginDataDrivenTest {
+    
+    // Using @CsvSource
+    @ParameterizedTest
+    @CsvSource({
+        "user1@test.com, pass1, true",
+        "user2@test.com, pass2, true",
+        "invalid@test.com, wrong, false"
+    })
+    public void testLoginWithData(String username, String password, boolean expected) {
+        driver.get("https://example.com/login");
+        LoginPage loginPage = new LoginPage(driver);
+        loginPage.login(username, password);
+        
+        if (expected) {
+            assertEquals("https://example.com/dashboard", driver.getCurrentUrl());
+        } else {
+            String errorMsg = loginPage.getErrorMessage();
+            assertTrue(errorMsg.toLowerCase().contains("error"));
+        }
+    }
+    
+    // Using CSV file
+    @ParameterizedTest
+    @CsvFileSource(resources = "/test_data.csv", numLinesToSkip = 1)
+    public void testLoginFromCSV(String username, String password) {
+        driver.get("https://example.com/login");
+        LoginPage loginPage = new LoginPage(driver);
+        loginPage.login(username, password);
+    }
+}
+```
+
+### Theory: Screenshots and Logging
+
+**Why Logging Matters:**
+- **Debugging:** Track test execution flow step-by-step
+- **Troubleshooting:** Identify exactly where tests fail
+- **CI/CD Integration:** Logs captured in build pipelines
+- **Audit Trail:** Know what happened before failure
+- **Performance Analysis:** Identify slow operations
+
+**Logging Levels:**
+```
+SEVERE (CRITICAL ERRORS)
+  └─ Test-blocking failures, assertions fail
+  
+WARNING (UNEXPECTED BEHAVIOR)
+  └─ Non-blocking issues, retried operations
+  
+INFO (IMPORTANT EVENTS)
+  └─ Test start/end, page transitions, successful operations
+  
+FINE/FINER (DETAILED FLOW)
+  └─ Element interactions, waits, locator searches
+```
+
+**Why Take Screenshots:**
+- **Visual Evidence:** Show what user saw during failure
+- **Debugging:** Identify UI issues not captured in logs
+- **Reporting:** Attach to test reports for analysis
+- **Reproduction:** Help recreate issues
+- **Documentation:** Show test scenario progression
+
+**When to Take Screenshots:**
+- ✅ On test failure (automatic)
+- ✅ Before and after major actions
+- ✅ On assertion failure
+- ✅ On unexpected UI state
+- ❌ After every single interaction (too many, slow tests)
+- ❌ On passing tests (wastes storage)
+
+**File Organization:**
+```
+screenshots/
+  ├─ 20240115/
+  │   ├─ LoginTest_20240115_143022.png (timestamp for uniqueness)
+  │   ├─ DashboardTest_20240115_143045.png
+  └─ 20240114/
+      └─ ...
+```
+
+**Performance Impact:**
+```
+Screenshot takes: 500ms - 1 second per image
+100 screenshots = 50-100 seconds added to test time
+Solution: Take selective screenshots, not for every step
+```
+
+### 3. Screenshots and Logging - Implementation
+
+```java
+import java.io.File;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.logging.Logger;
+import org.openqa.selenium.OutputType;
+import org.openqa.selenium.TakesScreenshot;
+
+public class TestUtils {
+    private static final Logger logger = Logger.getLogger(TestUtils.class.getName());
+    
+    public static String takeScreenshot(WebDriver driver, String testName) {
+        String timestamp = LocalDateTime.now().format(
+            DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")
+        );
+        String filename = String.format("screenshots/%s_%s.png", testName, timestamp);
+        
+        File screenshot = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
+        File destinationFile = new File(filename);
+        
+        try {
+            Files.copy(screenshot.toPath(), destinationFile.toPath());
+            logger.info("Screenshot saved: " + filename);
+            return filename;
+        } catch (IOException e) {
+            logger.severe("Failed to save screenshot: " + e.getMessage());
+            return null;
+        }
+    }
+}
+
+public class LoginTest {
+    private static final Logger logger = Logger.getLogger(LoginTest.class.getName());
+    
+    @Test
+    public void testLogin() {
+        try {
+            logger.info("Starting login test");
+            LoginPage loginPage = new LoginPage(driver);
+            loginPage.login("user@example.com", "password");
+            logger.info("Login successful");
+        } catch (Exception e) {
+            TestUtils.takeScreenshot(driver, "test_login");
+            logger.severe("Test failed: " + e.getMessage());
+            throw e;
+        }
+    }
+}
+```
+
+### Theory: Parallel Test Execution
+
+**Definition:**
+- Running multiple tests simultaneously instead of sequentially
+- Reduces total test execution time significantly
+- Requires proper resource management
+
+**Why Parallel Execution:**
+- **Time Savings:** 10 tests × 5 seconds = 50 seconds sequential vs ~5 seconds parallel
+- **CI/CD Speed:** Faster feedback in build pipelines
+- **Resource Utilization:** Use all CPU cores effectively
+- **Scalability:** Handle growing test suites
+
+**Execution Models:**
+```
+Sequential Execution:
+  Test1 ─────→ Test2 ─────→ Test3 ─────→ Test4
+  Total: 20 seconds
+
+Parallel Execution (4 threads):
+  Test1 ──→
+  Test2 ──→
+  Test3 ──→
+  Test4 ──→
+  Total: 5 seconds
+```
+
+**Critical Requirements for Parallel Tests:**
+1. **Test Isolation:** Each test independent, no shared state
+2. **Separate WebDriver Instances:** Cannot share browser
+3. **Thread-Safe Resources:** Logs, screenshots, databases
+4. **Unique File Names:** Don't overwrite other threads' files
+5. **No Hardcoded Data:** Avoid conflicts on shared data
+
+**Common Parallel Mistakes:**
+- ❌ Sharing WebDriver between tests (crashes)
+- ❌ Shared static variables (race conditions)
+- ❌ Hardcoded file paths (overwrite conflicts)
+- ❌ Database assumptions (data modified by other threads)
+- ❌ Same login credentials (concurrent session conflicts)
+
+**Thread Safety Patterns:**
+```java
+❌ WRONG - Shared WebDriver:
+  public static WebDriver driver;
+  
+✅ RIGHT - Per-test instance:
+  @BeforeEach
+  void setup() {
+    driver = new ChromeDriver(); // Fresh driver per test
+  }
+```
+
+**Parallelization Strategies:**
+- **Method Level:** Run methods concurrently (fine-grained)
+- **Class Level:** Run entire test classes concurrently
+- **Thread Pool:** Control max concurrent threads
+- **Dynamic:** JUnit 5 auto-parallelizes based on CPU cores
+
+### 4. Parallel Test Execution - Implementation
+
+```bash
+# Add Maven dependency for parallel execution
+mvn test
+```
+
+```java
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
+
+@Execution(ExecutionMode.CONCURRENT)
+public class ParallelTests {
+    // Tests will run in parallel
+}
+
+@Execution(ExecutionMode.CONCURRENT)
+public class ParallelTests {
+    // Tests will run in parallel
+}
+```
+
+### Theory: Network Throttling & Performance Testing
+
+**Why Test with Network Throttling:**
+- **Real-world conditions:** Not all users have fast internet
+- **Mobile testing:** Simulate 3G, 4G, 5G networks
+- **Performance verification:** Ensure app works under slow networks
+- **Error handling:** Test retry logic and timeouts
+
+**Network Conditions to Test:**
+```
+Condition          | Download | Upload | Latency
+─────────────────────────────────────────────────
+Fast (WiFi)        | 100 Mbps | 20 Mbps| 2ms
+Slow WiFi          | 10 Mbps  | 2 Mbps | 10ms
+3G                 | 400 kbps | 100kbps| 50ms
+4G LTE             | 10 Mbps  | 5 Mbps | 20ms
+Very Slow (2G)     | 50 kbps  | 50kbps | 400ms
+Offline            | 0        | 0      | -
+```
+
+**Performance Metrics to Track:**
+- **Time to First Byte (TTFB):** Server response time
+- **Page Load Time:** Complete page rendering
+- **Interaction Response:** Time to respond to user actions
+- **Resource Load Time:** Individual resource loading
+
+**CDP (Chrome DevTools Protocol):**
+- Enables low-level browser automation
+- Access to network, performance, and memory
+- Real-time debugging information
+- Only available for Chromium-based browsers
+
+**Throttling Parameters:**
+```
+downloadThroughput: Bytes per second (-1 = unlimited)
+uploadThroughput:   Bytes per second (-1 = unlimited)
+latency:            Milliseconds delay for requests
+offline:            True/False - disable network entirely
+```
+
+### 5. Network Throttling - Implementation (Chrome DevTools Protocol)
+
+```java
+import org.openqa.selenium.chromium.ChromiumDriver;
+import java.util.HashMap;
+import java.util.Map;
+
+ChromiumDriver driver = (ChromiumDriver) new ChromeDriver();
+
+// Enable CDP
+Map<String, Object> params = new HashMap<>();
+params.put("offline", false);
+params.put("downloadThroughput", 50 * 1024 / 8);  // 50 kbps
+params.put("uploadThroughput", 50 * 1024 / 8);
+params.put("latency", 400);  // 400ms latency
+driver.executeCdp("Network.emulateNetworkConditions", params);
+
+driver.get("https://example.com");
+
+// Restore normal network
+params.put("downloadThroughput", -1);
+params.put("uploadThroughput", -1);
+params.put("latency", 0);
+driver.executeCdp("Network.emulateNetworkConditions", params);
+```
+
+### Theory: Performance Testing
+
+**Performance Metrics:**
+- **Navigation Start:** When user navigates
+- **DOM Ready:** Document fully parsed (DOM interactive)
+- **Page Load:** All resources loaded (onLoad)
+- **Resource Timing:** Individual resource load times
+- **User Timing:** Custom application metrics
+
+**Navigation Timing Flow:**
+```
+User clicks → Navigation Start
+    ↓
+DNS Lookup ─→ TCP Connect ─→ Server Respond
+    ↓
+Download HTML ─→ Parse HTML ─→ DOM Ready
+    ↓
+Load Resources ─→ Execute Scripts ─→ Page Load Complete
+```
+
+**Testing Performance:**
+- Measure same action multiple times (avg, min, max)
+- Compare against baseline (regression detection)
+- Test with different network conditions
+- Monitor resource usage (memory, CPU)
+
+### 6. Performance Testing
+
+```java
+// Get performance metrics
+Map<String, Object> perfData = (Map<String, Object>) js.executeScript(
+    "return window.performance.timing;"
+);
+
+// Calculate page load time
+public static long getPageLoadTime(WebDriver driver) {
+    JavascriptExecutor js = (JavascriptExecutor) driver;
+    Map<String, Object> perfData = (Map<String, Object>) js.executeScript("""
+        return {
+            'navigationStart': window.performance.timing.navigationStart,
+            'loadEventEnd': window.performance.timing.loadEventEnd
+        }
+    """);
+    
+    long navigationStart = ((Number) perfData.get("navigationStart")).longValue();
+    long loadEventEnd = ((Number) perfData.get("loadEventEnd")).longValue();
+    return loadEventEnd - navigationStart;
+}
+
+// Measure specific action
+long startTime = System.currentTimeMillis();
+loginPage.login("user@example.com", "password");
+long endTime = System.currentTimeMillis();
+long loginTime = endTime - startTime;
+System.out.println("Login took " + loginTime + " ms");
+```
+
+---
+
+## Best Practices
+
+### Theory: Test Organization and Architecture
+
+**Folder Structure Rationale:**
+```
+Why separate folders:
+  /tests/        - All test classes (what we test)
+  /pages/        - Page Objects (how to interact)
+  /utils/        - Helper utilities (reusable functions)
+  /data/         - Test data and configs (test inputs)
+```
+
+**Base Test Class Pattern:**
+- Centralized setUp/tearDown logic
+- Common WebDriver initialization
+- Shared utility methods
+- Configuration management
+- Error handling
+
+**Framework Layer Design:**
+```
+User writes:      Test Classes
+          ↓
+Framework layer:  Page Objects → Utils → Config
+          ↓
+Selenium API:     WebDriver methods
+          ↓
+Browser:          Automation execution
+```
+
+**Benefits of Good Organization:**
+- **Scalability:** Add 100 tests without chaos
+- **Maintainability:** Find code quickly
+- **Reusability:** Share page objects across projects
+- **Debugging:** Clear file organization aids troubleshooting
+
+### 1. Test Organization
+
+```
+project/
+├── tests/
+│   ├── BaseTest.java            // Base test class
+│   ├── LoginTest.java
+│   ├── DashboardTest.java
+│   └── ProductTest.java
+├── pages/
+│   ├── LoginPage.java
+│   ├── DashboardPage.java
+│   └── BasePage.java
+├── utils/
+│   ├── DriverFactory.java
+│   ├── TestUtils.java
+│   └── WaitUtils.java
+├── data/
+│   ├── test_data.csv
+│   └── config.properties
+├── pom.xml
+└── TestNG.xml
+```
+
+### Theory: Configuration Management
+
+**Why Centralized Configuration:**
+- **Environment Switching:** Change URL without code changes
+- **Browser Selection:** Switch browsers via config, not code
+- **Timeout Tuning:** Adjust globally for different environments
+- **CI/CD Flexibility:** Different configs for dev/staging/prod
+- **Credentials Management:** Not hardcoded in tests
+
+**Configuration Hierarchy (Priority):**
+```
+System Properties (highest)
+    ↓
+Environment Variables
+    ↓
+Command-line Arguments
+    ↓
+config.properties (lowest)
+```
+
+**Sensitive Data:**
+- ❌ Never hardcode passwords
+- ✅ Use environment variables
+- ✅ Use CI/CD secrets management
+- ✅ Use .gitignore for sensitive files
+
+### 2. Configuration Management
+
+```java
+// Config.java
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.util.Properties;
+
+public class Config {
+    private static Properties props = new Properties();
+    
+    static {
+        try {
+            props.load(new FileInputStream("src/test/resources/config.properties"));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+    
+    public static String getBaseUrl() {
+        return props.getProperty("base.url", "https://example.com");
+    }
+    
+    public static String getBrowser() {
+        return props.getProperty("browser", "chrome");
+    }
+    
+    public static boolean isHeadless() {
+        return Boolean.parseBoolean(props.getProperty("headless", "false"));
+    }
+    
+    public static int getWaitTime() {
+        return Integer.parseInt(props.getProperty("wait.time", "10"));
+    }
+}
+
+// config.properties
+base.url=https://staging.example.com
+browser=chrome
+headless=true
+wait.time=15
+```
+
+### 3. Base Test Class
+
+```java
+// BaseTest.java
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
+
+public class BaseTest {
+    protected WebDriver driver;
+    
+    @BeforeEach
+    public void setUp() {
+        String browser = Config.getBrowser().toLowerCase();
+        
+        if (browser.equals("chrome")) {
+            ChromeOptions options = new ChromeOptions();
+            if (Config.isHeadless()) {
+                options.addArguments("--headless");
+            }
+            driver = new ChromeDriver(options);
+        } else if (browser.equals("firefox")) {
+            driver = new FirefoxDriver();
+        }
+        
+        driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(Config.getWaitTime()));
+        driver.manage().window().maximize();
+    }
+    
+    @AfterEach
+    public void tearDown() {
+        if (driver != null) {
+            driver.quit();
+        }
+    }
+}
+```
+
+### 4. Error Handling
+
+```java
+import org.openqa.selenium.TimeoutException;
+
+public class RetryUtils {
+    
+    public static void retryOnStale(Runnable action, int maxRetries) {
+        for (int attempt = 0; attempt < maxRetries; attempt++) {
+            try {
+                action.run();
+                return;
+            } catch (StaleElementReferenceException e) {
+                if (attempt == maxRetries - 1) {
+                    throw e;
+                }
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+    }
+    
+    // Usage
+    public void clickElement(WebDriver driver, By locator) {
+        retryOnStale(() -> driver.findElement(locator).click(), 3);
+    }
+}
+```
+
+### 5. Logging Best Practices
+
+```java
+import java.util.logging.Logger;
+import java.util.logging.Level;
+
+public class TestClass {
+    private static final Logger logger = Logger.getLogger(TestClass.class.getName());
+    
+    public void testLogin() {
+        logger.info("Starting login test");
+        logger.warning("Element not found, retrying");
+        logger.severe("Login failed: Invalid credentials");
+    }
+}
+```
+
+### 6. Test Data Management
+
+```java
+// TestData.java
+public class TestData {
+    
+    public static class User {
+        public String username;
+        public String password;
+        
+        public User(String username, String password) {
+            this.username = username;
+            this.password = password;
+        }
+    }
+    
+    public static User getValidUser() {
+        return new User("test@example.com", "SecurePass123!");
+    }
+    
+    public static User getInvalidUser() {
+        return new User("invalid@example.com", "wrongpassword");
+    }
+}
+
+// Usage in test
+@Test
+public void testLoginValid() {
+    User user = TestData.getValidUser();
+    loginPage.login(user.username, user.password);
+    assertEquals("https://example.com/dashboard", driver.getCurrentUrl());
+}
+```
+
+### 7. Use Explicit Waits Over Implicit Waits
+
+```java
+// Good
+WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+wait.until(ExpectedConditions.elementToBeClickable(By.id("button"))).click();
+
+// Avoid
+driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(10));
+driver.findElement(By.id("button")).click();
+```
+
+### 8. Clean Up Resources
+
+```java
+// Using try-finally
+@Test
+public void testWithCleanup() {
+    driver.get("https://example.com");
+    try {
+        // Test code
+    } finally {
+        driver.quit();
+    }
+}
+
+// Or using @BeforeEach and @AfterEach
+@BeforeEach
+public void setUp() {
+    driver = new ChromeDriver();
+}
+
+@AfterEach
+public void tearDown() {
+    if (driver != null) {
+        driver.quit();
+    }
+}
+```
+
+---
+
+## Common Issues & Solutions
+
+### Theory: Common Issue Categories
+
+**Issue Categories (by root cause):**
+```
+Synchronization Issues:
+  - Element not found (DOM not loaded)
+  - Stale element references (DOM refreshed)
+  - Element not clickable (UI overlays)
+  - Timing issues (waits insufficient)
+  
+Locator Issues:
+  - Wrong locator selects multiple elements
+  - Locator breaks after UI changes
+  - XPath queries too fragile
+  
+Browser/Driver Issues:
+  - Driver crashes or hangs
+  - Browser window issues
+  - Session timeouts
+  
+Environment Issues:
+  - Network timeouts
+  - Resource loading failures
+  - Environment-specific behaviors
+  
+Test Flakiness:
+  - Race conditions
+  - Timing-dependent behavior
+  - External dependencies
+```
+
+**Debugging Process:**
+1. Check logs first (what happened)
+2. Review screenshot (what was on screen)
+3. Verify locator/element existence
+4. Check if it's a timing issue
+5. Test in browser manually
+
+### 1. Element Not Found (NoSuchElementException)
+
+**Root Cause:** 
+- Element not in DOM yet (JavaScript loading)
+- Element might be in iframe
+- Locator incorrect/too specific
+- Element removed from DOM
+
+**Solutions:**
+```java
+// Solution 1: Use explicit wait
+WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+WebElement element = wait.until(
+    ExpectedConditions.presenceOfElementLocated(By.id("element"))
+);
+
+// Solution 2: Check if element exists
+List<WebElement> elements = driver.findElements(By.id("element"));
+if (!elements.isEmpty()) {
+    elements.get(0).click();
+}
+
+// Solution 3: Use JavaScript
+WebElement element = driver.findElement(By.id("element"));
+JavascriptExecutor js = (JavascriptExecutor) driver;
+js.executeScript("arguments[0].click();", element);
+```
+
+### 2. Stale Element Reference
+
+**Root Cause:**
+- DOM updated after element found
+- Page re-rendered
+- AJAX reloaded content
+- Element removed and re-added
+
+**Solutions:**
+```java
+// Solution 1: Find element again
+WebElement element = driver.findElement(By.id("element"));
+element.click();
+
+// Solution 2: Use retry logic
+public void retryClick(WebDriver driver, By locator, int maxRetries) {
+    for (int i = 0; i < maxRetries; i++) {
+        try {
+            driver.findElement(locator).click();
+            return;
+        } catch (StaleElementReferenceException e) {
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+    throw new TimeoutException("Failed to click element after " + maxRetries + " retries");
+}
+
+// Solution 3: Store locator, not element
+By buttonLocator = By.id("button");
+driver.findElement(buttonLocator).click();
+```
+
+### 3. Element Not Clickable
+
+**Cause:** Element hidden, disabled, or covered
+
+**Solutions:**
+```java
+// Solution 1: Scroll to element
+WebElement element = driver.findElement(By.id("button"));
+JavascriptExecutor js = (JavascriptExecutor) driver;
+js.executeScript("arguments[0].scrollIntoView(true);", element);
+element.click();
+
+// Solution 2: Use JavaScript click
+js.executeScript("arguments[0].click();", element);
+
+// Solution 3: Use Actions
+new Actions(driver).moveToElement(element).click().perform();
+
+// Solution 4: Wait for element to be clickable
+WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+wait.until(ExpectedConditions.elementToBeClickable(By.id("button"))).click();
+```
+```
+
+### 4. Timeout Exception
+
+**Cause:** Element/condition not found within timeout
+
+**Solutions:**
+```java
+// Increase timeout
+WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(20));  // Instead of 10
+
+// Change expected condition
+wait.until(ExpectedConditions.presenceOfElementLocated(...));  // Instead of visibility
+
+// Add explicit waits for intermediate steps
+wait.until(ExpectedConditions.presenceOfAllElementsLocatedBy(By.className("item")));
+```
+
+### 5. NoAlertPresentException
+
+**Cause:** Code tries to access alert when none exists
+
+**Solutions:**
+```java
+import org.openqa.selenium.NoAlertPresentException;
+
+try {
+    Alert alert = driver.switchTo().alert();
+    alert.accept();
+} catch (NoAlertPresentException e) {
+    System.out.println("No alert present");
+}
+
+// Or use explicit wait
+WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(5));
+Alert alert = wait.until(ExpectedConditions.alertIsPresent());
+alert.accept();
+```
+
+### 6. Unicode/Encoding Issues
+
+**Cause:** Special characters not handled properly
+
+**Solutions:**
+```java
+// Use unicode strings
+element.sendKeys("特殊字符");
+
+// Use unicode escape
+element.sendKeys("\u00A9");  // © symbol
+
+// Set charset properly in pom.xml
+//<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+```
+
+### 7. Flaky Tests
+
+**Causes:**
+- Timing issues
+- Element not visible yet
+- Network latency
+- Race conditions
+
+**Solutions:**
+```java
+// Use explicit waits consistently
+WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+wait.until(ExpectedConditions.elementToBeClickable(By.id("button")));
+
+// Add small delays between actions
+Thread.sleep(500);
+
+// Use retry logic
+public void retryOperation(Runnable operation, int maxRetries) {
+    for (int i = 0; i < maxRetries; i++) {
+        try {
+            operation.run();
+            return;
+        } catch (Exception e) {
+            if (i == maxRetries - 1) {
+                throw e;
+            }
+            try {
+                Thread.sleep(1000 * (i + 1));  // Exponential backoff
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+}
+```
+
+### 8. WebDriver Issues
+
+**Update WebDriver:**
+```bash
+# Ensure version matches browser version
+# Chrome: chromedriver.chromium.org
+# Firefox: github.com/mozilla/geckodriver
+
+# Or use WebDriver Manager (auto-downloads)
+<dependency>
+    <groupId>io.github.bonigarcia</groupId>
+    <artifactId>webdrivermanager</artifactId>
+    <version>5.x.x</version>
+</dependency>
+
+// Usage
+WebDriverManager.chromedriver().setup();
+WebDriver driver = new ChromeDriver();
+```
+
+---
+
+## Interview Questions
+
+### Theory: Interview Question Categories
+
+**What interviewers assess:**
+1. **Conceptual Understanding** - How does Selenium work (not just syntax)
+2. **Problem Solving** - How to handle real-world issues
+3. **Best Practices** - Design patterns and architecture knowledge
+4. **Experience Level** - Depth and breadth of usage
+5. **Soft Skills** - Communication and reasoning
+
+**Preparation Strategy:**
+- **Explain the "why"** not just the "what"
+- **Provide examples** from real projects
+- **Discuss trade-offs** between approaches
+- **Show debugging mindset** for edge cases
+- **Demonstrate continuous learning**
+
+**Question Types You'll Face:**
+- Conceptual (What is X? How does Y work?)
+- Practical (Write code to handle X scenario)
+- Comparative (Implicit vs explicit? XPath vs CSS?)
+- Troubleshooting (How would you debug X issue?)
+- Scenario-based (How would you test X feature?)
+
+### Basic Level
+
+**Q: What is Selenium?**
+
+A: Selenium is an open-source tool for automating web browsers. It supports multiple languages (Java, Python, C#, etc.) and can be used for automated testing, web scraping, and RPA.
+
+**Why it matters:** Shows understanding of Selenium's scope and use cases.
+
+**Q: What are the main WebDriver methods?**
+
+A: Key methods include:
+- `get()` - Load URL
+- `findElement()` - Find single element
+- `findElements()` - Find multiple elements
+- `click()` - Click element
+- `sendKeys()` - Type text
+- `submit()` - Submit form
+- `quit()` - Close session
+
+**Why it matters:** Demonstrates knowledge of basic WebDriver API.
+
+**Q: What is the difference between `close()` and `quit()`?**
+
+A: 
+- `close()` - Closes current browser window (session remains)
+- `quit()` - Closes all windows and ends WebDriver session
+
+**Why it matters:** Shows understanding of session lifecycle and resource management.
+
+**Q: What is Page Object Model (POM)?**
+
+A: Design pattern where each web page is represented as a Java class. Page elements are encapsulated as private variables, user interactions as public methods. Improves maintainability since UI changes only require Page Object updates, not test updates.
+
+**Why it matters:** Demonstrates knowledge of test architecture and scalability.
+
+**Q: What is the difference between implicit and explicit waits?**
+
+A: 
+- **Implicit:** Applies globally to all find operations, inefficient for specific conditions
+- **Explicit:** Targeted wait for specific conditions, more efficient and recommended
+
+**Why it matters:** Understanding synchronization is critical for flaky test prevention.
+
+### Intermediate Level
+
+**Q: How do you handle dynamic elements?**
+
+A: Use explicit waits with expected conditions:
+```java
+WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+wait.until(ExpectedConditions.presenceOfElementLocated(By.id("dynamic")));
+```
+
+**Deep Answer:** Dynamic elements are loaded after page load via JavaScript/AJAX. Waiting for presence ensures element exists in DOM, but still might not be visible. Use `elementToBeClickable()` if you need to interact with it.
+
+**Q: What is XPath and why is it used?**
+
+A: XPath is a query language to navigate XML/HTML documents. Used when other locators don't work, provides powerful element selection and can navigate to parent/sibling elements.
+
+**Performance Note:** XPath is slower than CSS selectors or IDs. Use only when necessary.
+
+**Q: How do you handle multiple windows?**
+
+A:
+```java
+String mainWindow = driver.getWindowHandle();
+for (String handle : driver.getWindowHandles()) {
+    driver.switchTo().window(handle);
+}
+driver.switchTo().window(mainWindow);
+```
+
+**Context:** Each window has a unique handle. Window handles are temporary and change per session. Always store main window handle before switching.
+
+**Q: What are expected conditions?**
+
+A: Conditions that WebDriverWait checks repeatedly until true or timeout:
+- ExpectedConditions.presenceOfElementLocated()
+- ExpectedConditions.visibilityOfElementLocated()
+- ExpectedConditions.elementToBeClickable()
+- etc.
+
+**Key Insight:** Use most specific condition needed. `visibilityOfElementLocated()` waits for both presence AND visibility, more thorough than just `presenceOfElementLocated()`.
+
+**Q: How do you handle frames/iframes?**
+
+A:
+```java
+driver.switchTo().frame("frame_id");
+driver.switchTo().parentFrame();
+driver.switchTo().defaultContent();
+```
+
+**Important:** 
+- Frames create isolated DOM contexts
+- Must switch to frame BEFORE accessing elements inside
+- Can't use XPath across frame boundaries
+- Can nest frames - switch one at a time
+
+### Advanced Level
+
+**Q: How do you make tests more reliable?**
+
+A:
+- Use explicit waits instead of implicit waits
+- Implement retry logic for flaky operations
+- Use Page Object Model
+- Proper exception handling
+- Data-driven testing
+- Parallel execution with proper isolation
+
+**Advanced Context:** Reliability is measured by stability (same result every run) and speed. Trade-off: Over-waiting makes tests slow. Find balance with strategic waits on critical operations only.
+
+**Q: What is the difference between relative and absolute locators?**
+
+A:
+- **Absolute:** Full path from root: `/html/body/div/button`
+- **Relative:** Partial path: `//button[@class='submit']`
+- Relative locators are more maintainable
+
+**Why it matters:** Absolute locators break with minor DOM changes. Relative locators are resilient to structural changes.
+
+**Q: How do you perform cross-browser testing?**
+
+A: Run tests on multiple browsers:
+```java
+@ParameterizedTest
+@ValueSource(strings = {"chrome", "firefox", "edge"})
+public void testLogin(String browser) {
+    WebDriver driver;
+    if (browser.equals("chrome")) {
+        driver = new ChromeDriver();
+    } else if (browser.equals("firefox")) {
+        driver = new FirefoxDriver();
+    }
+}
+```
+
+**Implementation:** Use DriverFactory to create browser-specific drivers. Some features/bugs differ between browsers - test critical paths on all browsers.
+
+**Q: How do you handle JavaScript-heavy applications?**
+
+A:
+- Use explicit waits for JavaScript execution
+- Use JavaScript execution to interact with elements
+- Monitor network requests with CDP
+
+**Real-world scenario:** SPAs (React, Angular) load content asynchronously. Selenium can't see if AJAX is complete. Solution: Wait for JavaScript to signal completion via custom conditions or element visibility.
+
+**Q: What is Selenium Grid used for?**
+
+A: Enables parallel test execution across multiple machines/browsers:
+- Start Hub: `java -jar selenium-server-hub.jar`
+- Register Nodes: `java -jar selenium-server-node.jar`
+- Connect from tests: `new RemoteWebDriver(new URL("http://localhost:4444"), capabilities)`
+
+**Advantage:** Distribute tests across 100s of machines for massive parallel execution. Common in cloud testing platforms (BrowserStack, Sauce Labs).
+
+**Q: How do you optimize Selenium tests for performance?**
+
+A:
+- Use headless mode (no GUI rendering)
+- Disable images/CSS loading (less network I/O)
+- Parallel execution with thread pools
+- Minimize unnecessary waits
+- Use efficient locators (ID/CSS faster than XPath)
+- Batch operations where possible
+
+**Key Trade-off:** Optimization vs Accuracy. Disabling images makes tests faster but misses image-related issues. Choose based on what you're testing.
+
+**Q: What are common test flakiness causes?**
+
+A:
+- **Timing:** Waits too short for varying network speeds
+- **Race conditions:** Parallel tests affecting shared resources
+- **Environment:** Tests passing in dev, failing in CI
+- **External dependencies:** API timeouts, database inconsistencies
+- **Brittle locators:** Break with minor UI changes
+- **Test isolation:** Previous test leaving state for next test
+
+**Solution:** Deterministic waits, proper setup/teardown, isolated test data, reliable locators.
+
+### Expert Level - Framework & Architecture
+
+**Q: How do you design a scalable Selenium test framework?**
+
+A: Multi-layered architecture:
+```
+1. Base Test Layer
+   - WebDriver initialization
+   - Setup/teardown logic
+   - Common utilities
+   - Error handling
+   - Retry mechanisms
+
+2. Page Object Layer
+   - Encapsulated locators
+   - User interaction methods
+   - Wait logic per page
+   - Validation methods
+
+3. Test Data Layer
+   - External data sources (CSV, JSON, Excel)
+   - Configuration management
+   - Test data builders
+   - Data cleanup fixtures
+
+4. Reporting & Logging
+   - Screenshots on failure
+   - Structured logging
+   - Test metrics (duration, status)
+   - CI/CD integration hooks
+
+5. Utilities Layer
+   - Browser factory (driver management)
+   - Wait utilities (custom conditions)
+   - File operations (uploads/downloads)
+   - API helpers (mock responses)
+```
+
+**Design Principles:**
+- Single Responsibility - Each class one purpose
+- DRY (Don't Repeat Yourself) - Reuse common logic
+- Dependency Injection - Pass dependencies to classes
+- Configuration-driven - Not hardcoded values
+
+**Q: How do you handle element locator maintenance at scale?**
+
+A: Multi-strategy approach:
+```
+1. Locator Repository (Centralized)
+   - All locators in one place (not scattered in tests)
+   - Updated when UI changes
+   - Version control tracked
+   
+2. Meaningful Naming
+   - loginButtonLocator (not button1)
+   - Dynamic patterns for similar elements
+   
+3. Abstraction Levels
+   Level 1 (Most Brittle): Index-based XPath
+   Level 2: Generated IDs
+   Level 3: Stable CSS selectors
+   Level 4 (Most Reliable): Semantic IDs
+   
+4. Locator Verification
+   - Validate locators in setup (fail fast)
+   - Monitor for changes (alerts on failures)
+   - Regression testing for UI changes
+```
+
+**Q: What's the difference between POM and Page Factory?**
+
+A:
+```
+Page Object Model (POM):
+  - Manual element finding in methods
+  - Lazy loading (find when method called)
+  - Full control over waits and interactions
+  - More verbose code
+  - Recommended approach
+
+Page Factory:
+  - Annotation-based (@FindBy)
+  - Automatic element initialization
+  - Declarative (describe what, not how)
+  - Less control over waits
+  - Older pattern (not recommended)
+```
+
+**Example:**
+```java
+// POM (Preferred)
+public class LoginPage {
+    private WebDriver driver;
+    private By username = By.id("username");
+    
+    public void enterUsername(String user) {
+        driver.findElement(username).sendKeys(user);
+    }
+}
+
+// Page Factory (Legacy)
+public class LoginPage {
+    @FindBy(id = "username")
+    private WebElement username;
+    
+    public void enterUsername(String user) {
+        username.sendKeys(user);
+    }
+}
+```
+
+**Q: How do you manage browser compatibility testing?**
+
+A:
+```
+1. Cross-Browser Strategy
+   - Test on primary browsers: Chrome, Firefox, Edge
+   - Mobile browsers: Chrome Mobile, Safari iOS
+   - Secondary: IE (if legacy required)
+
+2. Browser-Specific Handling
+   - Capability matrix for each browser
+   - Browser-specific waits/timeouts
+   - Handle driver differences (SafariDriver, EdgeDriver)
+
+3. Execution Strategy
+   - Run critical paths on all browsers
+   - Browser-specific edge cases in separate tests
+   - CI/CD matrix for parallel execution
+
+4. Known Issues Management
+   - Document browser-specific bugs
+   - Tag tests: @chrome, @firefox, @mobile
+   - Skip unsupported browsers for specific tests
+```
+
+**Q: What are the most common Selenium antipatterns to avoid?**
+
+A:
+```
+1. Hard Coding Waits
+   ❌ WRONG: Thread.sleep(5000)
+   ✅ RIGHT: wait.until(ExpectedConditions.elementToBeClickable(...))
+
+2. Test Interdependency
+   ❌ WRONG: Test2 depends on Test1 passing
+   ✅ RIGHT: Each test independent with own setup/data
+
+3. Sharing Driver Across Tests
+   ❌ WRONG: static WebDriver driver (shared)
+   ✅ RIGHT: @BeforeEach creates fresh driver per test
+
+4. Over-Assertion
+   ❌ WRONG: Assert 50 things per test
+   ✅ RIGHT: Single focused assertion per test
+
+5. Brittle Locators
+   ❌ WRONG: //table/tr[5]/td[3]
+   ✅ RIGHT: By.id("user-email") with semantic locator
+
+6. No Exception Handling
+   ❌ WRONG: test fails without clear error message
+   ✅ RIGHT: Proper logging and screenshot on failure
+
+7. UI-Only Testing
+   ❌ WRONG: Test everything through UI
+   ✅ RIGHT: Use APIs for setup, UI for critical flows
+```
+
+**Q: How do you implement retry logic for flaky tests?**
+
+A:
+```java
+// Approach 1: JUnit 5 Annotation
+@Test
+@ExtendWith(RetryExtension.class)  // Custom extension
+public void testFlaky() {
+    // Test code that might fail intermittently
+}
+
+// Approach 2: Manual Retry Wrapper
+public void retryTest(Runnable test, int maxRetries) {
+    for (int i = 0; i < maxRetries; i++) {
+        try {
+            test.run();
+            return;  // Success
+        } catch (Exception e) {
+            if (i == maxRetries - 1) throw e;
+            Thread.sleep(1000);  // Wait before retry
+        }
+    }
+}
+
+// Approach 3: TestNG Retry Listener
+public class RetryAnalyzer implements IRetryAnalyzer {
+    private int retryCount = 0;
+    private static final int MAX_RETRY = 3;
+    
+    @Override
+    public boolean retry(ITestResult result) {
+        if (retryCount < MAX_RETRY) {
+            retryCount++;
+            return true;  // Retry this test
+        }
+        return false;
+    }
+}
+
+// Best Practice: Fix root cause instead of retrying
+// Retry hides underlying timing or synchronization issues
+```
+
+**Q: How do you test applications with frequent UI changes?**
+
+A:
+```
+1. Loose Coupling
+   - Use CSS selectors instead of XPath
+   - Avoid deep nesting in locators
+   - Use data-testid attributes (negotiated with devs)
+
+2. Abstraction Layers
+   - Page Objects hide locator details
+   - Developers only change POM, tests unchanged
+   - Version control tracked changes
+
+3. Regression Detection
+   - Run full suite after UI changes
+   - Screenshot comparison (visual testing)
+   - Locator validator (verify locators still work)
+
+4. Collaboration
+   - Coordinate with frontend devs
+   - Agree on semantic IDs/attributes
+   - Add data-testid attributes for automation
+   - Communicate test impact of UI changes
+```
+
+**Q: What metrics should you track for test automation?**
+
+A:
+```
+Performance Metrics:
+  - Test execution time (total, per test, per category)
+  - Flakiness rate (% tests failing intermittently)
+  - Success rate (% tests passing)
+  - Duration trend (increasing = slow regression)
+
+Quality Metrics:
+  - Bug detection rate (bugs caught by automation)
+  - False positive rate (tests failing incorrectly)
+  - Defect escape rate (bugs reaching production)
+  - Test coverage (% features automated)
+
+Maintenance Metrics:
+  - Locator breakage rate (locators failing over time)
+  - Test maintenance cost (time fixing failing tests)
+  - Code duplication (reusable vs duplicate code)
+  - Test-to-code ratio (lines of test vs product code)
+
+ROI Metrics:
+  - Cost per test execution
+  - Time savings vs manual testing
+  - Payback period for automation investment
+```
+
+**Q: How do you handle testing of file uploads and downloads?**
+
+A:
+```
+File Upload:
+  1. Get file input element
+  2. Use sendKeys() to set file path
+  3. Trigger upload through form submission
+  
+Example:
+  WebElement fileInput = driver.findElement(By.id("file_input"));
+  String filePath = "/path/to/file.pdf";
+  fileInput.sendKeys(filePath);  // Absolute path required
+
+File Download:
+  1. Set download directory in Chrome options
+  2. Verify file exists in download folder
+  3. Validate file content
+  
+Example:
+  ChromeOptions options = new ChromeOptions();
+  options.setUserPreference(
+    "download.default_directory",
+    "/path/to/downloads"
+  );
+  
+  // Verify download
+  File downloadedFile = new File("/path/to/downloads/report.pdf");
+  assertTrue(downloadedFile.exists());
+```
+
+**Q: How do you test APIs alongside UI testing?**
+
+A:
+```
+Hybrid Testing Approach:
+  1. API Setup: Create test data via API (faster)
+  2. UI Verification: Verify data display in UI
+  3. API Cleanup: Delete test data via API (cleaner)
+  
+Benefits:
+  - Faster test execution (no UI setup)
+  - More reliable (not affected by UI bugs)
+  - Better isolation (API validation separate)
+  - Cleaner teardown (API-based cleanup)
+
+Implementation:
+  RestTemplate/OkHttp for API calls
+  Separate API client classes
+  Shared authentication handling
+  Unified test data builders
+```
+
+**Q: What's your approach to testing with external dependencies (payments, email)?**
+
+A:
+```
+1. Mocking Strategy
+   - Mock external services in tests
+   - Use WireMock or similar tools
+   - Capture real responses for testing
+
+2. Isolated Environment
+   - Separate test/staging environment
+   - Sandbox accounts for payment testing
+   - Test email inboxes (MailSlurp, TempMail)
+
+3. Contract Testing
+   - Verify API contracts don't break
+   - Mock realistic scenarios
+   - Maintain test data fixtures
+
+4. E2E vs Integration Balance
+   - Few E2E tests with real dependencies
+   - Most tests with mocked dependencies
+   - CI/CD separate test layers
+```
+
+**Q: How do you approach testing in a CI/CD pipeline?**
+
+A:
+```
+Pipeline Integration:
+  1. Trigger - On code commit/PR
+  2. Build - Compile and unit tests
+  3. Integration - Run Selenium tests
+  4. Reporting - Generate reports
+  5. Artifact - Screenshots, logs, videos
+
+Optimization:
+  - Parallel execution across agents
+  - Selective test execution (changed features only)
+  - Fail fast (stop pipeline on critical failures)
+  - Test categorization (smoke, regression, sanity)
+
+Challenges:
+  - Flaky tests block pipeline
+  - Long execution times
+  - Environment inconsistencies
+  - Resource constraints
+
+Solutions:
+  - Quarantine flaky tests (investigate separately)
+  - Parallel execution (multiple agents)
+  - Infrastructure as Code (consistent environments)
+  - Docker containers (isolated test environments)
+```
+
+---
+
+## Complete Test Example
+
+```java
+// pages/LoginPage.java
+import org.openqa.selenium.By;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebElement;
+import org.openqa.selenium.support.ui.WebDriverWait;
+import org.openqa.selenium.support.ExpectedConditions;
+import java.time.Duration;
+
+public class LoginPage {
+    private WebDriver driver;
+    private WebDriverWait wait;
+    
+    private By username = By.id("username");
+    private By password = By.id("password");
+    private By loginBtn = By.id("login_btn");
+    private By errorMsg = By.className("error-message");
+    
+    public LoginPage(WebDriver driver) {
+        this.driver = driver;
+        this.wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+    }
+    
+    public void enterUsername(String user) {
+        wait.until(ExpectedConditions.visibilityOfElementLocated(username));
+        driver.findElement(username).sendKeys(user);
+    }
+    
+    public void enterPassword(String pass) {
+        driver.findElement(password).sendKeys(pass);
+    }
+    
+    public void clickLogin() {
+        driver.findElement(loginBtn).click();
+    }
+    
+    public void login(String user, String pass) {
+        enterUsername(user);
+        enterPassword(pass);
+        clickLogin();
+    }
+    
+    public String getErrorMessage() {
+        return wait.until(
+            ExpectedConditions.visibilityOfElementLocated(errorMsg)
+        ).getText();
+    }
+}
+
+// pages/DashboardPage.java
+public class DashboardPage {
+    private WebDriver driver;
+    private WebDriverWait wait;
+    
+    private By welcomeMsg = By.className("welcome-message");
+    private By logoutBtn = By.id("logout_btn");
+    
+    public DashboardPage(WebDriver driver) {
+        this.driver = driver;
+        this.wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+    }
+    
+    public boolean isLoggedIn() {
+        try {
+            wait.until(ExpectedConditions.visibilityOfElementLocated(welcomeMsg));
+            return true;
+        } catch (TimeoutException e) {
+            return false;
+        }
+    }
+    
+    public void logout() {
+        driver.findElement(logoutBtn).click();
+    }
+}
+
+// tests/LoginTest.java
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.chrome.ChromeDriver;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class LoginTest {
+    private WebDriver driver;
+    
+    @BeforeEach
+    public void setUp() {
+        driver = new ChromeDriver();
+    }
+    
+    @Test
+    public void testLoginSuccess() {
+        driver.get("https://example.com/login");
+        LoginPage loginPage = new LoginPage(driver);
+        
+        loginPage.login("testuser@example.com", "password123");
+        
+        DashboardPage dashboard = new DashboardPage(driver);
+        assertTrue(dashboard.isLoggedIn());
+        assertEquals("https://example.com/dashboard", driver.getCurrentUrl());
+    }
+    
+    @Test
+    public void testLoginInvalidCredentials() {
+        driver.get("https://example.com/login");
+        LoginPage loginPage = new LoginPage(driver);
+        
+        loginPage.login("testuser@example.com", "wrongpassword");
+        
+        String errorMsg = loginPage.getErrorMessage();
+        assertTrue(errorMsg.contains("Invalid credentials"));
+    }
+    
+    @Test
+    public void testLoginEmptyFields() {
+        driver.get("https://example.com/login");
+        LoginPage loginPage = new LoginPage(driver);
+        
+        loginPage.clickLogin();
+        
+        String errorMsg = loginPage.getErrorMessage();
+        assertTrue(errorMsg.toLowerCase().contains("required"));
+    }
+    
+    @AfterEach
+    public void tearDown() {
+        if (driver != null) {
+            driver.quit();
+        }
+    }
+}
+```
+
+---
+
+## Additional Resources
+
+### Official Documentation
+- [Selenium Official Site](https://www.selenium.dev/)
+- [Java Selenium Docs](https://www.selenium.dev/documentation/webdriver/)
+- [W3C WebDriver Specification](https://w3c.github.io/webdriver/)
+- [TestNG Documentation](https://testng.org/)
+
+### Tools & Frameworks
+- **JUnit 5:** Testing framework (used in examples)
+- **TestNG:** Java testing framework
+- **Maven:** Build automation tool
+- **Selenium Grid:** Distributed testing
+- **Appium:** Mobile app testing
+- **WebDriverManager:** Automatic driver management
+
+### Maven Dependencies
+```xml
+<!-- Selenium -->
+<dependency>
+    <groupId>org.seleniumhq.selenium</groupId>
+    <artifactId>selenium-java</artifactId>
+    <version>4.x.x</version>
+</dependency>
+
+<!-- JUnit 5 -->
+<dependency>
+    <groupId>org.junit.jupiter</groupId>
+    <artifactId>junit-jupiter</artifactId>
+    <version>5.x.x</version>
+</dependency>
+
+<!-- WebDriver Manager -->
+<dependency>
+    <groupId>io.github.bonigarcia</groupId>
+    <artifactId>webdrivermanager</artifactId>
+    <version>5.x.x</version>
+</dependency>
+```
+
+### Best Practices
+- Always use explicit waits
+- Implement Page Object Model (POM)
+- Use meaningful assertions and test names
+- Maintain test data separately from code
+- Log important events and errors
+- Take screenshots on test failures
+- Run tests in parallel when possible
+- Keep tests independent and isolated
+- Use data-driven testing for multiple scenarios
+- Implement retry logic for flaky tests
+- Monitor test execution performance
+
+---
+
+*Last Updated: December 2025*
+*Selenium Version: 4.x*
+*Language: Java*
