@@ -1,0 +1,6271 @@
+# Snowflake Complete Notes and Theory
+
+## Table of Contents
+1. [Snowflake Fundamentals](#snowflake-fundamentals)
+2. [Architecture & Core Concepts](#architecture--core-concepts)
+3. [Data Warehousing Concepts](#data-warehousing-concepts)
+4. [Snowflake Editions & Pricing](#snowflake-editions--pricing)
+5. [Databases, Schemas, and Tables](#databases-schemas-and-tables)
+6. [Performance Optimization](#performance-optimization)
+7. [Security & Compliance](#security--compliance)
+8. [Data Loading & Integration](#data-loading--integration)
+9. [Querying & Analytics](#querying--analytics)
+10. [Scaling & Clustering](#scaling--clustering)
+11. [Best Practices](#best-practices)
+12. [Real-World Scenarios](#real-world-scenarios)
+13. [Interview Questions & Answers](#interview-questions--answers)
+
+---
+
+## Snowflake Fundamentals
+
+### What is Snowflake?
+
+Snowflake is a cloud-native data warehouse platform that separates compute and storage, allowing organizations to:
+- Store massive amounts of structured data
+- Run complex analytical queries
+- Scale independently (compute vs storage)
+- Eliminate ETL complexity with zero-copy cloning
+- Share data across teams without copying
+
+**Key Differentiators:**
+```
+Snowflake vs Traditional Data Warehouses
+
+Traditional (On-Premises)      Snowflake (Cloud)
+├─ Fixed resources            ├─ Pay only for what you use
+├─ Limited scalability        ├─ Unlimited scalability
+├─ Expensive maintenance      ├─ Zero maintenance
+├─ Long setup time            ├─ Instant setup
+├─ Shared compute/storage     └─ Separate compute/storage
+└─ Complex upgrades
+```
+
+---
+
+### Cloud-Native Architecture
+
+**Key Advantages:**
+- **Unlimited Storage**: Store petabytes of data cost-effectively
+- **Separated Compute & Storage**: Pay for processing separately from data storage
+- **Multi-cluster Warehouse**: Run multiple queries simultaneously
+- **Time Travel**: Query historical data (up to 90 days)
+- **Zero-Copy Cloning**: Instant copies without storage overhead
+- **Data Sharing**: Share data without copying via Data Cloud
+- **Scalability**: Scale compute up/down instantly
+- **Simplicity**: Minimal administration required
+
+---
+
+### Snowflake Editions
+
+```
+Edition          Features              Cost         Use Case
+Standard         Basic features        $2/credit    Small teams, learning
+Business         Advanced features     $3/credit    Mid-size companies
+Enterprise       Multi-cluster, RBAC   $4/credit    Large enterprises
+Business Critical Dedicated resources   $6/credit    Highly regulated industries
+```
+
+---
+
+## Architecture & Core Concepts
+
+### Three-Layer Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    QUERY PROCESSING LAYER                   │
+│  (SQL Engine, Parser, Optimizer, Execution)                 │
+└──────────────┬──────────────────────────────────────────────┘
+               │
+┌──────────────▼──────────────────────────────────────────────┐
+│                    METADATA LAYER                           │
+│  (Database structure, access control, usage statistics)     │
+└──────────────┬──────────────────────────────────────────────┘
+               │
+┌──────────────▼──────────────────────────────────────────────┐
+│                    STORAGE LAYER                            │
+│  (Compressed columnar format, cloud object storage)         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Compute Resources: Warehouses
+
+A **warehouse** is a cluster of compute resources (virtual processors):
+
+```
+Small Warehouse    = 1 credit/hour
+Medium Warehouse   = 2 credits/hour
+Large Warehouse    = 4 credits/hour
+X-Large Warehouse  = 8 credits/hour
+2X-Large Warehouse = 16 credits/hour
+
+Usage:
+├─ Automatically suspends after idle time (default: 10 min)
+└─ Resumes when needed
+```
+
+**Multi-Cluster Warehouses:**
+```
+Single Cluster:
+├─ 1 warehouse
+├─ Sequential query execution
+└─ Limited concurrency
+
+Multi-Cluster:
+├─ 2-10 clusters of same warehouse
+├─ Parallel query execution
+├─ Auto-scaling based on load
+└─ Load balancing across clusters
+```
+
+---
+
+### Database Objects
+
+```
+Database
+└── Schema
+    ├── Tables
+    │   ├── Permanent tables
+    │   ├── Temporary tables
+    │   └── Transient tables
+    ├── Views
+    │   ├── Standard views
+    │   ├── Dynamic views
+    │   └── Materialized views
+    ├── External tables
+    ├── Stages
+    │   ├── Internal stages
+    │   └── External stages (S3, Azure Blob)
+    ├── File formats
+    ├── Sequences
+    ├── Procedures
+    └── Functions
+```
+
+---
+
+## Data Warehousing Concepts
+
+### Schema Design Approaches
+
+**Star Schema (Recommended for Analytics):**
+
+```
+              ┌─────────────────┐
+              │   Fact Table    │
+              │  (Sales)        │
+              └────────┬────────┘
+                       │
+        ┌──────────────┼──────────────┐
+        │              │              │
+    ┌───▼──┐      ┌───▼───┐     ┌───▼──┐
+    │Date  │      │Product│     │Store │
+    │Dim   │      │Dim    │     │Dim   │
+    └──────┘      └───────┘     └──────┘
+```
+
+**Snowflake Schema:**
+```
+Fact Table → Date Dimension → Year Dimension
+         → Product Dimension → Category Dimension
+```
+
+**Recommended for Snowflake: Denormalized Design**
+```
+Reason:
+├─ Snowflake handles large tables efficiently
+├─ Fewer joins = faster queries
+├─ Columnar storage = compression
+└─ Result: Better performance with simpler design
+```
+
+---
+
+### Clustering Key
+
+**Purpose:** Improves query performance for large tables.
+
+```sql
+-- Create table with clustering key
+CREATE TABLE sales (
+    sale_id INTEGER,
+    customer_id INTEGER,
+    sale_date DATE,
+    amount DECIMAL(10, 2)
+)
+CLUSTER BY (customer_id, sale_date);
+
+-- Query benefits:
+-- WHERE customer_id = 123 AND sale_date > '2024-01-01'
+-- (Faster due to clustering)
+```
+
+**When to Use Clustering:**
+```
+✓ Large tables (> 1TB)
+✓ Frequently filtered columns
+✓ Range queries common
+✓ Join key columns
+
+✗ Small tables (< 100GB)
+✗ Full table scans common
+```
+
+---
+
+## Snowflake Concepts: Basic to Advanced
+
+### BASIC CONCEPTS
+
+#### Concept 1: Separation of Compute and Storage
+
+**Theory:**
+Most traditional databases tie compute and storage together. If you buy a server with 500GB storage and 64GB RAM, that's your fixed limit. Snowflake revolutionized this by separating them completely - you can store unlimited data in cloud storage and pay for compute (processing power) only when you use it.
+
+**Why It Matters:**
+```
+Traditional Database:
+Server 1: 500GB storage, 64GB RAM
+├─ Cost: $50,000/year
+├─ Throughput: Fixed
+└─ Problem: Can't scale storage without buying new server
+
+Snowflake Architecture:
+Storage Layer (S3/Azure):
+├─ Cost: $23/TB/month ($276/year for 1TB)
+├─ Scalability: Unlimited
+└─ No compute charges while idle
+
+Compute Layer (Virtual Warehouse):
+├─ Cost: $4/credit, 1 credit = 1 compute cluster/second
+├─ Scalability: Instant scaling
+└─ Pay only when running queries
+```
+
+**Practical Example:**
+```sql
+-- You store 100TB of historical data (costs: 100 × $23 × 12 = $27,600/year)
+-- But run queries only 2 hours per day
+-- Compute cost: 2 hours × 30 days × 60 min × 1 cluster = 3,600 credits
+--             = 3,600 × $4 = $14,400/year
+
+-- Total: $27,600 + $14,400 = $42,000/year
+-- Traditional on-prem: Would need $500K+ server for 100TB storage
+-- Savings: ~92%!
+```
+
+**Key Takeaway:**
+Stop thinking about "How big a server do I need?" and start thinking "How much compute do I actually use?"
+
+---
+
+#### Concept 2: Columnar Storage Format
+
+**Theory:**
+Snowflake stores data in columns, not rows. When you query "SELECT revenue FROM orders", Snowflake only reads the revenue column, not every column in the table.
+
+**Row vs Column Storage:**
+
+```
+ROW STORAGE (Traditional):
+OrderID  | CustomerID | Product    | Revenue | Date       | Status
+---------|------------|------------|---------|-----------|----------
+1        | 100        | Laptop     | 1200    | 2024-01-01| Shipped
+2        | 101        | Mouse      | 25      | 2024-01-02| Shipped
+3        | 100        | Keyboard   | 75      | 2024-01-03| Pending
+
+Query: "SELECT Revenue FROM Orders"
+├─ Must read: [OrderID, CustomerID, Product, Revenue, Date, Status]
+├─ Data read: 200 bytes × 3 rows = 600 bytes
+└─ Wasted: 500 bytes (everything except Revenue)
+
+COLUMNAR STORAGE (Snowflake):
+OrderID:   [1, 2, 3]
+CustomerID: [100, 101, 100]
+Product:   ["Laptop", "Mouse", "Keyboard"]
+Revenue:   [1200, 25, 75]           <-- Only this is read
+Date:      [2024-01-01, 2024-01-02, 2024-01-03]
+Status:    ["Shipped", "Shipped", "Pending"]
+
+Query: "SELECT Revenue FROM Orders"
+├─ Reads: [1200, 25, 75]
+├─ Data read: 100 bytes
+└─ Efficiency: 5x smaller!
+```
+
+**Compression Benefit:**
+```
+Revenue Column: [1200, 25, 75, 1200, 25, 75, 1200, 25, 75, ...]
+                (same values repeating)
+
+Compression (Run-Length Encoding):
+├─ Original: 100 values × 4 bytes = 400 bytes
+├─ Compressed: Store 1200 (4 bytes) + count 33 = 8 bytes
+└─ Compression Ratio: 98% smaller!
+```
+
+**Key Takeaway:**
+Columnar format makes Snowflake excellent for analytics (you query 2-3 columns from million rows). Not ideal for OLTP (row-based retrieval).
+
+---
+
+#### Concept 3: Micro-Partitioning
+
+**Theory:**
+Snowflake automatically divides tables into small chunks (micro-partitions), typically 50-100 MB each. When you query with a WHERE clause, Snowflake knows which micro-partitions contain relevant data and skips the rest.
+
+**How It Works:**
+
+```
+Table: orders (100 GB, 10 million rows)
+
+Auto-divided into micro-partitions:
+├─ Partition 1: Rows 1-100K (Jan 2024)
+├─ Partition 2: Rows 100K-200K (Jan 2024)
+├─ Partition 3: Rows 200K-300K (Feb 2024)
+├─ ...
+└─ Partition 1000: Rows 9.9M-10M (Dec 2024)
+
+Query: SELECT * FROM orders WHERE order_date > '2024-12-01'
+
+Snowflake's Process:
+1. Look at metadata: Which partitions have dates > '2024-12-01'?
+2. Answer: Only Partitions 990-1000
+3. Read only those partitions: ~1GB instead of 100GB
+4. Result: 100x faster!
+```
+
+**Partition Pruning in Action:**
+```sql
+-- Query WITHOUT effective predicate
+SELECT COUNT(*) FROM orders;
+-- Scans: 100% of partitions (100GB)
+-- Time: 30 seconds
+
+-- Query WITH date predicate
+SELECT COUNT(*) FROM orders 
+WHERE order_date = '2024-12-15';
+-- Scans: 0.1% of partitions (100MB)
+-- Time: 1 second
+-- Speedup: 30x!
+```
+
+**Key Takeaway:**
+Always use WHERE clauses that match your clustering keys. They're not just for filtering - they enable partition pruning for dramatic speedup.
+
+---
+
+#### Concept 4: Time Travel
+
+**Theory:**
+Snowflake keeps historical versions of your data automatically (up to 90 days in Enterprise). You can query data as it was at any point in time, or restore deleted data.
+
+**How It Works:**
+
+```
+Table Timeline:
+Time     | Data State                    | Access
+---------|-------------------------------|------------------------------------------
+Today    | 10 million rows              | SELECT * FROM table; (current)
+-1 day   | 9.8 million rows             | SELECT * FROM table AT(TIMESTAMP => 'now-1d');
+-7 days  | 8 million rows               | SELECT * FROM table AT(TIMESTAMP => 'now-7d');
+-30 days | 5 million rows               | SELECT * FROM table AT(TIMESTAMP => 'now-30d');
+-90 days | 2 million rows (data start)  | SELECT * FROM table AT(TIMESTAMP => 'now-90d');
+-91 days | NOT ACCESSIBLE               | (beyond retention period)
+```
+
+**Practical Uses:**
+
+```sql
+-- Use Case 1: Accidental deletion
+-- Someone deleted important customer records yesterday
+
+-- See what was deleted
+SELECT * FROM customers 
+AT(TIMESTAMP => CURRENT_TIMESTAMP - INTERVAL '1 day');
+
+-- Restore the deleted rows
+INSERT INTO customers
+SELECT * FROM customers 
+AT(TIMESTAMP => CURRENT_TIMESTAMP - INTERVAL '1 day')
+WHERE customer_id NOT IN (SELECT customer_id FROM customers);
+
+-- Use Case 2: Audit data changes
+-- Compare data between two points in time
+
+SELECT 
+    current.customer_id,
+    current.email as email_today,
+    historical.email as email_7_days_ago
+FROM customers current
+FULL OUTER JOIN 
+    customers AT(TIMESTAMP => CURRENT_TIMESTAMP - INTERVAL '7 days') historical
+    ON current.customer_id = historical.customer_id
+WHERE current.email != historical.email
+   OR (current.email IS NULL AND historical.email IS NOT NULL)
+   OR (current.email IS NOT NULL AND historical.email IS NULL);
+
+-- Use Case 3: Find when data changed
+-- When did customer 12345's status change?
+
+SELECT 
+    order_timestamp,
+    customer_status
+FROM customers 
+AT(TIMESTAMP => CURRENT_TIMESTAMP - INTERVAL '1 day')
+WHERE customer_id = 12345;
+```
+
+**Cost:**
+```
+Time Travel Storage:
+├─ Standard Edition: 1 day retention (free)
+├─ Business Edition: 8 days retention (free)
+└─ Enterprise Edition: 90 days retention (free)
+
+Failsafe (additional 7 days): costs 1 credit per TB per day
+```
+
+**Key Takeaway:**
+Time Travel is a safety net AND an analytical tool. Never delete immediately - use Time Travel to recover.
+
+---
+
+#### Concept 5: Zero-Copy Cloning
+
+**Theory:**
+You can create instant copies of entire tables, schemas, or databases WITHOUT duplicating the data. Clones share the same underlying data until you modify them.
+
+**How It Works:**
+
+```
+Original Table: customers (100 GB, 10 million rows)
+
+Without Cloning:
+├─ COPY TABLE: 100GB copied = costs storage + time
+├─ Execution: Takes 10-20 minutes
+└─ Total: 100GB original + 100GB copy = 200GB storage
+
+With Zero-Copy Clone:
+├─ CLONE TABLE: Creates metadata pointer only
+├─ Execution: Instant (milliseconds)
+├─ Original: customers (100GB)
+├─ Clone: customers_test (0 bytes - shares same data)
+└─ Total: Still 100GB storage (no duplication!)
+
+Modify Clone (INSERT/UPDATE/DELETE):
+├─ Clone creates its own micro-partitions
+├─ Original data unchanged
+├─ Storage grows only as clone diverges
+└─ Example: customers_test modified = 1GB extra
+    Total: 100GB (shared) + 1GB (clone changes) = 101GB
+```
+
+**Practical Uses:**
+
+```sql
+-- Use Case 1: Test data changes without affecting production
+CREATE TABLE customers_staging CLONE customers;
+-- customers_staging now exists with same data as customers
+-- But modifications to customers_staging don't affect customers
+
+UPDATE customers_staging SET status = 'inactive' WHERE ...;
+-- customers unchanged, only customers_staging modified
+
+-- Rollback: DROP TABLE customers_staging;
+
+-- Use Case 2: Fast backup
+CREATE TABLE customers_backup_2024_12_25 CLONE customers;
+-- Instant backup without storage duplication
+
+-- Use Case 3: Development environment
+CREATE SCHEMA dev_schema CLONE prod_schema;
+-- Entire schema cloned with zero storage impact
+-- Developers can test safely
+```
+
+**Comparison with Traditional Backup:**
+
+```
+Traditional Backup:
+├─ Time: 20 minutes
+├─ Storage needed: 100GB extra
+├─ Process: Sequential read/write
+└─ Cost: Warehouse running 20 mins = 80 credits
+
+Zero-Copy Clone:
+├─ Time: 100 milliseconds
+├─ Storage needed: ~0MB (until modified)
+├─ Process: Metadata only
+└─ Cost: ~1 credit (cloud services)
+
+Savings: 20 minutes (80 credits) → 100ms (0.01 credits) = 8000x faster
+```
+
+**Key Takeaway:**
+Clone aggressively for dev/test/backup. The cost is minimal, and you get instant copies.
+
+---
+
+#### Concept 6: Streams and Change Data Capture (CDC)
+
+**Theory:**
+A Stream tracks changes (inserts, updates, deletes) to a table. Instead of scanning the entire table for changes, you get only the delta.
+
+**Why It Matters:**
+
+```
+Traditional CDC Approach:
+1. Scan entire source table (100GB)
+2. Compare with previous snapshot (100GB)
+3. Find differences: 10,000 new rows
+4. Cost: Query 200GB + storage for snapshots
+
+Snowflake Stream Approach:
+1. Stream automatically logs: 10,000 rows inserted
+2. Read only those 10,000 rows
+3. Mark them consumed
+4. Cost: Query 1MB only
+```
+
+**How Streams Work:**
+
+```sql
+-- Create table
+CREATE TABLE orders (order_id INTEGER, customer_id INTEGER, amount DECIMAL);
+
+-- Create stream on table
+CREATE STREAM orders_changes ON TABLE orders;
+
+-- Insert data
+INSERT INTO orders VALUES (1, 100, 500);
+INSERT INTO orders VALUES (2, 101, 600);
+
+-- Stream captures changes
+SELECT * FROM orders_changes;
+-- Returns:
+-- order_id | customer_id | amount | METADATA$ACTION | METADATA$ISUPDATE
+-- 1        | 100         | 500    | INSERT          | FALSE
+-- 2        | 101         | 600    | INSERT          | FALSE
+
+-- Update data
+UPDATE orders SET amount = 550 WHERE order_id = 1;
+
+-- Stream now shows
+SELECT * FROM orders_changes;
+-- Returns:
+-- 1        | 100         | 500    | DELETE          | TRUE
+-- 1        | 100         | 550    | INSERT          | TRUE
+-- (DELETE shows old value, INSERT shows new value)
+
+-- Consume stream (mark as processed)
+-- Your application processes the changes
+-- Then clear the stream for next batch
+
+TRUNCATE TABLE orders_changes;
+```
+
+**Real-Time Pipeline:**
+
+```sql
+-- Create stream for CDC
+CREATE STREAM orders_stream ON TABLE raw_orders;
+
+-- Create task to process changes every minute
+CREATE TASK process_orders_changes
+  WAREHOUSE = etl_wh
+  SCHEDULE = 'USING CRON */1 * * * * America/New_York'
+  AS
+  INSERT INTO processed_orders
+  SELECT 
+      order_id,
+      customer_id,
+      amount,
+      CASE 
+          WHEN METADATA$ACTION = 'INSERT' THEN 'New'
+          WHEN METADATA$ACTION = 'DELETE' THEN 'Deleted'
+          ELSE 'Updated'
+      END as change_type,
+      CURRENT_TIMESTAMP as processed_at
+  FROM orders_stream
+  WHERE METADATA$ACTION != 'DELETE' OR METADATA$ISUPDATE = FALSE;
+```
+
+**Key Takeaway:**
+Streams are the foundation of real-time pipelines. They're efficient, cheap, and perfect for CDC use cases.
+
+---
+
+#### Concept 7: Warehouse Scaling
+
+**Theory:**
+Snowflake warehouses can auto-scale up/down based on query workload, or you can manually scale. This is different from traditional databases where scaling requires downtime and hardware changes.
+
+**How It Works:**
+
+```
+Manual Scaling Example:
+
+Scenario: Running quarterly revenue report (heavy query)
+Query 1: SELECT all data (5 min on Medium warehouse)
+Query 2: Add more aggregations (10 min, Medium warehouse slowing down)
+
+Solution:
+ALTER WAREHOUSE reporting_wh SET WAREHOUSE_SIZE = 'LARGE';
+-- Now has 4x compute power
+-- Same query runs in 1 minute
+
+Cost Analysis:
+├─ Medium warehouse: 2 credits/hour
+├─ Large warehouse: 4 credits/hour
+├─ Query on Medium: 5 min = 2 * (5/60) = 0.17 credits
+├─ Query on Large: 1 min = 4 * (1/60) = 0.07 credits
+└─ Larger warehouse saved money! (faster = cheaper)
+
+Auto-Scaling Example:
+CREATE OR REPLACE WAREHOUSE auto_scale_wh
+  WAREHOUSE_SIZE = 'SMALL'
+  MAX_CLUSTER_COUNT = 5
+  MIN_CLUSTER_COUNT = 1
+  SCALING_POLICY = 'STANDARD';
+
+-- Snowflake behavior:
+├─ Low load: 1 cluster running (Small = 1 credit/hour)
+├─ Medium load: 2-3 clusters (Medium = 2-3 credits/hour)
+├─ High load: Up to 5 clusters (Large = 4-5 credits/hour)
+└─ No load: 0 clusters (auto-suspend)
+
+Cost Optimization:
+├─ Before: Single Large warehouse 24/7 = 4 × 24 × 30 = $2,880/month
+├─ After: Auto-scale 1-5 clusters, avg 2 = 2 × 24 × 30 × $4 = $5,760/month
+    Wait, that's more! But query time improved 5x
+├─ Solution: Auto-suspend after 10 min idle
+└─ Result: ~$1,200/month (58% savings)
+```
+
+**Key Takeaway:**
+Always set auto-suspend. Right-size your warehouse. Scale larger for heavy operations temporarily.
+
+---
+
+#### Concept 8: Result Caching
+
+**Theory:**
+If two users run the exact same query within 24 hours, the second one uses a cached result instead of re-computing. This costs nothing.
+
+**How It Works:**
+
+```
+User 1 at 9:00 AM:
+SELECT customer_id, SUM(amount) 
+FROM orders 
+WHERE order_date = '2024-12-01'
+GROUP BY customer_id;
+
+-- Warehouse scans data: 100 credits used
+-- Result cached
+
+User 2 at 9:05 AM (same query):
+SELECT customer_id, SUM(amount) 
+FROM orders 
+WHERE order_date = '2024-12-01'
+GROUP BY customer_id;
+
+-- Result returned from cache: 0 credits used
+-- 10x speed improvement (instant vs 5 seconds)
+```
+
+**Cache Invalidation:**
+
+```
+Cache STAYS VALID if:
+├─ No changes to underlying table
+├─ Exact same query text
+└─ Within 24 hours
+
+Cache INVALIDATES if:
+├─ Underlying table modified
+├─ Query text differs (even comments!)
+└─ 24 hours have passed
+
+Example:
+-- This breaks cache (added comment)
+-- SELECT customer_id...
+
+-- This breaks cache (different WHERE)
+SELECT customer_id, SUM(amount) 
+FROM orders 
+WHERE order_date = '2024-12-02'  -- Changed date
+GROUP BY customer_id;
+
+-- This breaks cache (whitespace matters!)
+SELECT  customer_id, SUM(amount) 
+FROM orders 
+WHERE order_date = '2024-12-01'
+```
+
+**Key Takeaway:**
+Write consistent query text. Avoid CURRENT_DATE or functions that change - they break caching.
+
+---
+
+### INTERMEDIATE CONCEPTS
+
+#### Concept 9: Clustering Keys (Advanced)
+
+**Theory:**
+While we covered clustering basics earlier, understanding advanced clustering is crucial for large tables.
+
+**Clustering Metric:**
+
+```
+Problem: How do you know if your clustering is effective?
+
+Solution: Check CLUSTERING_DEPTH and AVERAGE_DEPTH
+
+-- High quality clustering:
+├─ CLUSTERING_DEPTH: 1-2 (excellent)
+├─ AVERAGE_DEPTH: 1-2 (excellent)
+└─ Benefit: 5-50x query speedup
+
+-- Poor clustering:
+├─ CLUSTERING_DEPTH: 10+ (bad)
+├─ AVERAGE_DEPTH: 5+ (mediocre)
+└─ Benefit: Minimal improvement
+```
+
+**Checking Clustering Quality:**
+
+```sql
+-- Check clustering effectiveness
+SELECT 
+    TABLE_NAME,
+    CLUSTERING_KEY,
+    CLUSTERING_DEPTH,
+    AVERAGE_DEPTH,
+    AVERAGE_OVERLAPS,
+    TOTAL_CONSTANT_PARTITIONS,
+    (CLUSTERING_DEPTH * 100.0 / AVERAGE_DEPTH) as clustering_efficiency_percent
+FROM SNOWFLAKE.ACCOUNT_USAGE.TABLE_STORAGE_METRICS
+WHERE TABLE_SCHEMA = 'PROD'
+  AND AVERAGE_DEPTH IS NOT NULL
+ORDER BY clustering_efficiency_percent DESC;
+
+-- Example output:
+-- Table: orders
+-- CLUSTERING_KEY: (order_date, customer_id)
+-- CLUSTERING_DEPTH: 2
+-- AVERAGE_DEPTH: 2
+-- Efficiency: 100% (perfect clustering!)
+
+-- Table: transactions
+-- CLUSTERING_KEY: (user_id)
+-- CLUSTERING_DEPTH: 50
+-- AVERAGE_DEPTH: 20
+-- Efficiency: 40% (poor clustering - reconsider)
+```
+
+**When to Re-cluster:**
+
+```sql
+-- Snowflake auto-clusters when beneficial
+-- You can manually trigger
+
+ALTER TABLE orders CLUSTER BY (order_date, customer_id);
+
+-- Monitor reclustering progress
+SELECT 
+    TABLE_NAME,
+    RECLUSTERED_BYTES,
+    SYSTEM_CREDITS_USED,
+    BYTES_UNCOMPRESSED,
+    PROGRESS_PERCENT
+FROM SNOWFLAKE.ACCOUNT_USAGE.AUTOMATIC_CLUSTERING_HISTORY
+WHERE TABLE_NAME = 'ORDERS'
+ORDER BY START_TIME DESC
+LIMIT 1;
+```
+
+**Key Takeaway:**
+Monitor clustering health. If AVERAGE_DEPTH is high, queries won't get partition pruning benefits.
+
+---
+
+#### Concept 10: Dynamic Data Masking (DDM)
+
+**Theory:**
+Control which users see which data at the column level, without creating separate tables. A single table row might show unmasked data to admins and masked data to analysts.
+
+**How It Works:**
+
+```
+Traditional Approach:
+├─ Table with PII: Create table with email, ssn, credit_card
+├─ Analyst view: Create separate view masking columns
+├─ Problem: Multiple views for same data, maintenance nightmare
+
+Dynamic Data Masking:
+├─ Single table: PII_DATA with email, ssn, credit_card
+├─ Applied at query time: Masking policy hides sensitive columns
+├─ Different users see different data from same row!
+```
+
+**Implementation:**
+
+```sql
+-- Create masking policy
+CREATE MASKING POLICY email_mask AS (val VARCHAR) RETURNS VARCHAR ->
+  CASE
+    WHEN CURRENT_ROLE() = 'ADMIN' THEN val
+    WHEN CURRENT_ROLE() = 'ANALYST' THEN '*****@*****'
+    ELSE NULL  -- No access
+  END;
+
+-- Apply to table
+ALTER TABLE customers MODIFY COLUMN email SET MASKING POLICY email_mask;
+
+-- Result:
+-- Admin runs: SELECT email FROM customers;
+--   → john@example.com (unmasked)
+-- Analyst runs: SELECT email FROM customers;
+--   → *****@***** (masked)
+-- Viewer runs: SELECT email FROM customers;
+--   → NULL (no access)
+
+-- Cost: Tiny overhead, worth it for compliance
+```
+
+**Key Takeaway:**
+Implement DDM for PII data. No need for multiple views or complex access control.
+
+---
+
+#### Concept 11: Row Access Policies
+
+**Theory:**
+Control which rows users see at query time based on their role, without filtering in application code.
+
+**How It Works:**
+
+```
+Scenario: Customer support team should only see their own customer's data
+
+Traditional:
+├─ Query: SELECT * FROM customers;
+├─ Code: WHERE region IN (user's regions)
+└─ Problem: Error-prone, code must be perfect
+
+Row Access Policy:
+├─ Table: Single copy of all customers
+├─ Policy: Automatically filter by region at query time
+├─ Enforcement: No code changes needed
+```
+
+**Implementation:**
+
+```sql
+-- Create row access policy
+CREATE ROW ACCESS POLICY region_policy ON (region VARCHAR)
+  AS (current_region VARCHAR) RETURNS BOOLEAN ->
+    region = current_region
+    OR CURRENT_ROLE() = 'ADMIN';
+
+-- Apply to table
+ALTER TABLE customers ADD ROW ACCESS POLICY region_policy ON (region);
+
+-- Usage:
+-- CREATE ROLE support_us WITH SESSION VARIABLES (current_region = 'US');
+-- CREATE ROLE support_eu WITH SESSION VARIABLES (current_region = 'EU');
+
+-- Support US Agent:
+-- SELECT * FROM customers;
+--   → Returns only US customers
+
+-- Support EU Agent:
+-- SELECT * FROM customers;
+--   → Returns only EU customers
+
+-- Admin:
+-- SELECT * FROM customers;
+--   → Returns all customers
+```
+
+**Key Takeaway:**
+Use row policies for multi-tenant data. Prevents accidental data leakage.
+
+---
+
+#### Concept 12: Materialized Views for Performance
+
+**Theory:**
+Pre-compute expensive aggregations once, query the result instantly. Updates automatically on schedule.
+
+**When to Use:**
+
+```
+Regular View (Snowflake):
+├─ Query: SELECT * FROM view;
+├─ Execution: Runs the underlying SQL (expensive)
+├─ Time: 10 minutes
+├─ Use: When you need real-time data
+
+Materialized View:
+├─ Query: SELECT * FROM materialized_view;
+├─ Execution: Returns pre-computed result
+├─ Time: <100ms
+├─ Use: When slightly stale data is acceptable
+```
+
+**Implementation:**
+
+```sql
+-- Expensive query (aggregates 1B rows)
+SELECT 
+    DATE_TRUNC('day', order_timestamp) as order_date,
+    product_category,
+    SUM(amount) as daily_revenue,
+    COUNT(*) as order_count,
+    AVG(amount) as avg_order_value
+FROM orders
+GROUP BY 1, 2;
+
+-- Without materialization: Takes 10 minutes, costs 40 credits
+-- Queried 100 times/day = 4000 credits/day = $16,000/day = $480,000/month!
+
+-- Create materialized view
+CREATE MATERIALIZED VIEW mv_daily_product_revenue AS
+SELECT 
+    DATE_TRUNC('day', order_timestamp) as order_date,
+    product_category,
+    SUM(amount) as daily_revenue,
+    COUNT(*) as order_count,
+    AVG(amount) as avg_order_value
+FROM orders
+GROUP BY 1, 2;
+
+-- Create task to refresh nightly
+CREATE TASK refresh_daily_revenue
+  WAREHOUSE = analytics_wh
+  SCHEDULE = 'USING CRON 0 2 * * * America/New_York'
+  AS
+  ALTER MATERIALIZED VIEW mv_daily_product_revenue CLUSTER BY (order_date, product_category);
+
+-- Now queries:
+SELECT * FROM mv_daily_product_revenue
+WHERE order_date = CURRENT_DATE;
+
+-- Query time: <100ms
+-- Cost: 40 credits once/night + query costs ~0.01 credits × 100 = 1 credit/day
+-- Savings: $16,000/day → $5/day = 99.97% reduction!
+```
+
+**Key Takeaway:**
+If a query is expensive and run frequently, materialize it.
+
+---
+
+### ADVANCED CONCEPTS
+
+#### Concept 13: Snowflake Data Sharing & Data Marketplace
+
+**Theory:**
+Share data with external organizations without copying or ETL. You control access at table level. Consumers pay for their own compute (you don't subsidize).
+
+**How It Works:**
+
+```
+Traditional Data Sharing:
+└─ Company A → Export CSV → Upload to S3 → Company B imports
+   ├─ Problems:
+   ├─ Stale data (24 hour delay)
+   ├─ No audit trail (who accessed what)
+   ├─ Storage duplication
+   └─ Manual process, error-prone
+
+Snowflake Data Sharing:
+└─ Company A (Provider) → Snowflake Share → Company B (Consumer)
+   ├─ Benefits:
+   ├─ Real-time data (no copy)
+   ├─ Full audit (who accessed when)
+   ├─ No storage duplication
+   ├─ Automatic updates
+   └─ Zero-copy architecture
+```
+
+**Implementation:**
+
+```sql
+-- PROVIDER SIDE (Company A)
+
+-- Create share object
+CREATE SHARE sales_data_share COMMENT = 'Sales data for Company B';
+
+-- Grant permissions on database
+GRANT USAGE ON DATABASE sales_db TO SHARE sales_data_share;
+
+-- Grant permissions on schema
+GRANT USAGE ON SCHEMA sales_db.prod TO SHARE sales_data_share;
+
+-- Grant permissions on specific tables
+GRANT SELECT ON TABLE sales_db.prod.orders TO SHARE sales_data_share;
+GRANT SELECT ON TABLE sales_db.prod.customers TO SHARE sales_data_share;
+
+-- Create reader account for consumer
+CREATE MANAGED ACCOUNT consumer_company
+  ADMIN_NAME = 'admin'
+  ADMIN_PASSWORD = 'TempPassword123!'
+  TYPE = READER;
+
+-- Add consumer to share
+ALTER SHARE sales_data_share ADD ACCOUNTS = abc12345.us-east-1.company_consumer;
+
+-- CONSUMER SIDE (Company B)
+
+-- Get shared data (appears as database)
+SHOW SHARED DATABASES;
+
+-- Query shared data (read-only)
+SELECT * FROM company_a_share.sales.orders LIMIT 100;
+
+-- Can't modify, but can:
+-- - Create views on top
+-- - Join with own data
+-- - Create materialized views
+-- - Do all analytics
+
+CREATE VIEW local_view AS
+SELECT 
+    o.order_id,
+    o.customer_id,
+    c.customer_name,
+    o.amount
+FROM company_a_share.sales.orders o
+JOIN company_a_share.sales.customers c
+    ON o.customer_id = c.customer_id;
+
+-- Cost to Consumer:
+├─ Query execution: Pay for compute (their warehouse)
+├─ Storage: Zero (reads shared data)
+└─ Bandwidth: Zero (same region)
+```
+
+**Data Marketplace:**
+
+```
+Snowflake Data Marketplace:
+├─ Provider lists datasets
+├─ Consumers browse and subscribe
+├─ Billing: Pay per query or subscription model
+├─ Examples: Weather, Real Estate, Financial data
+
+Benefits:
+├─ Monetize your data
+├─ Get third-party data instantly
+├─ No ETL, no copies
+└─ Fair pricing (consumers pay for use)
+```
+
+**Key Takeaway:**
+Share data instead of exporting. Zero-copy means no storage duplication and real-time data.
+
+---
+
+#### Concept 14: Multi-Cluster Warehouses for Concurrency
+
+**Theory:**
+For systems with many concurrent users, single warehouse has queue limits. Multi-cluster warehouses auto-scale to handle users without queueing.
+
+**How It Works:**
+
+```
+Single Warehouse:
+├─ Capacity: Can run 10 queries simultaneously
+├─ 11th query: Waits in queue
+├─ User experience: Slow
+└─ Cost: Fixed size, wasted during low load
+
+Multi-Cluster Warehouse:
+├─ Min 2 clusters, Max 5 clusters
+├─ Each cluster: Can run 10 queries
+├─ Total capacity: 10-50 concurrent queries
+├─ Auto-scales: Adds cluster when queue forms
+├─ Removes cluster: When queue clears
+└─ Cost: Pay only for clusters used
+```
+
+**Configuration:**
+
+```sql
+-- Create multi-cluster warehouse
+CREATE WAREHOUSE dashboard_wh
+  WAREHOUSE_SIZE = 'MEDIUM'
+  MIN_CLUSTER_COUNT = 2
+  MAX_CLUSTER_COUNT = 5
+  SCALING_POLICY = 'STANDARD'
+  AUTO_SUSPEND = 300
+  AUTO_RESUME = TRUE;
+
+-- Behavior:
+-- 10 PM (night): 0 clusters (auto-suspended)
+-- 9 AM (morning): 2 clusters active (MIN_CLUSTER_COUNT)
+-- Noon (peak): 5 clusters active (MAX_CLUSTER_COUNT)
+-- 6 PM (evening): 2 clusters active (demand drops)
+-- 10 PM: 0 clusters (auto-suspended)
+
+-- Cost calculation:
+-- Medium warehouse: 2 credits/hour
+-- Peak usage: 5 clusters × 2 credits × 8 hours = 80 credits/day
+-- Off-peak: 2 clusters × 2 credits × 12 hours = 48 credits/day
+// Total: 128 credits/day
+// Monthly: 128 × 30 × $4 = $15,360/month
+```
+
+**Key Takeaway:**
+Use multi-cluster for user-facing dashboards/BI tools. Prevents queueing and provides consistent performance.
+
+---
+
+#### Concept 15: Query Result Caching Deep Dive
+
+**Theory:**
+Snowflake's intelligent caching has 3 layers. Understanding all three helps you optimize further.
+
+**Three Cache Layers:**
+
+```
+Layer 1: Query Result Cache (24 hours)
+├─ Scope: Exact query text (entire result set)
+├─ Speed: <100ms
+├─ Cost: 0 credits
+├─ Hit rate: High if users run same reports
+└─ Example: Dashboard query run 50x/day
+
+Layer 2: Warehouse Cache (Remote Data Cache)
+├─ Scope: Recently scanned micro-partitions
+├─ Speed: ~1 second
+├─ Cost: 0 credits
+├─ Hit rate: High if related queries hit same data
+└─ Example: Query A scans Jan data, Query B also scans Jan
+
+Layer 3: Cloud Storage Cache (S3)
+├─ Scope: Most recent objects in S3
+├─ Speed: ~5-10 seconds
+├─ Cost: Data transfer charges apply
+├─ Hit rate: Good for repeated data access
+└─ Example: Query after 24 hours (result cache expired)
+```
+
+**Optimizing Cache Usage:**
+
+```sql
+-- BAD: Using functions breaks cache
+SELECT * FROM orders 
+WHERE order_date = CURRENT_DATE;
+-- CURRENT_DATE changes daily → cache never hits
+
+-- GOOD: Use specific dates
+SELECT * FROM orders 
+WHERE order_date = '2024-12-25';
+-- Same query text → cache hits
+
+-- BAD: Variable whitespace breaks cache
+SELECT customer_id,  SUM(amount) FROM orders;  -- Note: 2 spaces
+-- vs
+SELECT customer_id, SUM(amount) FROM orders;   -- Note: 1 space
+-- Different query text → different cache entries
+
+-- GOOD: Standardized formatting
+SELECT customer_id, SUM(amount) FROM orders;
+-- Always same text → always cache hits
+
+-- MONITOR CACHE EFFECTIVENESS
+SELECT 
+    QUERY_ID,
+    QUERY_TEXT,
+    EXECUTION_TIME,
+    BYTES_SCANNED,
+    RESULT_REUSE_INFORMATION
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE START_TIME > CURRENT_TIMESTAMP - INTERVAL '24 hours'
+  AND RESULT_REUSE_INFORMATION IS NOT NULL
+ORDER BY START_TIME DESC;
+
+-- Output shows: "RESULT_REUSE_INFORMATION": "REMOTE_DISK_CACHE_HIT"
+-- This query used cached result - 0 credits!
+```
+
+**Key Takeaway:**
+Standardize query formatting. Use Saved Queries in tools like Tableau to ensure consistent text.
+
+---
+
+#### Concept 16: Snowflake UDFs (User Defined Functions)
+
+**Theory:**
+Create custom functions using SQL, JavaScript, or Python. Execute in Snowflake engine (server-side) instead of bringing data to client.
+
+**Why Server-Side UDFs:**
+
+```
+Traditional Approach (Client-Side):
+├─ SELECT 1M rows (400GB) from Snowflake
+├─ Transfer 400GB to client application
+├─ Process data with Python
+├─ Send result back (1KB)
+└─ Cost: 400GB transfer + processing time
+
+UDF Approach (Server-Side):
+├─ Send SQL function definition
+├─ Snowflake executes on server
+├─ Return result (1KB)
+└─ Cost: Only computation, no data transfer
+```
+
+**Simple Example:**
+
+```sql
+-- Create SQL UDF (simplest, fastest)
+CREATE FUNCTION calculate_profit (
+    revenue DECIMAL(10, 2), 
+    cost DECIMAL(10, 2)
+)
+RETURNS DECIMAL(10, 2)
+AS '
+    CASE 
+        WHEN revenue <= cost THEN 0
+        ELSE revenue - cost
+    END
+';
+
+-- Use in query
+SELECT 
+    product_id,
+    SUM(sales_amount) as revenue,
+    SUM(cost_amount) as cost,
+    calculate_profit(SUM(sales_amount), SUM(cost_amount)) as profit
+FROM products
+GROUP BY product_id;
+
+-- Create Python UDF (for complex logic)
+CREATE OR REPLACE FUNCTION analyze_text(text_input VARCHAR)
+RETURNS VARCHAR
+LANGUAGE PYTHON
+RUNTIME_VERSION = '3.10'
+PACKAGES = ('nltk')
+HANDLER = 'analyze_text'
+AS '
+import nltk
+from nltk.sentiment import SentimentIntensityAnalyzer
+
+def analyze_text(text):
+    sia = SentimentIntensityAnalyzer()
+    scores = sia.polarity_scores(text)
+    
+    if scores["compound"] >= 0.05:
+        return "POSITIVE"
+    elif scores["compound"] <= -0.05:
+        return "NEGATIVE"
+    else:
+        return "NEUTRAL"
+';
+
+-- Use Python UDF
+SELECT 
+    review_id,
+    review_text,
+    analyze_text(review_text) as sentiment
+FROM product_reviews
+LIMIT 10;
+```
+
+**Key Takeaway:**
+Push computation to Snowflake when possible. Don't bring data to client unnecessarily.
+
+---
+
+#### Concept 17: Query Optimization with EXPLAIN and Profile
+
+**Theory:**
+Understand query execution plans to identify bottlenecks and optimization opportunities.
+
+**EXPLAIN Plan:**
+
+```sql
+-- Analyze execution plan
+EXPLAIN SELECT 
+    o.order_id,
+    c.customer_name,
+    o.amount
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+WHERE o.order_date > '2024-01-01';
+
+-- Output structure:
+-- ├─ Aggregate (if GROUP BY)
+-- ├─ Filter (WHERE clauses)
+// ├─ Join (JOIN operations)
+// │  ├─ Left input: Table Scan [orders]
+// │  │  └─ Filters: order_date > '2024-01-01'
+// │  │  └─ Partitions pruned: 335/365
+// │  └─ Right input: Table Scan [customers]
+// └─ Join type: Inner Hash Join
+
+-- Interpretation:
+// "Partitions pruned: 335/365" → 91% of data skipped ✓ Good
+// "Hash Join" → Efficient join type ✓ Good
+// "No full table scan" → Not scanning unnecessary data ✓ Good
+
+-- If you saw:
+// "Partitions pruned: 0/365" → Query scans all data ✗ Bad
+// "Broadcast Join" → Slower than Hash Join ✗ Mediocre
+// "Full table scan" → Check clustering ✗ Bad
+```
+
+**Query Profile:**
+
+```sql
+-- Enable profiling
+SET EXPLAIN_MODE = 'PROFILE';
+
+-- Run query
+SELECT 
+    DATE_TRUNC('day', order_timestamp) as order_date,
+    SUM(amount) as daily_revenue
+FROM orders
+WHERE order_date > '2024-01-01'
+GROUP BY 1;
+
+-- Review query profile in Snowflake UI:
+-- Shows:
+// ├─ Execution time: 5.2 seconds
+// ├─ Bytes scanned: 1.2 GB
+// ├─ Rows processed: 10M
+// ├─ Warehouse size: Medium
+// ├─ Partitions: 91 pruned out of 365
+// └─ Recommendations: "Consider clustering by order_date"
+
+-- Common optimization findings:
+// "Data is heavily skewed" → Use more granular clustering
+// "Spill to disk occurred" → Increase warehouse size
+// "Hash join failed, broadcast used" → Join is on large table
+// "0 partitions pruned" → Add WHERE clause with clustering key
+```
+
+**Key Takeaway:**
+Always check EXPLAIN before deploying. Profile slow queries to find bottlenecks.
+
+---
+
+#### Concept 18: Snowflake for Data Science & ML
+
+**Theory:**
+Snowflake integrates with Python, ML libraries, and Jupyter notebooks via Snowpark. Keep data in Snowflake, bring analysis to data (not vice versa).
+
+**How It Works:**
+
+```
+Traditional ML Pipeline:
+├─ Export data to CSV
+├─ Load into Python (Pandas)
+├─ Build model
+├─ Export predictions back
+└─ Insert into Snowflake
+
+Snowpark Pipeline:
+├─ Keep data in Snowflake
+├─ Write Python code (Snowpark API)
+├─ Execute on Snowflake warehouse
+├─ Store predictions directly
+└─ No data movement!
+```
+
+**Example:**
+
+```python
+# Traditional: 1GB CSV loaded into Pandas
+import pandas as pd
+df = pd.read_csv('customers.csv')  # Takes memory, slow
+
+# Snowpark: 1GB data queried from Snowflake
+from snowflake.snowpark import Session
+
+session = Session.builder.configs({...}).create()
+df = session.sql("SELECT * FROM customers").to_pandas()
+# Efficiently streamed, keeps data in Snowflake
+
+# Build model
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestRegressor
+
+scaler = StandardScaler()
+X = scaler.fit_transform(df[['age', 'income', 'credit_score']])
+y = df['loan_amount']
+
+model = RandomForestRegressor()
+model.fit(X, y)
+
+# Make predictions on all data in Snowflake
+prediction_df = session.sql("""
+    SELECT 
+        customer_id,
+        age,
+        income,
+        credit_score
+    FROM customers
+""").to_pandas()
+
+predictions = model.predict(
+    scaler.transform(prediction_df[['age', 'income', 'credit_score']])
+)
+
+# Store back in Snowflake
+prediction_df['predicted_loan_amount'] = predictions
+session.write_pandas(prediction_df, 'predicted_loan_amounts', auto_create_table=True)
+```
+
+**Key Takeaway:**
+Use Snowpark to build ML models while keeping data in Snowflake. No ETL, no data movement.
+
+---
+
+#### Concept 19: Snowflake Cost Optimization Advanced
+
+**Theory:**
+Beyond basic optimization, advanced techniques reduce costs 50-80%.
+
+**Advanced Strategies:**
+
+```
+Strategy 1: Heterogeneous Warehouse Sizing
+├─ Heavy queries: Large warehouse (4 credits/hour, 30 min) = 2 credits
+├─ Light queries: Small warehouse (1 credit/hour, 2 min) = 0.03 credits
+├─ Before: Medium warehouse (2 credits/hour) for all
+│  ├─ Heavy: 1 hour = 2 credits
+│  └─ Light: 1 hour = 2 credits
+├─ Savings: Route queries to appropriate sizes = 30% reduction
+
+Strategy 2: Dedicated Warehouses by Use Case
+├─ Reporting warehouse: Suspend after 10 minutes
+├─ ETL warehouse: Only runs during ingestion
+├─ Dashboard warehouse: Multi-cluster, auto-scale
+├─ Benefit: Each optimized independently
+
+Strategy 3: Query Caching Optimization
+├─ Standardize query formatting (SQL style guide)
+├─ Use saved queries from BI tool
+├─ Benefit: 30-50% cache hit rate = 30-50% cost reduction
+
+Strategy 4: Data Sharing Instead of Replication
+├─ Before: Copy shared tables to every environment
+│  └─ Dev: 10TB, Staging: 10TB, Prod: 10TB = 30TB
+├─ After: Share read-only tables
+│  └─ Single copy: 10TB (90% storage reduction)
+
+Strategy 5: Optimize Data Retention
+├─ Data deleted: 90 days retention costs same as active
+├─ Solution: Set TIME_TRAVEL_RETENTION_TIME_IN_DAYS = 1
+│  └─ Reduces storage 90x for deleted data
+
+Total Impact:
+├─ Heterogeneous sizing: 30% cost reduction
+├─ Suspended warehouses: 40% cost reduction
+├─ Query caching: 30% cost reduction  
+├─ Data sharing: 70% storage cost reduction
+├─ Retention tuning: 80% for deleted data
+└─ Total: Can achieve 50-80% overall cost reduction!
+```
+
+**Cost Monitoring:**
+
+```sql
+-- Monitor daily costs
+SELECT 
+    DATE(USAGE_DATE) as usage_day,
+    WAREHOUSE_NAME,
+    SUM(CREDITS_USED) as daily_credits,
+    SUM(CREDITS_USED) * 4 as estimated_daily_cost
+FROM SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSE_METERING_HISTORY
+WHERE USAGE_DATE > CURRENT_DATE - INTERVAL '30 days'
+GROUP BY 1, 2
+ORDER BY usage_day DESC, estimated_daily_cost DESC;
+
+-- Find expensive queries
+SELECT 
+    QUERY_TEXT,
+    COUNT(*) as execution_count,
+    AVG(EXECUTION_TIME) / 1000 as avg_duration_seconds,
+    AVG(CREDITS_USED) as avg_credits_per_query,
+    SUM(CREDITS_USED) as total_credits,
+    SUM(CREDITS_USED) * 4 as total_cost_usd
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE START_TIME > CURRENT_DATE - INTERVAL '7 days'
+  AND QUERY_TEXT NOT LIKE 'EXPLAIN%'
+GROUP BY 1
+ORDER BY total_cost_usd DESC
+LIMIT 20;
+
+-- Find inefficient queries (high scans, low rows)
+SELECT 
+    QUERY_TEXT,
+    BYTES_SCANNED / (1024 * 1024 * 1024) as gb_scanned,
+    ROWS_PRODUCED,
+    BYTES_SCANNED / NULLIF(ROWS_PRODUCED, 0) as bytes_per_row,
+    CREDITS_USED
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE START_TIME > CURRENT_DATE - INTERVAL '1 day'
+  AND BYTES_SCANNED / NULLIF(ROWS_PRODUCED, 0) > 10000  -- >10KB per row = inefficient
+ORDER BY bytes_per_row DESC;
+```
+
+**Key Takeaway:**
+Monitor costs continuously. Small optimizations add up to massive savings.
+
+---
+
+#### Concept 20: Snowflake for Data Governance & Compliance
+
+**Theory:**
+Implement enterprise governance without sacrificing performance.
+
+**Key Features:**
+
+```
+Feature 1: Column-Level Lineage
+├─ Track data flow: source → transformation → output
+├─ See which table columns feed into which reports
+├─ Essential for compliance audits
+
+Feature 2: Object Tagging
+├─ Tag tables with metadata:
+│  ├─ Contains PII: customer emails, SSNs
+│  ├─ Classification: Confidential, Internal, Public
+│  └─ Owner: data_governance@company.com
+├─ Used for masking and access control policies
+
+Feature 3: Access Logging
+├─ Who accessed what data, when, how
+├─ Integration with SIEM for alerting
+├─ Required for SOC2, HIPAA, GDPR compliance
+
+Feature 4: Encryption
+├─ End-to-end encryption in transit and at rest
+├─ Customer-managed encryption keys (CMEK)
+├─ Encryption overhead: <5% performance impact
+```
+
+**Implementation:**
+
+```sql
+-- Create tags
+CREATE TAG PII_LEVEL COMMENT = 'Personally Identifiable Information Level';
+CREATE TAG DATA_CLASSIFICATION COMMENT = 'Data Classification Level';
+CREATE TAG DATA_OWNER COMMENT = 'Data Owner Contact';
+
+-- Apply tags
+ALTER TABLE customers SET TAG 
+    PII_LEVEL = 'HIGH',
+    DATA_CLASSIFICATION = 'CONFIDENTIAL',
+    DATA_OWNER = 'john@company.com';
+
+ALTER TABLE customers MODIFY COLUMN email SET MASKING POLICY email_mask;
+ALTER TABLE customers MODIFY COLUMN ssn SET MASKING POLICY ssn_mask;
+
+-- Apply row access policy
+ALTER TABLE customers ADD ROW ACCESS POLICY region_policy ON (region);
+
+-- Create audit view (logs all queries)
+CREATE VIEW audit_queries AS
+SELECT 
+    QUERY_START_TIME,
+    USER_NAME,
+    QUERY_TEXT,
+    EXECUTION_STATUS,
+    WAREHOUSE_NAME,
+    DATABASE_NAME
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE START_TIME > CURRENT_TIMESTAMP - INTERVAL '90 days';
+
+-- Alert on suspicious access
+CREATE TASK alert_unusual_access
+  WAREHOUSE = security_wh
+  SCHEDULE = 'USING CRON 0 * * * * America/New_York'
+  AS
+  INSERT INTO security_alerts
+  SELECT 
+      current_timestamp as alert_time,
+      'UNUSUAL_ACCESS' as alert_type,
+      USER_NAME,
+      COUNT(*) as query_count,
+      COUNT(DISTINCT DATABASE_NAME) as databases_accessed,
+      LISTAGG(DISTINCT DATABASE_NAME, ', ') as databases
+  FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+  WHERE START_TIME > CURRENT_TIMESTAMP - INTERVAL '1 hour'
+    AND USER_NAME NOT IN (SELECT authorized_user FROM service_accounts)
+  GROUP BY USER_NAME
+  HAVING COUNT(*) > 1000;  -- Alert if user runs 1000+ queries in 1 hour
+```
+
+**Key Takeaway:**
+Governance and performance aren't mutually exclusive. Snowflake makes compliance efficient.
+
+---
+
+## Snowflake Editions & Pricing
+
+### Credit-Based Pricing
+
+```
+Cost = Credits Used × Credit Price
+
+Standard Edition: $2/credit
+Business Edition: $3/credit
+Enterprise Edition: $4/credit
+
+Usage:
+├─ Warehouse: 1 credit per cluster per second
+├─ Cloud Services: 1 credit per compute hour
+└─ Serverless: Additional charges
+```
+
+### Cost Optimization
+
+```
+Strategy 1: Suspend Warehouses
+├─ Automatically suspend after inactivity
+├─ Resume when needed
+└─ Example: Suspend after 5 minutes idle
+
+Strategy 2: Right-Size Warehouses
+├─ Small for light queries
+├─ Large for heavy lifting
+├─ Scale up only when needed
+
+Strategy 3: Use Materialized Views
+├─ Pre-compute expensive aggregations
+├─ Query materialized view (instant)
+├─ Update on schedule (cheaper than queries)
+
+Strategy 4: Query Result Caching
+├─ Snowflake caches results for 24 hours
+├─ Identical queries use cache (free!)
+├─ No warehouse credit cost
+
+Strategy 5: Compress Data
+├─ Snowflake auto-compresses
+├─ Smaller storage = lower cost
+└─ Columnar format = high compression
+
+Cost Reduction Example:
+Before:
+├─ 10 warehouses running 24/7: 240 credits/day
+├─ Monthly cost: 240 × 30 × $4 = $28,800
+
+After:
+├─ Suspend after 5 min: 150 credits/day
+├─ Auto-scale 2-5 clusters: 180 credits/day
+├─ Result: 150 credits/day × 30 × $4 = $18,000
+└─ Savings: $10,800/month (38% reduction)
+```
+
+---
+
+## Databases, Schemas, and Tables
+
+### Creating Database Objects
+
+```sql
+-- Create database
+CREATE DATABASE analytics;
+
+-- Create schema
+CREATE SCHEMA analytics.prod;
+
+-- Create table
+CREATE TABLE analytics.prod.customers (
+    customer_id INTEGER PRIMARY KEY,
+    name VARCHAR(100),
+    email VARCHAR(100),
+    country VARCHAR(2),
+    created_date TIMESTAMP,
+    updated_date TIMESTAMP
+);
+
+-- Create temporary table (dropped at session end)
+CREATE TEMPORARY TABLE temp_staging AS
+SELECT * FROM raw_data;
+
+-- Create transient table (no Time Travel, lower cost)
+CREATE TRANSIENT TABLE archive (
+    id INTEGER,
+    data VARCHAR(1000)
+);
+```
+
+### Table Types
+
+```
+Permanent Table
+├─ Persists across sessions
+├─ Time Travel: 1-90 days
+├─ Fail-safe: 7 days additional
+├─ Higher storage cost
+└─ Best for: Production data
+
+Temporary Table
+├─ Exists for session only
+├─ Dropped when session ends
+├─ No Time Travel
+├─ Lower cost
+└─ Best for: Session-specific work
+
+Transient Table
+├─ Persists across sessions
+├─ No Time Travel
+├─ No Fail-safe
+├─ Lowest cost
+└─ Best for: Non-critical, temporary data
+```
+
+---
+
+### Views
+
+```sql
+-- Standard view
+CREATE VIEW customer_summary AS
+SELECT 
+    customer_id,
+    COUNT(*) as order_count,
+    SUM(amount) as total_spent
+FROM orders
+GROUP BY customer_id;
+
+-- Materialized view (stores results)
+CREATE MATERIALIZED VIEW customer_metrics AS
+SELECT 
+    customer_id,
+    AVG(amount) as avg_order_value,
+    MAX(order_date) as latest_order
+FROM orders
+GROUP BY customer_id;
+
+-- Dynamic view (uses masking policies)
+CREATE DYNAMIC VIEW masked_customers AS
+SELECT 
+    customer_id,
+    MASK_EMAIL(email) as email,  -- Masks for non-admin users
+    name
+FROM customers;
+```
+
+---
+
+## Performance Optimization
+
+### Query Optimization Techniques
+
+**1. Clustering Key**
+
+```sql
+-- Poorly clustered query
+SELECT * FROM sales WHERE customer_id = 123;
+
+-- With clustering key, Snowflake scans fewer blocks
+CLUSTER BY (customer_id);
+
+-- Check clustering depth
+SELECT SYSTEM$CLUSTERING_DEPTH('sales', '(customer_id)');
+-- Output: 1.5 (good)
+-- Output: 5.0 (poor, consider reclustering)
+```
+
+**2. Partition Pruning**
+
+```sql
+-- Good: Partition pruning applied
+SELECT * FROM sales 
+WHERE sale_date >= '2024-01-01' 
+  AND sale_date < '2024-02-01';
+
+-- Bad: Full table scan
+SELECT * FROM sales 
+WHERE YEAR(sale_date) = 2024;
+```
+
+**3. Materialized Views**
+
+```sql
+-- Expensive query (takes 5 minutes)
+SELECT 
+    product_id,
+    SUM(quantity) as total_sold,
+    AVG(price) as avg_price
+FROM sales
+GROUP BY product_id;
+
+-- Solution: Materialized view
+CREATE MATERIALIZED VIEW product_metrics AS
+SELECT 
+    product_id,
+    SUM(quantity) as total_sold,
+    AVG(price) as avg_price
+FROM sales
+GROUP BY product_id;
+
+-- Now query returns instantly
+SELECT * FROM product_metrics WHERE total_sold > 1000;
+```
+
+**4. Result Caching**
+
+```sql
+-- First query: 5 seconds (full execution)
+SELECT * FROM large_table WHERE status = 'active';
+
+-- Second identical query: < 100ms (from cache!)
+SELECT * FROM large_table WHERE status = 'active';
+
+-- Cache invalidated after 24 hours or data changes
+```
+
+**5. Search Optimization Service**
+
+```sql
+-- Enable search optimization
+ALTER TABLE large_table ADD SEARCH OPTIMIZATION ON EQUALITY(customer_id);
+
+-- Benefits:
+-- ├─ Faster equality filters
+-- ├─ Faster LIKE patterns
+-- └─ Additional cost: ~2x storage
+```
+
+### Query Analysis
+
+```sql
+-- View query execution plan
+EXPLAIN SELECT * FROM sales WHERE customer_id = 123;
+
+-- Profile query execution
+SELECT *
+  FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()));
+
+-- Check warehouse efficiency
+SELECT 
+    query_id,
+    query_text,
+    EXECUTION_TIME / 1000 as seconds,
+    BYTES_SCANNED,
+    ROWS_PRODUCED
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE START_TIME > CURRENT_TIMESTAMP - INTERVAL '1 hour'
+ORDER BY EXECUTION_TIME DESC
+LIMIT 10;
+```
+
+---
+
+## Security & Compliance
+
+### Authentication & Authorization
+
+**Authentication Methods:**
+
+```
+1. Username/Password
+   └─ Basic authentication
+
+2. Single Sign-On (SSO)
+   ├─ SAML
+   ├─ OAuth
+   └─ Azure AD, Okta
+
+3. Multi-Factor Authentication (MFA)
+   ├─ Time-based OTP
+   └─ Required for production
+
+4. Key Pair Authentication
+   └─ API integrations, automation
+```
+
+### Role-Based Access Control (RBAC)
+
+```sql
+-- Create role
+CREATE ROLE analyst;
+
+-- Grant permissions
+GRANT USAGE ON DATABASE analytics TO ROLE analyst;
+GRANT USAGE ON SCHEMA analytics.prod TO ROLE analyst;
+GRANT SELECT ON ALL TABLES IN SCHEMA analytics.prod TO ROLE analyst;
+
+-- Assign role to user
+GRANT ROLE analyst TO USER john@company.com;
+
+-- View role hierarchy
+SHOW GRANTS ON ROLE analyst;
+```
+
+**Predefined Roles:**
+
+```
+SYSADMIN
+├─ Can create warehouses, databases
+├─ Manage account settings
+└─ Highest privilege
+
+USERADMIN
+├─ Manage users and roles
+└─ Cannot create databases
+
+SECURITYADMIN
+├─ Manage security policies
+├─ RBAC management
+└─ No object creation
+
+ACCOUNTADMIN
+├─ Billing, account settings
+├─ Highest level access
+└─ Use sparingly
+```
+
+### Data Encryption
+
+**Automatic Encryption:**
+
+```
+At Rest:
+├─ AES-256 encryption
+├─ Default for all data
+└─ No additional cost
+
+In Transit:
+├─ TLS 1.2+
+├─ HTTPS for all connections
+└─ Automatic
+
+Client-Side:
+├─ Encrypt before uploading
+├─ Decrypt in application
+└─ User manages keys
+```
+
+### Row-Level Security & Masking
+
+```sql
+-- Create masking policy
+CREATE MASKING POLICY email_mask AS (val VARCHAR) RETURNS VARCHAR ->
+    CASE 
+        WHEN IS_ROLE_IN_SESSION('ADMIN') THEN val
+        ELSE CONCAT(SUBSTRING(val, 1, 2), '****@****')
+    END;
+
+-- Apply to column
+ALTER TABLE customers 
+    MODIFY COLUMN email SET MASKING POLICY email_mask;
+
+-- Now:
+-- ADMIN sees: john@example.com
+-- Analyst sees: jo****@****
+```
+
+---
+
+## Data Loading & Integration
+
+### COPY INTO
+
+**Loading from Cloud Storage:**
+
+```sql
+-- Setup: Create stage
+CREATE STAGE my_s3_stage
+    URL = 's3://my-bucket/data/'
+    CREDENTIALS = (AWS_KEY_ID='xxx' AWS_SECRET_KEY='yyy');
+
+-- Load data
+COPY INTO customers
+FROM @my_s3_stage/customers.csv
+FILE_FORMAT = (TYPE = CSV, SKIP_HEADER = 1)
+ON_ERROR = SKIP_FILE;
+
+-- Options:
+├─ ON_ERROR = SKIP_FILE: Skip entire file on error
+├─ ON_ERROR = SKIP_FILE_3: Skip after 3 errors
+├─ ON_ERROR = ABORT_STATEMENT: Abort on first error
+└─ FORCE = TRUE: Reload already loaded files
+```
+
+**Loading from Local Files:**
+
+```sql
+-- Create internal stage
+CREATE STAGE local_stage;
+
+-- Upload file
+PUT file:///tmp/customers.csv @local_stage/;
+
+-- Load
+COPY INTO customers
+FROM @local_stage/customers.csv
+FILE_FORMAT = (TYPE = CSV);
+```
+
+### Continuous Data Loading
+
+```sql
+-- Snowpipe: Automatic data loading
+CREATE PIPE my_pipe AS
+    COPY INTO customers
+    FROM @my_s3_stage/
+    FILE_FORMAT = (TYPE = CSV);
+
+-- Enable
+ALTER PIPE my_pipe SET PIPE_EXECUTION_PAUSED = FALSE;
+
+-- Monitor
+SELECT * FROM TABLE(INFORMATION_SCHEMA.PIPE_USAGE_HISTORY(
+    DATE_RANGE_START => CURRENT_TIMESTAMP - INTERVAL '1 hour',
+    PIPE_NAME => 'my_pipe'
+));
+```
+
+### Integration with External Tools
+
+```
+Supported Integrations:
+├─ Talend
+├─ Apache Airflow
+├─ Matomo
+├─ AWS DMS
+├─ Google Cloud Dataflow
+├─ Azure Data Factory
+├─ Tableau
+├─ Power BI
+├─ Looker
+└─ Many more via SDK
+```
+
+---
+
+## Querying & Analytics
+
+### Common Query Patterns
+
+**Window Functions:**
+
+```sql
+-- Running total
+SELECT 
+    sale_date,
+    amount,
+    SUM(amount) OVER (ORDER BY sale_date) as running_total
+FROM sales
+ORDER BY sale_date;
+
+-- Ranking
+SELECT 
+    customer_id,
+    amount,
+    RANK() OVER (ORDER BY amount DESC) as rank
+FROM orders;
+
+-- Row number
+SELECT 
+    customer_id,
+    order_date,
+    ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY order_date) as order_seq
+FROM orders;
+```
+
+**Time Series Analysis:**
+
+```sql
+-- Monthly trends
+SELECT 
+    DATE_TRUNC('month', order_date) as month,
+    COUNT(*) as order_count,
+    SUM(amount) as revenue
+FROM orders
+GROUP BY DATE_TRUNC('month', order_date)
+ORDER BY month;
+
+-- Year-over-year comparison
+SELECT 
+    DATE_PART('month', order_date) as month,
+    DATE_PART('year', order_date) as year,
+    SUM(amount) as revenue
+FROM orders
+GROUP BY DATE_PART('month', order_date), DATE_PART('year', order_date);
+```
+
+**Pivoting Data:**
+
+```sql
+-- Pivot table
+SELECT *
+FROM sales
+PIVOT (
+    SUM(amount)
+    FOR quarter IN ('Q1', 'Q2', 'Q3', 'Q4')
+)
+ORDER BY year;
+```
+
+---
+
+## Scaling & Clustering
+
+### Auto-Scaling
+
+```sql
+-- Create warehouse with auto-scaling
+CREATE WAREHOUSE analytics_wh
+    WAREHOUSE_SIZE = MEDIUM
+    AUTO_SUSPEND = 600  -- Suspend after 10 min
+    AUTO_RESUME = TRUE
+    MIN_CLUSTER_COUNT = 1
+    MAX_CLUSTER_COUNT = 5
+    SCALING_POLICY = ECONOMY;  -- Or STANDARD
+
+-- ECONOMY: Minimizes cluster count (saves cost)
+-- STANDARD: Prioritizes query performance
+```
+
+### Performance Monitoring
+
+```sql
+-- Query history
+SELECT 
+    query_id,
+    query_text,
+    EXECUTION_TIME / 1000 as duration_seconds,
+    ROWS_PRODUCED,
+    WAREHOUSE_NAME
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE START_TIME > CURRENT_TIMESTAMP - INTERVAL '24 hours'
+ORDER BY EXECUTION_TIME DESC;
+
+-- Warehouse utilization
+SELECT 
+    warehouse_name,
+    SUM(CREDITS_USED) as total_credits,
+    COUNT(*) as queries_executed,
+    AVG(EXECUTION_TIME / 1000) as avg_duration_seconds
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE START_TIME > CURRENT_TIMESTAMP - INTERVAL '7 days'
+GROUP BY warehouse_name
+ORDER BY total_credits DESC;
+
+-- Storage usage
+SELECT 
+    database_name,
+    SUM(ACTIVE_BYTES) / (1024 * 1024 * 1024) as size_gb,
+    TABLE_COUNT
+FROM SNOWFLAKE.ACCOUNT_USAGE.TABLE_STORAGE_METRICS
+WHERE MONTH(MEASUREMENT_TIME) = MONTH(CURRENT_DATE)
+  AND YEAR(MEASUREMENT_TIME) = YEAR(CURRENT_DATE)
+GROUP BY database_name
+ORDER BY size_gb DESC;
+```
+
+---
+
+## Best Practices
+
+### Schema Design
+
+```
+✓ Use denormalized design (fewer joins)
+✓ Partition large tables by date
+✓ Use clustering keys for large tables
+✓ Avoid extremely wide tables (100+ columns)
+✓ Use surrogate keys for dimensions
+✓ Archive old data separately
+✓ Document schema clearly
+```
+
+### Data Quality
+
+```
+✓ Validate data on load
+✓ Use constraints where appropriate
+✓ Implement data quality checks
+✓ Monitor null values
+✓ Track data lineage
+✓ Document transformations
+✓ Version control DDL/DML scripts
+```
+
+### Performance
+
+```
+✓ Use clustering keys effectively
+✓ Implement result caching
+✓ Materialize expensive views
+✓ Avoid SELECT * queries
+✓ Use WHERE clauses to prune
+✓ Monitor query history
+✓ Right-size warehouses
+✓ Suspend unused warehouses
+```
+
+### Security
+
+```
+✓ Enable MFA for all users
+✓ Use SSO when possible
+✓ Implement least privilege
+✓ Mask sensitive data
+✓ Audit access logs
+✓ Rotate credentials regularly
+✓ Use Key Pair Auth for automation
+✓ Enable object-level encryption
+```
+
+---
+
+## Real-World Scenarios
+
+### Scenario 1: Building a Data Lake
+
+```
+Architecture:
+
+Raw Layer (Bronze)
+├─ Raw data from sources
+├─ Minimal transformation
+├─ Full audit trail
+└─ External stage pointing to S3
+
+Refined Layer (Silver)
+├─ Cleansed, validated data
+├─ Added business keys
+├─ Deduplication
+└─ Merge slowly changing dimensions
+
+Curated Layer (Gold)
+├─ Business-ready tables
+├─ Pre-aggregated metrics
+├─ Optimized for analytics
+└─ Performance-tuned queries
+
+Implementation:
+
+1. Define stages
+   ├─ s3://datalake/raw/{domain}/{table}/
+   ├─ s3://datalake/refined/{domain}/{table}/
+   └─ s3://datalake/curated/{domain}/{table}/
+
+2. Load raw data
+   ├─ Snowpipe from raw → bronze tables
+   ├─ Automatic ingestion
+   └─ Minimal latency
+
+3. Transform to silver
+   ├─ Cleansing logic
+   ├─ Schema validation
+   ├─ Deduplication
+   └─ Scheduled tasks
+
+4. Publish to gold
+   ├─ Pre-computed metrics
+   ├─ Materialized views
+   ├─ Optimized for BI tools
+   └─ RBAC policies applied
+```
+
+### Scenario 2: Real-Time Analytics
+
+```
+Architecture:
+
+Event Sources
+├─ Web app events
+├─ Mobile app events
+├─ Server logs
+└─ External APIs
+
+Message Queue (Kafka, Kinesis)
+└─ Stream events
+
+Snowflake (Stream & Tasks)
+├─ Stream: Captures changes
+├─ Task: Processes stream data
+├─ Incremental load (not full refresh)
+└─ Minutes latency
+
+Analytics
+├─ Dashboard (Tableau)
+├─ Real-time alerts
+├─ ML models
+└─ Reports
+
+Cost: ~$5,000/month for 1M events/day
+Latency: 5-10 minutes
+```
+
+### Scenario 3: Data Sharing
+
+```
+Provider Setup:
+
+1. Create share
+   CREATE DATA SHARE my_share;
+
+2. Add database
+   ALTER DATABASE analytics ENABLE FOR DATA SHARING;
+   GRANT USAGE ON DATABASE analytics TO SHARE my_share;
+
+3. Create reader account
+   CREATE MANAGED ACCOUNT consumer_account
+   ADMIN_NAME = admin
+   ADMIN_PASSWORD = 'P@ssw0rd'
+   TYPE = READER;
+
+4. Grant share
+   GRANT IMPORT SHARE ON SHARE my_share TO ACCOUNT consumer_account;
+
+Consumer Access:
+- No data copy
+- No storage cost
+- Real-time access
+- RBAC policies enforced
+```
+
+---
+
+## Practical Applications with Detailed Processes & Elaborate Theory
+
+### Application 1: E-Commerce Data Warehouse Implementation
+
+**Business Context:**
+An e-commerce company with 10 million daily transactions needs to analyze sales, inventory, customer behavior, and marketing effectiveness. Current system (Oracle DW) costs $500K/year with 2-hour query times.
+
+**Objective:**
+Move to Snowflake to reduce costs by 60%, improve query speed to <1 minute, and enable self-service analytics.
+
+#### Phase 1: Architecture Design & Planning
+
+**Theory: Why Separation of Compute & Storage Matters**
+
+```
+Traditional Oracle Setup:
+├─ Server with fixed 256GB RAM, 10TB SSD
+├─ Cost: $500K/year regardless of usage
+├─ Scaling requires hardware purchase
+├─ Peak load: Queries queue up
+├─ Off-peak: Resources wasted
+└─ Problem: Inflexible, expensive, slow
+
+Snowflake Architecture:
+├─ Cloud storage (unlimited, $23/TB/month)
+├─ Compute warehouses (pay per use)
+├─ Can have multiple warehouses:
+│  ├─ Warehouse A: ETL processes (Small, 2 credits/hour)
+│  ├─ Warehouse B: Real-time queries (Large, 8 credits/hour)
+│  └─ Warehouse C: Executive dashboards (Medium, 4 credits/hour)
+├─ All share same data (zero copy cloning)
+└─ Problem solved: Efficient, scalable, fast
+
+Cost Comparison (Annual):
+Oracle:
+├─ License: $300,000
+├─ Hardware: $150,000
+├─ Maintenance: $50,000
+└─ Total: $500,000
+
+Snowflake:
+├─ Storage: 100TB × $23 × 12 = $27,600
+├─ Compute: 500 credits/day × 30 × $4 = $60,000
+├─ Cloud Services: ~$10,000
+└─ Total: ~$97,600 (80% reduction!)
+```
+
+**Schema Design Theory**
+
+```
+Decision: Denormalized Star Schema vs Normalized
+
+Why Denormalized for Snowflake?
+
+Reason 1: Columnar Storage Efficiency
+├─ Traditional: Each row stored together
+│  └─ SELECT order_id → reads all columns
+├─ Snowflake: Each column stored separately
+│  └─ SELECT order_id → reads only that column
+├─ Denormalized helps compression
+└─ Result: Faster queries, lower storage
+
+Reason 2: Join Cost
+├─ Traditional: Joins are expensive (IO intensive)
+├─ Snowflake: Joins are cheap (parallel execution)
+├─ Denormalized: Fewer joins needed
+└─ Result: Simpler queries, faster performance
+
+Reason 3: Columnar Compression
+├─ Repeated values compress extremely well
+├─ Example: customer_name repeated 1M times
+│  - Original: 1M × 50 bytes = 50MB
+│  - Compressed: Run-length encoding = 50KB
+├─ Normalized design: More repeated values
+└─ Result: Much smaller storage footprint
+
+Conclusion:
+Don't normalize like traditional DW
+Do denormalize by combining related data
+Result: Better performance + lower cost
+```
+
+**Designed Schema:**
+
+```sql
+-- Bronze Layer (Raw, minimal transformation)
+CREATE TABLE bronze_raw_orders (
+    raw_json VARIANT,
+    source_system VARCHAR,
+    load_date TIMESTAMP
+);
+
+-- Silver Layer (Cleansed, standardized)
+CREATE TABLE silver_orders (
+    order_id INTEGER,
+    customer_id INTEGER,
+    product_id INTEGER,
+    order_timestamp TIMESTAMP,
+    quantity INTEGER,
+    unit_price DECIMAL(10, 2),
+    total_amount DECIMAL(10, 2),
+    discount_percent DECIMAL(5, 2),
+    shipping_cost DECIMAL(10, 2),
+    final_amount DECIMAL(10, 2),
+    order_status VARCHAR,
+    payment_method VARCHAR,
+    created_date DATE,
+    updated_date TIMESTAMP,
+    _dw_batch_id INTEGER,
+    _dw_insert_timestamp TIMESTAMP,
+    _dw_update_timestamp TIMESTAMP
+) CLUSTER BY (created_date, customer_id);
+
+-- Gold Layer (Denormalized for BI)
+CREATE TABLE gold_orders_fact (
+    -- Keys
+    order_id INTEGER PRIMARY KEY,
+    customer_id INTEGER,
+    product_id INTEGER,
+    
+    -- Customer dimensions (denormalized)
+    customer_name VARCHAR,
+    customer_email VARCHAR,
+    customer_country VARCHAR,
+    customer_segment VARCHAR,
+    customer_lifetime_value DECIMAL(12, 2),
+    
+    -- Product dimensions (denormalized)
+    product_name VARCHAR,
+    product_category VARCHAR,
+    product_sub_category VARCHAR,
+    product_supplier VARCHAR,
+    
+    -- Order facts
+    order_date DATE,
+    order_hour INTEGER,
+    order_day_of_week VARCHAR,
+    
+    -- Metrics
+    order_quantity INTEGER,
+    unit_price DECIMAL(10, 2),
+    discount_percent DECIMAL(5, 2),
+    shipping_cost DECIMAL(10, 2),
+    tax_amount DECIMAL(10, 2),
+    final_amount DECIMAL(10, 2),
+    profit_margin DECIMAL(5, 2),
+    
+    -- Status
+    payment_status VARCHAR,
+    fulfillment_status VARCHAR,
+    return_status VARCHAR,
+    
+    -- Dates
+    created_timestamp TIMESTAMP,
+    updated_timestamp TIMESTAMP
+) CLUSTER BY (order_date, customer_id);
+
+-- Materialized View for Daily Metrics
+CREATE MATERIALIZED VIEW mv_daily_metrics AS
+SELECT 
+    order_date,
+    customer_segment,
+    COUNT(DISTINCT order_id) as orders,
+    COUNT(DISTINCT customer_id) as customers,
+    SUM(final_amount) as revenue,
+    AVG(final_amount) as avg_order_value,
+    SUM(profit_margin) as profit,
+    COUNT(CASE WHEN return_status = 'Returned' THEN 1 END) as returns
+FROM gold_orders_fact
+GROUP BY order_date, customer_segment;
+```
+
+**Theory: Clustering Keys Explanation**
+
+```
+Without Clustering:
+┌─────────────────────────────────┐
+│ 100GB Table (Random Order)      │
+├─────────────────────────────────┤
+│ Customer 001 │ Customer 523     │
+│ Customer 045 │ Customer 012     │
+│ Customer 523 │ Customer 001     │
+│ Customer 999 │ Customer 045     │
+│ ... (scattered randomly)         │
+└─────────────────────────────────┘
+
+Query: "Get all orders for Customer 001"
+├─ Must read entire 100GB table
+├─ Scans millions of blocks
+└─ Takes 30 seconds
+
+With CLUSTER BY (customer_id):
+┌─────────────────────────────────┐
+│ 100GB Table (Organized)         │
+├─────────────────────────────────┤
+│ Customer 001 │ Customer 001     │
+│ Customer 001 │ Customer 001     │
+│ Customer 002 │ Customer 002     │
+│ Customer 003 │ Customer 003     │
+│ ... (organized by customer)      │
+└─────────────────────────────────┘
+
+Query: "Get all orders for Customer 001"
+├─ Knows where Customer 001 data is
+├─ Scans only 100MB
+└─ Takes 0.5 seconds (60x faster!)
+
+Cost:
+├─ Storage: 100GB → 105GB (5% overhead for clustering metadata)
+├─ Computation: Query 60x faster
+└─ ROI: Massive improvement
+```
+
+#### Phase 2: Data Loading Implementation
+
+**Theory: ETL Patterns in Snowflake**
+
+```
+Traditional ETL:
+1. Extract (read from source)
+2. Transform (process in memory)
+3. Load (write to warehouse)
+Problem: Memory bottleneck, slow, expensive
+
+Snowflake ELT (Extract, Load, Transform):
+1. Extract (read from source)
+2. Load (push to cloud storage)
+3. Transform (SQL in Snowflake)
+
+Advantages:
+├─ Source → S3 is fast (parallel)
+├─ Snowflake → handles massive data
+├─ SQL transformations scalable
+└─ No memory limits
+
+Implementation:
+Step 1: Land data in S3 (daily)
+Step 2: Snowpipe ingests automatically
+Step 3: Tasks transform in Snowflake
+Step 4: Results available instantly
+```
+
+**Step-by-Step Implementation:**
+
+```sql
+-- Step 1: Create Integration with AWS
+CREATE STORAGE INTEGRATION s3_integration
+  TYPE = EXTERNAL_STAGE
+  STORAGE_PROVIDER = S3
+  ENABLED = TRUE
+  STORAGE_AWS_ROLE_ARN = 'arn:aws:iam::123456789:role/snowflake-role'
+  STORAGE_ALLOWED_LOCATIONS = ('s3://ecommerce-data/');
+
+-- Step 2: Create External Stage (points to S3)
+CREATE STAGE s3_raw_stage
+  URL = 's3://ecommerce-data/raw/orders/'
+  STORAGE_INTEGRATION = s3_integration
+  FILE_FORMAT = (TYPE = PARQUET);
+
+-- Step 3: Create File Format for Parquet
+CREATE FILE FORMAT parquet_format
+  TYPE = PARQUET
+  COMPRESSION = SNAPPY;
+
+-- Step 4: Create Bronze table (raw landing)
+CREATE TABLE bronze_orders (
+    order_id STRING,
+    customer_id STRING,
+    product_id STRING,
+    quantity STRING,
+    unit_price STRING,
+    created_timestamp STRING,
+    updated_timestamp STRING,
+    _metadata VARIANT
+);
+
+-- Step 5: Create Snowpipe for continuous ingestion
+CREATE PIPE orders_pipe
+  AUTO_INGEST = TRUE
+  AS
+  COPY INTO bronze_orders
+  FROM @s3_raw_stage
+  FILE_FORMAT = parquet_format
+  ON_ERROR = SKIP_FILE;
+
+-- Step 6: Enable the pipe
+ALTER PIPE orders_pipe SET PIPE_EXECUTION_PAUSED = FALSE;
+
+-- Step 7: Create task to transform Bronze → Silver
+CREATE TASK transform_bronze_to_silver
+  WAREHOUSE = transform_wh
+  SCHEDULE = 'USING CRON 0 2 * * * America/New_York'  -- Daily at 2 AM
+  AS
+  INSERT INTO silver_orders
+  SELECT 
+      TO_NUMBER(order_id)::INTEGER as order_id,
+      TO_NUMBER(customer_id)::INTEGER as customer_id,
+      TO_NUMBER(product_id)::INTEGER as product_id,
+      TO_TIMESTAMP(created_timestamp) as order_timestamp,
+      TO_NUMBER(quantity)::INTEGER as quantity,
+      TO_NUMBER(unit_price)::DECIMAL(10, 2) as unit_price,
+      TO_NUMBER(quantity)::INTEGER * TO_NUMBER(unit_price)::DECIMAL(10, 2) as total_amount,
+      COALESCE(TO_NUMBER(_metadata:discount_percent::VARCHAR)::DECIMAL(5, 2), 0) as discount_percent,
+      COALESCE(TO_NUMBER(_metadata:shipping_cost::VARCHAR)::DECIMAL(10, 2), 0) as shipping_cost,
+      (TO_NUMBER(quantity)::INTEGER * TO_NUMBER(unit_price)::DECIMAL(10, 2)) - 
+      (TO_NUMBER(quantity)::INTEGER * TO_NUMBER(unit_price)::DECIMAL(10, 2) * COALESCE(TO_NUMBER(_metadata:discount_percent::VARCHAR)::DECIMAL(5, 2), 0) / 100) +
+      COALESCE(TO_NUMBER(_metadata:shipping_cost::VARCHAR)::DECIMAL(10, 2), 0) as final_amount,
+      COALESCE(_metadata:order_status::VARCHAR, 'Pending') as order_status,
+      COALESCE(_metadata:payment_method::VARCHAR, 'Unknown') as payment_method,
+      DATE(TO_TIMESTAMP(created_timestamp)) as created_date,
+      CURRENT_TIMESTAMP as updated_date,
+      0 as _dw_batch_id,
+      CURRENT_TIMESTAMP as _dw_insert_timestamp,
+      CURRENT_TIMESTAMP as _dw_update_timestamp
+  FROM bronze_orders
+  WHERE _dw_insert_timestamp IS NULL
+  ON_ERROR = CONTINUE;
+
+-- Step 8: Enable task
+ALTER TASK transform_bronze_to_silver RESUME;
+
+-- Step 9: Create task to transform Silver → Gold (denormalized)
+CREATE TASK transform_silver_to_gold
+  WAREHOUSE = analytics_wh
+  AFTER transform_bronze_to_silver
+  AS
+  MERGE INTO gold_orders_fact g
+  USING (
+      SELECT 
+          s.order_id,
+          s.customer_id,
+          s.product_id,
+          c.customer_name,
+          c.customer_email,
+          c.customer_country,
+          c.customer_segment,
+          c.customer_lifetime_value,
+          p.product_name,
+          p.product_category,
+          p.product_sub_category,
+          p.product_supplier,
+          s.order_timestamp,
+          EXTRACT(HOUR FROM s.order_timestamp) as order_hour,
+          TO_CHAR(s.order_timestamp, 'DY') as order_day_of_week,
+          s.quantity,
+          s.unit_price,
+          s.discount_percent,
+          s.shipping_cost,
+          (s.final_amount * 0.1) as tax_amount,
+          s.final_amount,
+          ((s.unit_price * 0.4) / s.unit_price * 100) as profit_margin,
+          s.order_status,
+          'Fulfilled' as fulfillment_status,
+          'Not Returned' as return_status,
+          s.created_date,
+          CURRENT_TIMESTAMP as updated_timestamp
+      FROM silver_orders s
+      LEFT JOIN customer_dimension c ON s.customer_id = c.customer_id
+      LEFT JOIN product_dimension p ON s.product_id = p.product_id
+      WHERE s._dw_update_timestamp > CURRENT_TIMESTAMP - INTERVAL '1 day'
+  ) n
+  ON g.order_id = n.order_id
+  WHEN MATCHED THEN UPDATE SET g.updated_timestamp = n.updated_timestamp
+  WHEN NOT MATCHED THEN INSERT (
+      order_id, customer_id, product_id, customer_name, customer_email,
+      customer_country, customer_segment, customer_lifetime_value,
+      product_name, product_category, product_sub_category, product_supplier,
+      order_date, order_hour, order_day_of_week, order_quantity,
+      unit_price, discount_percent, shipping_cost, tax_amount,
+      final_amount, profit_margin, payment_status, fulfillment_status,
+      return_status, created_timestamp, updated_timestamp
+  ) VALUES (
+      n.order_id, n.customer_id, n.product_id, n.customer_name, n.customer_email,
+      n.customer_country, n.customer_segment, n.customer_lifetime_value,
+      n.product_name, n.product_category, n.product_sub_category, n.product_supplier,
+      n.order_date, n.order_hour, n.order_day_of_week, n.quantity,
+      n.unit_price, n.discount_percent, n.shipping_cost, n.tax_amount,
+      n.final_amount, n.profit_margin, n.order_status, n.fulfillment_status,
+      n.return_status, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+  );
+
+-- Step 10: Enable task
+ALTER TASK transform_silver_to_gold RESUME;
+
+-- Step 11: Refresh materialized views on schedule
+CREATE TASK refresh_daily_metrics
+  WAREHOUSE = analytics_wh
+  SCHEDULE = 'USING CRON 0 6 * * * America/New_York'  -- 6 AM daily
+  AS
+  ALTER MATERIALIZED VIEW mv_daily_metrics CLUSTER BY (order_date, customer_segment);
+
+-- Step 12: Monitor pipeline
+SELECT 
+    PIPE_NAME,
+    DEFINITION,
+    NOTIFICATION_CHANNEL,
+    LAST_NOTIFICATION_PROCESSED_TIME,
+    EXECUTION_PROGRESS,
+    CREDITS_USED
+FROM SNOWFLAKE.ACCOUNT_USAGE.PIPE_USAGE_HISTORY
+WHERE MONTH(LAST_NOTIFICATION_PROCESSED_TIME) = MONTH(CURRENT_DATE)
+ORDER BY LAST_NOTIFICATION_PROCESSED_TIME DESC;
+
+-- Step 13: Monitor task execution
+SELECT 
+    NAME,
+    DATABASE_NAME,
+    SCHEMA_NAME,
+    DEFINITION,
+    STATE,
+    NEXT_SCHEDULED_TIME,
+    LAST_COMPLETED_TIME,
+    LAST_SUSPENDED_TIME
+FROM SNOWFLAKE.ACCOUNT_USAGE.TASK_HISTORY
+WHERE SCHEDULED_TIME > CURRENT_TIMESTAMP - INTERVAL '7 days'
+ORDER BY SCHEDULED_TIME DESC;
+```
+
+**Performance Results:**
+
+```
+Before (Traditional ETL):
+├─ Daily data load: 4 hours
+├─ Query time: 2-5 minutes
+├─ Storage: 50TB (uncompressed)
+├─ Cost: $500K/year
+└─ Refresh latency: 1 day
+
+After (Snowflake ELT + Tasks):
+├─ Real-time ingestion (Snowpipe)
+├─ Query time: <5 seconds
+├─ Storage: 8TB (auto-compressed)
+├─ Cost: $100K/year
+└─ Refresh latency: <1 hour
+
+Improvement:
+├─ Query speed: 30-60x faster
+├─ Storage efficiency: 6.25x smaller
+├─ Cost reduction: 80%
+└─ Data freshness: 24x more recent
+```
+
+#### Phase 3: Query Optimization
+
+**Theory: Query Optimization Process**
+
+```
+Traditional Approach:
+1. Write query
+2. Run query
+3. If slow, add index
+4. If still slow, rewrite query
+Problem: Reactive, slow feedback loop
+
+Snowflake Approach:
+1. Write query (correct first)
+2. Analyze execution plan (proactive)
+3. Optimize schema (clustering)
+4. Cache results
+5. Monitor continuously
+
+Why Different?
+├─ No traditional indexes
+├─ Clustering keys instead
+├─ Result caching automatic
+├─ Query optimizer excellent
+└─ Focus on schema design
+```
+
+**Optimization Examples:**
+
+```sql
+-- Slow Query (Full Table Scan)
+SELECT 
+    order_date,
+    SUM(final_amount) as revenue
+FROM gold_orders_fact
+WHERE YEAR(order_date) = 2024
+GROUP BY order_date;
+
+-- Execution: 45 seconds (entire 100GB table scanned)
+
+-- Optimized Query 1: Use direct date comparison
+SELECT 
+    order_date,
+    SUM(final_amount) as revenue
+FROM gold_orders_fact
+WHERE order_date >= '2024-01-01' 
+  AND order_date < '2025-01-01'
+GROUP BY order_date;
+
+-- Execution: 5 seconds (partition pruning applied!)
+-- Why faster: Clustering by date enables partition pruning
+-- Snowflake knows which blocks contain 2024 data
+
+-- Optimized Query 2: Use materialized view
+SELECT *
+FROM mv_daily_metrics
+WHERE order_date >= '2024-01-01' 
+  AND order_date < '2025-01-01';
+
+-- Execution: <100ms (results cached!)
+-- Why instant: Pre-aggregated, refreshed nightly
+
+-- Optimized Query 3: Add specific columns
+SELECT 
+    order_date,
+    customer_segment,
+    SUM(final_amount) as revenue
+FROM gold_orders_fact
+WHERE order_date >= '2024-01-01'
+GROUP BY order_date, customer_segment;
+
+-- Execution: 2 seconds (columnar format advantage)
+-- Why fast: Only reads 3 columns, not entire row
+```
+
+**Query Analysis:**
+
+```sql
+-- Analyze execution plan
+EXPLAIN 
+SELECT order_date, SUM(final_amount) as revenue
+FROM gold_orders_fact
+WHERE order_date >= '2024-01-01'
+GROUP BY order_date;
+
+-- Output shows:
+-- ├─ Aggregate [Streaming]
+-- ├─ Filter [order_date >= '2024-01-01']
+-- ├─ Table Scan [gold_orders_fact]
+-- │  └─ Pruned partitions: 335/365 (91% pruning!)
+-- └─ Cost: 5 seconds
+
+-- Monitor query history
+SELECT 
+    query_id,
+    query_text,
+    EXECUTION_TIME / 1000 as duration_seconds,
+    BYTES_SCANNED / (1024 * 1024 * 1024) as gb_scanned,
+    ROWS_PRODUCED,
+    WAREHOUSE_SIZE,
+    CREDITS_USED
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE START_TIME > CURRENT_TIMESTAMP - INTERVAL '24 hours'
+  AND DATABASE_NAME = 'ECOMMERCE_DW'
+ORDER BY EXECUTION_TIME DESC
+LIMIT 20;
+```
+
+### Application 2: Real-Time Marketing Analytics Pipeline
+
+**Business Context:**
+Marketing department needs real-time view of campaign performance across 5 marketing channels (Email, Social, Display, Search, Affiliate). Currently waiting 24 hours for reports.
+
+**Objective:**
+Implement real-time dashboard with 5-minute latency showing conversions, cost, ROI by channel.
+
+#### Architecture Overview
+
+```
+Marketing Channels (5 sources)
+├─ Email Provider API
+├─ Facebook/Instagram API
+├─ Google Ads API
+├─ Google Analytics
+└─ Affiliate Networks
+
+↓ (APIs extract data hourly)
+
+S3 Data Lake
+├─ s3://marketing-data/emails/
+├─ s3://marketing-data/social/
+├─ s3://marketing-data/ads/
+├─ s3://marketing-data/analytics/
+└─ s3://marketing-data/affiliates/
+
+↓ (Snowpipe ingests continuously)
+
+Snowflake Raw Tables
+├─ raw_email_sends
+├─ raw_email_opens
+├─ raw_email_clicks
+├─ raw_facebook_impressions
+├─ raw_facebook_clicks
+├─ ... (15 raw tables total)
+
+↓ (Tasks transform hourly)
+
+Snowflake Processed Tables
+├─ email_campaign_metrics
+├─ social_campaign_metrics
+├─ search_campaign_metrics
+└─ attribution_analysis
+
+↓ (Streams capture changes)
+
+Materialized Views
+├─ mv_hourly_channel_performance
+├─ mv_campaign_roi
+├─ mv_budget_tracking
+└─ mv_customer_journey
+
+↓ (Real-time connection)
+
+Tableau Dashboard
+├─ Channel performance (updated every 5 min)
+├─ Campaign ROI (updated every 5 min)
+├─ Budget utilization (updated every 5 min)
+└─ Alerts (non-critical spend)
+```
+
+**Implementation:**
+
+```sql
+-- Raw tables (Bronze Layer)
+CREATE TABLE raw_email_metrics (
+    load_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    email_provider VARCHAR,
+    campaign_id VARCHAR,
+    timestamp_utc TIMESTAMP,
+    metric_type VARCHAR,  -- 'send', 'open', 'click', 'bounce'
+    count INTEGER,
+    metadata VARIANT
+);
+
+CREATE TABLE raw_social_metrics (
+    load_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    social_network VARCHAR,  -- 'facebook', 'instagram'
+    campaign_id VARCHAR,
+    timestamp_utc TIMESTAMP,
+    metric_type VARCHAR,  -- 'impression', 'click', 'conversion'
+    count INTEGER,
+    spend_usd DECIMAL(12, 2),
+    metadata VARIANT
+);
+
+-- Silver Tables (Cleansed, standardized)
+CREATE TABLE silver_campaign_metrics (
+    metric_id STRING,
+    channel VARCHAR,
+    campaign_id VARCHAR,
+    metric_date DATE,
+    metric_hour INTEGER,
+    metric_type VARCHAR,
+    count INTEGER,
+    cost_usd DECIMAL(12, 2),
+    processed_timestamp TIMESTAMP
+) CLUSTER BY (metric_date, channel);
+
+-- Gold Table (Aggregated, ready for BI)
+CREATE TABLE gold_daily_channel_performance (
+    performance_id STRING,
+    metric_date DATE,
+    channel VARCHAR,
+    campaign_id VARCHAR,
+    
+    -- Sends/Impressions
+    sends INTEGER,
+    impressions INTEGER,
+    
+    -- Engagement
+    clicks INTEGER,
+    opens INTEGER,
+    conversions INTEGER,
+    
+    -- Cost & Revenue
+    cost_usd DECIMAL(12, 2),
+    revenue_usd DECIMAL(12, 2),
+    
+    -- Metrics
+    click_through_rate DECIMAL(5, 2),
+    conversion_rate DECIMAL(5, 2),
+    cost_per_conversion DECIMAL(10, 2),
+    roi DECIMAL(5, 2),
+    
+    -- Timestamps
+    data_date DATE,
+    process_timestamp TIMESTAMP
+) CLUSTER BY (metric_date, channel);
+
+-- Stream to capture changes
+CREATE STREAM gold_daily_channel_performance_stream 
+ON TABLE gold_daily_channel_performance;
+
+-- Materialized View for Real-Time Dashboard
+CREATE MATERIALIZED VIEW mv_realtime_channel_dashboard AS
+SELECT 
+    metric_date,
+    channel,
+    SUM(sends) as total_sends,
+    SUM(impressions) as total_impressions,
+    SUM(clicks) as total_clicks,
+    SUM(conversions) as total_conversions,
+    SUM(cost_usd) as total_cost,
+    SUM(revenue_usd) as total_revenue,
+    ROUND(SUM(cost_usd) / NULLIF(SUM(clicks), 0), 2) as cost_per_click,
+    ROUND(SUM(cost_usd) / NULLIF(SUM(conversions), 0), 2) as cost_per_conversion,
+    ROUND((SUM(revenue_usd) - SUM(cost_usd)) / NULLIF(SUM(cost_usd), 0) * 100, 2) as roi_percent,
+    MAX(process_timestamp) as last_updated
+FROM gold_daily_channel_performance
+WHERE metric_date >= CURRENT_DATE - INTERVAL '90 days'
+GROUP BY metric_date, channel;
+
+-- Task: Update materialized view every 5 minutes
+CREATE TASK mv_dashboard_refresh
+  WAREHOUSE = marketing_wh
+  SCHEDULE = 'USING CRON */5 * * * * America/New_York'  -- Every 5 minutes
+  AS
+  ALTER MATERIALIZED VIEW mv_realtime_channel_dashboard 
+    CLUSTER BY (metric_date, channel);
+
+-- Task: Aggregate to daily metrics hourly
+CREATE TASK create_daily_metrics
+  WAREHOUSE = marketing_wh
+  SCHEDULE = 'USING CRON 0 * * * * America/New_York'  -- Every hour
+  AFTER raw_email_metrics_pipe, raw_social_metrics_pipe
+  AS
+  INSERT INTO gold_daily_channel_performance
+  SELECT 
+      MD5(CONCAT(metric_date, channel, campaign_id)) as performance_id,
+      metric_date,
+      channel,
+      campaign_id,
+      
+      SUM(CASE WHEN metric_type = 'send' THEN count ELSE 0 END) as sends,
+      SUM(CASE WHEN metric_type = 'impression' THEN count ELSE 0 END) as impressions,
+      SUM(CASE WHEN metric_type = 'click' THEN count ELSE 0 END) as clicks,
+      SUM(CASE WHEN metric_type = 'open' THEN count ELSE 0 END) as opens,
+      SUM(CASE WHEN metric_type = 'conversion' THEN count ELSE 0 END) as conversions,
+      
+      SUM(cost_usd) as cost_usd,
+      0 as revenue_usd,  -- Will be populated separately
+      
+      ROUND(SUM(CASE WHEN metric_type = 'click' THEN count ELSE 0 END) / 
+            NULLIF(SUM(CASE WHEN metric_type IN ('send', 'impression') THEN count ELSE 0 END), 0) * 100, 2) as ctr,
+      ROUND(SUM(CASE WHEN metric_type = 'conversion' THEN count ELSE 0 END) / 
+            NULLIF(SUM(CASE WHEN metric_type = 'click' THEN count ELSE 0 END), 0) * 100, 2) as cvr,
+      ROUND(SUM(cost_usd) / NULLIF(SUM(CASE WHEN metric_type = 'conversion' THEN count ELSE 0 END), 0), 2) as cpc,
+      0 as roi,
+      
+      CURRENT_DATE as data_date,
+      CURRENT_TIMESTAMP as process_timestamp
+  FROM silver_campaign_metrics
+  WHERE processed_timestamp >= CURRENT_TIMESTAMP - INTERVAL '1 hour'
+  GROUP BY metric_date, channel, campaign_id;
+
+-- Task: Create alert for budget overages
+CREATE TASK budget_alert_task
+  WAREHOUSE = marketing_wh
+  SCHEDULE = 'USING CRON 0 * * * * America/New_York'  -- Every hour
+  AS
+  INSERT INTO marketing_alerts
+  SELECT 
+      current_timestamp as alert_time,
+      'BUDGET_OVERAGE' as alert_type,
+      channel,
+      campaign_id,
+      CONCAT('Campaign ', campaign_id, ' on ', channel, ' has spent $', total_cost::STRING, ' today. Daily budget: $10,000') as message,
+      'WARNING' as severity
+  FROM (
+      SELECT 
+          channel,
+          campaign_id,
+          SUM(total_cost) as total_cost
+      FROM mv_realtime_channel_dashboard
+      WHERE metric_date = CURRENT_DATE
+      GROUP BY channel, campaign_id
+      HAVING SUM(total_cost) > 10000  -- Daily budget
+  );
+
+-- Tableau Connection (Direct SQL)
+-- Dashboard Query
+SELECT 
+    metric_date,
+    channel,
+    total_sends,
+    total_impressions,
+    total_clicks,
+    total_conversions,
+    total_cost,
+    total_revenue,
+    cost_per_click,
+    cost_per_conversion,
+    roi_percent,
+    last_updated
+FROM mv_realtime_channel_dashboard
+WHERE metric_date >= CURRENT_DATE - INTERVAL '30 days'
+ORDER BY metric_date DESC, channel;
+
+-- Monitor pipeline health
+SELECT 
+    channel,
+    COUNT(*) as records_processed,
+    MIN(processed_timestamp) as oldest_record,
+    MAX(processed_timestamp) as newest_record,
+    DATEDIFF(minute, MAX(processed_timestamp), CURRENT_TIMESTAMP) as latency_minutes,
+    SUM(cost_usd) as total_cost_today
+FROM gold_daily_channel_performance
+WHERE data_date = CURRENT_DATE
+GROUP BY channel;
+```
+
+**Results:**
+
+```
+Before Implementation:
+├─ Data latency: 24 hours
+├─ Report generation: Manual, 2 hours
+├─ Query time: 5 minutes
+├─ Cost visibility: Limited (next day)
+└─ Decision speed: Slow (wait for next day)
+
+After Implementation:
+├─ Data latency: 5 minutes
+├─ Dashboard updates: Automatic
+├─ Query time: <100ms (cached materialized view)
+├─ Cost visibility: Real-time
+└─ Decision speed: Instant (pause underperforming campaigns)
+
+Business Impact:
+├─ Catch underperforming campaigns: Hours vs Days
+├─ Optimize budget: Real-time vs next day
+├─ Reduce waste: ~15% by pausing early
+└─ Increase ROI: Estimated +20% annual
+```
+
+---
+
+## Data Engineer & Snowflake Developer: Roles, Responsibilities & Detailed Usage
+
+### Role Definition & Responsibilities
+
+#### Data Engineer Role
+
+**What is a Data Engineer?**
+
+A Data Engineer builds and maintains the infrastructure that allows data to flow from source systems to analytics platforms. Unlike Data Scientists (who analyze data) or Business Analysts (who interpret data), Data Engineers focus on:
+- Data pipeline architecture
+- ETL/ELT process implementation
+- Data quality and validation
+- Performance optimization
+- Monitoring and reliability
+
+**Daily Responsibilities:**
+
+```
+Morning Tasks:
+├─ Monitor pipeline health
+│  ├─ Check if overnight jobs completed successfully
+│  ├─ Validate data quality (row counts, null checks)
+│  └─ Alert on failures
+├─ Review failed jobs
+│  ├─ Debug pipeline errors
+│  ├─ Fix data quality issues
+│  └─ Implement corrective actions
+└─ Optimize cost
+   ├─ Check warehouse utilization
+   ├─ Identify expensive queries
+   └─ Schedule optimization tasks
+
+Development Tasks:
+├─ Design new data pipelines
+│  ├─ Plan data flow architecture
+│  ├─ Estimate storage and compute needs
+│  └─ Define SLAs (latency, availability)
+├─ Implement ETL/ELT processes
+│  ├─ Write SQL transformations
+│  ├─ Create tasks and streams
+│  └─ Build data quality checks
+├─ Improve existing pipelines
+│  ├─ Identify slow transformations
+│  ├─ Optimize queries
+│  └─ Reduce costs
+└─ Documentation & testing
+   ├─ Document process flows
+   ├─ Create runbooks
+   └─ Build unit tests
+
+Operational Tasks:
+├─ Production support
+│  ├─ 24/7 on-call rotations
+│  ├─ Incident response
+│  └─ Root cause analysis
+├─ Capacity planning
+│  ├─ Forecast data growth
+│  ├─ Plan warehouse scaling
+│  └─ Budget for next year
+└─ Security & compliance
+   ├─ Access control reviews
+   ├─ Data governance
+   └─ Audit trails
+```
+
+**Required Skills for Data Engineers:**
+
+```
+Hard Skills:
+├─ Advanced SQL
+│  ├─ Complex joins, subqueries
+│  ├─ Window functions, CTEs
+│  ├─ Dynamic SQL
+│  └─ Optimization techniques
+├─ Programming languages
+│  ├─ Python (data validation, orchestration)
+│  ├─ Bash/Shell (automation)
+│  ├─ (Optional) Java, Go
+│  └─ (Optional) Scala for Spark
+├─ Cloud platforms
+│  ├─ AWS (S3, EC2, Lambda, Glue)
+│  ├─ Azure (Blob Storage, Data Factory, Synapse)
+│  ├─ GCP (Cloud Storage, Dataflow, BigQuery)
+│  └─ Snowflake specifics
+├─ Data pipeline tools
+│  ├─ Orchestration: Airflow, Prefect, dbt
+│  ├─ Integration: Fivetran, Stitch, custom APIs
+│  ├─ Messaging: Kafka, Kinesis, Pub/Sub
+│  └─ Monitoring: Great Expectations, dbt tests
+└─ Databases & data structures
+   ├─ Relational (SQL, indexes, constraints)
+   ├─ NoSQL (Document, Key-value)
+   ├─ Data warehousing (star schema, denormalization)
+   └─ Lakehouse concepts (Delta, Iceberg)
+
+Soft Skills:
+├─ Problem-solving
+├─ Communication (explain technical to non-technical)
+├─ Collaboration (work with data scientists, analysts)
+├─ Attention to detail (data quality is critical)
+└─ On-call mindset (production support)
+```
+
+---
+
+#### Snowflake Developer Role
+
+**What is a Snowflake Developer?**
+
+A Snowflake Developer specializes in building and optimizing Snowflake solutions. Can be:
+1. **Specialized Data Engineer** - Deep Snowflake expertise
+2. **Analytics Engineer** - Data transformation focus (dbt + Snowflake)
+3. **Snowflake Solutions Architect** - Design complex architectures
+4. **Snowflake Admin** - Maintenance and configuration
+
+**Snowflake-Specific Responsibilities:**
+
+```
+Development:
+├─ Data modeling
+│  ├─ Dimension/fact tables
+│  ├─ Denormalization strategies
+│  ├─ Clustering key decisions
+│  └─ Performance tuning
+├─ SQL optimization
+│  ├─ Write efficient queries
+│  ├─ Analyze execution plans
+│  ├─ Implement caching strategies
+│  └─ Partition pruning
+├─ Snowflake-specific features
+│  ├─ Streams & Tasks
+│  ├─ Time Travel implementation
+│  ├─ Zero-copy cloning
+│  ├─ Data sharing
+│  └─ UDFs (Python, SQL, JavaScript)
+├─ Transformation pipelines
+│  ├─ ELT design (not ETL)
+│  ├─ Incremental loading
+│  ├─ Data quality validation
+│  └─ Error handling
+└─ Integration
+   ├─ Snowpipe for real-time ingestion
+   ├─ API integrations
+   ├─ Third-party connector setup
+   └─ Custom scripts for data loading
+
+Administration:
+├─ Warehouse management
+│  ├─ Size and cluster configuration
+│  ├─ Auto-suspend/resume settings
+│  ├─ Multi-cluster setup
+│  └─ Resource monitoring
+├─ Cost optimization
+│  ├─ Monitor credit usage
+│  ├─ Identify expensive queries
+│  ├─ Optimize data storage
+│  └─ Budget forecasting
+├─ Security
+│  ├─ Role-based access control (RBAC)
+│  ├─ Dynamic data masking
+│  ├─ Row-level security
+│  ├─ Encryption configuration
+│  └─ Audit trail setup
+├─ Data governance
+│  ├─ Tagging strategy
+│  ├─ Lineage tracking
+│  ├─ Metadata management
+│  └─ Compliance enforcement
+└─ Monitoring & alerting
+   ├─ Query performance tracking
+   ├─ Pipeline failure alerts
+   ├─ Data quality monitoring
+   └─ Cost anomaly detection
+
+Architecture:
+├─ Design data pipelines
+│  ├─ Bronze/Silver/Gold layers
+│  ├─ Real-time vs batch processing
+│  ├─ Scaling strategies
+│  └─ DR/HA design
+├─ Integration architecture
+│  ├─ Data ingestion patterns
+│  ├─ Transformation strategy
+│  ├─ Output strategies (sharing, exports)
+│  └─ Monitoring design
+└─ Performance planning
+   ├─ Workload capacity planning
+   ├─ Data growth projections
+   ├─ Warehouse scaling strategy
+   └─ Cost optimization roadmap
+```
+
+---
+
+### Data Engineer Interview Questions (Role-Specific)
+
+#### Q1: Design a scalable data pipeline for a SaaS company with 100M daily events
+
+**Detailed Answer with Architecture:**
+
+**Business Requirements:**
+```
+Input:
+├─ 100M events/day from web/mobile apps
+├─ 1KB per event = 100GB raw data/day
+├─ Need analytics within 5 minutes
+├─ Must handle 10x growth
+└─ Cost-sensitive (funded startup)
+
+Output:
+├─ Real-time dashboards
+├─ Hourly aggregates
+├─ Customer journey analysis
+└─ Anomaly detection
+```
+
+**Architecture Design:**
+
+```
+Step 1: Event Streaming
+├─ Kafka cluster (AWS MSK)
+│  ├─ 10 partitions per topic
+│  ├─ 1 day retention
+│  └─ Cost: ~$1,000/month
+├─ Or: AWS Kinesis Data Streams
+│  ├─ 10 shards
+│  └─ Cost: ~$1,500/month
+└─ Or: Google Pub/Sub
+   └─ Cost: ~$500/month (cheapest)
+
+Step 2: Data Ingestion to Snowflake
+├─ Snowpipe for continuous loading
+│  ├─ Monitors S3 for new files
+│  ├─ Automatically ingests
+│  ├─ Cost: Snowflake credits
+│  └─ Latency: 1-5 minutes
+└─ Alternative: Kafka connector
+   ├─ Custom connector service
+   ├─ Batch inserts
+   ├─ Cost: EC2 instance
+   └─ Latency: 1-2 minutes
+
+Step 3: Raw Data Storage (Bronze Layer)
+CREATE TABLE raw_events (
+    event_id STRING,
+    user_id STRING,
+    event_type STRING,
+    timestamp TIMESTAMP,
+    properties VARIANT,
+    load_timestamp TIMESTAMP
+)
+CLUSTER BY (event_type, DATE(timestamp));
+
+Step 4: Data Transformation (Silver Layer)
+-- Create stream to capture raw events
+CREATE STREAM raw_events_stream ON TABLE raw_events;
+
+-- Task to transform raw → silver
+CREATE TASK transform_raw_to_silver
+  WAREHOUSE = transform_wh (Small, 2 credits/hr)
+  SCHEDULE = 'USING CRON */5 * * * * UTC'  -- Every 5 min
+AS
+INSERT INTO silver_events
+SELECT 
+    event_id,
+    user_id,
+    CASE 
+        WHEN event_type = 'PAGE_VIEW' THEN 'page_view'
+        WHEN event_type = 'PURCHASE' THEN 'purchase'
+        WHEN event_type = 'CLICK' THEN 'click'
+        ELSE 'other'
+    END as event_type_normalized,
+    TO_TIMESTAMP_NTZ(timestamp) as event_timestamp,
+    properties:product_id::STRING as product_id,
+    properties:amount::DECIMAL(10,2) as amount,
+    CURRENT_TIMESTAMP as processed_at
+FROM raw_events_stream
+WHERE METADATA$ACTION = 'INSERT';
+
+Step 5: Aggregated Data (Gold Layer)
+CREATE MATERIALIZED VIEW hourly_events_agg AS
+SELECT 
+    DATE_TRUNC('hour', event_timestamp) as event_hour,
+    event_type_normalized,
+    COUNT(*) as event_count,
+    COUNT(DISTINCT user_id) as unique_users,
+    SUM(amount) as total_amount,
+    AVG(amount) as avg_amount
+FROM silver_events
+WHERE event_timestamp > CURRENT_TIMESTAMP - INTERVAL '90 days'
+GROUP BY 1, 2;
+
+-- Task to refresh materialized view
+CREATE TASK refresh_hourly_agg
+  WAREHOUSE = analytics_wh (Large, 8 credits/hr)
+  SCHEDULE = 'USING CRON 0 * * * * UTC'  -- Every hour
+AS
+ALTER MATERIALIZED VIEW hourly_events_agg CLUSTER BY (event_hour, event_type_normalized);
+
+Step 6: Real-Time Dashboard
+-- Tableau/Looker connects to hourly_events_agg
+-- Queries < 100ms (materialized view)
+-- Updates every hour
+-- Cost: ~0 (materialized view is pre-computed)
+
+Step 7: Monitoring & Quality
+CREATE TABLE data_quality_checks (
+    check_timestamp TIMESTAMP,
+    table_name VARCHAR,
+    check_type VARCHAR,  -- 'row_count', 'null_check', 'duplicate_check'
+    expected_value NUMERIC,
+    actual_value NUMERIC,
+    status VARCHAR,  -- 'PASS', 'FAIL'
+    alert_sent BOOLEAN
+);
+
+CREATE TASK data_quality_check
+  WAREHOUSE = monitoring_wh (XSmall, 1 credit/hr)
+  SCHEDULE = 'USING CRON */15 * * * * UTC'  -- Every 15 min
+AS
+-- Check 1: Raw events have data
+INSERT INTO data_quality_checks
+SELECT 
+    CURRENT_TIMESTAMP,
+    'raw_events',
+    'row_count_recent',
+    100000,  -- Expected at least 100K events in last hour
+    COUNT(*),
+    CASE WHEN COUNT(*) >= 100000 THEN 'PASS' ELSE 'FAIL' END,
+    FALSE
+FROM raw_events
+WHERE load_timestamp > CURRENT_TIMESTAMP - INTERVAL '1 hour';
+
+-- Check 2: Null values in critical columns
+INSERT INTO data_quality_checks
+SELECT 
+    CURRENT_TIMESTAMP,
+    'silver_events',
+    'null_check_user_id',
+    0,
+    COUNT(*),
+    CASE WHEN COUNT(*) = 0 THEN 'PASS' ELSE 'FAIL' END,
+    FALSE
+FROM silver_events
+WHERE user_id IS NULL
+  AND processed_at > CURRENT_TIMESTAMP - INTERVAL '1 hour';
+```
+
+**Cost Breakdown (Monthly):**
+
+```
+Data Ingestion:
+├─ Snowpipe: 100GB × $23/TB × 30 = $69
+├─ Kafka/Kinesis: ~$1,000
+└─ Total ingestion: ~$1,100
+
+Compute (Snowflake Credits):
+├─ Transform task (every 5 min):
+│  └─ Small WH × 2 credits/hr × 24 hrs × 30 = 1,440 credits
+├─ Refresh task (every hour):
+│  └─ Large WH × 8 credits/hr × 24 hrs × 30 = 5,760 credits
+├─ Dashboard queries:
+│  └─ ~100 queries/day × 1 credit × 30 = 3,000 credits
+├─ Monitoring:
+│  └─ XSmall × 1 credit/hr × 24 × 30 = 720 credits
+└─ Total compute: 11,000 credits × $4 (Enterprise) = $44,000
+
+Storage:
+├─ Raw events: 100GB/day × 30 = 3TB × $23 = $69
+├─ Silver events (deduplicated): 1.5TB × $23 = $34
+└─ Total storage: ~$100
+
+Total Monthly Cost: ~$45,200
+
+Cost Per Event: $45,200 / (100M × 30) = $0.0000015 = 0.15 cents per million events
+
+Optimization to reduce cost:
+├─ Use XSmall WH for transforms: -$2,880
+├─ Cache query results: -$3,000 (50% fewer queries)
+├─ Compress raw data: -$35
+└─ Optimized cost: ~$39,300/month (13% savings)
+```
+
+**Key Decisions & Trade-offs:**
+
+```
+Decision 1: Snowpipe vs Custom Ingestion
+├─ Snowpipe:
+│  ├─ Pros: Fully managed, automatic, simple setup
+│  ├─ Cons: Limited scheduling, less flexible
+│  └─ Best for: SaaS starting out
+├─ Custom (Lambda + Kinesis):
+│  ├─ Pros: Full control, flexible, potentially cheaper at scale
+│  ├─ Cons: Need to maintain code
+│  └─ Best for: High-volume, complex requirements
+
+Decision 2: ELT (Transform in Snowflake) vs ETL
+├─ ELT (chosen):
+│  ├─ Pros: Simpler, cheaper, leverages Snowflake power
+│  ├─ Cons: Uses warehouse compute
+│  └─ Best for: Cloud data warehousing
+├─ ETL (Lambda, Glue):
+│  ├─ Pros: Pre-processes data, lighter warehouse load
+│  ├─ Cons: Requires separate processing infrastructure
+│  └─ Best for: Complex transformations
+
+Decision 3: Real-Time vs Hourly Aggregates
+├─ Real-time (Stream processing):
+│  ├─ Cost: High (always-running infrastructure)
+│  ├─ Latency: Seconds
+│  └─ Best for: Critical metrics (payment systems)
+├─ Hourly (Chosen):
+│  ├─ Cost: Low (task runs once/hour)
+│  ├─ Latency: 5-60 minutes
+│  └─ Best for: Business analytics
+
+Decision 4: Storage Format
+├─ Parquet (used):
+│  ├─ Pros: Highly compressed, fast reads
+│  ├─ Compression: 10:1 ratio
+│  └─ Best for: Analytical workloads
+├─ JSON:
+│  ├─ Pros: Flexible schema
+│  ├─ Cons: Larger size
+│  └─ Best for: Semi-structured data
+```
+
+---
+
+#### Q2: How would you implement data quality checks in a production pipeline?
+
+**Detailed Answer:**
+
+**Data Quality Dimensions:**
+
+```
+1. Completeness
+   └─ Are all required fields present?
+   ├─ NULL checks
+   ├─ Empty string checks
+   └─ Missing required columns
+
+2. Uniqueness
+   └─ Are there duplicate records?
+   ├─ Check for duplicate IDs
+   ├─ Check for duplicate transactions
+   └─ Identify late-arriving duplicates
+
+3. Validity
+   └─ Is data in correct format/range?
+   ├─ Email validation
+   ├─ Phone number format
+   ├─ Date range checks
+   ├─ Enum validation
+   └─ Numeric range checks
+
+4. Consistency
+   └─ Does data match across systems?
+   ├─ Compare row counts across tables
+   ├─ Validate foreign key relationships
+   ├─ Check for circular references
+   └─ Compare with source systems
+
+5. Accuracy
+   └─ Is data correct?
+   ├─ Check sums match (invoice total = line items sum)
+   ├─ Validate business rules
+   ├─ Compare with expected patterns
+   └─ Check for outliers
+```
+
+**Implementation:**
+
+```sql
+-- Create quality rules table
+CREATE TABLE quality_rules (
+    rule_id VARCHAR,
+    rule_name VARCHAR,
+    table_name VARCHAR,
+    column_name VARCHAR,
+    rule_type VARCHAR,  -- 'NOT_NULL', 'UNIQUE', 'FORMAT', 'RANGE', etc.
+    rule_expression VARCHAR,
+    alert_threshold NUMERIC,  -- % of records allowed to fail
+    enabled BOOLEAN,
+    owner_email VARCHAR,
+    created_date DATE,
+    modified_date DATE
+);
+
+-- Example rules
+INSERT INTO quality_rules VALUES
+('RULE_001', 'User ID Not Null', 'users', 'user_id', 'NOT_NULL', 'user_id IS NOT NULL', 0, TRUE, 'data-eng@company.com', CURRENT_DATE, CURRENT_DATE),
+('RULE_002', 'Email Valid Format', 'users', 'email', 'FORMAT', 'email LIKE ''%@%.%''', 5, TRUE, 'data-eng@company.com', CURRENT_DATE, CURRENT_DATE),
+('RULE_003', 'Created Date Not Future', 'users', 'created_date', 'RANGE', 'created_date <= CURRENT_DATE', 1, TRUE, 'data-eng@company.com', CURRENT_DATE, CURRENT_DATE);
+
+-- Create quality checks result table
+CREATE TABLE quality_check_results (
+    check_id VARCHAR,
+    check_timestamp TIMESTAMP,
+    rule_id VARCHAR,
+    rule_name VARCHAR,
+    table_name VARCHAR,
+    total_records NUMERIC,
+    failed_records NUMERIC,
+    failed_percentage NUMERIC,
+    status VARCHAR,  -- 'PASS', 'WARN', 'FAIL'
+    failed_sample_query VARCHAR,
+    remediation_notes VARCHAR
+);
+
+-- Create task to run quality checks
+CREATE TASK run_quality_checks
+  WAREHOUSE = qa_wh
+  SCHEDULE = 'USING CRON */30 * * * * UTC'  -- Every 30 minutes
+  COMMENT = 'Validates data quality across all tables'
+AS
+BEGIN
+  -- Get all active rules
+  LET active_rules CURSOR FOR 
+    SELECT rule_id, rule_name, table_name, column_name, rule_type, rule_expression, alert_threshold
+    FROM quality_rules
+    WHERE enabled = TRUE;
+  
+  FOR rule IN active_rules DO
+    -- Dynamically execute each rule
+    DECLARE total_count NUMERIC;
+    DECLARE failed_count NUMERIC;
+    DECLARE failed_pct NUMERIC;
+    
+    -- Get total records
+    SET total_count = (
+        SELECT COUNT(*) FROM IDENTIFIER(:table_name)
+        WHERE DATE(CURRENT_TIMESTAMP()) = CURRENT_DATE()
+    );
+    
+    -- Get failed records
+    SET failed_count = (
+        SELECT COUNT(*) FROM IDENTIFIER(:table_name)
+        WHERE NOT (:rule_expression)
+          AND DATE(CURRENT_TIMESTAMP()) = CURRENT_DATE()
+    );
+    
+    SET failed_pct = (failed_count / total_count) * 100;
+    
+    -- Determine status
+    DECLARE status VARCHAR;
+    IF failed_pct <= :alert_threshold THEN
+      SET status = 'PASS';
+    ELSEIF failed_pct <= :alert_threshold * 1.5 THEN
+      SET status = 'WARN';
+    ELSE
+      SET status = 'FAIL';
+    END IF;
+    
+    -- Insert result
+    INSERT INTO quality_check_results VALUES (
+        UUID_STRING(),
+        CURRENT_TIMESTAMP(),
+        :rule_id,
+        :rule_name,
+        :table_name,
+        :total_count,
+        :failed_count,
+        :failed_pct,
+        :status,
+        'SELECT * FROM ' || :table_name || ' WHERE NOT (' || :rule_expression || ')',
+        NULL
+    );
+  END FOR;
+END;
+
+-- Simpler approach using dbt (recommended)
+-- In dbt, create tests/data_quality.yml:
+/*
+models:
+  - name: users
+    columns:
+      - name: user_id
+        tests:
+          - not_null
+          - unique
+      - name: email
+        tests:
+          - not_null
+          - unique
+          - custom_test: email_format
+      - name: created_date
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "created_date <= current_date"
+    tests:
+      - dbt_utils.equal_rowcount:
+          compare_model: stg_users
+        - dbt_utils.recency:
+            datepart: day
+            interval: 1
+            column_name: updated_date
+*/
+```
+
+**Alerting & Remediation:**
+
+```sql
+-- Create alerts table
+CREATE TABLE quality_alerts (
+    alert_id VARCHAR,
+    alert_timestamp TIMESTAMP,
+    rule_id VARCHAR,
+    rule_name VARCHAR,
+    severity VARCHAR,  -- 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'
+    message VARCHAR,
+    recipients VARCHAR,  -- Email addresses
+    sent BOOLEAN DEFAULT FALSE,
+    acknowledged BOOLEAN DEFAULT FALSE,
+    acknowledgement_timestamp TIMESTAMP,
+    remediation_action VARCHAR
+);
+
+-- Create task to generate alerts
+CREATE TASK generate_quality_alerts
+  WAREHOUSE = qa_wh
+  AFTER run_quality_checks
+AS
+INSERT INTO quality_alerts
+SELECT 
+    UUID_STRING(),
+    CURRENT_TIMESTAMP(),
+    r.rule_id,
+    r.rule_name,
+    CASE 
+        WHEN r.status = 'FAIL' THEN 'CRITICAL'
+        WHEN r.status = 'WARN' THEN 'MEDIUM'
+        ELSE 'LOW'
+    END as severity,
+    CONCAT(
+        'Data Quality Alert: ',
+        r.rule_name,
+        ' failed with ',
+        r.failed_percentage,
+        '% of records failing (threshold: ',
+        q.alert_threshold,
+        '%)'
+    ) as message,
+    q.owner_email,
+    FALSE,
+    FALSE,
+    NULL,
+    NULL
+FROM quality_check_results r
+JOIN quality_rules q ON r.rule_id = q.rule_id
+WHERE r.status IN ('WARN', 'FAIL')
+  AND r.check_timestamp > CURRENT_TIMESTAMP - INTERVAL '1 hour';
+
+-- Create task to send alerts via webhook
+CREATE TASK send_quality_alerts
+  WAREHOUSE = qa_wh
+  AFTER generate_quality_alerts
+AS
+-- Integration with external system (Slack, PagerDuty, etc.)
+-- Using external function or procedure
+CALL send_notification_to_slack(
+    'quality_alerts',
+    'Data Quality Pipeline Alerts'
+);
+
+-- Remediation procedures
+CREATE PROCEDURE remediate_nulls(table_name VARCHAR, column_name VARCHAR, default_value VARCHAR)
+RETURNS VARCHAR
+LANGUAGE SQL
+AS
+BEGIN
+    DECLARE row_count NUMERIC;
+    
+    -- Update NULL values with default
+    LET update_query = 'UPDATE ' || table_name || 
+                       ' SET ' || column_name || ' = ''' || default_value || 
+                       ''' WHERE ' || column_name || ' IS NULL';
+    
+    EXECUTE IMMEDIATE update_query;
+    
+    RETURN 'Updated ' || ROW_COUNT || ' rows';
+END;
+```
+
+---
+
+#### Q3: Design a multi-environment strategy (Dev, Staging, Prod) in Snowflake
+
+**Detailed Answer:**
+
+**Environment Structure:**
+
+```
+Environment    Purpose              Data Volume   Latency   Cost/Mo
+Dev            Experimentation      10% Prod      Flexible  $1,000
+Staging        Pre-prod validation  50% Prod      SLA       $5,000
+Prod           Live system          100%          <5min     $50,000
+```
+
+**Database Strategy:**
+
+```
+Option 1: Separate Accounts (Most Isolation)
+├─ Company-Dev (for data engineers)
+├─ Company-Staging (for QA)
+└─ Company-Prod (for business)
+
+Benefits:
+├─ Complete isolation
+├─ Different admins, budgets
+├─ Failover doesn't affect others
+└─ Different settings per environment
+
+Drawbacks:
+├─ Cost: 3x Snowflake accounts
+├─ Replication complexity
+├─ More administration
+└─ Data sharing less efficient
+
+Option 2: Separate Databases (Recommended)
+├─ dev_analytics, stg_analytics, prod_analytics
+├─ All in same account
+├─ Share warehouses where possible
+└─ Cost-effective
+
+Benefits:
+├─ Controlled cost
+├─ Easy promotion (copy database)
+├─ Data sharing possible
+└─ Simpler administration
+
+Drawbacks:
+├─ Less isolation
+├─ Shared compute potentially
+└─ Admin errors can impact all
+
+Option 3: Shared Database (Budget-Conscious)
+├─ Single database
+├─ schemas: dev_, stg_, prod_
+└─ Tables distinguished by schema
+
+Benefits:
+├─ Lowest cost
+├─ Simple migration
+└─ Easy cross-environment queries
+
+Drawbacks:
+├─ Minimal isolation
+├─ Hard to manage access
+├─ Risk of mistakes
+```
+
+**Recommended Implementation (Option 2):**
+
+```sql
+-- ===== DATABASE SETUP =====
+-- Create databases for each environment
+CREATE DATABASE dev_analytics COMMENT = 'Development environment';
+CREATE DATABASE stg_analytics COMMENT = 'Staging environment';
+CREATE DATABASE prod_analytics COMMENT = 'Production environment';
+
+-- ===== SCHEMA STRUCTURE =====
+-- Same schema structure in each environment
+CREATE SCHEMA dev_analytics.raw COMMENT = 'Raw data ingestion';
+CREATE SCHEMA dev_analytics.staging COMMENT = 'Transformed data';
+CREATE SCHEMA dev_analytics.marts COMMENT = 'Business-ready data';
+
+CREATE SCHEMA stg_analytics.raw;
+CREATE SCHEMA stg_analytics.staging;
+CREATE SCHEMA stg_analytics.marts;
+
+CREATE SCHEMA prod_analytics.raw;
+CREATE SCHEMA prod_analytics.staging;
+CREATE SCHEMA prod_analytics.marts;
+
+-- ===== TABLE DEFINITIONS =====
+-- Define in each environment (ideally via dbt or scripts)
+CREATE TABLE dev_analytics.raw.customers (
+    customer_id INTEGER,
+    name VARCHAR,
+    email VARCHAR,
+    created_date DATE
+);
+
+-- Repeat for stg and prod
+
+-- ===== WAREHOUSE CONFIGURATION =====
+-- Dev warehouse (small, economical)
+CREATE WAREHOUSE dev_warehouse
+  WAREHOUSE_SIZE = 'XSMALL'
+  AUTO_SUSPEND = 300  -- 5 min
+  AUTO_RESUME = TRUE
+  COMMENT = 'Development queries';
+
+-- Staging warehouse (medium, 1 cluster)
+CREATE WAREHOUSE stg_warehouse
+  WAREHOUSE_SIZE = 'MEDIUM'
+  AUTO_SUSPEND = 600  -- 10 min
+  AUTO_RESUME = TRUE
+  COMMENT = 'Staging tests';
+
+-- Production warehouse (multi-cluster, HA)
+CREATE WAREHOUSE prod_warehouse
+  WAREHOUSE_SIZE = 'LARGE'
+  MIN_CLUSTER_COUNT = 2
+  MAX_CLUSTER_COUNT = 5
+  SCALING_POLICY = 'STANDARD'
+  AUTO_SUSPEND = FALSE  -- Always available
+  AUTO_RESUME = TRUE
+  COMMENT = 'Production queries';
+
+-- ===== ROLE-BASED ACCESS CONTROL =====
+-- Developer role
+CREATE ROLE data_engineer;
+GRANT USAGE ON DATABASE dev_analytics TO ROLE data_engineer;
+GRANT USAGE ON SCHEMA dev_analytics.* TO ROLE data_engineer;
+GRANT ALL ON SCHEMA dev_analytics.* TO ROLE data_engineer;
+GRANT USAGE ON WAREHOUSE dev_warehouse TO ROLE data_engineer;
+-- Can read stg but not modify
+GRANT USAGE ON DATABASE stg_analytics TO ROLE data_engineer;
+GRANT SELECT ON ALL TABLES IN SCHEMA stg_analytics.* TO ROLE data_engineer;
+
+-- Analyst role
+CREATE ROLE analyst;
+GRANT USAGE ON DATABASE prod_analytics TO ROLE analyst;
+GRANT SELECT ON SCHEMA prod_analytics.marts TO ROLE analyst;
+GRANT USAGE ON WAREHOUSE prod_warehouse TO ROLE analyst;
+
+-- Prod admin (limited people)
+CREATE ROLE prod_admin;
+GRANT ALL ON DATABASE prod_analytics TO ROLE prod_admin;
+GRANT ALL ON WAREHOUSE prod_warehouse TO ROLE prod_admin;
+
+-- ===== PROMOTION WORKFLOW =====
+-- Promote from Dev → Staging (manually or via automation)
+
+-- Step 1: Clone entire staging database from prod
+CREATE DATABASE stg_analytics_new CLONE stg_analytics
+  AT(TIMESTAMP => CURRENT_TIMESTAMP - INTERVAL '10 minutes');
+-- (Captures state 10 minutes ago)
+
+-- Step 2: Deploy code changes
+-- Run migration scripts, update stored procedures, etc.
+CREATE OR REPLACE PROCEDURE stg_analytics_new.raw.load_customers()
+RETURNS VARCHAR
+LANGUAGE SQL
+AS
+$$
+  INSERT INTO stg_analytics_new.raw.customers
+  SELECT * FROM dev_analytics.raw.customers;
+$$;
+
+-- Step 3: Run tests
+CREATE TASK test_stg_database
+  WAREHOUSE = stg_warehouse
+  AFTER promote_code
+AS
+-- Run dbt tests
+CALL stg_analytics_new.utils.run_dbt_tests();
+
+-- Step 4: Swap if tests pass
+ALTER DATABASE stg_analytics RENAME TO stg_analytics_backup;
+ALTER DATABASE stg_analytics_new RENAME TO stg_analytics;
+ALTER DATABASE stg_analytics_backup RENAME TO stg_analytics_old;
+
+-- Promote from Staging → Prod (production promotion)
+
+-- Same process but with approval gate
+CREATE PROCEDURE promote_to_prod()
+RETURNS VARCHAR
+LANGUAGE SQL
+AS
+$$
+  -- Only proceed if approved
+  IF NOT EXISTS (
+    SELECT 1 FROM promotion_approvals 
+    WHERE target_env = 'PROD' 
+    AND approval_status = 'APPROVED'
+    AND approval_date > CURRENT_TIMESTAMP - INTERVAL '1 hour'
+  ) THEN
+    RETURN 'ERROR: Promotion not approved';
+  END IF;
+  
+  -- Create prod clone from staging
+  CREATE DATABASE prod_analytics_new CLONE stg_analytics;
+  
+  -- Validate data
+  CALL validate_prod_database('prod_analytics_new');
+  
+  -- Swap (this is the critical moment)
+  ALTER DATABASE prod_analytics RENAME TO prod_analytics_backup;
+  ALTER DATABASE prod_analytics_new RENAME TO prod_analytics;
+  
+  -- Keep backup for 24 hours (Time Travel)
+  -- Then delete
+  RETURN 'Promotion complete';
+END;
+$$;
+
+-- ===== DATA SYNCHRONIZATION =====
+-- Keep dev/stg close to prod with sample data
+
+-- Option 1: Nightly clone from prod
+CREATE TASK sync_stg_from_prod
+  WAREHOUSE = stg_warehouse
+  SCHEDULE = 'USING CRON 0 2 * * * UTC'
+AS
+BEGIN
+  -- Back up current stg
+  CREATE DATABASE stg_analytics_backup CLONE stg_analytics;
+  
+  -- Clone from prod
+  CREATE DATABASE stg_analytics_new CLONE prod_analytics 
+    AT(TIMESTAMP => CURRENT_TIMESTAMP - INTERVAL '1 hour');
+  
+  -- Swap
+  ALTER DATABASE stg_analytics RENAME TO stg_analytics_old;
+  ALTER DATABASE stg_analytics_new RENAME TO stg_analytics;
+  
+  -- After verification, clean up old
+  DROP DATABASE stg_analytics_old;
+END;
+
+-- Option 2: Sample data for dev (faster, cheaper)
+CREATE TASK sync_dev_from_stg
+  WAREHOUSE = dev_warehouse
+  SCHEDULE = 'USING CRON 0 1 * * * UTC'
+AS
+-- Copy 10% sample of data
+INSERT INTO dev_analytics.raw.customers
+SELECT * FROM stg_analytics.raw.customers
+SAMPLE (10);  -- 10% random sample
+```
+
+**Migration & Rollback:**
+
+```sql
+-- Automatic rollback if prod fails
+CREATE PROCEDURE rollback_prod()
+RETURNS VARCHAR
+LANGUAGE SQL
+AS
+$$
+  -- Swap back to previous version
+  IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.DATABASES 
+             WHERE DATABASE_NAME = 'prod_analytics_backup') THEN
+    
+    ALTER DATABASE prod_analytics RENAME TO prod_analytics_failed;
+    ALTER DATABASE prod_analytics_backup RENAME TO prod_analytics;
+    
+    -- Notify team
+    CALL notify_team('PROD_ROLLBACK_EXECUTED');
+    
+    RETURN 'Rollback successful. Previous version restored.';
+  ELSE
+    RETURN 'ERROR: No backup available for rollback';
+  END IF;
+END;
+$$;
+
+-- Manual zero-downtime promotion (using views)
+-- Prod queries use view → can switch underlying table instantly
+CREATE VIEW prod_analytics.marts.v_customers AS
+SELECT * FROM prod_analytics_v2.marts.customers;
+
+-- Deploy new version to prod_v2
+-- When ready, switch view:
+CREATE OR REPLACE VIEW prod_analytics.marts.v_customers AS
+SELECT * FROM prod_analytics_v2.marts.customers;
+-- (No downtime, instant switch)
+```
+
+---
+
+#### Q4: How do you handle slowly changing dimensions (SCD)?
+
+**Detailed Answer with Implementation:**
+
+**SCD Types:**
+
+```
+Type 0: No History
+├─ Don't track changes
+├─ Overwrite old data
+└─ Example: Product price (not critical)
+
+Type 1: Overwrite
+├─ Update in place (lose history)
+├─ Simplest, used for corrections
+└─ Example: Customer address (rare changes)
+
+Type 2: Add New Row
+├─ Keep history with effective dates
+├─ Most common for data warehouses
+└─ Example: Customer status changes (common)
+
+Type 3: Add New Column
+├─ Keep previous value + current
+├─ Limited history (only last 2 versions)
+└─ Example: Track last change only
+
+Type 4: History Table
+├─ Separate history table
+├─ Current and historical in different places
+└─ Example: Audit-heavy environments
+```
+
+**Type 2 SCD Implementation (Most Common):**
+
+```sql
+-- Create dimension table with SCD2 structure
+CREATE TABLE dim_customers (
+    customer_key INTEGER AUTOINCREMENT,
+    customer_id INTEGER,
+    customer_name VARCHAR,
+    email VARCHAR,
+    phone VARCHAR,
+    country VARCHAR,
+    customer_segment VARCHAR,
+    
+    -- SCD2 columns
+    effective_date DATE,      -- When this version became active
+    end_date DATE,            -- When this version ended
+    is_current BOOLEAN,       -- TRUE only for current version
+    source_system VARCHAR,
+    load_date TIMESTAMP
+)
+CLUSTER BY (customer_id, is_current);
+
+-- Create staging table (from source)
+CREATE TABLE stg_customers (
+    customer_id INTEGER,
+    customer_name VARCHAR,
+    email VARCHAR,
+    phone VARCHAR,
+    country VARCHAR,
+    customer_segment VARCHAR
+);
+
+-- SCD2 Merge Logic
+CREATE TASK load_dim_customers
+  WAREHOUSE = etl_wh
+  SCHEDULE = 'USING CRON 0 2 * * * UTC'
+AS
+MERGE INTO dim_customers d
+USING (
+    SELECT 
+        s.customer_id,
+        s.customer_name,
+        s.email,
+        s.phone,
+        s.country,
+        s.customer_segment,
+        CURRENT_DATE as effective_date,
+        NULL::DATE as end_date,
+        TRUE as is_current,
+        'source_system_name' as source_system,
+        CURRENT_TIMESTAMP as load_date
+    FROM stg_customers s
+) s
+ON d.customer_id = s.customer_id 
+   AND d.is_current = TRUE
+
+-- When record exists and hasn't changed, do nothing
+WHEN MATCHED 
+    AND d.customer_name = s.customer_name
+    AND d.email = s.email
+    AND d.phone = s.phone
+    AND d.country = s.country
+    AND d.customer_segment = s.customer_segment
+THEN DO NOTHING
+
+-- When record exists but has changed, create new version
+WHEN MATCHED 
+    AND (d.customer_name != s.customer_name
+      OR d.email != s.email
+      OR d.phone != s.phone
+      OR d.country != s.country
+      OR d.customer_segment != s.customer_segment)
+THEN
+    UPDATE SET 
+        d.end_date = CURRENT_DATE - INTERVAL '1 day',
+        d.is_current = FALSE
+
+-- When new record, insert it
+WHEN NOT MATCHED THEN
+    INSERT (
+        customer_id, customer_name, email, phone, country,
+        customer_segment, effective_date, end_date, is_current,
+        source_system, load_date
+    ) VALUES (
+        s.customer_id, s.customer_name, s.email, s.phone,
+        s.country, s.customer_segment, s.effective_date,
+        s.end_date, s.is_current, s.source_system, s.load_date
+    );
+
+-- Additional insert for matched, changed rows
+INSERT INTO dim_customers
+SELECT 
+    NULL,  -- Auto-increment will generate new key
+    s.customer_id,
+    s.customer_name,
+    s.email,
+    s.phone,
+    s.country,
+    s.customer_segment,
+    s.effective_date,
+    s.end_date,
+    s.is_current,
+    s.source_system,
+    s.load_date
+FROM (
+    -- Rows that matched but changed
+    SELECT 
+        s.customer_id,
+        s.customer_name,
+        s.email,
+        s.phone,
+        s.country,
+        s.customer_segment,
+        CURRENT_DATE as effective_date,
+        NULL::DATE as end_date,
+        TRUE as is_current,
+        'source_system_name' as source_system,
+        CURRENT_TIMESTAMP as load_date
+    FROM stg_customers s
+    INNER JOIN dim_customers d 
+        ON s.customer_id = d.customer_id 
+        AND d.is_current = TRUE
+    WHERE (d.customer_name != s.customer_name
+        OR d.email != s.email
+        OR d.phone != s.phone
+        OR d.country != s.country
+        OR d.customer_segment != s.customer_segment)
+) s;
+
+-- Query to see customer history
+SELECT 
+    customer_id,
+    customer_name,
+    email,
+    customer_segment,
+    effective_date,
+    end_date,
+    DATEDIFF(day, effective_date, COALESCE(end_date, CURRENT_DATE)) as days_in_segment
+FROM dim_customers
+WHERE customer_id = 12345  -- Example customer
+ORDER BY effective_date DESC;
+
+-- Output:
+-- customer_id | customer_name | email        | customer_segment | effective_date | end_date    | days_in_segment
+-- 12345       | John Doe      | john@new.com | Gold             | 2024-12-01    | NULL        | 25
+-- 12345       | John Doe      | john@old.com | Silver           | 2024-10-01    | 2024-11-30  | 61
+// 12345       | John Smith    | john@old.com | Silver           | 2024-01-01    | 2024-09-30  | 274
+```
+
+---
+
+#### Q5: Optimize a query that's scanning 500GB but returning only 10 rows
+
+**Detailed Analysis & Solutions:**
+
+```sql
+-- Original slow query
+SELECT 
+    o.order_id,
+    c.customer_name,
+    p.product_name,
+    o.amount
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+JOIN products p ON o.product_id = p.product_id
+WHERE o.amount > 10000;
+
+-- Execution: 500GB scanned, 10 rows returned
+-- Time: 45 seconds
+// Credits: 50 (Large warehouse × 30 seconds)
+
+-- STEP 1: Analyze the problem
+EXPLAIN
+SELECT ...;
+
+-- Output:
+-- ├─ Table Scan [orders] 500GB
+// │  ├─ Filter: amount > 10000
+// │  └─ Partitions pruned: 0/365  ← Problem! No partition pruning
+// ├─ Hash Join with customers
+// └─ Hash Join with products
+```
+
+**Solutions (Priority Order):**
+
+```sql
+-- SOLUTION 1: Add Clustering (Most Impact)
+-- Reason: amount is filter column, should cluster by it
+ALTER TABLE orders CLUSTER BY (amount DESC);
+-- Then re-run query
+SELECT ...;
+
+// Execution: 50MB scanned (1000x improvement!)
+// Time: 1 second
+// Credits: 0.5
+
+-- SOLUTION 2: Create Filtered Materialized View
+-- For frequently filtered amount ranges
+CREATE MATERIALIZED VIEW mv_high_value_orders AS
+SELECT 
+    o.order_id,
+    o.customer_id,
+    o.product_id,
+    o.amount
+FROM orders o
+WHERE o.amount > 5000  -- Covers our filter
+CLUSTER BY (amount DESC);
+
+-- Refresh nightly
+CREATE TASK refresh_high_value_orders
+  WAREHOUSE = analytics_wh
+  SCHEDULE = 'USING CRON 0 2 * * * UTC'
+AS
+ALTER MATERIALIZED VIEW mv_high_value_orders 
+  CLUSTER BY (amount DESC);
+
+-- Query against materialized view
+SELECT 
+    o.order_id,
+    c.customer_name,
+    p.product_name,
+    o.amount
+FROM mv_high_value_orders o
+JOIN customers c ON o.customer_id = c.customer_id
+JOIN products p ON o.product_id = p.product_id
+WHERE o.amount > 10000;
+
+// Execution: <100ms (from cache)
+// Cost: ~1 credit (refresh only)
+
+-- SOLUTION 3: Denormalize for BI Queries
+-- Join customer/product info at load time
+CREATE TABLE fact_orders_denormalized (
+    order_id INTEGER,
+    customer_id INTEGER,
+    customer_name VARCHAR,
+    product_id INTEGER,
+    product_name VARCHAR,
+    amount DECIMAL,
+    order_date DATE
+) CLUSTER BY (amount DESC, order_date);
+
+-- Load denormalized data
+INSERT INTO fact_orders_denormalized
+SELECT 
+    o.order_id,
+    o.customer_id,
+    c.customer_name,
+    o.product_id,
+    p.product_name,
+    o.amount,
+    o.order_date
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+JOIN products p ON o.product_id = p.product_id;
+
+-- Query denormalized table (no joins!)
+SELECT *
+FROM fact_orders_denormalized
+WHERE amount > 10000;
+
+// Execution: 50MB scanned
+// Time: <1 second
+// Credits: <0.5
+// Benefit: No joins, simpler query
+
+-- SOLUTION 4: Partition by date first
+-- If orders are time-series
+ALTER TABLE orders CLUSTER BY (order_date DESC, amount DESC);
+
+-- Query with date filter
+SELECT 
+    o.order_id,
+    c.customer_name,
+    p.product_name,
+    o.amount
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+JOIN products p ON o.product_id = p.product_id
+WHERE o.order_date >= DATE_TRUNC('year', CURRENT_DATE)  -- This year only
+  AND o.amount > 10000;
+
+// Execution: 20GB scanned (25x from original)
+// Time: 2 seconds
+// Credits: 2
+
+-- SOLUTION 5: Use result caching
+-- If same query run frequently
+-- First run: 50GB scanned
+// Subsequent runs (same day): Cached result, <100ms
+
+-- SOLUTION 6: Archive old data
+-- Don't query 5-year-old orders
+DELETE FROM orders WHERE order_date < DATE_TRUNC('year', CURRENT_DATE) - INTERVAL '2 years';
+
+// Reduces table from 500GB to 100GB
+// Future queries: 100GB instead of 500GB
+```
+
+**Performance Comparison:**
+
+```
+Original Query:          500GB scanned, 45 sec, 50 credits
+├─ With Clustering:      50MB scanned,  1 sec, 0.5 credits (1000x faster!)
+├─ Materialized View:    0MB (cached), <100ms, 0 credits
+├─ Denormalized Table:   50MB scanned, <1 sec, 0.5 credits
+├─ Date + Amount filter: 20GB scanned, 2 sec, 2 credits
+└─ All above combined:   5MB scanned, <500ms, 0.1 credits
+```
+
+**Final Optimized Query:**
+
+```sql
+-- Combines all optimizations
+SELECT 
+    order_id,
+    customer_name,
+    product_name,
+    amount
+FROM fact_orders_denormalized
+WHERE order_date >= DATE_TRUNC('year', CURRENT_DATE)
+  AND amount > 10000
+ORDER BY amount DESC;
+
+-- Result: 
+// ├─ Scans: 5MB (1% of original)
+// ├─ Time: <500ms
+// ├─ Credits: 0.1 per query
+// ├─ Cost: $0.00004 per query (vs $0.20 original)
+// └─ Improvement: 5000x faster, 5000x cheaper!
+```
+
+---
+
+## Interview Questions & Answers
+
+### Basic Level
+
+#### Q1: What is Snowflake and how is it different from traditional data warehouses?
+**Answer:**
+
+Snowflake is a cloud-native data warehouse that separates compute and storage, eliminating traditional bottlenecks.
+
+```
+Key Differences:
+
+Traditional DW              Snowflake
+├─ Fixed resources         ├─ Scale independently
+├─ Storage + compute tied  ├─ Separate compute/storage
+├─ Complex setup           ├─ Instant provisioning
+├─ Manual scaling          ├─ Auto-scaling
+├─ High maintenance        ├─ Zero maintenance
+├─ Expensive               └─ Pay-per-use pricing
+
+Snowflake Unique Features:
+├─ Time Travel (query past versions)
+├─ Zero-Copy Cloning (instant copies)
+├─ Data Sharing (no copying needed)
+├─ Multi-Cluster Warehouses (parallel execution)
+└─ Automatic compression (columnar storage)
+```
+
+#### Q2: Explain compute and storage separation in Snowflake.
+**Answer:**
+
+```
+Traditional DW:
+Compute ← → Storage
+(Tightly coupled = inflexible)
+
+Snowflake:
+Compute (Warehouse) ←cloud storage→ Storage (Cloud)
+(Independent = flexible scaling)
+
+Benefits:
+├─ Scale compute without buying storage
+├─ Scale storage without upgrading compute
+├─ Multiple warehouses share same data
+├─ Cost-effective (pay for each separately)
+└─ Compute suspends (storage doesn't), reducing cost
+```
+
+#### Q3: What are credits and how is cost calculated?
+**Answer:**
+
+```
+Credit = Unit of consumption
+1 Credit = 1 compute resource for 1 second
+
+Pricing by Edition:
+├─ Standard: $2/credit
+├─ Business: $3/credit
+├─ Enterprise: $4/credit
+└─ Business Critical: $6/credit
+
+Usage:
+├─ Warehouse: 1 credit/cluster/second
+├─ Cloud Services: ~1 credit/hour
+├─ Serverless: Additional cost
+
+Example:
+Large Warehouse (4 credits/hour) running 24 hours
+= 4 × 24 = 96 credits
+= 96 × $4 (Enterprise) = $384/day
+```
+
+#### Q4: What are warehouses and why are they important?
+**Answer:**
+
+```
+Warehouse = Cluster of compute resources
+
+Size Determines Cost:
+XSmall: 1 credit/hour
+Small: 2 credits/hour
+Medium: 4 credits/hour
+Large: 8 credits/hour
+2X-Large: 16 credits/hour
+
+Why Important:
+├─ Determines query speed
+├─ Affects concurrency (multiple users)
+├─ Impacts cost
+├─ Can be suspended to save money
+└─ Multiple warehouses can run simultaneously
+
+Multi-Cluster Warehouses:
+├─ 2-10 clusters of same warehouse
+├─ Auto-scales based on load
+├─ No single query bottleneck
+└─ Handles peak traffic gracefully
+```
+
+#### Q5: Explain clustering keys and their importance.
+**Answer:**
+
+```
+Clustering Key: Physically orders data by column
+
+Purpose:
+├─ Improves query performance
+├─ Reduces data scanned
+├─ Beneficial for large tables (> 1TB)
+└─ Added automatically for common patterns
+
+Example:
+CREATE TABLE sales (
+    id INT,
+    customer_id INT,
+    sale_date DATE,
+    amount DECIMAL
+) CLUSTER BY (customer_id, sale_date);
+
+When to Use:
+✓ Large tables (> 1TB)
+✓ Frequently filtered columns
+✓ Common WHERE conditions
+✓ JOIN keys
+
+Cost:
+├─ Storage: ~2x for clustering metadata
+└─ Performance gain: Often 10-100x faster
+```
+
+### Intermediate Level
+
+#### Q6: How would you design a schema for e-commerce analytics?
+**Answer:**
+
+```
+Fact Table:
+orders (fact_order)
+├─ order_id
+├─ customer_id
+├─ product_id
+├─ order_date
+├─ quantity
+└─ amount
+
+Dimensions:
+customers:
+├─ customer_id
+├─ name
+├─ email
+├─ country
+└─ signup_date
+
+products:
+├─ product_id
+├─ product_name
+├─ category
+├─ price
+└─ supplier_id
+
+Alternative (Denormalized):
+orders_all:
+├─ order_id
+├─ customer_name
+├─ product_name
+├─ category
+├─ order_date
+├─ quantity
+├─ amount
+└─ country
+
+Snowflake Recommendation:
+├─ Use denormalized fact table
+├─ Fewer joins = faster queries
+├─ Columnar storage = compression
+├─ Result: Better performance
+```
+
+#### Q7: What optimization techniques would you use for a slow query?
+**Answer:**
+
+```
+Step 1: Analyze Query Plan
+├─ EXPLAIN to view execution plan
+├─ Check for full table scans
+├─ Look for inefficient joins
+└─ Identify bottlenecks
+
+Step 2: Check Data Pruning
+├─ Is WHERE clause filtering?
+├─ Are partition boundaries clear?
+├─ Is clustering helping?
+└─ Consider partition key changes
+
+Step 3: Optimize Query
+├─ Add clustering key: CLUSTER BY (customer_id)
+├─ Create materialized view for aggregation
+├─ Reduce data selected: SELECT col1, col2 (not *)
+├─ Simplify JOINs
+└─ Use result caching
+
+Step 4: Scale Compute
+├─ Increase warehouse size
+├─ Use multi-cluster warehouse
+├─ Schedule during off-peak
+└─ Last resort: Might indicate schema issue
+
+Step 5: Monitor
+├─ Check QUERY_HISTORY
+├─ Track execution time
+├─ Monitor credits used
+└─ Compare before/after
+```
+
+#### Q8: How do you handle security and access control in Snowflake?
+**Answer:**
+
+```
+Multi-Layer Approach:
+
+Layer 1: Authentication
+├─ Username/password
+├─ SSO (SAML, OAuth)
+├─ MFA (Required for production)
+└─ Key pair (For automation)
+
+Layer 2: Authorization (RBAC)
+├─ Create roles by function
+├─ Grant minimum permissions
+├─ Use predefined roles (SYSADMIN, etc.)
+└─ Track role hierarchy
+
+Layer 3: Data Protection
+├─ Encryption at rest (AES-256)
+├─ Encryption in transit (TLS)
+├─ Column-level masking
+└─ Row-level security
+
+Layer 4: Auditing
+├─ Query history
+├─ Login attempts
+├─ Object access
+└─ Data changes
+
+Example RBAC:
+-- Create role
+CREATE ROLE analyst;
+
+-- Grant permissions
+GRANT USAGE ON DATABASE analytics TO ROLE analyst;
+GRANT SELECT ON SCHEMA analytics.prod TO ROLE analyst;
+
+-- Assign to user
+GRANT ROLE analyst TO USER john@company.com;
+```
+
+#### Q9: Explain Time Travel and Zero-Copy Cloning.
+**Answer:**
+
+```
+Time Travel:
+Purpose: Query historical data
+
+Retention:
+├─ Standard edition: 1 day
+├─ Business/Enterprise: 90 days
+└─ Configurable per object
+
+Usage:
+-- Query data from 1 hour ago
+SELECT * FROM table AT(OFFSET => -3600);
+
+-- Query data from specific timestamp
+SELECT * FROM table AT(TIMESTAMP => '2024-01-15 10:00:00');
+
+-- Query from before deletion
+SELECT * FROM table BEFORE(STATEMENT => '<query_id>');
+
+Cost: Stored in fail-safe, minimal additional cost
+
+Zero-Copy Cloning:
+Purpose: Create instant copy without storage
+
+Usage:
+-- Clone entire table
+CREATE TABLE table_copy CLONE table;
+
+-- Clone entire database
+CREATE DATABASE analytics_copy CLONE analytics;
+
+Benefits:
+├─ Instant (no copy time)
+├─ Zero additional storage initially
+├─ Independent (changes don't affect original)
+└─ Metadata references original blocks
+
+Use Cases:
+├─ Testing changes
+├─ Point-in-time copies
+├─ Environment promotion
+└─ Development/sandbox
+```
+
+#### Q10: How do you optimize costs in Snowflake?
+**Answer:**
+
+```
+Strategy 1: Right-Size Warehouses
+├─ Use Small/Medium for normal queries
+├─ Use Large only for heavy lifting
+├─ Auto-scale 2-5 clusters during peak
+└─ Savings: 30-40%
+
+Strategy 2: Suspend Unused Warehouses
+├─ Set AUTO_SUSPEND = 300 (5 minutes)
+├─ Resume automatically when needed
+└─ Savings: 40-50%
+
+Strategy 3: Query Optimization
+├─ Remove SELECT *
+├─ Use WHERE to prune data
+├─ Cache frequently-run queries
+├─ Materialized views for aggregations
+└─ Savings: 20-30%
+
+Strategy 4: Data Lifecycle
+├─ Archive old data to cheaper tier
+├─ Delete unneeded data
+├─ Use transient tables for temp data
+└─ Savings: 10-20% storage
+
+Strategy 5: Scheduled Queries
+├─ Run heavy jobs during off-peak
+├─ Pre-compute metrics
+├─ Avoid real-time processing
+└─ Savings: 20-30%
+
+Combined Impact:
+Before: 500 credits/day × 30 × $4 = $60,000/month
+After optimization:
+├─ Right-sizing: -$15,000
+├─ Suspension: -$20,000
+├─ Query opt: -$10,000
+└─ Total: $15,000/month (75% savings!)
+```
+
+### Advanced Level
+
+#### Q11: How would you implement a data pipeline for real-time analytics?
+**Answer:**
+
+```
+Architecture:
+
+Event Sources
+├─ Mobile/Web apps
+├─ API endpoints
+├─ Server logs
+└─ Third-party services
+
+Message Queue
+├─ Kafka, Kinesis, Pub/Sub
+└─ Decouples sources from Snowflake
+
+Snowflake Streams & Tasks:
+Stream: Captures INSERT/UPDATE/DELETE
+├─ Points to source table
+├─ Tracks changes automatically
+└─ Enables incremental loading
+
+Task: Scheduled process
+├─ Runs SQL statements
+├─ Can be triggered by stream
+├─ Runs at specified interval
+└─ Error handling built-in
+
+Materialized Views:
+├─ Pre-computed aggregations
+├─ Updated by tasks
+├─ Query returns instantly
+└─ Cost: One-time computation
+
+Example Implementation:
+
+1. Raw table from Snowpipe
+   CREATE TABLE raw_events (
+       event_id STRING,
+       user_id STRING,
+       event_type STRING,
+       timestamp TIMESTAMP,
+       data VARIANT
+   );
+
+2. Create stream
+   CREATE STREAM events_stream ON TABLE raw_events;
+
+3. Create task to process stream
+   CREATE TASK process_events
+       WAREHOUSE = compute_wh
+       SCHEDULE = '5 minute'
+   AS
+   MERGE INTO processed_events AS t
+   USING (SELECT * FROM events_stream) AS s
+   ON t.event_id = s.event_id
+   WHEN MATCHED THEN UPDATE SET ...
+   WHEN NOT MATCHED THEN INSERT ...;
+
+4. Enable task
+   ALTER TASK process_events RESUME;
+
+5. Create materialized view
+   CREATE MATERIALIZED VIEW hourly_metrics AS
+   SELECT 
+       DATE_TRUNC('hour', timestamp) as hour,
+       event_type,
+       COUNT(*) as count
+   FROM processed_events
+   GROUP BY 1, 2;
+
+Results:
+├─ Latency: 5-10 minutes
+├─ Cost: ~$2,000/month for 1M events/day
+├─ Reliability: Exactly-once semantics
+└─ Scalability: Handles 100M+ events/day
+```
+
+#### Q12: Design a disaster recovery and backup strategy.
+**Answer:**
+
+```
+Backup Strategy:
+
+Level 1: Automatic Time Travel
+├─ 1-90 day retention (edition dependent)
+├─ Zero cost (built-in)
+├─ Restore: UNDROP command or Time Travel queries
+└─ RTO: Minutes, RPO: Varies
+
+Level 2: Snapshots
+├─ Manual points-in-time
+├─ Use Zero-Copy Cloning
+├─ Store in separate region
+└─ RTO: Minutes
+
+Level 3: Cross-Region Replication
+├─ Replicate database to another region
+├─ Automated replication
+├─ RPO: Minutes
+└─ RTO: Minutes (with DNS switch)
+
+Implementation:
+
+1. Enable auto-replication
+   CREATE DATABASE analytics_replica 
+   CLONE analytics AT(OFFSET => -300);  -- 5 min behind
+
+2. Create scheduled task
+   CREATE TASK replicate_task
+       WAREHOUSE = backup_wh
+       SCHEDULE = '5 minute'
+   AS
+   CREATE OR REPLACE DATABASE analytics_replica 
+   CLONE analytics AT(OFFSET => -300);
+
+3. Monitor replication lag
+   SELECT MAX(METADATA_FILE_LAST_MODIFIED)
+   FROM SNOWFLAKE.ACCOUNT_USAGE.TABLES
+   WHERE DATABASE_NAME = 'analytics';
+
+Recovery Procedures:
+
+Data Loss Scenario:
+1. Use Time Travel
+   SELECT * FROM table AT(OFFSET => -3600);
+
+2. Or restore from clone
+   CREATE TABLE restored_table CLONE table_copy;
+
+3. Or failover to replica
+   ALTER DATABASE analytics RENAME TO analytics_old;
+   ALTER DATABASE analytics_replica RENAME TO analytics;
+
+Testing:
+├─ Monthly failover drills
+├─ Verify RPO/RTO
+├─ Document procedures
+└─ Train team on recovery
+```
+
+---
+
+#### Q13: How would you handle schema changes in production without downtime?
+
+**Detailed Answer:**
+
+**Challenge:**
+Adding/removing columns or changing data types in production tables requires careful planning to avoid downtime and data loss.
+
+**Approach 1: View-Based Refactoring (Zero Downtime)**
+
+```sql
+-- Current production table
+CREATE TABLE customers (
+    customer_id INTEGER,
+    name VARCHAR,
+    email VARCHAR,
+    created_date DATE
+);
+
+-- Business need: Add "phone" column and "last_login" timestamp
+
+-- Step 1: Create new table with desired schema
+CREATE TABLE customers_v2 (
+    customer_id INTEGER,
+    name VARCHAR,
+    email VARCHAR,
+    phone VARCHAR,  -- New column
+    created_date DATE,
+    last_login TIMESTAMP,  -- New column
+    updated_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Step 2: Migrate existing data
+INSERT INTO customers_v2 (customer_id, name, email, phone, created_date, last_login, updated_timestamp)
+SELECT 
+    customer_id,
+    name,
+    email,
+    NULL as phone,  -- Default for new column
+    created_date,
+    created_date as last_login,  -- Default value
+    CURRENT_TIMESTAMP
+FROM customers;
+
+-- Step 3: Create view pointing to old table name
+CREATE OR REPLACE VIEW customers AS
+SELECT 
+    customer_id,
+    name,
+    email,
+    phone,
+    created_date,
+    last_login
+FROM customers_v2;
+
+-- Step 4: Update application connection
+-- Point inserts/updates to trigger-based logic or application code
+
+-- Step 5: Dual-write to both tables during transition
+-- Application writes to BOTH customers (old) and customers_v2 (new)
+-- Read from view (customers) which points to customers_v2
+-- Continue for validation period (1-2 weeks)
+
+-- Step 6: Switch primary table
+-- Stop dual-writes
+// Verify data consistency
+// Drop old table
+DROP TABLE customers;
+RENAME TABLE customers_v2 TO customers;
+
+-- Step 7: Drop view
+DROP VIEW IF EXISTS customers;
+
+-- Zero downtime:
+├─ Reads: From view (always available)
+├─ Writes: Application handles dual-write
+├─ Rollback: Easy (just repoint view)
+└─ Validation: Full data verification possible
+```
+
+**Approach 2: ALTER TABLE (For Simple Changes)**
+
+```sql
+-- For simple column additions (fastest)
+ALTER TABLE customers ADD COLUMN phone VARCHAR;
+-- ✓ Instant, no data movement
+// ✓ Snowflake handles internally
+// ✓ < 1 second downtime
+
+-- For renaming column
+ALTER TABLE customers RENAME COLUMN created_date TO creation_date;
+// ✓ Metadata-only operation
+// ✓ No downtime
+
+-- For type changes (requires caution)
+ALTER TABLE customers MODIFY COLUMN email STRING;
+// ⚠ May require data conversion
+// ⚠ Test thoroughly in dev first
+```
+
+**Approach 3: Stored Procedure Wrapper (For Complex Logic)**
+
+```sql
+-- Create procedure to handle schema migration
+CREATE PROCEDURE migrate_customers_schema()
+RETURNS VARCHAR
+LANGUAGE SQL
+AS
+$$
+BEGIN
+    -- Step 1: Create staging with new schema
+    CREATE TABLE customers_staging LIKE customers;
+    ALTER TABLE customers_staging ADD COLUMN phone VARCHAR;
+    
+    -- Step 2: Copy data
+    INSERT INTO customers_staging
+    SELECT * EXCLUDE (phone) FROM customers;
+    
+    -- Step 3: Validate data
+    DECLARE row_diff NUMERIC;
+    SET row_diff = (
+        SELECT ABS(
+            (SELECT COUNT(*) FROM customers) - 
+            (SELECT COUNT(*) FROM customers_staging)
+        )
+    );
+    
+    IF row_diff > 0 THEN
+        RETURN 'ERROR: Row count mismatch. Staging has ' || row_diff || ' fewer rows';
+    END IF;
+    
+    -- Step 4: Swap tables
+    ALTER TABLE customers RENAME TO customers_old;
+    ALTER TABLE customers_staging RENAME TO customers;
+    
+    -- Step 5: Keep backup for 7 days
+    RETURN 'Migration successful. Backup available as customers_old for 7 days';
+END;
+$$;
+
+-- Call procedure
+CALL migrate_customers_schema();
+```
+
+**Best Practices:**
+
+```
+✓ Always have rollback plan
+✓ Test in dev/staging first
+✓ Schedule during low-traffic hours
+✓ Use Time Travel for recovery
+✓ Monitor queries after change
+✓ Keep old table for days as backup
+✓ Use views for abstraction
+✓ Document all changes
+✓ Use version control for DDL
+└─ Automate with dbt or Terraform
+```
+
+---
+
+#### Q14: How do you handle incremental loading vs full refresh?
+
+**Detailed Answer:**
+
+**Incremental Loading (Preferred for Most Cases)**
+
+```
+Theory:
+├─ Load only new/changed data
+├─ Much faster than full refresh
+├─ Cheaper (fewer scans)
+├─ Ideal for large tables
+└─ Maintains history automatically
+
+Mechanism:
+Source System → High Water Mark → Snowflake
+                     ↑
+              Tracks last processed ID/timestamp
+```
+
+**Implementation Using Watermarking:**
+
+```sql
+-- Create watermark table
+CREATE TABLE load_watermarks (
+    table_name VARCHAR,
+    last_processed_id INTEGER,
+    last_processed_timestamp TIMESTAMP,
+    update_timestamp TIMESTAMP
+);
+
+-- Insert initial watermark
+INSERT INTO load_watermarks VALUES ('customers', 0, '2024-01-01', CURRENT_TIMESTAMP);
+
+-- Create task to load incrementally
+CREATE TASK load_customers_incremental
+  WAREHOUSE = etl_wh
+  SCHEDULE = 'USING CRON 0 * * * * UTC'
+AS
+BEGIN
+    -- Step 1: Get last watermark
+    DECLARE last_id NUMERIC;
+    SET last_id = (
+        SELECT last_processed_id 
+        FROM load_watermarks 
+        WHERE table_name = 'customers'
+    );
+    
+    -- Step 2: Load new records
+    INSERT INTO customers
+    SELECT * 
+    FROM source_customers
+    WHERE customer_id > last_id
+      AND load_date = CURRENT_DATE;
+    
+    -- Step 3: Update watermark
+    UPDATE load_watermarks
+    SET 
+        last_processed_id = (SELECT MAX(customer_id) FROM source_customers),
+        update_timestamp = CURRENT_TIMESTAMP
+    WHERE table_name = 'customers';
+    
+    RETURN 'Incremental load successful';
+END;
+```
+
+**Cost Comparison: Incremental vs Full Refresh**
+
+```
+Scenario: 100M customer records, load daily
+
+Full Refresh:
+├─ Scan source: 100M records = 50GB
+├─ Delete old data: 100M records
+├─ Insert new data: 100M records
+├─ Cost: 100 credits × $4 = $400/day
+├─ Time: 30 minutes
+└─ Monthly: $12,000
+
+Incremental Loading:
+├─ Scan source: Only 1M new records = 500MB
+├─ Insert: 1M records only
+├─ Cost: 1 credit × $4 = $4/day
+├─ Time: 30 seconds
+└─ Monthly: $120 (99% cheaper!)
+
+Difference:
+├─ Speed: 60x faster (30 min vs 30 sec)
+├─ Cost: 100x cheaper ($12K vs $120)
+├─ Load window: 30 sec vs 30 min
+└─ Resource impact: Minimal vs Significant
+```
+
+**Implementation Using CDC (Streams):**
+
+```sql
+-- Modern approach using Snowflake Streams
+CREATE STREAM customers_changes ON TABLE source_customers;
+
+-- Task processes only changes
+CREATE TASK load_customers_from_stream
+  WAREHOUSE = etl_wh
+  SCHEDULE = 'USING CRON */5 * * * * UTC'
+AS
+INSERT INTO customers
+SELECT 
+    customer_id,
+    name,
+    email,
+    created_date,
+    METADATA$ACTION as change_type,
+    CURRENT_TIMESTAMP as loaded_timestamp
+FROM customers_changes
+WHERE METADATA$ACTION = 'INSERT'
+   OR (METADATA$ACTION = 'DELETE' AND NOT EXISTS(SELECT 1 FROM customers WHERE ...))
+   OR (METADATA$ACTION = 'UPDATE' AND NOT METADATA$ISUPDATE);
+
+-- Stream automatically captures:
+├─ New inserts (METADATA$ACTION = 'INSERT')
+├─ Updates (DELETE old + INSERT new)
+├─ Deletes (METADATA$ACTION = 'DELETE')
+└─ Only processes each row once
+```
+
+**Handling Different Data Scenarios:**
+
+```
+Scenario 1: Data with Timestamp
+├─ Use: WHERE updated_timestamp > last_timestamp
+├─ Simple, efficient
+└─ Works great for SQL Server, PostgreSQL sources
+
+Scenario 2: Data with Primary Key Only
+├─ Use: WHERE primary_key > last_key
+├─ Assume rows are added sequentially
+└─ Problem: Won't catch updates
+
+Scenario 3: Data with Change Detection Columns
+├─ Use: WHERE hash(data) != previous_hash
+├─ Detect any changes
+└─ More computation
+
+Scenario 4: Messaging Queue (Kafka, Kinesis)
+├─ Use: Stream each change event
+├─ Real-time CDC
+└─ Best for high-frequency changes
+
+Recommendation:
+If available: CDC/timestamp column
+If not: Use Streams with trigger-based capture
+Fallback: Watermark with updated_date
+Last resort: Full refresh with archival
+```
+
+---
+
+#### Q15: Design a cost-tracking and optimization dashboard.
+
+**Detailed Answer:**
+
+**Problem:**
+Companies struggle to understand where Snowflake costs come from and how to optimize.
+
+**Solution: Cost Tracking Dashboard**
+
+```sql
+-- Create cost tracking tables
+CREATE TABLE cost_daily_summary (
+    cost_date DATE,
+    warehouse_name VARCHAR,
+    user_name VARCHAR,
+    credits_used NUMERIC,
+    compute_cost NUMERIC,
+    storage_gb NUMERIC,
+    storage_cost NUMERIC,
+    total_cost NUMERIC
+);
+
+-- Populate with data from Snowflake account usage
+CREATE TASK populate_daily_costs
+  WAREHOUSE = monitoring_wh
+  SCHEDULE = 'USING CRON 0 1 * * * UTC'
+AS
+INSERT INTO cost_daily_summary
+SELECT 
+    DATEADD(day, -1, CURRENT_DATE) as cost_date,
+    WAREHOUSE_NAME,
+    USER_NAME,
+    SUM(CREDITS_USED) as credits_used,
+    SUM(CREDITS_USED) * 4 as compute_cost,  -- Enterprise edition
+    0 as storage_gb,
+    0 as storage_cost,
+    SUM(CREDITS_USED) * 4 as total_cost
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE DATE(START_TIME) = DATEADD(day, -1, CURRENT_DATE)
+GROUP BY DATEADD(day, -1, CURRENT_DATE), WAREHOUSE_NAME, USER_NAME;
+
+-- Add storage costs
+INSERT INTO cost_daily_summary
+SELECT 
+    DATEADD(day, -1, CURRENT_DATE),
+    'STORAGE' as warehouse_name,
+    'STORAGE' as user_name,
+    0 as credits_used,
+    0 as compute_cost,
+    SUM(ACTIVE_BYTES) / (1024 * 1024 * 1024) as storage_gb,
+    (SUM(ACTIVE_BYTES) / (1024 * 1024 * 1024 * 1024)) * 23 as storage_cost,
+    (SUM(ACTIVE_BYTES) / (1024 * 1024 * 1024 * 1024)) * 23 as total_cost
+FROM SNOWFLAKE.ACCOUNT_USAGE.TABLE_STORAGE_METRICS
+WHERE DATEADD(day, -1, CURRENT_DATE) = DATE(MEASUREMENT_TIME);
+
+-- Create cost insights view
+CREATE VIEW cost_analysis AS
+SELECT 
+    cost_date,
+    warehouse_name,
+    SUM(total_cost) as daily_cost,
+    SUM(credits_used) as credits,
+    ROUND(SUM(total_cost) * 365) as annual_cost,
+    RANK() OVER (PARTITION BY cost_date ORDER BY total_cost DESC) as cost_rank
+FROM cost_daily_summary
+GROUP BY cost_date, warehouse_name
+ORDER BY cost_date DESC, total_cost DESC;
+
+-- Monthly cost breakdown
+CREATE MATERIALIZED VIEW mv_monthly_costs AS
+SELECT 
+    DATE_TRUNC('month', cost_date) as cost_month,
+    SUM(total_cost) as monthly_cost,
+    SUM(credits_used) as monthly_credits,
+    COUNT(DISTINCT warehouse_name) as warehouses,
+    COUNT(DISTINCT user_name) as active_users,
+    ROUND(SUM(total_cost) / NULLIF(COUNT(DISTINCT user_name), 0), 2) as cost_per_user
+FROM cost_daily_summary
+GROUP BY DATE_TRUNC('month', cost_date);
+
+-- Cost by warehouse
+CREATE VIEW costs_by_warehouse AS
+SELECT 
+    warehouse_name,
+    COUNT(DISTINCT cost_date) as days_active,
+    SUM(credits_used) as total_credits,
+    ROUND(SUM(total_cost), 2) as total_cost,
+    ROUND(SUM(total_cost) / NULLIF(COUNT(DISTINCT cost_date), 0), 2) as daily_avg,
+    ROUND((SUM(total_cost) / NULLIF(COUNT(DISTINCT cost_date), 0)) * 30) as estimated_monthly,
+    ROUND((SUM(total_cost) / NULLIF(COUNT(DISTINCT cost_date), 0)) * 365) as estimated_annual,
+    MIN(cost_date) as first_use,
+    MAX(cost_date) as last_use
+FROM cost_daily_summary
+WHERE warehouse_name NOT IN ('STORAGE')
+GROUP BY warehouse_name
+ORDER BY total_cost DESC;
+
+-- Expensive queries
+CREATE VIEW expensive_queries AS
+SELECT 
+    q.QUERY_ID,
+    q.QUERY_TEXT,
+    q.WAREHOUSE_NAME,
+    q.USER_NAME,
+    q.EXECUTION_TIME / 1000 as duration_seconds,
+    q.BYTES_SCANNED / (1024 * 1024 * 1024) as gb_scanned,
+    q.ROWS_PRODUCED,
+    q.CREDITS_USED,
+    q.CREDITS_USED * 4 as query_cost,
+    q.START_TIME,
+    CASE 
+        WHEN q.CREDITS_USED > 100 THEN 'VERY_EXPENSIVE'
+        WHEN q.CREDITS_USED > 50 THEN 'EXPENSIVE'
+        WHEN q.CREDITS_USED > 10 THEN 'MODERATE'
+        ELSE 'CHEAP'
+    END as cost_category
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY q
+WHERE q.START_TIME > CURRENT_TIMESTAMP - INTERVAL '30 days'
+  AND q.QUERY_TEXT NOT LIKE 'EXPLAIN%'
+ORDER BY q.CREDITS_USED DESC
+LIMIT 100;
+
+-- Cost optimization opportunities
+CREATE VIEW cost_optimization_opportunities AS
+SELECT 
+    'Suspended warehouses' as opportunity,
+    COUNT(*) as warehouse_count,
+    'Enable AUTO_SUSPEND for idle warehouses' as recommendation,
+    'HIGH' as priority,
+    'Could save 20-30% of compute costs' as potential_savings
+FROM INFORMATION_SCHEMA.WAREHOUSES
+WHERE AUTO_SUSPEND_SECS IS NULL
+
+UNION ALL
+
+SELECT 
+    'Unoptimized queries',
+    COUNT(*),
+    'Add clustering keys for large tables',
+    'MEDIUM',
+    'Could save 30-50% of query costs'
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE EXECUTION_TIME > 300000  -- 5+ minutes
+  AND START_TIME > CURRENT_TIMESTAMP - INTERVAL '7 days'
+
+UNION ALL
+
+SELECT 
+    'Full table scans',
+    COUNT(*),
+    'Add WHERE clauses or clustering',
+    'MEDIUM',
+    'Could reduce scans by 50-80%'
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE BYTES_SCANNED > 1000000000  -- 1GB+
+  AND ROWS_PRODUCED < 10000
+  AND START_TIME > CURRENT_TIMESTAMP - INTERVAL '7 days';
+
+-- Cost alert
+CREATE TASK cost_alert_task
+  WAREHOUSE = monitoring_wh
+  SCHEDULE = 'USING CRON 0 6 * * * UTC'
+AS
+SELECT 
+    CURRENT_DATE as alert_date,
+    'COST_ALERT' as alert_type,
+    CASE 
+        WHEN SUM(total_cost) > 100000 THEN 'Monthly costs exceed $100K - investigate spikes'
+        WHEN COUNT(DISTINCT warehouse_name) > 20 THEN 'More than 20 warehouses active - consolidate'
+        WHEN EXISTS (SELECT 1 FROM expensive_queries LIMIT 1) THEN 'Very expensive queries detected'
+        ELSE 'Cost monitoring OK'
+    END as message
+FROM cost_daily_summary
+WHERE cost_date >= DATEADD(month, -1, CURRENT_DATE);
+```
+
+**Dashboard Metrics to Track:**
+
+```
+Real-Time Metrics:
+├─ Total daily cost
+├─ Cost per warehouse
+├─ Cost per user
+├─ Cost per query
+└─ Credit utilization
+
+Trend Analysis:
+├─ Daily cost over 30 days
+├─ Monthly cost trend
+├─ Cost by department
+└─ Cost by project
+
+Anomaly Detection:
+├─ Sudden cost spikes
+├─ Queries costing >$100
+├─ Warehouses running 24/7
+└─ Unused warehouses
+
+Optimization Metrics:
+├─ Queries with low efficiency (high scan, low output)
+├─ Tables without clustering
+├─ Materialized views needing refresh
+└─ Caching effectiveness
+```
+
+---
+
+### Important Concepts to Study for Data Engineers
+
+#### Critical Concept 1: Data Lineage & Impact Analysis
+**Why Critical:**
+When data is wrong, you need to know WHAT changed, WHERE, and WHAT systems are affected.
+
+```
+Example Scenario:
+Customer table has 100 NULL emails
+├─ Question: When did this happen?
+├─ Question: Where are these records flowing?
+├─ Question: What dashboards are broken?
+└─ Question: What dependencies exist?
+
+Solution: Data Lineage Tracking
+Source System → ETL → Raw Table → Transformation → Gold Table → Dashboard
+                                   ↑
+                          Bug introduced here affects ALL downstream
+
+Snowflake Implementation:
+├─ Use dbt with manifest for lineage
+├─ Track via COPY/INSERT queries in QUERY_HISTORY
+├─ Use table tagging for relationships
+└─ Implement audit triggers on base tables
+```
+
+---
+
+#### Critical Concept 2: Exactly-Once vs At-Least-Once Processing
+**Why Critical:**
+Determines whether you have duplicate data or missing data.
+
+```
+Exactly-Once (Best):
+├─ Each record processed exactly 1 time
+├─ No duplicates, no missing
+├─ Implementation: Idempotent inserts (MERGE with unique key)
+└─ Example: MERGE INTO table ... ON primary_key
+
+At-Least-Once (OK with duplicates):
+├─ Record may be processed 1+ times
+├─ Risk: Duplicates
+├─ Implementation: Simple INSERT
+└─ Mitigation: DISTINCT or MERGE before use
+
+At-Most-Once (Loses data):
+├─ May skip records to avoid duplicates
+├─ Risk: Missing data
+├─ Implementation: DELETE then INSERT
+└─ Problem: Not acceptable for data warehouses
+
+Snowflake Recommendation:
+├─ Use MERGE with surrogate keys
+├─ Implement deduplication logic
+└─ Test with retry scenarios
+```
+
+---
+
+#### Critical Concept 3: Late-Arriving Facts & Dimensions
+**Why Critical:**
+Data doesn't always arrive in order. Must handle delayed records properly.
+
+```
+Scenario: Customer change comes after orders
+
+Timeline:
+2024-01-15: Customer "John Smith" exists
+2024-01-20: Load 10 orders for John (happy path)
+2024-01-25: Customer record update arrives: "John Smith" → "John Doe"
+
+Problem:
+Which name should show in orders fact table?
+
+Solutions:
+
+Option 1: Update Fact Table
+├─ When dimension changes, update facts
+├─ Pro: Consistent
+├─ Con: Fact tables shouldn't change
+└─ Bad practice
+
+Option 2: SCD Type 2
+├─ Add new dimension version with effective dates
+├─ Update foreign key in fact to new dimension key
+├─ Pro: History preserved
+└─ Complexity: Moderate
+
+Option 3: Soft Deletes
+├─ Mark old dimension "inactive"
+├─ Current key points to active dimension
+├─ Pro: Simple
+└─ Con: Must handle correctly in queries
+
+Option 4: Ignore Late Arrivals
+├─ Load up to N days late, then ignore
+├─ Pro: Simple
+└─ Con: Accept some data loss
+
+Snowflake Implementation:
+-- Late-arriving dimension handler
+CREATE TASK handle_late_dimension_updates
+  WAREHOUSE = etl_wh
+  SCHEDULE = 'USING CRON 0 * * * * UTC'
+AS
+INSERT INTO fact_orders_corrections
+SELECT 
+    original_fact_id,
+    old_dimension_id,
+    new_dimension_id,
+    change_reason,
+    CURRENT_TIMESTAMP as correction_timestamp
+FROM (
+    SELECT 
+        f.order_id,
+        f.customer_id as old_customer_key,
+        d.customer_key as new_customer_key,
+        'Late Dimension Update' as change_reason
+    FROM fact_orders f
+    JOIN dim_customers_v1 dv1 ON f.customer_id = dv1.customer_key
+    JOIN dim_customers dv2 ON dv1.source_id = dv2.source_id
+    WHERE dv2.effective_date > f.order_date
+      AND dv2.effective_date < f.order_date + INTERVAL '30 days'
+      AND dv2.is_current = TRUE
+);
+```
+
+---
+
+#### Critical Concept 4: Handling Nulls in Data Warehouse
+**Why Critical:**
+NULL handling is inconsistent across databases. Must define strategy.
+
+```
+Problems with NULLs:
+
+Technical:
+├─ SUM(amount) ignores NULLs (might hide missing data)
+├─ DISTINCT includes NULLs
+├─ JOINs on NULL don't match (NULL != NULL)
+└─ GROUP BY treats NULLs as one group
+
+Business:
+├─ Missing data vs intentional blank
+├─ Unknown vs not applicable vs pending
+├─ Cost: Can't aggregate
+└─ Privacy: Hidden data
+
+Strategy:
+
+1. Define NULL meanings
+   ├─ NULL = not yet loaded
+   ├─ 'UNKNOWN' = missing from source
+   ├─ 'N/A' = not applicable
+   ├─ 0 = zero value (not missing)
+   └─ Empty string = blank (different from NULL)
+
+2. Implement in source layer
+   SELECT 
+       customer_id,
+       COALESCE(email, 'UNKNOWN') as email,
+       COALESCE(phone, 'N/A') as phone,
+       CASE 
+           WHEN amount IS NULL THEN 'PENDING'
+           WHEN amount = 0 THEN 0
+           ELSE amount
+       END as amount
+   FROM raw_customers;
+
+3. Handle in queries
+   ├─ Use COALESCE for reporting
+   ├─ COUNT(*) vs COUNT(column)
+   ├─ ISNULL flags for quality checks
+   └─ Separate buckets: Present vs Missing vs Unknown
+
+4. Monitor NULL rates
+   CREATE TABLE null_monitoring (
+       table_name VARCHAR,
+       column_name VARCHAR,
+       null_count NUMERIC,
+       total_count NUMERIC,
+       null_percent NUMERIC,
+       check_timestamp TIMESTAMP
+   );
+```
+
+---
+
+#### Critical Concept 5: Surrogate Keys vs Natural Keys
+**Why Critical:**
+Affects data quality, performance, and maintainability.
+
+```
+Natural Key (from source system):
+├─ Definition: Unique identifier in source
+├─ Example: customer_id from CRM
+├─ Pros: Meaningful, source-consistent
+├─ Cons: Can change, business rules embedded
+└─ Problem: What if source changes key structure?
+
+Surrogate Key (generated in DW):
+├─ Definition: Artificial sequential ID
+├─ Example: customer_key = AUTOINCREMENT
+├─ Pros: Stable, never changes, fast joins
+├─ Cons: No business meaning
+└─ Problem: Need to map back to natural key
+
+Best Practice: Use Both
+
+CREATE TABLE dim_customers (
+    -- Surrogate key (for DW joins)
+    customer_key INTEGER AUTOINCREMENT PRIMARY KEY,
+    
+    -- Natural keys (for reconciliation)
+    source_customer_id VARCHAR,
+    source_system VARCHAR,
+    
+    -- Data
+    customer_name VARCHAR,
+    email VARCHAR,
+    
+    -- SCD2
+    effective_date DATE,
+    end_date DATE,
+    is_current BOOLEAN,
+    
+    -- Uniqueness constraint
+    UNIQUE (source_customer_id, source_system, effective_date)
+);
+
+Benefits:
+├─ Fact tables use small integers (surrogate key)
+├─ Audits use natural keys (source traceability)
+├─ SCD2 easier (new surrogate for each version)
+└─ Stable even if natural key changes
+```
+
+---
+
+#### Critical Concept 6: Data Retention & Archival Strategy
+**Why Critical:**
+Old data costs money but may be needed for compliance/audits.
+
+```
+Time Travel & Fail-Safe Costs:
+├─ Time Travel (1-90 days): Included in edition
+├─ Fail-Safe (additional 7 days): Costs 1 credit/TB/day
+├─ Deleted data: Still charges for fail-safe period
+└─ Example: Delete 100TB table → still costs $100/day for 7 days
+
+Strategy:
+
+Tier 1: Hot Data (0-3 months)
+├─ Standard tables
+├─ Full optimization
+├─ Fast queries
+└─ Cost: Full
+
+Tier 2: Warm Data (3-12 months)
+├─ Compressed/archived tables
+├─ Less frequent access
+├─ Query slower
+└─ Cost: 50% (cheaper storage tier)
+
+Tier 3: Cold Data (1+ years)
+├─ Parquet files in S3
+├─ Accessed via external tables
+├─ Very slow access
+└─ Cost: 10% (S3 is cheaper)
+
+Tier 4: Archive (Compliance hold)
+├─ Encrypted storage
+├─ No query access
+├─ Meets regulatory needs
+└─ Cost: 5% (cheapest option)
+
+Implementation:
+
+-- Partition by date
+CREATE TABLE orders (
+    order_id INTEGER,
+    order_date DATE,
+    amount DECIMAL,
+    data VARIANT
+)
+CLUSTER BY (order_date);
+
+-- Create task to archive old data
+CREATE TASK archive_old_orders
+  WAREHOUSE = archive_wh
+  SCHEDULE = 'USING CRON 0 2 1 * * UTC'  -- Monthly
+AS
+-- Copy orders > 12 months old to archive
+INSERT INTO s3_external_archive_table
+SELECT * FROM orders
+WHERE order_date < DATEADD(month, -12, CURRENT_DATE);
+
+-- Delete from main table
+DELETE FROM orders
+WHERE order_date < DATEADD(month, -12, CURRENT_DATE);
+
+-- Query both (active + archive)
+SELECT * FROM orders
+WHERE order_date >= DATEADD(month, -12, CURRENT_DATE)
+
+UNION ALL
+
+SELECT * FROM s3_external_archive_table
+WHERE order_date < DATEADD(month, -12, CURRENT_DATE);
+
+Savings:
+├─ Before: 5 years × 365 × 100GB = 182TB = $4,200/month
+├─ After: 1 year hot + archive = 100GB + S3 = $400/month
+└─ Savings: 90% ($36K/year)
+```
+
+---
+
+#### Critical Concept 7: Testing Data Pipelines
+**Why Critical:**
+Bugs in data pipelines affect entire business. Testing is essential.
+
+```
+Types of Tests:
+
+1. Data Validation Tests (dbt tests)
+   -- Tests/data_quality.yml
+   models:
+     - name: customers
+       columns:
+         - name: customer_id
+           tests:
+             - not_null
+             - unique
+             - dbt_utils.relationships:
+                 to: ref('dim_customer')
+                 field: customer_id
+
+2. Schema Tests
+   -- Verify table structure
+   ├─ Column existence
+   ├─ Data types
+   ├─ Constraints
+   └─ Triggers
+
+3. Freshness Tests
+   -- Verify data is current
+   SELECT MAX(updated_timestamp) as latest_update
+   FROM source_table;
+   -- Must be within last 24 hours
+
+4. Reconciliation Tests
+   -- Compare source vs warehouse
+   SELECT 
+       COUNT(*) as table_count,
+       COUNT(DISTINCT customer_id) as unique_customers,
+       SUM(amount) as total_amount
+   FROM target_table
+   MINUS
+   SELECT 
+       COUNT(*) as table_count,
+       COUNT(DISTINCT customer_id) as unique_customers,
+       SUM(amount) as total_amount
+   FROM source_table;
+   -- Should be 0 differences
+
+5. Performance Tests
+   -- Query should complete in SLA
+   SELECT EXECUTION_TIME
+   FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+   WHERE QUERY_ID = '<query_id>';
+   -- Must be < 60 seconds (SLA)
+
+6. Integration Tests
+   -- End-to-end pipeline
+   ├─ Source data loads
+   ├─ Transforms correctly
+   ├─ Writes to target
+   ├─ Downstream queries work
+   └─ Alerts trigger correctly
+
+Implementation Strategy:
+
+CREATE DATABASE dbt_test_db;
+
+-- Run dbt tests
+dbt test --select customers --profiles-dir . --target dev
+
+-- Create test pipeline
+CREATE TASK run_pipeline_tests
+  WAREHOUSE = test_wh
+  SCHEDULE = 'USING CRON 0 4 * * * UTC'
+AS
+BEGIN
+    -- Test 1: Row counts match
+    IF (SELECT COUNT(*) FROM customers) < 100 THEN
+        INSERT INTO test_failures VALUES ('customers_row_count_low', CURRENT_TIMESTAMP);
+    END IF;
+    
+    -- Test 2: Nulls acceptable level
+    IF (SELECT COUNT(*) FROM customers WHERE email IS NULL) > 
+       (SELECT 0.05 * COUNT(*) FROM customers) THEN
+        INSERT INTO test_failures VALUES ('customers_email_nulls_high', CURRENT_TIMESTAMP);
+    END IF;
+    
+    -- Test 3: Data freshness
+    IF (SELECT MAX(updated_timestamp) FROM customers) < CURRENT_TIMESTAMP - INTERVAL '24 hours' THEN
+        INSERT INTO test_failures VALUES ('customers_not_fresh', CURRENT_TIMESTAMP);
+    END IF;
+END;
+
+Testing Best Practices:
+├─ Test in every environment
+├─ Automate all tests
+├─ Monitor test performance
+├─ Alert on failures immediately
+├─ Have rollback procedure
+└─ Document test cases
+```
+
+---
+
+#### Critical Concept 8: Monitoring & Alerting
+**Why Critical:**
+Silent failures are worst. Need visibility into pipeline health.
+
+```
+What to Monitor:
+
+Pipeline Health:
+├─ Did job complete on time?
+├─ Did job succeed or fail?
+├─ How many rows loaded?
+├─ Data quality metrics
+└─ Row counts vs expected
+
+Performance:
+├─ Query execution time
+├─ Credit usage
+├─ Warehouse utilization
+├─ Slowest queries
+└─ Spills to disk
+
+Cost:
+├─ Daily/monthly spend
+├─ Cost per warehouse
+├─ Cost per query
+├─ Anomalies
+└─ Forecast
+
+Data Quality:
+├─ NULL rates
+├─ Duplicate rate
+├─ Freshness
+├─ Schema changes
+└─ Outliers
+
+Implementation:
+
+-- Create monitoring tables
+CREATE TABLE pipeline_execution_log (
+    job_id VARCHAR,
+    job_name VARCHAR,
+    start_time TIMESTAMP,
+    end_time TIMESTAMP,
+    status VARCHAR,  -- SUCCESS, FAILURE
+    rows_loaded NUMERIC,
+    error_message VARCHAR,
+    slack_notified BOOLEAN
+);
+
+-- Task to monitor pipelines
+CREATE TASK monitor_pipeline_health
+  WAREHOUSE = monitoring_wh
+  SCHEDULE = 'USING CRON */5 * * * * UTC'
+AS
+-- Check for failed tasks
+INSERT INTO pipeline_execution_log
+SELECT 
+    QUERY_ID,
+    QUERY_TEXT,
+    START_TIME,
+    END_TIME,
+    EXECUTION_STATUS,
+    ROW_COUNT,
+    ERROR_MESSAGE,
+    FALSE
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE START_TIME > CURRENT_TIMESTAMP - INTERVAL '5 minutes'
+  AND EXECUTION_STATUS IN ('FAIL', 'TIMEOUT');
+
+-- Send alerts
+CREATE TASK send_alerts
+  WAREHOUSE = monitoring_wh
+  AFTER monitor_pipeline_health
+AS
+-- Slack webhook integration
+CALL send_notification_to_slack(
+    (SELECT * FROM pipeline_execution_log WHERE slack_notified = FALSE),
+    'Pipeline Failures'
+);
+
+Alert Examples:
+├─ Job not completed (> 30 min late): CRITICAL
+├─ Job failed: CRITICAL
+├─ Row count < 50% expected: HIGH
+├─ Data quality test failed: MEDIUM
+├─ Cost spike: MEDIUM
+└─ Slow query (> 5 min): LOW
+```
+
+---
+
+#### Critical Concept 9: Version Control for Data Engineering
+**Why Critical:**
+Track changes to schemas, transformations, and procedures for auditability and rollback.
+
+```
+What to Version Control:
+
+SQL:
+├─ CREATE TABLE statements (DDL)
+├─ Transformation queries
+├─ Stored procedures
+└─ Views and materialized views
+
+Configuration:
+├─ Snowflake warehouse config
+├─ dbt YAML files
+├─ Task definitions
+└─ Policy definitions
+
+Scripts:
+├─ Data loading scripts
+├─ Validation scripts
+├─ Rollback procedures
+└─ Migration scripts
+
+Documentation:
+├─ Schema documentation
+├─ Process flows
+├─ Runbooks
+└─ SLA definitions
+
+Git Workflow:
+
+main branch (production):
+├─ Stable, tested code
+├─ Tags for releases
+└─ No direct commits
+
+dev branch:
+├─ Feature branches
+├─ Code review via PRs
+├─ dbt test passing
+
+Feature branch (feature/add-customer-scd):
+├─ Developer work
+├─ Local testing
+├─ Create PR → Review → Merge
+
+dbt Project Structure:
+├─ models/
+│  ├─ staging/
+│  │  └─ stg_customers.sql
+│  ├─ marts/
+│  │  └─ mart_customers.sql
+│  └─ schema.yml (tests)
+├─ macros/
+│  └─ custom_transformations.sql
+├─ tests/
+│  └─ data_quality.sql
+└─ dbt_project.yml
+```
+
+---
+
+#### Critical Concept 10: Handling PII & Data Privacy
+**Why Critical:**
+Regulatory compliance (GDPR, CCPA, HIPAA) requires careful PII handling.
+
+```
+PII Categories:
+├─ Direct: Name, Email, Phone, SSN
+├─ Quasi: Zip code, Age, Gender (can re-identify)
+├─ Sensitive: Health data, Financial, Criminal
+└─ Metadata: IP addresses, Timestamps
+
+Snowflake Protection Mechanisms:
+
+1. Dynamic Data Masking (column level)
+CREATE MASKING POLICY ssn_mask AS (val VARCHAR) RETURNS VARCHAR ->
+  CASE
+    WHEN CURRENT_ROLE() = 'ADMIN' THEN val
+    WHEN CURRENT_ROLE() = 'ANALYST' THEN CONCAT('XXX-XX-', RIGHT(val, 4))
+    ELSE NULL
+  END;
+
+ALTER TABLE customers MODIFY COLUMN ssn SET MASKING POLICY ssn_mask;
+
+2. Row Access Policies (row level)
+CREATE ROW ACCESS POLICY data_residency AS (country VARCHAR) RETURNS BOOLEAN ->
+  country = CURRENT_SESSION_CONTEXT('user_country')
+  OR CURRENT_ROLE() = 'ADMIN';
+
+ALTER TABLE customers ADD ROW ACCESS POLICY data_residency ON (country);
+
+3. Encryption
+├─ At rest: AES-256 (automatic)
+├─ In transit: TLS 1.2+ (automatic)
+└─ Client-side: User-managed keys
+
+4. Tokenization
+├─ Replace PII with tokens
+├─ Store mapping separately
+├─ Use tokens in analytics
+
+CREATE TABLE customer_pii_vault (
+    pii_token VARCHAR PRIMARY KEY,
+    customer_name VARCHAR,
+    email VARCHAR,
+    phone VARCHAR,
+    created_date TIMESTAMP
+);
+
+CREATE TABLE customer_analytics_safe (
+    pii_token VARCHAR,
+    country VARCHAR,
+    segment VARCHAR,
+    lifetime_value DECIMAL
+);
+
+5. Deletion Policies
+├─ Time-based deletion
+├─ User-requested deletion
+├─ Right to be forgotten (GDPR)
+
+CREATE TASK delete_expired_pii
+  WAREHOUSE = data_gov_wh
+  SCHEDULE = 'USING CRON 0 2 * * * UTC'
+AS
+DELETE FROM customer_pii_vault
+WHERE created_date < DATEADD(year, -7, CURRENT_DATE)
+  AND no_active_orders = TRUE;
+
+Best Practices:
+├─ Minimize PII collection
+├─ Separate PII from analytics
+├─ Use DDM for multi-role access
+├─ Encrypt sensitive columns
+├─ Audit access to PII
+├─ Delete when no longer needed
+└─ Educate team on privacy
+```
+
+---
+
+## Key Takeaways for Data Engineers & Snowflake Developers
+
+```
+1. Core Skills Development
+   ├─ Advanced SQL (window functions, CTEs, recursive queries)
+   ├─ Python for data validation & orchestration
+   ├─ Snowflake-specific features (Streams, Tasks, UDFs)
+   ├─ Data modeling & schema design
+   └─ ETL/ELT pipeline architecture
+
+2. Performance Optimization Mindset
+   ├─ Always think: "How much data am I scanning?"
+   ├─ Clustering for large tables is essential
+   ├─ Materialized views for frequent aggregations
+   ├─ Result caching for BI tools
+   └─ Monitor query history religiously
+
+3. Cost Consciousness
+   ├─ Use appropriate warehouse sizes
+   ├─ Always set AUTO_SUSPEND
+   ├─ Right-size materialized views
+   ├─ Archive old data
+   └─ Track costs per query, per warehouse, per department
+
+4. Data Quality Standards
+   ├─ Define data quality rules in dbt
+   ├─ Automated testing in pipeline
+   ├─ Monitor null rates and anomalies
+   ├─ Reconciliation tests essential
+   └─ Alert on failures immediately
+
+5. Production Excellence
+   ├─ Zero-downtime deployments using views
+   ├─ Version control for all code
+   ├─ Comprehensive monitoring & alerting
+   ├─ Disaster recovery procedures tested
+   └─ Documentation that stays current
+
+6. Snowflake-Specific Patterns
+   ├─ Use Streams + Tasks for CDC
+   ├─ Zero-copy cloning for dev/test
+   ├─ Time Travel for recovery
+   ├─ Data sharing for cross-org data
+   └─ Dynamic masking for security
+
+7. Common Mistakes to Avoid
+   ├─ ✗ SELECT * in transformations (too much data)
+   ├─ ✗ No WHERE clauses (full table scans)
+   ├─ ✗ Leaving warehouses running 24/7 (unnecessary cost)
+   ├─ ✗ No clustering on large tables (slow queries)
+   ├─ ✗ Ignoring data quality checks (garbage in, garbage out)
+   ├─ ✗ Manual processes instead of automation (error-prone)
+   ├─ ✗ No monitoring (silent failures)
+   └─ ✗ Designing before understanding requirements (waste)
+```
+
+---
+
+
+
+---
+
+## Summary
+
+Snowflake is a modern, scalable data warehouse perfect for:
+
+1. **Large-scale analytics**: Petabytes of data
+2. **Concurrent users**: Multiple departments querying simultaneously
+3. **Cost efficiency**: Separate compute/storage pricing
+4. **Easy sharing**: Data Cloud for sharing without copying
+5. **Minimal maintenance**: Fully managed, zero administration
+6. **Modern analytics**: SQL + Python + data science
+
+**Key Success Factors:**
+
+```
+✓ Understand your use case (OLAP vs OLTP)
+✓ Design efficient schemas (denormalized for analytics)
+✓ Optimize queries and clustering keys
+✓ Right-size warehouses and auto-scale
+✓ Implement security best practices
+✓ Monitor costs and performance continuously
+✓ Use appropriate data structures (streams, tasks, views)
+✓ Archive old data for cost savings
+✓ Test disaster recovery procedures
+└─ Build data culture and documentation
+```
+
+Snowflake enables organizations to democratize data, allowing more people to access and analyze data without being experts in data warehousing.
