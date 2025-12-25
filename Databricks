@@ -1,0 +1,5156 @@
+# Databricks Complete Notes & Theory
+
+## Table of Contents
+1. [Introduction](#introduction)
+2. [Core Concepts](#core-concepts)
+3. [Architecture](#architecture)
+4. [Setup & Configuration](#setup--configuration)
+5. [Spark & PySpark](#spark--pyspark)
+6. [Notebooks](#notebooks)
+7. [Delta Lake](#delta-lake)
+8. [SQL & Queries](#sql--queries)
+9. [Workflows & Jobs](#workflows--jobs)
+10. [Security & Governance](#security--governance)
+11. [Performance Optimization](#performance-optimization)
+12. [Best Practices](#best-practices)
+13. [Comprehensive Concepts: Basic to Advanced](#comprehensive-concepts-basic-to-advanced)
+14. [Real-world Examples](#real-world-examples)
+
+---
+
+## Introduction
+
+### What is Databricks?
+Databricks is a unified analytics platform built on Apache Spark that combines data engineering, data science, and analytics. It provides:
+- **Collaborative notebooks** for data exploration
+- **Unified workspace** for teams
+- **Optimized Spark runtime** for fast processing
+- **Delta Lake** for reliable data management
+- **ML & AI capabilities** with MLflow
+
+### Key Benefits
+- Reduced time to insight
+- Simplified infrastructure
+- Built-in collaboration
+- Data quality guarantees
+- Automatic scaling
+- Cost efficiency
+
+---
+
+## Core Concepts
+
+### Workspace
+The Databricks workspace is a collaborative environment where users can:
+- Create and edit notebooks
+- Share work with team members
+- Manage clusters
+- Store secrets and configurations
+
+```
+Workspace Structure:
+/Users/
+  /user@example.com/
+    /My Notebook.py
+    /Data Analysis/
+/Shared/
+  /Team Projects/
+  /Shared Notebooks/
+/Repos/
+  /git-repositories/
+```
+
+### Clusters
+A cluster is a set of compute resources where jobs and queries run.
+
+**Types of Clusters:**
+1. **Interactive Clusters** - For development and exploration
+2. **Job Clusters** - Created for specific jobs
+3. **All-purpose Clusters** - General-purpose development
+
+**Cluster Configuration Example:**
+```
+Cluster Name: analytics-cluster
+Runtime: 13.3 LTS (includes Spark 3.4.1)
+Worker Type: i3.xlarge (4 cores, 30.5 GB RAM)
+Number of Workers: 2-8 (autoscaling)
+Driver Type: i3.xlarge
+Spark Config:
+  spark.databricks.delta.autoCompact.enabled true
+  spark.databricks.delta.schema.autoMerge.enabled true
+```
+
+### Catalogs and Schemas
+Databricks uses a three-level namespace hierarchy:
+
+```
+Catalog (Database level)
+  └── Schema (Container of tables)
+      └── Table (Data)
+
+Example:
+main (default catalog)
+  └── analytics
+      ├── users
+      ├── orders
+      └── products
+```
+
+---
+
+## Architecture
+
+### Databricks Architecture Overview
+
+```
+┌─────────────────────────────────────────────────┐
+│           User Layer (Web UI, IDE)              │
+├─────────────────────────────────────────────────┤
+│          Control Plane (Managed Service)        │
+│  • Job scheduler                                │
+│  • Notebook editor                              │
+│  • Authentication & authorization               │
+├─────────────────────────────────────────────────┤
+│          Data Plane (Cloud Infrastructure)      │
+│  • Apache Spark clusters                        │
+│  • DBFS (Databricks File System)               │
+│  • Object storage (S3, ADLS, GCS)              │
+├─────────────────────────────────────────────────┤
+│              Delta Lake Layer                   │
+│  • ACID transactions                            │
+│  • Schema enforcement                           │
+│  • Time travel                                  │
+└─────────────────────────────────────────────────┘
+```
+
+### Data Flow
+```
+Raw Data (S3/ADLS/GCS)
+    ↓
+[Databricks Cluster]
+    ├── Data Ingestion
+    ├── Transformation
+    ├── Data Quality Checks
+    ↓
+[Delta Lake Tables]
+    ↓
+Analytics & ML
+    ↓
+Insights & Reports
+```
+
+---
+
+## Setup & Configuration
+
+### Prerequisites
+1. Databricks account (Azure, AWS, or GCP)
+2. Cloud storage configured (S3, ADLS, GCS)
+3. Proper IAM permissions
+4. Network connectivity
+
+### Initial Setup Steps
+
+**Step 1: Create Workspace**
+```
+Platform: Azure/AWS/GCP
+Workspace Name: my-analytics-workspace
+Region: Select appropriate region
+```
+
+**Step 2: Configure Cluster**
+```python
+# Cluster configuration via UI:
+1. Select Cluster
+2. Set Runtime version (13.3 LTS recommended)
+3. Configure worker types and count
+4. Set auto-scaling parameters
+5. Add init scripts if needed
+```
+
+**Step 3: Configure Storage**
+```python
+# Mount cloud storage (for older Databricks versions)
+dbutils.fs.mount(
+  source="s3a://my-bucket/data",
+  mount_point="/mnt/data",
+  extra_configs={"fs.s3a.access.key": "xxx",
+                 "fs.s3a.secret.key": "xxx"}
+)
+
+# For newer Unity Catalog approach:
+# Use external locations and storage credentials
+```
+
+**Step 4: Install Libraries**
+```python
+# Via cluster configuration:
+PyPI: pandas>=1.3.0, numpy>=1.20.0
+
+# Via notebook (dynamically):
+%pip install pandas numpy scikit-learn
+```
+
+### Workspace Access Control
+```python
+# Grant permissions (via UI or API):
+Workspace Admin:
+  ├── Notebooks: READ, WRITE, EXECUTE, MANAGE
+  ├── Clusters: ATTACH, CREATE, MANAGE
+  ├── Jobs: EXECUTE, MANAGE, MONITOR
+
+Data Analyst:
+  ├── Notebooks: READ, EXECUTE
+  ├── Clusters: ATTACH (specific)
+  ├── Tables: SELECT, READ
+```
+
+---
+
+## Spark & PySpark
+
+### Spark Fundamentals
+
+**RDD (Resilient Distributed Dataset)**
+```python
+# Lowest level abstraction
+rdd = sc.parallelize([1, 2, 3, 4, 5])
+rdd_mapped = rdd.map(lambda x: x * 2)
+print(rdd_mapped.collect())  # [2, 4, 6, 8, 10]
+```
+
+**DataFrame** (Higher-level abstraction)
+```python
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("example").getOrCreate()
+
+# Create DataFrame from Python collection
+data = [
+    ("Alice", 25, "Engineering"),
+    ("Bob", 30, "Sales"),
+    ("Charlie", 28, "Engineering")
+]
+columns = ["name", "age", "department"]
+df = spark.createDataFrame(data, columns)
+
+# Display
+df.show()
+```
+
+**Output:**
+```
++-------+---+------------+
+|   name|age|  department|
++-------+---+------------+
+|  Alice| 25|Engineering|
+|    Bob| 30|      Sales|
+|Charlie| 28|Engineering|
++-------+---+------------+
+```
+
+### DataFrame Operations
+
+**Basic Operations:**
+```python
+# Select specific columns
+df.select("name", "age").show()
+
+# Filtering
+df.filter(df.age > 25).show()
+
+# Groupby and aggregation
+df.groupBy("department").count().show()
+
+# Join operations
+df1.join(df2, "id", "inner").show()
+
+# Window functions
+from pyspark.sql.window import Window
+from pyspark.sql.functions import row_number
+
+window_spec = Window.partitionBy("department").orderBy("salary")
+df.withColumn("rank", row_number().over(window_spec)).show()
+```
+
+**Complex Transformations:**
+```python
+from pyspark.sql.functions import col, when, sum, avg, concat, upper
+
+# Conditional column creation
+df_transformed = df.withColumn(
+    "salary_level",
+    when(col("salary") < 50000, "Junior")
+    .when(col("salary") < 80000, "Mid")
+    .otherwise("Senior")
+)
+
+# String operations
+df_transformed = df.withColumn(
+    "full_name",
+    concat(upper(col("first_name")), col("last_name"))
+)
+
+# Aggregate functions
+summary = df.groupBy("department").agg(
+    sum("salary").alias("total_salary"),
+    avg("salary").alias("avg_salary"),
+    count("*").alias("employee_count")
+)
+summary.show()
+```
+
+### RDD vs DataFrame vs SQL
+
+```
+┌──────────────────────────────────────────┐
+│              SQL (Most optimized)        │
+├──────────────────────────────────────────┤
+│         DataFrame (Optimized by Catalyst)│
+├──────────────────────────────────────────┤
+│     RDD (Manual optimization required)   │
+└──────────────────────────────────────────┘
+
+Performance: DataFrame > SQL > RDD
+Ease of use: SQL = DataFrame > RDD
+Flexibility: RDD > DataFrame > SQL
+```
+
+### Spark SQL
+
+```python
+# Create temporary view
+df.createOrReplaceTempView("employees")
+
+# Query with SQL
+result = spark.sql("""
+    SELECT 
+        department,
+        COUNT(*) as employee_count,
+        AVG(salary) as avg_salary,
+        MAX(salary) as max_salary
+    FROM employees
+    WHERE salary > 50000
+    GROUP BY department
+    ORDER BY avg_salary DESC
+""")
+result.show()
+```
+
+### Partitioning & Bucketing
+
+```python
+# Partitioning (data organization on disk)
+df.write.partitionBy("year", "month").mode("overwrite").parquet("/data/sales")
+
+# This creates structure:
+# /data/sales/year=2023/month=01/...
+# /data/sales/year=2023/month=02/...
+
+# Bucketing (for optimized joins and aggregations)
+df.write.bucketBy(10, "customer_id").mode("overwrite").saveAsTable("customers_bucketed")
+```
+
+---
+
+## Notebooks
+
+### Notebook Types
+1. **Python notebooks** - For data engineering and ML
+2. **SQL notebooks** - For analytics and reporting
+3. **Scala notebooks** - For high-performance processing
+4. **R notebooks** - For statistical analysis
+5. **Markdown notebooks** - For documentation
+
+### Creating & Running Notebooks
+
+**Basic Notebook Structure:**
+```python
+# Cell 1: Imports and setup
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+import pandas as pd
+
+# Cell 2: Load data
+df = spark.read.format("delta").load("/data/raw/users")
+
+# Cell 3: Explore data
+df.display()  # Databricks visualization
+df.describe().show()
+
+# Cell 4: Transform
+df_cleaned = df.filter(col("age") > 18).na.drop()
+
+# Cell 5: Save results
+df_cleaned.write.format("delta").mode("overwrite").save("/data/processed/users")
+```
+
+### Magic Commands in Notebooks
+
+```python
+# %python - Execute Python code
+%python
+import pandas as pd
+df_pandas = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
+
+# %sql - Execute SQL queries
+%sql
+SELECT * FROM my_table WHERE status = 'active'
+
+# %scala - Execute Scala code
+%scala
+val numbers = sc.parallelize(1 to 10)
+
+# %r - Execute R code
+%r
+library(ggplot2)
+plot(mtcars$mpg)
+
+# %sh - Execute shell commands
+%sh
+ls -la /mnt/data/
+
+# %md - Markdown for documentation
+%md
+## Analysis Results
+This section shows the key metrics
+
+# %fs - Databricks file system commands
+%fs
+ls /mnt/data/
+
+# %run - Include another notebook
+%run ./common_functions
+```
+
+### dbutils Functions
+
+```python
+# File operations
+dbutils.fs.ls("/mnt/data/")
+dbutils.fs.rm("/mnt/data/old_file", recurse=True)
+dbutils.fs.mv("/mnt/data/source", "/mnt/data/dest")
+
+# Secret management
+password = dbutils.secrets.get(scope="my_scope", key="db_password")
+
+# Widget (interactive parameter)
+dbutils.widgets.text("input_date", "2024-01-01", "Select Date")
+input_date = dbutils.widgets.get("input_date")
+
+# Notebook context
+dbutils.notebook.run("./other_notebook", timeout_seconds=3600, arguments={"param": "value"})
+```
+
+---
+
+## Delta Lake
+
+### What is Delta Lake?
+Delta Lake is an open-source storage layer that brings ACID transactions, time travel, and data quality to data lakes.
+
+### Delta vs Parquet
+
+| Feature | Delta | Parquet |
+|---------|-------|---------|
+| ACID Transactions | ✅ Yes | ❌ No |
+| Schema Enforcement | ✅ Yes | ❌ No |
+| Time Travel | ✅ Yes | ❌ No |
+| Updates/Deletes | ✅ Yes | ❌ No (Difficult) |
+| Data Compaction | ✅ Yes | ❌ Manual |
+
+### Creating Delta Tables
+
+**Method 1: From DataFrame**
+```python
+df = spark.read.csv("/path/to/file.csv", header=True)
+df.write.format("delta").mode("overwrite").save("/delta/users")
+```
+
+**Method 2: Using SQL**
+```sql
+CREATE TABLE users (
+    id INT,
+    name STRING,
+    email STRING,
+    created_date TIMESTAMP
+)
+USING DELTA
+```
+
+**Method 3: From External Source**
+```python
+# From CSV
+df = spark.read.format("csv").option("header", "true").load("s3://bucket/data.csv")
+df.write.format("delta").mode("overwrite").save("/delta/users")
+
+# From Parquet
+df = spark.read.parquet("s3://bucket/data.parquet")
+df.write.format("delta").mode("overwrite").save("/delta/users")
+```
+
+### Delta Operations
+
+**ACID Transactions:**
+```python
+# Atomicity: All or nothing
+df = spark.sql("SELECT * FROM users")
+df.write.format("delta").mode("overwrite").option("mergeSchema", "true").save("/delta/users")
+
+# Consistency: Data integrity
+# Isolation: No dirty reads
+# Durability: Write once, read always
+```
+
+**Schema Evolution:**
+```python
+# Add new columns
+df.write.format("delta").mode("overwrite").option("mergeSchema", "true").save("/delta/users")
+
+# This enables automatic schema updates
+```
+
+**Time Travel - Access Previous Versions:**
+```python
+# View version history
+spark.sql("DESCRIBE HISTORY /delta/users").show()
+
+# Read data from specific timestamp
+df_historical = spark.read.format("delta").option("timestampAsOf", "2024-01-15 10:30:00").load("/delta/users")
+
+# Read data from specific version
+df_version = spark.read.format("delta").option("versionAsOf", 5).load("/delta/users")
+
+# Rollback to previous version
+spark.sql("RESTORE TABLE users TO VERSION AS OF 3")
+```
+
+**Update, Delete, Merge:**
+```python
+# Update
+spark.sql("""
+    UPDATE users 
+    SET status = 'inactive' 
+    WHERE last_login < '2023-01-01'
+""")
+
+# Delete
+spark.sql("DELETE FROM users WHERE id = 123")
+
+# Merge (Upsert)
+spark.sql("""
+    MERGE INTO users t
+    USING new_users s
+    ON t.id = s.id
+    WHEN MATCHED THEN UPDATE SET email = s.email
+    WHEN NOT MATCHED THEN INSERT (id, name, email) VALUES (s.id, s.name, s.email)
+""")
+```
+
+**Optimize & Vacuum:**
+```python
+# Optimize table (compact small files, Z-order index)
+spark.sql("OPTIMIZE users ZORDER BY id")
+
+# Remove old files (7 days default)
+spark.sql("VACUUM users RETAIN 7 DAYS")
+
+# Collect stats
+spark.sql("ANALYZE TABLE users COMPUTE STATISTICS")
+```
+
+### Delta Lake Architecture
+
+```
+Delta Table Structure:
+/delta/users/
+  ├── _delta_log/
+  │   ├── 00000000000000000000.json  # Transaction log
+  │   ├── 00000000000000000001.json
+  │   └── ...
+  ├── part-00000-xxx.parquet
+  ├── part-00001-xxx.parquet
+  └── ...
+
+Transaction Log (JSON):
+{
+  "add": {
+    "path": "part-00000-xxx.parquet",
+    "size": 1024,
+    "modificationTime": 1234567890000
+  }
+}
+```
+
+---
+
+## SQL & Queries
+
+### Databricks SQL
+
+**Basic Query:**
+```sql
+-- Simple select
+SELECT id, name, email, created_date
+FROM users
+WHERE status = 'active'
+ORDER BY created_date DESC
+LIMIT 10;
+
+-- With aggregate functions
+SELECT 
+    department,
+    COUNT(*) as employee_count,
+    AVG(salary) as avg_salary,
+    MIN(salary) as min_salary,
+    MAX(salary) as max_salary
+FROM employees
+GROUP BY department
+HAVING COUNT(*) > 5
+ORDER BY avg_salary DESC;
+```
+
+**Advanced SQL Features:**
+
+```sql
+-- Window Functions
+SELECT 
+    name,
+    salary,
+    department,
+    ROW_NUMBER() OVER (PARTITION BY department ORDER BY salary DESC) as rank,
+    LAG(salary) OVER (PARTITION BY department ORDER BY salary) as prev_salary,
+    LEAD(salary) OVER (PARTITION BY department ORDER BY salary) as next_salary
+FROM employees;
+
+-- Common Table Expressions (CTE)
+WITH high_earners AS (
+    SELECT id, name, salary
+    FROM employees
+    WHERE salary > 100000
+),
+department_summary AS (
+    SELECT 
+        department,
+        COUNT(*) as count,
+        AVG(salary) as avg_salary
+    FROM high_earners
+    GROUP BY department
+)
+SELECT * FROM department_summary
+ORDER BY avg_salary DESC;
+
+-- Recursive CTE (hierarchical data)
+WITH RECURSIVE org_hierarchy AS (
+    SELECT id, name, manager_id, 1 as level
+    FROM employees
+    WHERE manager_id IS NULL
+    
+    UNION ALL
+    
+    SELECT e.id, e.name, e.manager_id, oh.level + 1
+    FROM employees e
+    INNER JOIN org_hierarchy oh ON e.manager_id = oh.id
+)
+SELECT * FROM org_hierarchy
+ORDER BY level, name;
+
+-- JSON functions
+SELECT 
+    id,
+    name,
+    json_extract(metadata, '$.country') as country,
+    json_extract_scalar(metadata, '$.city') as city
+FROM users;
+
+-- String functions
+SELECT 
+    UPPER(name) as uppercase_name,
+    LOWER(email) as lowercase_email,
+    LENGTH(name) as name_length,
+    SUBSTRING(name, 1, 3) as first_three,
+    CONCAT(first_name, ' ', last_name) as full_name,
+    TRIM(name) as trimmed_name,
+    REPLACE(phone, '-', '') as formatted_phone
+FROM users;
+
+-- Date functions
+SELECT 
+    name,
+    created_date,
+    DATE_ADD(created_date, 30) as thirty_days_later,
+    DATE_DIFF(CURRENT_DATE(), created_date) as days_since_created,
+    DATE_TRUNC('month', created_date) as month_start,
+    YEAR(created_date) as year,
+    MONTH(created_date) as month,
+    DAYOFWEEK(created_date) as day_of_week
+FROM users;
+```
+
+### Query Optimization
+
+```sql
+-- Use EXPLAIN to see execution plan
+EXPLAIN SELECT * FROM large_table WHERE status = 'active';
+
+-- Partition pruning
+SELECT * FROM sales 
+WHERE year = 2024 AND month = 1;  -- Efficient if partitioned by year, month
+
+-- Predicate pushdown
+SELECT * FROM table1 
+WHERE id > 100  -- Filter before join
+INNER JOIN table2 ON table1.id = table2.id;
+
+-- Use approximate statistics for large datasets
+SELECT APPROX_COUNT_DISTINCT(customer_id) FROM orders;
+
+-- Broadcast small tables for joins
+SELECT /*+ BROADCAST(small_table) */ * 
+FROM large_table 
+JOIN small_table ON large_table.id = small_table.id;
+```
+
+---
+
+## Workflows & Jobs
+
+### Creating Jobs
+
+**Job Configuration:**
+```
+Job Name: daily_data_pipeline
+Cluster: Fixed cluster (cost-effective)
+Task Type: Notebook
+Notebook Path: /Users/user@example.com/pipelines/etl_pipeline
+Max concurrent runs: 1
+Timeout: 2 hours
+Retry policy: 2 retries on failure
+```
+
+### Job Types
+
+```python
+# 1. Notebook Job (Most common)
+Job Config:
+  - Notebook path
+  - Cluster (interactive or job cluster)
+  - Parameters (optional)
+
+# 2. Spark Submit Job
+spark-submit \
+  --master spark://xxx.compute.xxx.net:7077 \
+  --deploy-mode cluster \
+  /path/to/script.py arg1 arg2
+
+# 3. Python/JAR Job
+  - Python: Upload .py or .zip
+  - JAR: Upload compiled .jar file
+  - Main class and arguments
+```
+
+### Scheduling Jobs
+
+```python
+# Via UI or API
+{
+  "name": "daily_etl",
+  "new_cluster": {
+    "spark_version": "13.3.x-scala2.12",
+    "node_type_id": "i3.xlarge",
+    "num_workers": 4
+  },
+  "notebook_task": {
+    "notebook_path": "/Users/user@example.com/pipelines/etl"
+  },
+  "schedule": {
+    "quartz_cron_expression": "0 0 2 * * ?",  # 2 AM daily
+    "timezone_id": "UTC"
+  }
+}
+```
+
+### Multi-Task Workflows
+
+```python
+# Workflow structure
+Task 1 (Extract)
+  └── Task 2 (Transform)
+      ├── Task 3a (Load to Warehouse)
+      └── Task 3b (Load to Archive)
+          └── Task 4 (Notification)
+
+# Configuration
+{
+  "name": "multi_step_etl",
+  "tasks": [
+    {
+      "task_key": "extract",
+      "notebook_task": {"notebook_path": "/extract"},
+      "new_cluster": {...}
+    },
+    {
+      "task_key": "transform",
+      "depends_on": [{"task_key": "extract"}],
+      "notebook_task": {"notebook_path": "/transform"},
+      "new_cluster": {...}
+    },
+    {
+      "task_key": "load_warehouse",
+      "depends_on": [{"task_key": "transform"}],
+      "notebook_task": {"notebook_path": "/load"},
+      "new_cluster": {...}
+    }
+  ]
+}
+```
+
+### Job Monitoring
+
+```python
+# Monitor via API
+GET /api/2.1/jobs/get?job_id=123
+
+# Get run history
+GET /api/2.1/jobs/runs/list?job_id=123
+
+# Check run status
+GET /api/2.1/jobs/runs/get?run_id=456
+
+# Cancel running job
+POST /api/2.1/jobs/runs/cancel?run_id=456
+```
+
+---
+
+## Security & Governance
+
+### Authentication & Authorization
+
+**Workspace Permissions:**
+```
+Admin
+  ├── All workspace resources
+  ├── Cluster management
+  ├── User management
+
+Data Engineer
+  ├── Create notebooks
+  ├── Create clusters
+  ├── Read tables
+
+Data Analyst
+  ├── Read notebooks
+  ├── Query tables
+  ├── Create personal notebooks
+
+Viewer
+  ├── Read-only access
+```
+
+### Secret Management
+
+```python
+# Create secret scope
+# Via Databricks CLI:
+databricks secrets create-scope --scope my_scope
+
+# Store secrets
+databricks secrets put --scope my_scope --key db_password
+
+# Use secrets in code
+db_password = dbutils.secrets.get(scope="my_scope", key="db_password")
+
+connection_string = f"postgresql://user:{db_password}@host:5432/db"
+```
+
+### Data Governance
+
+**Unity Catalog:**
+```sql
+-- Create metastore
+CREATE CATALOG my_catalog;
+
+-- Create schema
+CREATE SCHEMA my_catalog.analytics;
+
+-- Create table
+CREATE TABLE my_catalog.analytics.users (
+    id INT,
+    name STRING,
+    email STRING
+);
+
+-- Grant permissions
+GRANT SELECT ON TABLE my_catalog.analytics.users TO `data_analyst_group`;
+GRANT MODIFY ON TABLE my_catalog.analytics.users TO `data_engineer_group`;
+
+-- Data lineage tracking
+SELECT * FROM system.access.audit_logs
+WHERE action_type = 'SELECT'
+AND timestamp > '2024-01-01';
+```
+
+**Column-level Security:**
+```python
+# Dynamic masking based on user
+# Implemented via Unity Catalog policies
+```
+
+---
+
+## Performance Optimization
+
+### Cluster Optimization
+
+**Worker Configuration:**
+```
+For Heavy Computing: i3.xlarge (high CPU)
+For Memory-Intensive: r5.4xlarge (high RAM)
+For Balanced: m5.large (standard)
+
+Autoscaling:
+Min Workers: 2
+Max Workers: 10
+Scale up threshold: 80% utilization
+Scale down delay: 5 minutes
+```
+
+**Spark Configuration:**
+```python
+# In cluster configuration:
+spark.sql.adaptive.enabled true  # Adaptive query execution
+spark.sql.shuffle.partitions 200  # Optimize shuffles
+spark.databricks.delta.optimizeWrite.enabled true  # Compact files
+spark.databricks.delta.autoCompact.enabled true  # Auto-compaction
+
+# Broadcast join threshold
+spark.sql.autoBroadcastJoinThreshold 104857600  # 100 MB
+```
+
+### Data Optimization
+
+**File Size Optimization:**
+```python
+# Too many small files (bad for performance)
+df.write.format("delta").mode("overwrite").save("/delta/data")
+
+# Optimize by repartitioning
+df.repartition(10).write.format("delta").mode("overwrite").save("/delta/data")
+
+# Z-order for multi-column filter queries
+spark.sql("OPTIMIZE my_table ZORDER BY (date, region, product_id)")
+```
+
+**Partitioning Strategy:**
+```python
+# Good: Partition by low-cardinality column
+df.write.partitionBy("year", "month").format("delta").mode("overwrite").save("/data")
+
+# Bad: Partition by high-cardinality column (creates too many partitions)
+df.write.partitionBy("user_id").format("delta").mode("overwrite").save("/data")
+```
+
+**Query Optimization:**
+```sql
+-- Use column selection (not SELECT *)
+SELECT id, name, email FROM users;  -- Good
+
+-- Use WHERE before JOIN
+SELECT *
+FROM orders o
+WHERE o.date > '2024-01-01'  -- Filter first
+JOIN customers c ON o.customer_id = c.id;
+
+-- Use approximate stats for exploratory analysis
+SELECT APPROX_COUNT_DISTINCT(user_id) FROM events;
+
+-- Cache frequently accessed tables
+CACHE TABLE hot_table;
+```
+
+### Monitoring Performance
+
+```python
+# Spark UI: http://cluster-url:4040
+# - Jobs, Stages, Tasks
+# - Storage, Environment
+# - SQL, DataFrame
+
+# Databricks metrics
+# - Query performance
+# - Cluster utilization
+# - Cost analysis
+
+# Custom monitoring
+from pyspark.sql.functions import *
+df.explain(mode="extended")  # Show execution plan
+df.explain()  # Show logical plan
+```
+
+---
+
+## Best Practices
+
+### 1. Code Organization
+```
+Workspace/
+├── /Users/user@example.com/
+│   ├── /Notebooks/
+│   │   ├── dev_notebook
+│   │   └── exploratory_analysis
+│   └── /Pipelines/
+│       ├── etl_pipeline
+│       ├── validation_pipeline
+│       └── reporting_pipeline
+├── /Shared/
+│   ├── /Libraries/
+│   │   ├── common_functions
+│   │   └── data_validators
+│   └── /Production/
+│       ├── daily_jobs
+│       └── scheduled_reports
+└── /Repos/
+    └── /git-repo/
+        ├── src/
+        ├── tests/
+        └── README.md
+```
+
+### 2. Data Quality
+```python
+# Data quality framework
+def validate_data(df):
+    # Check for nulls
+    null_counts = df.select([count(when(col(c).isNull(), c)).alias(c) for c in df.columns])
+    
+    # Check data types
+    assert df.schema == expected_schema, "Schema mismatch"
+    
+    # Check row counts
+    assert df.count() > 0, "Empty dataframe"
+    
+    # Check business logic
+    assert df.filter(col("age") < 0).count() == 0, "Invalid ages found"
+    
+    return True
+
+# Usage
+if validate_data(df):
+    df.write.format("delta").mode("overwrite").save("/data/validated")
+```
+
+### 3. Error Handling
+```python
+# Use try-catch in notebooks
+try:
+    df = spark.read.format("delta").load("/data/users")
+    df_processed = df.filter(col("status") == "active")
+    df_processed.write.format("delta").mode("overwrite").save("/data/processed")
+except Exception as e:
+    print(f"Error processing data: {str(e)}")
+    dbutils.notebook.exit("FAILED")
+```
+
+### 4. Logging & Monitoring
+```python
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+handler = logging.FileHandler("/dbfs/logs/pipeline.log")
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
+logger.info(f"Processing {df.count()} records")
+logger.warning("Potential data quality issue")
+logger.error("Critical failure in pipeline")
+```
+
+### 5. Cost Optimization
+```
+• Use job clusters instead of interactive for scheduled jobs
+• Enable autoscaling with appropriate min/max workers
+• Use smaller instances for light workloads
+• Terminate idle clusters (set auto-termination to 30 mins)
+• Use spot instances for non-critical workloads (AWS)
+• Monitor and track spending via Databricks billing API
+```
+
+### 6. Version Control
+```
+Connect Databricks Repos to Git:
+1. Create personal access token on GitHub
+2. Create Databricks API token
+3. In Databricks UI: Create Repo → Connect Git
+4. Commit and push from Databricks
+5. Use branches for development/production
+
+Git Workflow:
+main (production)
+  └── develop (staging)
+      ├── feature/new-analysis
+      ├── feature/data-pipeline
+      └── bugfix/data-validation
+```
+
+---
+
+## Comprehensive Concepts: Basic to Advanced
+
+### LEVEL 1: FOUNDATIONAL CONCEPTS
+
+#### 1.1 Understanding Distributed Computing Basics
+
+**Key Point:** Databricks runs on distributed clusters where data is split across multiple machines.
+
+**Basic Example: Local vs Distributed**
+```python
+# LOCAL PROCESSING (Single machine - SLOW)
+import pandas as pd
+df_pandas = pd.read_csv("large_file.csv")  # Must fit in RAM
+result = df_pandas.groupby("category").sum()  # Single thread/core
+# If file > RAM: CRASH
+
+# DISTRIBUTED PROCESSING (Databricks - FAST)
+df_spark = spark.read.csv("large_file.csv")  # Distributed load
+result = df_spark.groupBy("category").sum()  # Parallel execution
+# File can be 1TB+: Works fine
+```
+
+**How It Works:**
+```
+Large Dataset (1TB)
+    ↓ Split into partitions
+Partition 1 (Node 1) | Partition 2 (Node 2) | Partition 3 (Node 3)
+    ↓
+Process in parallel on all nodes
+    ↓
+Combine results
+```
+
+**Key Points:**
+- ✓ Data split across multiple nodes = parallel processing
+- ✓ Each partition processed independently
+- ✓ Results combined = final output
+- ✓ Scale by adding more nodes
+
+**Usage Pattern:**
+```python
+# Always use Spark for large datasets
+df = spark.read.csv("s3://bucket/large_file.csv")  # Distributed
+# NOT: pd.read_csv() on large files
+```
+
+---
+
+#### 1.2 DataFrames - The Core Abstraction
+
+**Key Point:** DataFrame = Distributed table with schema, optimized for analytics.
+
+**Basic Example: Creating DataFrames**
+```python
+# Method 1: From Python list
+data = [("Alice", 25), ("Bob", 30), ("Charlie", 28)]
+df = spark.createDataFrame(data, ["name", "age"])
+
+# Method 2: From CSV
+df = spark.read.csv("people.csv", header=True)
+
+# Method 3: From JSON
+df = spark.read.json("events.json")
+
+# Method 4: From Parquet
+df = spark.read.parquet("data.parquet")
+
+# Method 5: From SQL
+df = spark.sql("SELECT * FROM my_table")
+
+# All produce same thing: DataFrame
+df.show()  # View data
+df.printSchema()  # See structure
+```
+
+**DataFrame Operations Progression:**
+```python
+# BASIC: Select & Filter
+df.select("name", "age").show()
+df.filter(df.age > 25).show()
+
+# INTERMEDIATE: Transform
+df.withColumn("age_group", 
+    when(df.age < 30, "Young").otherwise("Old")
+).show()
+
+# ADVANCED: Window functions
+from pyspark.sql.window import Window
+window = Window.partitionBy("department").orderBy("salary")
+df.withColumn("rank", row_number().over(window)).show()
+```
+
+**Key Points:**
+- ✓ Immutable (read-only) - modifications create new DataFrame
+- ✓ Lazy evaluation - code doesn't run until action (show, count, write)
+- ✓ Type-safe operations with schema
+- ✓ Optimized by Catalyst optimizer
+
+**Usage Pattern:**
+```python
+# Chain operations (lazy)
+result = (df
+    .filter(df.amount > 0)
+    .withColumn("tax", df.amount * 0.1)
+    .select("id", "amount", "tax")
+)
+
+# Execute when needed
+result.show()  # Action: forces execution
+result.write.format("delta").save("/data")  # Action: saves
+```
+
+---
+
+#### 1.3 Basic Data Loading & Exploration
+
+**Key Point:** Always explore data first to understand structure and quality.
+
+**Complete Example:**
+```python
+# Step 1: Load data
+df = spark.read.format("csv") \
+    .option("header", "true") \
+    .option("inferSchema", "true") \
+    .load("s3://bucket/orders.csv")
+
+# Step 2: Explore structure
+print(f"Rows: {df.count()}")
+print(f"Columns: {len(df.columns)}")
+df.printSchema()
+
+# Output:
+# root
+#  |-- order_id: long
+#  |-- customer_id: long
+#  |-- amount: double
+#  |-- date: string
+
+# Step 3: View sample
+df.show(5)
+
+# Step 4: Get statistics
+df.describe().show()
+
+# Output:
+# summary  order_id  customer_id  amount
+# count    10000     10000        10000
+# mean     5000.5    2500.25      500.50
+# stddev   2886.9    1443.4       300.2
+
+# Step 5: Check nulls
+df.select([count(when(col(c).isNull(), c)).alias(c) for c in df.columns]).show()
+
+# Step 6: Check data types
+for field in df.schema:
+    print(f"{field.name}: {field.dataType}")
+```
+
+**Key Points:**
+- ✓ Always check schema before processing
+- ✓ Validate assumptions about data
+- ✓ Understand data distribution
+- ✓ Plan data quality checks early
+
+---
+
+### LEVEL 2: INTERMEDIATE CONCEPTS
+
+#### 2.1 Transformations: Broad vs Narrow
+
+**Key Point:** Understanding transformation types helps predict performance.
+
+**Narrow Transformations (No shuffle)**
+```python
+# No data movement between nodes = FAST
+df = df.filter(df.amount > 0)  # Narrow: filter locally
+df = df.withColumn("tax", df.amount * 0.1)  # Narrow: compute locally
+df = df.select("id", "amount")  # Narrow: select columns locally
+
+# These don't require shuffling data
+# Execution: Map-only
+# Cost: Low
+# Speed: Fast
+```
+
+**Broad Transformations (Shuffle needed)**
+```python
+# Data movement between nodes = SLOW
+df = df.groupBy("category").sum()  # Broad: needs shuffle
+df = df.join(other_df, "id")  # Broad: needs shuffle
+df = df.distinct()  # Broad: needs shuffle
+
+# These require moving data between nodes
+# Execution: Map + Shuffle + Reduce
+# Cost: High (network I/O)
+# Speed: Slower
+
+# Cost formula: (Records × Bytes per record) × Network bandwidth
+```
+
+**Performance Comparison:**
+```python
+# SLOW: 100M records with broad operations
+df.filter(df.amount > 0) \
+    .groupBy("region").count() \
+    .join(categories, "region")
+# Shuffles all data 3 times
+
+# FAST: Same result with optimization
+df.filter(df.amount > 0) \  # Narrow: filter first
+    .join(categories, "region") \  # Broad but smaller dataset
+    .groupBy("region").count()  # Narrow on small data
+# Shuffles only filtered data
+```
+
+**Key Points:**
+- ✓ Filter early and often (narrow operations)
+- ✓ Minimize shuffle operations
+- ✓ Use cache for repeatedly used DataFrames
+- ✓ Monitor shuffle size in Spark UI
+
+---
+
+#### 2.2 Working with Different Data Formats
+
+**Key Point:** Choose format based on use case for optimal performance.
+
+**CSV - Human Readable, Slow**
+```python
+# ✓ Good for: One-time loads, data exchange
+# ✗ Bad for: Repeated reads, large files
+
+df = spark.read.format("csv") \
+    .option("header", "true") \
+    .option("inferSchema", "false") \  # Better: provide schema
+    .schema("id INT, name STRING, age INT") \
+    .load("data.csv")
+
+# Must parse each cell = SLOW
+# Each read from scratch = SLOW
+```
+
+**Parquet - Fast, Compressed**
+```python
+# ✓ Good for: Data lake, OLAP queries
+# ✗ Bad for: Frequent schema changes
+
+df = spark.read.parquet("data.parquet")  # Fast: binary format
+df.write.parquet("output.parquet")  # Compressed storage
+
+# Binary format = No parsing = FAST
+# Column-oriented = Efficient queries = FAST
+# Predicate pushdown = Only read needed columns = FAST
+```
+
+**JSON - Flexible, Moderate Speed**
+```python
+# ✓ Good for: Nested data, APIs
+# ✗ Bad for: Large-scale analytics
+
+df = spark.read.json("data.json")
+df.write.json("output.json")
+
+# Flexible schema = Easy
+# Self-describing = No schema needed
+# Text-based = Slower than Parquet
+```
+
+**Delta - Best of All**
+```python
+# ✓ Good for: Everything - ACID, fast, flexible
+# ✓ Parquet advantages + transactions
+
+df = spark.read.format("delta").load("/delta/table")
+df.write.format("delta").mode("overwrite").save("/delta/table")
+
+# Use Delta by default for all tables
+```
+
+**Format Comparison Table:**
+```
+Format    | Read Speed | Write Speed | Compression | ACID | Use Case
+----------|------------|-------------|-------------|------|------------------
+CSV       | Slow       | Slow        | No          | No   | Data exchange
+Parquet   | Fast       | Fast        | Yes         | No   | Data lake
+JSON      | Moderate   | Moderate    | No          | No   | APIs, nested
+Delta     | Fast       | Fast        | Yes         | Yes  | Everything
+```
+
+**Practical Example: Format Conversion**
+```python
+# Convert CSV to Parquet (one-time)
+df = spark.read.csv("large.csv", header=True)
+df.repartition(100).write.parquet("large.parquet")
+
+# Now read Parquet (10x faster)
+df = spark.read.parquet("large.parquet")  # Already divided into 100 files
+```
+
+---
+
+#### 2.3 Joins - Types and Performance
+
+**Key Point:** Join type matters more than anything else for performance.
+
+**Inner Join - Smallest Result**
+```python
+# Returns: Only matching records from both tables
+orders = spark.createDataFrame([(1, "A", 100), (2, "B", 200)], ["id", "customer", "amount"])
+customers = spark.createDataFrame([(1, "Alice"), (2, "Bob"), (3, "Charlie")], ["id", "name"])
+
+result = orders.join(customers, "id", "inner")
+# Result: Only id 1,2 (3 from customers not matched)
+# Smallest result = fastest join
+```
+
+**Left Join - Keep Left Table**
+```python
+result = orders.join(customers, "id", "left")
+# Result: All from orders, NULL for unmatched customers
+# Larger than inner join
+```
+
+**Full Join - Keep All**
+```python
+result = orders.join(customers, "id", "outer")
+# Result: All from both, NULL for unmatched
+# Largest result = slowest
+```
+
+**Cross Join - Cartesian Product (AVOID)**
+```python
+result = orders.join(customers)  # No join condition
+# Result: EVERY order with EVERY customer
+# 1000 orders × 1000 customers = 1M rows
+# VERY SLOW - avoid unless intentional
+```
+
+**Performance Optimization:**
+```python
+# SLOW: Default join (shuffle both sides)
+result = large_orders.join(large_customers, "id")
+# Both tables shuffled = HIGH cost
+
+# FAST: Broadcast small table
+result = large_orders.join(broadcast(small_customers), "id")
+# Small table broadcast to all nodes = NO shuffle on large table
+
+# When to broadcast:
+broadcast_threshold = spark.conf.get("spark.sql.autoBroadcastJoinThreshold")
+print(broadcast_threshold)  # Default: 10MB
+
+# Manual broadcast for tables < 100MB
+if small_customers.memory_estimate() < 100_000_000:
+    result = large_orders.join(broadcast(small_customers), "id")
+```
+
+**Join Strategy Matrix:**
+```
+Size A     | Size B     | Strategy           | Speed    | Cost
+-----------|------------|-------------------|----------|--------
+1MB        | 1MB        | Broadcast both     | FAST     | Low
+1MB        | 1GB        | Broadcast small    | FAST     | Low
+1GB        | 1GB        | Hash join          | MEDIUM   | Medium
+1TB        | 1TB        | Sort-merge join    | SLOW     | High
+
+# Spark chooses automatically, but can hint:
+result = large.join(broadcast(small), "key", "inner")
+```
+
+**Key Points:**
+- ✓ Use broadcast joins for small × large
+- ✓ Filter before join (smaller datasets)
+- ✓ Use inner join when possible (smaller result)
+- ✓ Check join keys are indexed (partitioned)
+
+---
+
+#### 2.4 Aggregations and GroupBy
+
+**Key Point:** Aggregations require shuffle, so minimize and optimize.
+
+**Basic Aggregation:**
+```python
+# Count per category
+result = df.groupBy("category").count()
+# Spark: 
+#   1. Shuffle data by category
+#   2. Count on each partition
+#   3. Combine counts
+
+# Check execution plan
+result.explain()  # Shows shuffle steps
+```
+
+**Multiple Aggregations (Efficient):**
+```python
+# EFFICIENT: Single groupBy with multiple aggregations
+result = df.groupBy("category").agg(
+    count("*").alias("count"),
+    sum("amount").alias("total"),
+    avg("amount").alias("average"),
+    min("amount").alias("minimum"),
+    max("amount").alias("maximum")
+)
+# Single shuffle, multiple calculations
+
+# INEFFICIENT: Multiple groupBys (AVOID)
+count_by_cat = df.groupBy("category").count()
+sum_by_cat = df.groupBy("category").sum("amount")
+avg_by_cat = df.groupBy("category").avg("amount")
+# Three shuffles!
+```
+
+**Optimization: Pre-filtering**
+```python
+# SLOW: Shuffle all data, then filter
+df.groupBy("category").agg(sum("amount")).filter(col("sum") > 1000)
+
+# FAST: Filter first, then shuffle smaller data
+df.filter(col("amount") > 0) \
+    .groupBy("category").agg(sum("amount")) \
+    .filter(col("sum") > 1000)
+```
+
+**Advanced: Window Functions (No full shuffle)**
+```python
+from pyspark.sql.functions import row_number
+from pyspark.sql.window import Window
+
+# Rank sales within each category (without full GROUP BY)
+window = Window.partitionBy("category").orderBy(col("amount").desc())
+result = df.withColumn("rank", row_number().over(window))
+
+# Efficient: Only shuffle within partitions, not full shuffle
+# Use when you need rankings, running totals, etc.
+```
+
+**Key Points:**
+- ✓ Use single groupBy for multiple aggregations
+- ✓ Filter BEFORE groupBy
+- ✓ Use window functions for rankings (cheaper)
+- ✓ Minimize groupBy operations
+
+---
+
+### LEVEL 3: ADVANCED CONCEPTS
+
+#### 3.1 Query Optimization & Execution Plans
+
+**Key Point:** Understanding execution plans is key to optimization.
+
+**Analyzing Execution Plans:**
+```python
+df = spark.read.format("delta").load("/delta/orders")
+customers = spark.read.format("delta").load("/delta/customers")
+
+query = df.filter(col("amount") > 100) \
+    .join(customers, "customer_id") \
+    .groupBy("customer_id").agg(sum("amount"))
+
+# View logical plan (what operations)
+query.explain()
+# Output:
+# == Parsed Logical Plan ==
+# Project ...
+# Aggregate ...
+# Join ...
+# Filter ...
+
+# View physical plan (how it executes)
+query.explain(mode="extended")
+# Output shows:
+# - Sort operations
+# - Shuffle operations
+# - Broadcast details
+# - Partition counts
+
+# View cost-based optimizer decisions
+query.explain(mode="cost")
+# Shows estimated costs for each step
+```
+
+**Identifying Bottlenecks:**
+```python
+# BAD: Unoptimized
+result = df \
+    .join(customers, "id") \  # Shuffle before filter
+    .filter(col("amount") > 1000) \  # Filter after shuffle
+    .groupBy("category").count()
+
+# GOOD: Optimized
+result = df \
+    .filter(col("amount") > 1000) \  # Filter first (narrow)
+    .join(broadcast(customers), "id") \  # Broadcast small table
+    .groupBy("category").count()
+
+# Catalyst optimizer usually does this automatically
+# But explicit code is safer
+```
+
+**Using EXPLAIN to Debug:**
+```python
+# Find slow operations
+slow_query = df.groupBy("a").count().join(other_df, "a").filter(col("count") > 10)
+
+# Explain shows:
+# - Sort-Merge Join (expensive)
+# - Full shuffle (expensive)
+# - Multiple stages
+
+# vs optimized:
+fast_query = df.filter(col("count") > 10).join(broadcast(other_df), "a").groupBy("a").count()
+
+# Explain shows:
+# - Broadcast Join (cheap)
+# - Single stage
+# - No full shuffle
+```
+
+**Key Points:**
+- ✓ Always use explain() to check your queries
+- ✓ Look for "Shuffle" in execution plan
+- ✓ Minimize shuffle operations
+- ✓ Use broadcast for small tables
+- ✓ Filter before expensive operations
+
+---
+
+#### 3.2 Caching and Materialization
+
+**Key Point:** Cache repeatedly used DataFrames for performance.
+
+**When to Cache:**
+```python
+# If DataFrame is reused multiple times
+df = spark.read.format("delta").load("/delta/large_table")  # 10GB
+
+# Scenario 1: Used multiple times
+result1 = df.filter(df.amount > 1000).count()
+result2 = df.filter(df.amount > 2000).count()
+# df read from disk twice = SLOW
+
+# Better: Cache
+df.cache()  # Keep in memory
+result1 = df.filter(df.amount > 1000).count()  # Read from cache
+result2 = df.filter(df.amount > 2000).count()  # Read from cache
+df.unpersist()  # Free memory when done
+
+# Cost: 10GB RAM
+# Savings: 2x disk I/O
+```
+
+**Cache Strategies:**
+```python
+# MEMORY_ONLY (Fast but risky)
+df.persist(StorageLevel.MEMORY_ONLY)  # If doesn't fit: recompute
+# Use for: Small DataFrames that fit in memory
+
+# MEMORY_AND_DISK (Safe)
+df.persist(StorageLevel.MEMORY_AND_DISK)  # Spill to disk if needed
+# Use for: Medium DataFrames
+
+# DISK_ONLY (Slow but guaranteed)
+df.persist(StorageLevel.DISK_ONLY)  # Store on disk only
+# Use for: Very large, infrequently accessed
+
+# Don't cache: One-time use
+df.groupBy("category").count()  # No reuse = don't cache
+```
+
+**When NOT to Cache:**
+```python
+# Don't cache temporary variables
+temp = df.filter(col("amount") > 0)
+result = temp.groupBy("category").count()  # temp used once
+
+# Don't cache if memory is tight
+# Automatic spill to disk = slower than not caching
+
+# Don't forget to unpersist
+df.cache()
+# ... lots of processing ...
+df.unpersist()  # Free memory!
+# If you forget: Memory leak
+```
+
+**Key Points:**
+- ✓ Cache DataFrames reused 2+ times
+- ✓ Use MEMORY_AND_DISK for safety
+- ✓ Always unpersist when done
+- ✓ Monitor cache sizes in Spark UI
+- ✓ Don't cache everything (memory finite)
+
+---
+
+#### 3.3 Partitioning Strategies
+
+**Key Point:** Smart partitioning is critical for large datasets.
+
+**Partitioning Basics:**
+```python
+# Partitioning = splitting data across files/folders
+# Benefits: Faster queries, parallel processing, organize data
+
+# By Date (GOOD - low cardinality)
+df.write.partitionBy("year", "month", "day") \
+    .format("delta") \
+    .save("/data/events")
+
+# Result:
+# /data/events/year=2024/month=01/day=01/part-00000.parquet
+# /data/events/year=2024/month=01/day=02/part-00001.parquet
+
+# When you query: WHERE year=2024 AND month=01
+# Spark reads only relevant partitions = FAST
+
+# By Region (GOOD - low cardinality)
+df.write.partitionBy("region").save("/data/sales")
+# Partitions: /data/sales/region=US/, region=EU/, region=APAC/
+
+# By Customer ID (BAD - high cardinality)
+df.write.partitionBy("customer_id").save("/data/orders")
+# Creates millions of partitions = SLOW
+# Metadata operations crawl
+# File count explosion
+```
+
+**Partition Pruning (Query Optimization):**
+```python
+# WITH partitioning
+query = spark.sql("""
+    SELECT * FROM events 
+    WHERE year=2024 AND month=01
+""")
+# Spark automatically prunes:
+# - Only reads /data/events/year=2024/month=01/ folder
+# - Ignores other months = 90% less data = 10x faster
+
+# WITHOUT partitioning
+# Would read entire dataset = SLOW
+```
+
+**Number of Partitions:**
+```python
+# Optimal partition count
+# Rule: 1 file per executor core (for parallelism)
+
+# If cluster has 64 cores
+# Target: 64-128 partitions (1-2 files per core)
+
+df.repartition(64).write.format("delta").save("/data/table")
+
+# Too few partitions (8):
+# - 56 cores sit idle
+# - Not fully parallel = slow
+
+# Too many partitions (10000):
+# - Small files = metadata overhead
+# - Slow list operations = slow
+
+# Check current partitions
+df.rdd.getNumPartitions()  # e.g., 200
+
+# For tables:
+# Reorganize if many small files
+df.coalesce(64).write.format("delta").mode("overwrite").save("/data/table")
+```
+
+**Bucketing (Advanced Optimization):**
+```python
+# Sort data within partitions for faster joins
+df.write.bucketBy(10, "customer_id") \
+    .mode("overwrite") \
+    .format("delta") \
+    .saveAsTable("orders")
+
+# Benefits:
+# - Faster joins on customer_id
+# - Faster GROUP BY on customer_id
+# - Better cache locality
+
+# Cost: Extra write time initially
+# Benefit: Many fast queries after
+```
+
+**Key Points:**
+- ✓ Partition by low-cardinality columns (date, region)
+- ✓ Avoid high-cardinality partitioning (IDs)
+- ✓ Target 1-2 files per core
+- ✓ Use partition pruning in WHERE clauses
+- ✓ Bucket for frequently joined columns
+
+---
+
+#### 3.4 Advanced Delta Lake Features
+
+**Key Point:** Delta Lake features enable reliable, auditable data pipelines.
+
+**Merges (Upserts):**
+```python
+# Update/insert based on conditions
+# Use case: Daily data refresh with new/changed records
+
+new_data = spark.read.csv("daily_updates.csv", header=True)
+
+spark.sql("""
+    MERGE INTO customers t
+    USING new_data s
+    ON t.customer_id = s.customer_id
+    
+    WHEN MATCHED AND s.is_deleted = true 
+        THEN DELETE
+    
+    WHEN MATCHED 
+        THEN UPDATE SET 
+            email = s.email,
+            last_updated = current_timestamp()
+    
+    WHEN NOT MATCHED 
+        THEN INSERT (customer_id, email, signup_date, last_updated) 
+            VALUES (s.customer_id, s.email, s.signup_date, current_timestamp())
+""")
+
+# In single transaction:
+# - Update changed customers
+# - Insert new customers
+# - Delete removed customers
+# All atomic = no partial updates
+```
+
+**Time Travel & Audit:**
+```python
+# Restore to previous versions
+spark.sql("RESTORE TABLE orders TO VERSION AS OF 5")
+
+# Query historical data
+result = spark.read.format("delta") \
+    .option("versionAsOf", 3) \
+    .load("/delta/orders")
+
+# View all versions
+spark.sql("DESCRIBE HISTORY orders").show()
+
+# Audit trail:
+# - When changed
+# - Who changed it
+# - What changed
+# Essential for compliance (GDPR, SOX)
+```
+
+**Schema Evolution:**
+```python
+# Automatically add new columns
+new_df = new_df.withColumn("new_column", lit(0))
+new_df.write.format("delta") \
+    .mode("overwrite") \
+    .option("mergeSchema", "true") \
+    .save("/delta/orders")
+
+# Old schema:    order_id, customer_id, amount
+# New schema:    order_id, customer_id, amount, new_column
+# Existing data: NULL for new_column
+# Queries work seamlessly
+```
+
+**Constraints & Expectations:**
+```python
+# Add quality constraints
+spark.sql("""
+    ALTER TABLE orders 
+    ADD CONSTRAINT valid_amount CHECK (amount > 0)
+""")
+
+# Future writes with negative amounts: REJECTED
+# Prevents bad data from entering
+
+# Data expectations (softer, non-blocking)
+spark.sql("""
+    ADD CONSTRAINT valid_date CHECK (order_date > '2000-01-01')
+""")
+```
+
+**Key Points:**
+- ✓ Use MERGE for upserts (atomic)
+- ✓ Leverage time travel for audits
+- ✓ Enable schema evolution for flexibility
+- ✓ Add constraints for data quality
+- ✓ View history for compliance
+
+---
+
+#### 3.5 Streaming and Real-Time Processing
+
+**Key Point:** Same API as batch, but continuous processing.
+
+**Structured Streaming Basics:**
+```python
+# Read from Kafka (or other streaming source)
+stream = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "broker:9092") \
+    .option("subscribe", "events") \
+    .load()
+
+# Transform
+processed = stream \
+    .select(from_json(col("value").cast("string"), schema).alias("data")) \
+    .select("data.*") \
+    .filter(col("amount") > 0)
+
+# Write to Delta (or other sink)
+query = processed.writeStream \
+    .format("delta") \
+    .option("checkpointLocation", "/delta/checkpoints/stream") \
+    .option("path", "/delta/streaming_data") \
+    .outputMode("append") \
+    .trigger(processingTime="10 seconds") \
+    .start()
+
+# Monitor
+query.status  # Current status
+query.recentProgress  # Last few batches
+```
+
+**Output Modes:**
+```python
+# APPEND (new rows only) - MOST COMMON
+query.writeStream.outputMode("append")
+# Use for: append-only streams (events, logs)
+
+# UPDATE (changed rows)
+query.writeStream.outputMode("update")
+# Use for: stateful aggregations that change
+
+# COMPLETE (all rows)
+query.writeStream.outputMode("complete")
+# Use for: small aggregations, dashboards
+# WARNING: Writes entire result each batch (expensive)
+```
+
+**Windowing (Real-Time Aggregations):**
+```python
+# 1-minute windows
+result = stream.groupBy(
+    window(col("timestamp"), "1 minute")
+).count()
+
+# 5-minute windows with 1-minute sliding
+result = stream.groupBy(
+    window(col("timestamp"), "5 minutes", "1 minute")
+).count()
+
+# Use for: Real-time metrics (throughput, error rates)
+```
+
+**Fault Tolerance:**
+```python
+# Checkpoints track progress
+# If job fails: resume from last checkpoint (no data loss)
+
+query = stream.writeStream \
+    .option("checkpointLocation", "/delta/chkpt") \
+    .format("delta") \
+    .start()
+
+# Crash at 2PM with 500 events processed
+# Restart at 2:10PM
+# Automatically resumes from checkpoint
+# Processes new events (501+)
+# No duplicates, no gaps
+```
+
+**Key Points:**
+- ✓ Use same DataFrame API as batch
+- ✓ Always set checkpoint location
+- ✓ Use APPEND mode for events
+- ✓ Window for real-time metrics
+- ✓ Auto-recovery from checkpoint
+
+---
+
+#### 3.6 Machine Learning with MLlib
+
+**Key Point:** Spark ML for distributed machine learning.
+
+**Basic Pipeline:**
+```python
+from pyspark.ml import Pipeline
+from pyspark.ml.feature import StringIndexer, VectorAssembler
+from pyspark.ml.classification import RandomForestClassifier
+
+# Training data
+df = spark.read.format("delta").load("/delta/training_data")
+
+# 1. Feature Preparation
+indexer = StringIndexer(inputCol="category", outputCol="category_idx")
+assembler = VectorAssembler(
+    inputCols=["category_idx", "amount", "days_active"],
+    outputCol="features"
+)
+
+# 2. Model
+rf = RandomForestClassifier(
+    labelCol="is_fraud",
+    featuresCol="features",
+    numTrees=100,
+    maxDepth=10
+)
+
+# 3. Pipeline (chain operations)
+pipeline = Pipeline(stages=[indexer, assembler, rf])
+
+# 4. Train
+model = pipeline.fit(df)
+
+# 5. Predict
+predictions = model.transform(df)
+
+# Result: predictions with probability, prediction columns
+predictions.select("is_fraud", "prediction", "probability").show()
+```
+
+**Model Evaluation:**
+```python
+from pyspark.ml.evaluation import BinaryClassificationEvaluator, ClassificationEvaluator
+
+# Metrics
+evaluator = BinaryClassificationEvaluator(labelCol="is_fraud")
+auc = evaluator.evaluate(predictions)
+print(f"AUC: {auc:.3f}")
+
+# Confusion matrix
+evaluator = ClassificationEvaluator(labelCol="is_fraud")
+accuracy = evaluator.setMetricName("accuracy").evaluate(predictions)
+f1 = evaluator.setMetricName("f1").evaluate(predictions)
+
+print(f"Accuracy: {accuracy:.3f}, F1: {f1:.3f}")
+```
+
+**Hyperparameter Tuning:**
+```python
+from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
+
+# Define parameter grid
+paramGrid = ParamGridBuilder() \
+    .addGrid(rf.numTrees, [100, 200, 500]) \
+    .addGrid(rf.maxDepth, [5, 10, 15]) \
+    .build()
+
+# Cross-validation
+cv = CrossValidator(
+    estimator=pipeline,
+    estimatorParamMaps=paramGrid,
+    evaluator=evaluator,
+    numFolds=5
+)
+
+# Find best parameters
+cvModel = cv.fit(df)
+best_model = cvModel.bestModel
+```
+
+**Key Points:**
+- ✓ Use MLlib for distributed ML
+- ✓ Chain operations in Pipeline
+- ✓ Train on full dataset (Spark handles distribution)
+- ✓ Use cross-validation for tuning
+- ✓ Save models for reuse
+
+---
+
+#### 3.7 Performance Tuning & Troubleshooting
+
+**Key Point:** Systematic approach to find and fix bottlenecks.
+
+**Memory Issues:**
+```python
+# Problem: OOM (Out of Memory)
+# Solution steps:
+
+# 1. Check Spark UI - see which executor ran out
+# 2. Reduce data with filter
+df = df.filter(col("date") > '2024-01-01')  # 50% smaller
+
+# 3. Increase partitions (more, smaller partitions)
+df = df.repartition(500)  # Each partition uses less memory
+
+# 4. Increase cluster memory
+# Scale from 16GB to 32GB per executor
+
+# 5. Use broadcast for small tables
+from pyspark.sql.functions import broadcast
+large.join(broadcast(small))  # Avoids shuffle
+```
+
+**Slow Queries:**
+```python
+# Problem: Query takes too long
+# Solution steps:
+
+# 1. Use explain() to find shuffle
+query.explain()
+# Look for: "Sort-Merge Join", "Exchange", "HashAggregate"
+
+# 2. Filter early
+df.filter(col("year")==2024).groupBy("month").count()  # Filter first
+# NOT: df.groupBy("month").count().filter(col("year")==2024)
+
+# 3. Optimize joins
+df.join(broadcast(small))  # Broadcast join cheaper
+
+# 4. Add partitioning
+df.repartition(200)  # More parallel processing
+
+# 5. Cache if reused
+df.cache()  # Keep in memory
+result1 = df.filter(...).count()
+result2 = df.filter(...).count()
+```
+
+**Cluster Issues:**
+```python
+# Problem: Some executors much slower (straggler)
+# Solution:
+
+# 1. Check for data skew
+df.groupBy("key").count().show()  # If one key has 90% data
+
+# 2. Salt the skewed key
+df = df.withColumn(
+    "key_salt",
+    concat(col("key"), (rand() * 10).cast("int"))
+)
+# Spreads data across more partitions
+
+# 3. Autoscaling
+# Add config to cluster:
+spark.conf.set("spark.dynamicAllocation.enabled", "true")
+spark.conf.set("spark.dynamicAllocation.minExecutors", "2")
+spark.conf.set("spark.dynamicAllocation.maxExecutors", "100")
+```
+
+**Key Points:**
+- ✓ Use Spark UI to diagnose issues
+- ✓ Filter early and often
+- ✓ Watch for data skew
+- ✓ Optimize shuffle operations
+- ✓ Monitor cluster resources
+
+---
+
+## Real-world Examples & Practical Applications
+
+### Example 1: Complete E-Commerce ETL Pipeline
+
+**Business Context:** A retail company needs to consolidate sales data from multiple sources, clean it, enrich it with customer data, and make it available for analytics.
+
+**Architecture:**
+```
+Raw Sources (CSV, JSON, DB)
+    ↓
+[Databricks Ingestion Layer]
+    ↓
+Bronze Tables (Raw)
+    ↓
+[Transformation & Validation]
+    ↓
+Silver Tables (Cleaned)
+    ↓
+[Business Logic & Enrichment]
+    ↓
+Gold Tables (Analytics Ready)
+    ↓
+BI Tools, Reports, ML Models
+```
+
+**Step 1: Setup - Create Bronze Layer (Raw Data)**
+```python
+# Notebook: /Shared/Production/01_bronze_ingestion
+
+import logging
+from datetime import datetime
+from pyspark.sql.functions import col, input_file_name, current_timestamp
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+logger.info("Starting Bronze Layer Ingestion")
+
+try:
+    # Load from multiple sources
+    # CSV from S3
+    orders_csv = spark.read.format("csv") \
+        .option("header", "true") \
+        .option("inferSchema", "true") \
+        .load("s3://ecommerce-bucket/raw/orders/*.csv")
+    
+    # JSON from S3
+    products_json = spark.read.format("json") \
+        .load("s3://ecommerce-bucket/raw/products/*.json")
+    
+    # Database connection
+    customers_db = spark.read.format("jdbc") \
+        .option("url", "jdbc:postgresql://db-host:5432/ecommerce") \
+        .option("dbtable", "public.customers") \
+        .option("user", dbutils.secrets.get(scope="prod", key="db_user")) \
+        .option("password", dbutils.secrets.get(scope="prod", key="db_pass")) \
+        .load()
+    
+    # Add metadata columns for tracking
+    orders_bronze = orders_csv \
+        .withColumn("source_file", input_file_name()) \
+        .withColumn("ingestion_date", current_timestamp()) \
+        .withColumn("ingestion_batch_id", lit(datetime.now().strftime("%Y%m%d_%H%M%S")))
+    
+    products_bronze = products_json \
+        .withColumn("ingestion_date", current_timestamp()) \
+        .withColumn("ingestion_batch_id", lit(datetime.now().strftime("%Y%m%d_%H%M%S")))
+    
+    customers_bronze = customers_db \
+        .withColumn("ingestion_date", current_timestamp()) \
+        .withColumn("ingestion_batch_id", lit(datetime.now().strftime("%Y%m%d_%H%M%S")))
+    
+    # Save as Delta tables (Bronze layer)
+    orders_bronze.write.format("delta").mode("append").save("/delta/bronze/orders")
+    products_bronze.write.format("delta").mode("append").save("/delta/bronze/products")
+    customers_bronze.write.format("delta").mode("append").save("/delta/bronze/customers")
+    
+    logger.info(f"Bronze layer saved: Orders={orders_bronze.count()}, Products={products_bronze.count()}, Customers={customers_bronze.count()}")
+    
+except Exception as e:
+    logger.error(f"Error in bronze ingestion: {str(e)}")
+    dbutils.notebook.exit("FAILED")
+```
+
+**Step 2: Silver Layer - Data Cleaning & Validation**
+```python
+# Notebook: /Shared/Production/02_silver_transformation
+
+from pyspark.sql.functions import (
+    col, when, trim, upper, lower, 
+    to_date, regexp_replace, isnan, isnull, coalesce
+)
+from datetime import datetime, timedelta
+
+logger.info("Starting Silver Layer Transformation")
+
+try:
+    # Read bronze data
+    orders = spark.read.format("delta").load("/delta/bronze/orders")
+    products = spark.read.format("delta").load("/delta/bronze/products")
+    customers = spark.read.format("delta").load("/delta/bronze/customers")
+    
+    # ===== ORDERS TRANSFORMATION =====
+    orders_cleaned = (orders
+        # Data type conversions
+        .withColumn("order_id", col("order_id").cast("bigint"))
+        .withColumn("customer_id", col("customer_id").cast("bigint"))
+        .withColumn("product_id", col("product_id").cast("bigint"))
+        .withColumn("order_date", to_date(col("order_date"), "yyyy-MM-dd"))
+        .withColumn("amount", col("amount").cast("decimal(10,2)"))
+        .withColumn("quantity", col("quantity").cast("int"))
+        
+        # String cleaning
+        .withColumn("status", upper(trim(col("status"))))
+        .withColumn("order_channel", lower(trim(col("order_channel"))))
+        
+        # Handle missing values
+        .withColumn("shipping_address", coalesce(col("shipping_address"), lit("Unknown")))
+        .withColumn("discount_percent", coalesce(col("discount_percent"), lit(0)))
+        
+        # Data validation and filtering
+        .filter(col("order_id").isNotNull())
+        .filter(col("customer_id").isNotNull())
+        .filter(col("amount") > 0)  # Remove invalid orders
+        .filter(col("quantity") > 0)
+        
+        # Add calculated columns
+        .withColumn("final_amount", col("amount") * (1 - col("discount_percent") / 100))
+        .withColumn("year", year(col("order_date")))
+        .withColumn("month", month(col("order_date")))
+        .withColumn("day_of_week", dayofweek(col("order_date")))
+        
+        # Remove duplicates (keep latest)
+        .withColumn("row_num", row_number().over(
+            Window.partitionBy("order_id").orderBy(col("ingestion_date").desc())
+        ))
+        .filter(col("row_num") == 1)
+        .drop("row_num")
+    )
+    
+    # ===== PRODUCTS TRANSFORMATION =====
+    products_cleaned = (products
+        .withColumn("product_id", col("product_id").cast("bigint"))
+        .withColumn("price", col("price").cast("decimal(10,2)"))
+        .withColumn("product_name", trim(col("product_name")))
+        .withColumn("category", lower(trim(col("category"))))
+        
+        # Validate prices
+        .filter(col("price") > 0)
+        .dropDuplicates(["product_id"])
+    )
+    
+    # ===== CUSTOMERS TRANSFORMATION =====
+    customers_cleaned = (customers
+        .withColumn("customer_id", col("customer_id").cast("bigint"))
+        .withColumn("email", lower(trim(col("email"))))
+        .withColumn("country", upper(trim(col("country"))))
+        .withColumn("signup_date", to_date(col("signup_date"), "yyyy-MM-dd"))
+        
+        # Add customer age segment
+        .withColumn("age_segment", when(col("age") < 25, "Young")
+                                   .when(col("age") < 40, "Adult")
+                                   .when(col("age") < 60, "Senior")
+                                   .otherwise("Elderly"))
+        .dropDuplicates(["customer_id"])
+    )
+    
+    # ===== DATA QUALITY CHECKS =====
+    def data_quality_checks(df, table_name):
+        """Perform comprehensive data quality checks"""
+        total_rows = df.count()
+        null_rows = df.filter([col(c).isNull() for c in df.columns]).count()
+        
+        logger.info(f"{table_name}: Total={total_rows}, Null rows={null_rows}")
+        
+        if total_rows == 0:
+            raise Exception(f"{table_name} is empty after transformation")
+        
+        return True
+    
+    data_quality_checks(orders_cleaned, "orders")
+    data_quality_checks(products_cleaned, "products")
+    data_quality_checks(customers_cleaned, "customers")
+    
+    # ===== SAVE SILVER TABLES =====
+    orders_cleaned.write.format("delta").mode("overwrite").save("/delta/silver/orders")
+    products_cleaned.write.format("delta").mode("overwrite").save("/delta/silver/products")
+    customers_cleaned.write.format("delta").mode("overwrite").save("/delta/silver/customers")
+    
+    logger.info("Silver layer saved successfully")
+    
+except Exception as e:
+    logger.error(f"Error in silver transformation: {str(e)}")
+    raise
+
+# %sql
+-- Create managed tables for easier access
+CREATE TABLE IF NOT EXISTS silver.orders USING DELTA LOCATION '/delta/silver/orders'
+CREATE TABLE IF NOT EXISTS silver.products USING DELTA LOCATION '/delta/silver/products'
+CREATE TABLE IF NOT EXISTS silver.customers USING DELTA LOCATION '/delta/silver/customers'
+```
+
+**Step 3: Gold Layer - Business Analytics Tables**
+```python
+# Notebook: /Shared/Production/03_gold_analytics
+
+logger.info("Starting Gold Layer Creation")
+
+try:
+    # Read silver tables
+    orders = spark.read.format("delta").load("/delta/silver/orders")
+    products = spark.read.format("delta").load("/delta/silver/products")
+    customers = spark.read.format("delta").load("/delta/silver/customers")
+    
+    # Create temporary views
+    orders.createOrReplaceTempView("orders")
+    products.createOrReplaceTempView("products")
+    customers.createOrReplaceTempView("customers")
+    
+    # ===== FACT TABLE: SALES TRANSACTIONS =====
+    sales_fact = spark.sql("""
+        SELECT 
+            o.order_id,
+            o.customer_id,
+            o.product_id,
+            o.order_date,
+            o.year,
+            o.month,
+            o.day_of_week,
+            o.quantity,
+            o.amount as gross_amount,
+            o.discount_percent,
+            o.final_amount,
+            p.price as product_price,
+            p.category,
+            c.country,
+            c.age_segment,
+            (o.final_amount - (p.price * o.quantity * 0.3)) as profit  -- Assuming 30% cost
+        FROM orders o
+        LEFT JOIN products p ON o.product_id = p.product_id
+        LEFT JOIN customers c ON o.customer_id = c.customer_id
+        WHERE o.year >= YEAR(CURRENT_DATE) - 2  -- Last 2 years
+    """)
+    
+    # ===== DIMENSION TABLE: CUSTOMER SUMMARY =====
+    customer_dim = spark.sql("""
+        WITH customer_stats AS (
+            SELECT 
+                c.customer_id,
+                c.email,
+                c.country,
+                c.age_segment,
+                c.signup_date,
+                COUNT(DISTINCT o.order_id) as lifetime_orders,
+                COUNT(DISTINCT YEAR(o.order_date)) as active_years,
+                SUM(o.final_amount) as lifetime_revenue,
+                AVG(o.final_amount) as avg_order_value,
+                MIN(o.order_date) as first_order_date,
+                MAX(o.order_date) as last_order_date,
+                DATEDIFF(CURRENT_DATE, MAX(o.order_date)) as days_since_last_order
+            FROM customers c
+            LEFT JOIN orders o ON c.customer_id = o.customer_id
+            GROUP BY c.customer_id, c.email, c.country, c.age_segment, c.signup_date
+        )
+        SELECT 
+            *,
+            CASE 
+                WHEN days_since_last_order <= 30 THEN 'Active'
+                WHEN days_since_last_order <= 90 THEN 'At Risk'
+                WHEN days_since_last_order <= 180 THEN 'Dormant'
+                ELSE 'Inactive'
+            END as customer_status,
+            CASE
+                WHEN lifetime_revenue > 10000 THEN 'VIP'
+                WHEN lifetime_revenue > 5000 THEN 'Premium'
+                WHEN lifetime_revenue > 1000 THEN 'Regular'
+                ELSE 'New'
+            END as customer_tier
+        FROM customer_stats
+    """)
+    
+    # ===== DIMENSION TABLE: PRODUCT SUMMARY =====
+    product_dim = spark.sql("""
+        SELECT 
+            p.product_id,
+            p.product_name,
+            p.category,
+            p.price,
+            COUNT(DISTINCT o.order_id) as total_orders,
+            SUM(o.quantity) as total_quantity_sold,
+            SUM(o.final_amount) as total_revenue,
+            AVG(o.final_amount) as avg_sale_value,
+            STDDEV(o.final_amount) as revenue_stddev,
+            MIN(o.order_date) as first_sale_date,
+            MAX(o.order_date) as last_sale_date
+        FROM products p
+        LEFT JOIN orders o ON p.product_id = o.product_id
+        GROUP BY p.product_id, p.product_name, p.category, p.price
+    """)
+    
+    # ===== AGGREGATION TABLE: DAILY SALES SUMMARY =====
+    daily_sales = spark.sql("""
+        SELECT 
+            o.order_date,
+            o.year,
+            o.month,
+            o.day_of_week,
+            p.category,
+            c.country,
+            c.age_segment,
+            COUNT(DISTINCT o.order_id) as order_count,
+            SUM(o.quantity) as total_quantity,
+            SUM(o.final_amount) as total_revenue,
+            AVG(o.final_amount) as avg_order_value,
+            MIN(o.final_amount) as min_order_value,
+            MAX(o.final_amount) as max_order_value,
+            STDDEV(o.final_amount) as revenue_stddev,
+            COUNT(DISTINCT o.customer_id) as unique_customers
+        FROM orders o
+        LEFT JOIN products p ON o.product_id = p.product_id
+        LEFT JOIN customers c ON o.customer_id = c.customer_id
+        GROUP BY o.order_date, o.year, o.month, o.day_of_week, p.category, c.country, c.age_segment
+    """)
+    
+    # ===== TREND ANALYSIS TABLE =====
+    trend_analysis = spark.sql("""
+        WITH monthly_trends AS (
+            SELECT 
+                CONCAT(YEAR(o.order_date), '-', LPAD(MONTH(o.order_date), 2, '0')) as year_month,
+                p.category,
+                COUNT(DISTINCT o.order_id) as order_count,
+                SUM(o.final_amount) as revenue,
+                AVG(o.final_amount) as avg_order_value,
+                LAG(SUM(o.final_amount)) OVER (PARTITION BY p.category ORDER BY YEAR(o.order_date), MONTH(o.order_date)) as prev_month_revenue
+            FROM orders o
+            LEFT JOIN products p ON o.product_id = p.product_id
+            GROUP BY YEAR(o.order_date), MONTH(o.order_date), p.category
+        )
+        SELECT 
+            year_month,
+            category,
+            order_count,
+            revenue,
+            avg_order_value,
+            prev_month_revenue,
+            ROUND(((revenue - prev_month_revenue) / prev_month_revenue * 100), 2) as mom_growth_percent
+        FROM monthly_trends
+        ORDER BY year_month DESC, category
+    """)
+    
+    # ===== SAVE GOLD TABLES =====
+    sales_fact.write.format("delta").mode("overwrite").save("/delta/gold/sales_fact")
+    customer_dim.write.format("delta").mode("overwrite").save("/delta/gold/customer_dim")
+    product_dim.write.format("delta").mode("overwrite").save("/delta/gold/product_dim")
+    daily_sales.write.format("delta").mode("overwrite").save("/delta/gold/daily_sales")
+    trend_analysis.write.format("delta").mode("overwrite").save("/delta/gold/trend_analysis")
+    
+    logger.info("Gold layer created successfully")
+    
+except Exception as e:
+    logger.error(f"Error in gold layer creation: {str(e)}")
+    raise
+```
+
+**Step 4: Create Gold Tables and Optimize**
+```sql
+-- Create managed tables
+CREATE TABLE IF NOT EXISTS gold.sales_fact USING DELTA LOCATION '/delta/gold/sales_fact';
+CREATE TABLE IF NOT EXISTS gold.customer_dim USING DELTA LOCATION '/delta/gold/customer_dim';
+CREATE TABLE IF NOT EXISTS gold.product_dim USING DELTA.gold/product_dim';
+CREATE TABLE IF NOT EXISTS gold.daily_sales USING DELTA LOCATION '/delta/gold/daily_sales';
+CREATE TABLE IF NOT EXISTS gold.trend_analysis USING DELTA LOCATION '/delta/gold/trend_analysis';
+
+-- Optimize for faster queries
+OPTIMIZE gold.sales_fact ZORDER BY (order_date, customer_id, product_id);
+OPTIMIZE gold.customer_dim ZORDER BY (customer_id);
+OPTIMIZE gold.product_dim ZORDER BY (category, product_id);
+OPTIMIZE gold.daily_sales ZORDER BY (order_date, category);
+
+-- Analyze to collect statistics
+ANALYZE TABLE gold.sales_fact COMPUTE STATISTICS;
+ANALYZE TABLE gold.customer_dim COMPUTE STATISTICS;
+ANALYZE TABLE gold.product_dim COMPUTE STATISTICS;
+```
+
+**Step 5: Reporting Queries**
+```sql
+-- Top 10 customers by revenue
+SELECT 
+    customer_id,
+    email,
+    country,
+    customer_tier,
+    customer_status,
+    lifetime_revenue,
+    lifetime_orders,
+    days_since_last_order
+FROM gold.customer_dim
+ORDER BY lifetime_revenue DESC
+LIMIT 10;
+
+-- Sales by category and region (with growth)
+SELECT 
+    year_month,
+    category,
+    revenue,
+    ROUND(mom_growth_percent, 2) as growth_percent
+FROM gold.trend_analysis
+WHERE year_month >= DATE_FORMAT(DATE_ADD(CURRENT_DATE, -6 * 30), 'yyyy-MM')
+ORDER BY year_month DESC, revenue DESC;
+
+-- Customer segmentation for marketing
+SELECT 
+    age_segment,
+    customer_tier,
+    customer_status,
+    COUNT(*) as customer_count,
+    ROUND(AVG(lifetime_revenue), 2) as avg_revenue,
+    ROUND(AVG(lifetime_orders), 1) as avg_orders
+FROM gold.customer_dim
+GROUP BY age_segment, customer_tier, customer_status
+ORDER BY customer_count DESC;
+
+-- Product performance analysis
+SELECT 
+    category,
+    product_name,
+    price,
+    total_quantity_sold,
+    total_revenue,
+    ROUND(total_revenue / NULLIF(total_quantity_sold, 0), 2) as avg_price_per_unit
+FROM gold.product_dim
+ORDER BY total_revenue DESC
+LIMIT 20;
+```
+
+---
+
+### Example 2: Real-Time Streaming Data Pipeline with Fraud Detection
+
+**Business Context:** A payment processing company needs to detect fraudulent transactions in real-time and alert users.
+
+**Architecture:**
+```
+Kafka Topic (Transaction Events)
+    ↓
+[Spark Structured Streaming]
+    ├── Parse & Enrich
+    ├── Apply Fraud Rules
+    ├── Score with ML Model
+    ↓
+Real-time Fraud Alerts
+    ├── Alert consumers
+    ├── Block transactions
+    └── Store for investigation
+```
+
+**Implementation:**
+```python
+# Notebook: /Shared/Production/realtime_fraud_detection
+
+from pyspark.sql.functions import (
+    col, from_json, schema_of_json, when, abs,
+    window, struct
+)
+from pyspark.ml import PipelineModel
+from datetime import datetime
+
+logger.info("Starting Real-time Fraud Detection Pipeline")
+
+# ===== DEFINE SCHEMA =====
+transaction_schema = """
+    STRUCT<
+        transaction_id: STRING,
+        user_id: STRING,
+        merchant_id: STRING,
+        amount: DOUBLE,
+        timestamp: TIMESTAMP,
+        card_last4: STRING,
+        merchant_category: STRING,
+        country: STRING,
+        device_id: STRING
+    >
+"""
+
+# ===== READ FROM KAFKA =====
+kafka_stream = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "kafka-broker:9092") \
+    .option("subscribe", "transactions") \
+    .option("startingOffsets", "latest") \
+    .option("failOnDataLoss", "false") \
+    .load()
+
+# ===== PARSE JSON =====
+parsed_stream = kafka_stream.select(
+    from_json(col("value").cast("string"), transaction_schema).alias("data")
+).select("data.*")
+
+# ===== LOAD REFERENCE DATA =====
+user_profiles = spark.read.format("delta").load("/delta/silver/user_profiles")
+user_profiles.createOrReplaceTempView("user_profiles")
+
+merchant_data = spark.read.format("delta").load("/delta/silver/merchants")
+merchant_data.createOrReplaceTempView("merchants")
+
+# ===== ENRICH WITH HISTORICAL DATA =====
+enriched_stream = parsed_stream.join(
+    user_profiles.select("user_id", "country as user_country", "avg_transaction_amount", "max_transaction_amount"),
+    on="user_id",
+    how="left"
+).join(
+    merchant_data.select("merchant_id", "risk_category", "mcc_code"),
+    on="merchant_id",
+    how="left"
+)
+
+# ===== FRAUD DETECTION RULES =====
+fraud_rules = enriched_stream.withColumn(
+    "fraud_score",
+    when(col("amount") > col("max_transaction_amount") * 2, 50)  # Amount spike
+    .when(col("country") != col("user_country"), 30)  # Country mismatch
+    .when(col("amount") > 5000, 20)  # High amount threshold
+    .when(col("risk_category") == "HIGH", 25)  # High risk merchant
+    .otherwise(0)
+)
+
+# ===== APPLY ML MODEL FOR ADDITIONAL SCORING =====
+# Load pre-trained fraud detection model
+fraud_model = PipelineModel.load("/models/fraud_detection_v2")
+
+# Prepare features for model
+model_input = fraud_rules.select(
+    struct(
+        col("amount"),
+        col("fraud_score"),
+        col("device_id"),
+        col("merchant_category")
+    ).alias("features")
+)
+
+# Score with model
+ml_scored = fraud_model.transform(model_input)
+
+# ===== COMBINE SCORES =====
+final_scores = fraud_rules.join(
+    ml_scored.select(col("probability")[1].alias("ml_fraud_probability")),
+    how="left"
+).withColumn(
+    "final_fraud_score",
+    (col("fraud_score") + col("ml_fraud_probability") * 100) / 2
+).withColumn(
+    "is_fraud_alert",
+    when(col("final_fraud_score") > 70, true).otherwise(false)
+)
+
+# ===== ALERT ON FRAUD =====
+fraud_alerts = final_scores.filter(col("is_fraud_alert") == true)
+
+# Write fraud alerts to Delta Lake for investigation
+query_delta = fraud_alerts.select(
+    col("transaction_id"),
+    col("user_id"),
+    col("amount"),
+    col("final_fraud_score"),
+    col("timestamp"),
+    current_timestamp().alias("alert_timestamp")
+).writeStream \
+    .format("delta") \
+    .option("path", "/delta/fraud_alerts") \
+    .option("checkpointLocation", "/delta/checkpoints/fraud_alerts") \
+    .outputMode("append") \
+    .trigger(processingTime="5 seconds") \
+    .start()
+
+# Write clean transactions to data lake
+clean_transactions = final_scores.filter(col("is_fraud_alert") == false)
+
+query_clean = clean_transactions.writeStream \
+    .format("delta") \
+    .option("path", "/delta/transactions_processed") \
+    .option("checkpointLocation", "/delta/checkpoints/transactions") \
+    .outputMode("append") \
+    .trigger(processingTime="10 seconds") \
+    .start()
+
+# Monitor the streams
+print("Fraud Detection Pipeline Started")
+print(f"Uptime: {datetime.now()}")
+
+# Query monitoring
+fraud_alerts.select(
+    "transaction_id", "user_id", "amount", "final_fraud_score"
+).writeStream \
+    .format("console") \
+    .option("truncate", false) \
+    .start()
+
+query_delta.awaitTermination()
+```
+
+---
+
+### Example 3: Customer Segmentation & Churn Prediction ML Model
+
+**Business Context:** An SaaS company wants to identify which customers are likely to churn and segment them for targeted retention campaigns.
+
+```python
+# Notebook: /Shared/Production/customer_churn_prediction
+
+from pyspark.ml import Pipeline, PipelineModel
+from pyspark.ml.feature import (
+    StringIndexer, OneHotEncoder, VectorAssembler, StandardScaler
+)
+from pyspark.ml.classification import RandomForestClassifier, GBTClassifier
+from pyspark.ml.evaluation import BinaryClassificationEvaluator, ClassificationEvaluator
+from pyspark.sql.window import Window
+
+logger.info("Starting Customer Churn Prediction Model")
+
+try:
+    # ===== LOAD AND PREPARE DATA =====
+    customer_data = spark.read.format("delta").load("/delta/silver/customers")
+    usage_data = spark.read.format("delta").load("/delta/silver/usage_metrics")
+    
+    # ===== FEATURE ENGINEERING =====
+    # Calculate customer tenure and activity metrics
+    features = spark.sql("""
+        WITH customer_metrics AS (
+            SELECT 
+                c.customer_id,
+                c.signup_date,
+                DATEDIFF(CURRENT_DATE, c.signup_date) as tenure_days,
+                ROUND(DATEDIFF(CURRENT_DATE, c.signup_date) / 365.0, 1) as tenure_years,
+                c.subscription_tier,
+                c.monthly_cost,
+                COUNT(DISTINCT u.usage_date) as active_days_30,
+                SUM(u.page_views) as total_page_views_30,
+                SUM(u.api_calls) as total_api_calls_30,
+                AVG(u.session_duration) as avg_session_duration,
+                MAX(u.usage_date) as last_active_date,
+                DATEDIFF(CURRENT_DATE, MAX(u.usage_date)) as days_since_active,
+                COUNT(DISTINCT u.feature_used) as unique_features_used
+            FROM customer_data c
+            LEFT JOIN usage_data u ON c.customer_id = u.customer_id
+                AND u.usage_date >= DATE_ADD(CURRENT_DATE, -30)
+            GROUP BY c.customer_id, c.signup_date, c.subscription_tier, c.monthly_cost
+        ),
+        customer_with_churn AS (
+            SELECT 
+                cm.*,
+                CASE 
+                    WHEN days_since_active > 60 THEN 1
+                    ELSE 0
+                END as churned  -- Label: 1 = churned, 0 = active
+            FROM customer_metrics cm
+        )
+        SELECT * FROM customer_with_churn
+    """)
+    
+    # ===== SPLIT DATA =====
+    train_data, test_data = features.randomSplit([0.8, 0.2], seed=42)
+    
+    # ===== BUILD PIPELINE =====
+    # Categorical features
+    tier_indexer = StringIndexer(inputCol="subscription_tier", outputCol="tier_indexed")
+    tier_encoder = OneHotEncoder(inputCol="tier_indexed", outputCol="tier_encoded")
+    
+    # Feature assembly
+    assembler = VectorAssembler(
+        inputCols=[
+            "tenure_years",
+            "tier_encoded",
+            "active_days_30",
+            "total_page_views_30",
+            "total_api_calls_30",
+            "avg_session_duration",
+            "days_since_active",
+            "unique_features_used"
+        ],
+        outputCol="features"
+    )
+    
+    # Feature scaling
+    scaler = StandardScaler(inputCol="features", outputCol="scaled_features")
+    
+    # Classifier (Gradient Boosting)
+    gbt = GBTClassifier(
+        labelCol="churned",
+        featuresCol="scaled_features",
+        maxIter=20,
+        maxDepth=5,
+        seed=42
+    )
+    
+    # Create pipeline
+    pipeline = Pipeline(stages=[
+        tier_indexer,
+        tier_encoder,
+        assembler,
+        scaler,
+        gbt
+    ])
+    
+    # ===== TRAIN MODEL =====
+    logger.info("Training churn prediction model...")
+    model = pipeline.fit(train_data)
+    
+    # ===== EVALUATE MODEL =====
+    predictions = model.transform(test_data)
+    
+    # Binary classification metrics
+    binary_evaluator = BinaryClassificationEvaluator(labelCol="churned")
+    auc = binary_evaluator.evaluate(predictions)
+    
+    # Classification metrics
+    classifier_evaluator = ClassificationEvaluator(labelCol="churned")
+    accuracy = classifier_evaluator.evaluate(predictions)
+    f1 = classifier_evaluator.setMetricName("f1").evaluate(predictions)
+    
+    logger.info(f"Model Performance - AUC: {auc:.3f}, Accuracy: {accuracy:.3f}, F1: {f1:.3f}")
+    
+    # ===== MAKE PREDICTIONS ON ALL CUSTOMERS =====
+    all_predictions = model.transform(features)
+    
+    # ===== CREATE CUSTOMER SEGMENTATION =====
+    segmented_customers = all_predictions.select(
+        col("customer_id"),
+        col("subscription_tier"),
+        col("tenure_years"),
+        col("monthly_cost"),
+        col("probability")[1].alias("churn_probability"),
+        when(col("probability")[1] > 0.7, "Very High Risk")
+            .when(col("probability")[1] > 0.5, "High Risk")
+            .when(col("probability")[1] > 0.3, "Medium Risk")
+            .otherwise("Low Risk").alias("churn_segment"),
+        col("active_days_30"),
+        col("days_since_active"),
+        col("unique_features_used")
+    ).orderBy(col("churn_probability").desc())
+    
+    # ===== ACTIONABLE INSIGHTS =====
+    churn_analysis = spark.sql("""
+        WITH risk_segments AS (
+            SELECT 
+                churn_segment,
+                COUNT(*) as customer_count,
+                ROUND(AVG(churn_probability), 3) as avg_churn_prob,
+                ROUND(AVG(tenure_years), 1) as avg_tenure,
+                ROUND(SUM(monthly_cost), 0) as total_monthly_revenue,
+                ROUND(AVG(active_days_30), 1) as avg_active_days,
+                ROUND(AVG(unique_features_used), 1) as avg_features_used
+            FROM segmented_customers_temp
+            GROUP BY churn_segment
+        )
+        SELECT 
+            *,
+            CASE
+                WHEN churn_segment = 'Very High Risk' THEN 'Urgent: Personal outreach + discount'
+                WHEN churn_segment = 'High Risk' THEN 'High priority: Email campaign + feature training'
+                WHEN churn_segment = 'Medium Risk' THEN 'Monitor: Automated engagement campaign'
+                ELSE 'Maintain: Standard nurture'
+            END as recommended_action
+        FROM risk_segments
+        ORDER BY total_monthly_revenue DESC
+    """)
+    
+    # Save results
+    segmented_customers.write.format("delta").mode("overwrite").save("/delta/customer_churn_predictions")
+    churn_analysis.write.format("delta").mode("overwrite").save("/delta/churn_analysis")
+    
+    # Save model
+    model.save("/models/churn_prediction_v1")
+    
+    logger.info("Churn prediction model saved successfully")
+    
+except Exception as e:
+    logger.error(f"Error in churn prediction: {str(e)}")
+    raise
+```
+
+---
+
+### Example 4: Data Quality Monitoring & Automated Alerts
+
+```python
+# Notebook: /Shared/Production/data_quality_monitoring
+
+from pyspark.sql.functions import *
+from datetime import datetime
+
+logger.info("Starting Data Quality Monitoring")
+
+try:
+    # Define quality metrics for each table
+    quality_metrics = {}
+    
+    # Load tables to monitor
+    tables_to_check = {
+        "orders": "/delta/silver/orders",
+        "products": "/delta/silver/products",
+        "customers": "/delta/silver/customers"
+    }
+    
+    for table_name, path in tables_to_check.items():
+        df = spark.read.format("delta").load(path)
+        
+        # Basic metrics
+        metrics = {
+            "table_name": table_name,
+            "timestamp": datetime.now(),
+            "total_rows": df.count(),
+            "columns": len(df.columns),
+            "null_counts": {},
+            "duplicate_counts": {},
+            "schema_changes": False
+        }
+        
+        # Check for nulls in each column
+        for col_name in df.columns:
+            null_count = df.filter(col(col_name).isNull()).count()
+            null_percent = (null_count / metrics["total_rows"]) * 100
+            
+            metrics["null_counts"][col_name] = {
+                "count": null_count,
+                "percent": round(null_percent, 2)
+            }
+            
+            # Alert if too many nulls
+            if null_percent > 10:
+                logger.warning(f"WARNING: {table_name}.{col_name} has {null_percent}% nulls")
+        
+        # Check for duplicates
+        duplicate_count = df.count() - df.dropDuplicates().count()
+        metrics["duplicate_counts"]["total_duplicates"] = duplicate_count
+        
+        if duplicate_count > 0:
+            logger.warning(f"WARNING: {table_name} has {duplicate_count} duplicate rows")
+        
+        quality_metrics[table_name] = metrics
+    
+    # Store quality metrics in Delta table
+    metrics_df = spark.createDataFrame([
+        (table_name, metrics["timestamp"], metrics["total_rows"], 
+         metrics["columns"], str(metrics["null_counts"]))
+        for table_name, metrics in quality_metrics.items()
+    ], ["table_name", "check_timestamp", "row_count", "column_count", "null_statistics"])
+    
+    metrics_df.write.format("delta").mode("append").save("/delta/quality_metrics")
+    
+    logger.info("Data quality check completed")
+    
+except Exception as e:
+    logger.error(f"Error in quality monitoring: {str(e)}")
+    raise
+```
+
+---
+
+### Example 5: Complete Scheduled Job Configuration
+
+```json
+// Job Configuration JSON
+{
+  "name": "ecommerce_daily_etl",
+  "description": "Daily ETL pipeline for e-commerce data",
+  "new_cluster": {
+    "spark_version": "13.3.x-scala2.12",
+    "node_type_id": "i3.xlarge",
+    "driver_node_type_id": "i3.xlarge",
+    "num_workers": 4,
+    "aws_attributes": {
+      "availability": "SPOT_WITH_FALLBACK",
+      "zone_id": "us-west-2a"
+    },
+    "spark_conf": {
+      "spark.databricks.delta.autoCompact.enabled": "true",
+      "spark.databricks.delta.optimizeWrite.enabled": "true",
+      "spark.sql.adaptive.enabled": "true"
+    },
+    "init_scripts": [
+      {
+        "dbfs": {
+          "destination": "/dbfs/init-scripts/setup-logging.sh"
+        }
+      }
+    ]
+  },
+  "tasks": [
+    {
+      "task_key": "ingest_raw_data",
+      "notebook_task": {
+        "notebook_path": "/Shared/Production/01_bronze_ingestion",
+        "base_parameters": {
+          "environment": "production"
+        }
+      },
+      "timeout_seconds": 3600,
+      "max_retries": 2
+    },
+    {
+      "task_key": "clean_and_transform",
+      "depends_on": [
+        {
+          "task_key": "ingest_raw_data"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Shared/Production/02_silver_transformation"
+      },
+      "timeout_seconds": 3600,
+      "max_retries": 2
+    },
+    {
+      "task_key": "create_analytics_tables",
+      "depends_on": [
+        {
+          "task_key": "clean_and_transform"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Shared/Production/03_gold_analytics"
+      },
+      "timeout_seconds": 3600,
+      "max_retries": 1
+    },
+    {
+      "task_key": "run_quality_checks",
+      "depends_on": [
+        {
+          "task_key": "create_analytics_tables"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Shared/Production/data_quality_monitoring"
+      },
+      "timeout_seconds": 1800
+    },
+    {
+      "task_key": "send_alerts",
+      "depends_on": [
+        {
+          "task_key": "run_quality_checks"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Shared/Production/alert_stakeholders"
+      },
+      "timeout_seconds": 600
+    }
+  ],
+  "schedule": {
+    "quartz_cron_expression": "0 2 * * ?",
+    "timezone_id": "America/Los_Angeles"
+  },
+  "email_notifications": {
+    "on_success": [
+      "data-team@company.com"
+    ],
+    "on_failure": [
+      "data-team@company.com",
+      "engineering-lead@company.com"
+    ]
+  }
+}
+```
+
+---
+
+## Quick Reference
+
+### Common Commands
+```python
+# Display data (Databricks)
+display(df)
+
+# Get file system info
+dbutils.fs.ls("/mnt/data/")
+
+# Access secrets
+dbutils.secrets.get(scope="my_scope", key="secret_key")
+
+# Run another notebook
+dbutils.notebook.run("/path/notebook", timeout_seconds=3600)
+
+# Execute shell command
+%sh ls -la /mnt/data/
+
+# Install packages
+%pip install pandas numpy
+```
+
+### Important File Paths
+```
+/mnt/data/          # Mounted cloud storage
+/dbfs/              # Databricks File System
+/Workspace/         # Notebook workspace
+/tmp/               # Temporary files
+```
+
+### Key Metrics to Monitor
+- Query execution time
+- Cluster CPU/memory utilization
+- Data size and row counts
+- Cost per job
+- Data quality metrics
+- Model accuracy (for ML)
+
+---
+
+## Complete Interview Questions & Answers with Scenarios
+
+### SECTION 1: FUNDAMENTAL CONCEPTS (Level: Junior/Intern)
+
+**Q1: What is the difference between Spark RDD, DataFrame, and Dataset?**
+
+A: 
+```
+RDD (Resilient Distributed Dataset):
+  - Lowest level abstraction
+  - Untyped, unstructured data
+  - No optimization by Catalyst
+  - Use case: Unstructured data (images, text)
+  
+  Example:
+  rdd = sc.parallelize([1, 2, 3, 4, 5])
+  rdd_squared = rdd.map(lambda x: x**2)
+
+DataFrame:
+  - Higher-level API
+  - Optimized by Catalyst query optimizer
+  - Schema-based structure
+  - Column and row access
+  - Use case: Most data processing tasks
+  
+  Example:
+  df = spark.createDataFrame([(1, "a"), (2, "b")], ["id", "name"])
+
+Dataset:
+  - Type-safe DataFrame (Scala/Java only)
+  - Best of both worlds: SQL optimization + type safety
+  - Not available in Python
+  
+Performance Order: Dataset > DataFrame > RDD
+Ease of Use Order: DataFrame ≈ Dataset > RDD
+Flexibility Order: RDD > Dataset > DataFrame
+```
+
+**Q2: Explain Delta Lake and how it differs from Parquet.**
+
+A:
+```
+Delta Lake is a storage layer that provides:
+
+1. ACID Transactions
+   - Multiple concurrent writes are isolated
+   - All-or-nothing commits
+   - Example: Update fails midway → automatic rollback
+   
+2. Schema Enforcement
+   - Prevents writing data with mismatched schema
+   - Catches data quality issues early
+   
+3. Time Travel
+   - Query historical versions of data
+   - Restore to previous state
+   
+   Example:
+   # Read data from 30 days ago
+   df = spark.read.format("delta") \
+       .option("timestampAsOf", "2024-11-25 10:00:00") \
+       .load("/delta/users")
+   
+   # Restore table to version 10
+   RESTORE TABLE users TO VERSION AS OF 10
+
+4. Unified Batch & Streaming
+   - Same table for batch and streaming
+   - Automatic handling of data consistency
+
+5. Data Quality
+   - Constraints and expectations
+   - Column-level metadata
+   
+Parquet (columnar format):
+  - Efficient storage and compression
+  - Fast analytical queries
+  - NO transaction support
+  - NO time travel
+  - Difficult to handle updates/deletes
+  - Data can become inconsistent in multi-write scenarios
+
+Real-world Impact:
+Parquet: 10 concurrent writes might produce corrupted data
+Delta: 10 concurrent writes → all-or-nothing consistency
+```
+
+**Q3: How would you handle a scenario where your pipeline fails mid-execution?**
+
+A:
+```
+Three-tier recovery strategy:
+
+Tier 1: Idempotent Design (Best Practice)
+  - Rerunning the same job produces same result
+  - No duplicate data
+  - No partial updates
+  
+  Example:
+  # GOOD: Idempotent (overwrites)
+  df.write.format("delta").mode("overwrite").save("/data/users")
+  
+  # BAD: Not idempotent (appends)
+  df.write.format("delta").mode("append").save("/data/users")
+  # If fails and retries, data appears twice
+
+Tier 2: Checkpoint Mechanism
+  - For streaming jobs, track progress
+  
+  Example:
+  query = df.writeStream \
+    .option("checkpointLocation", "/delta/checkpoints/job1") \
+    .format("delta") \
+    .start()
+  # On restart, resumes from last checkpoint
+
+Tier 3: Manual Recovery
+  - Time travel to good state
+  - Re-run from checkpoint
+  
+  Example:
+  # Restore to last good state
+  RESTORE TABLE gold.orders TO TIMESTAMP AS OF "2024-12-24 18:00:00"
+  
+  # Re-run pipeline
+  %run ./pipeline_notebook
+```
+
+### Advanced Questions
+
+**Q4: Design a data pipeline that processes 10TB of data daily with SLA of 2 hours. What are your considerations?**
+
+A:
+```
+Architecture Design:
+
+1. Cluster Sizing
+   Memory = Total Data Size / Parallelism
+   
+   For 10TB:
+   - Target: Complete in 2 hours
+   - Cluster: 16 worker nodes (i3.2xlarge)
+   - Each worker: 61GB RAM
+   - Total memory: ~976GB
+   - Parallelism: 200-300 tasks
+   
+2. Data Partitioning
+   GOOD: Partition by date (low cardinality)
+   df.write.partitionBy("year", "month", "day") \
+     .format("delta").save("/data/events")
+   
+   BAD: Partition by user_id (high cardinality)
+   → Creates millions of files → slow metadata operations
+   
+3. File Size Optimization
+   Optimal: 100-500 MB per file
+   
+   Too small (< 10MB):
+   - Overhead in metadata management
+   - Slow reads
+   - Solution: Repartition before write
+   
+   df.repartition(50).write.format("delta").save("/data")
+   
+4. Query Optimization
+   - Predicate pushdown: Filter before join
+   - Column projection: SELECT specific columns
+   - Broadcast small tables (< 100MB)
+   
+   GOOD:
+   SELECT o.*, c.name
+   FROM orders o
+   WHERE o.date > '2024-01-01'  -- Filter first
+   JOIN /*+ BROADCAST(customers) */ customers c
+   
+   BAD:
+   SELECT * FROM orders o
+   JOIN customers c
+   WHERE o.date > '2024-01-01'  -- Filter after join
+   
+5. Monitoring & Alerting
+   - Track execution time per stage
+   - Alert if > 90% of SLA (1.8 hours)
+   - Auto-scaling configured: 16-32 workers
+   
+6. Contingency
+   - Pre-cache hot tables
+   - Have rollback plan (time travel)
+   - Duplicate pipeline on standby cluster
+```
+
+**Q5: You're seeing OOM (Out of Memory) errors in your Spark job. How do you debug and fix?**
+
+A:
+```
+Debugging Process:
+
+Step 1: Check Spark UI
+- Go to Spark UI (cluster:4040)
+- Look at "Executors" tab
+- Find executor with max memory usage
+- Check "Storage" tab for cached data
+
+Step 2: Identify Bottleneck
+Possible causes:
+a) Shuffle operation (JOIN, GROUP BY)
+   - Too many records in single partition
+   - Solution: Increase spark.sql.shuffle.partitions
+   
+   # Current: 200 partitions
+   spark.conf.set("spark.sql.shuffle.partitions", "1000")
+   
+b) Data skew
+   - Some partitions have 10x more data
+   - Solution: Repartition on different key
+   
+   # Check for skew
+   df.groupBy("key").count().show()
+   
+   # If one value dominates:
+   df = df.withColumn("key_salt", concat(col("key"), 
+       (rand() * 10).cast("int")))
+
+c) Cached data
+   - Data cached but never cleared
+   - Solution: Clear cache
+   
+   spark.catalog.clearCache()
+
+Step 3: Fix Implementation
+Option A: Increase cluster memory
+  - Scale up to larger instances (m5.4xlarge)
+  - More expensive but guaranteed fix
+  
+Option B: Increase partitions
+  - spark.sql.shuffle.partitions = 1000
+  - Reduces data per partition
+  
+Option C: Filter early
+  # GOOD: Filter reduces data before shuffle
+  df.filter(col("year") == 2024)
+    .groupBy("category").sum()
+  
+  # BAD: Shuffle all data, then filter
+  df.groupBy("category").sum()
+    .filter(col("year") == 2024)
+
+Option D: Use broadcast join
+  small_df = spark.read.format("delta").load("/small_table")  # < 100MB
+  large_df = spark.read.format("delta").load("/large_table")
+  
+  result = large_df.join(
+      broadcast(small_df),
+      on="key",
+      how="inner"
+  )
+```
+
+### Production Scenarios
+
+**Q6: Your pipeline is running 3x slower than before. What do you check?**
+
+A:
+```
+Performance Degradation Checklist:
+
+1. Data Volume Increase
+   SELECT COUNT(*) FROM source_table
+   SELECT SUM(file_size) FROM system.access.audit_logs
+   
+   If 3x more data:
+   - Scale cluster 3x
+   - Check if partitions still optimal
+
+2. Cluster Configuration Change
+   - Check if auto-scaling is working
+   - Verify min/max workers are correct
+   - Check if instance types changed
+   - Look for deprecated configurations
+
+3. Query Plan Changes
+   EXPLAIN SELECT ... 
+   # Check if join order changed
+   # Look for cross joins or Cartesian products
+   
+4. Data Skew Issue
+   SELECT category, COUNT(*) as cnt
+   FROM orders
+   GROUP BY category
+   ORDER BY cnt DESC
+   
+   # If one category has 90% of data:
+   # It becomes bottleneck
+   
+5. Delta Table Statistics
+   ANALYZE TABLE orders COMPUTE STATISTICS
+   # Recompute to update optimizer stats
+   
+6. Cluster Contention
+   - Multiple jobs running simultaneously
+   - Solution: Increase min workers or use separate clusters
+   
+7. External System Slowdown
+   - Database query slow
+   - Network latency to data source
+   - Check source system performance
+   
+Quick Fix Order:
+1. Run ANALYZE TABLE (5 min)
+2. Clear cache (dbutils.catalog.clearCache())
+3. Increase shuffle partitions
+4. Scale cluster
+5. Optimize join strategy
+```
+
+**Q7: A critical production table is corrupted. How do you recover?**
+
+A:
+```
+Recovery Strategy (Step-by-step):
+
+Step 1: Assess Damage
+# Check transaction log
+SELECT * FROM DESCRIBE HISTORY table_name
+# Shows all versions and timestamps
+
+# Find last good state
+SELECT * FROM table_name VERSION AS OF 5
+# If looks good, proceed
+
+Step 2: Immediate Recovery (1-5 minutes)
+# Option A: Restore from backup (IF AVAILABLE)
+RESTORE TABLE schema.table_name TO VERSION AS OF 10
+
+# Option B: Use time travel
+RESTORE TABLE schema.table_name TO TIMESTAMP AS OF "2024-12-24 15:00:00"
+
+# Verify data looks correct
+SELECT COUNT(*), MAX(updated_at) FROM schema.table_name
+
+Step 3: Root Cause Analysis
+# Check audit logs
+SELECT * FROM system.access.audit_logs 
+WHERE action_type = 'MODIFY' 
+AND object_name = 'table_name'
+ORDER BY timestamp DESC
+
+# Identify problematic update
+# Was it a job failure? A bad deployment?
+
+Step 4: Implement Fix
+# If it was a job:
+dbutils.notebook.exit("FAILED")
+# Prevents further corruptions
+
+# If it was a schema issue:
+df.write.format("delta").mode("overwrite").save("/data/table")
+```
+
+---
+
+### SECTION 2: INTERMEDIATE CONCEPTS (Level: Mid-level Engineer)
+
+**Q8: Explain the difference between APPEND, OVERWRITE, and MERGE write modes in Delta Lake.**
+
+A:
+```
+APPEND Mode:
+  - Adds new rows to existing table
+  - Idempotent: No, rerunning adds duplicates
+  - Use case: Event logs, streaming data
+  
+  df.write.format("delta").mode("append").save("/delta/events")
+  
+  If running twice:
+  - First run: 1000 rows
+  - Second run: 2000 rows (1000 + 1000 duplicates)
+
+OVERWRITE Mode:
+  - Replaces entire table contents
+  - Idempotent: Yes, rerunning produces same result
+  - Use case: Daily snapshots, ETL pipelines
+  
+  df.write.format("delta").mode("overwrite").save("/delta/users")
+  
+  If running twice:
+  - First run: 1000 rows
+  - Second run: 1000 rows (same)
+
+MERGE (Upsert):
+  - Combines insert, update, delete in single transaction
+  - Idempotent: Yes, if match conditions are unique
+  - Use case: Incremental updates, CDC (Change Data Capture)
+  
+  MERGE INTO users t
+  USING new_data s
+  ON t.id = s.id
+  WHEN MATCHED THEN UPDATE SET *
+  WHEN NOT MATCHED THEN INSERT *
+  
+  If running twice with same data:
+  - First run: 1000 rows
+  - Second run: 1000 rows (updates, no duplicates)
+
+When to Use Each:
+  APPEND:  Streaming, logs, events (append-only)
+  OVERWRITE: Snapshots, daily aggregations (full refresh)
+  MERGE: Incremental updates, CDC, dimension tables
+```
+
+**Q9: What is data skew and how do you detect and fix it?**
+
+A:
+```
+Data Skew = Uneven data distribution across partitions
+
+Example: Customer orders by region
+- North America: 900M records (90%)
+- Europe: 50M records (5%)
+- Asia: 50M records (5%)
+TOTAL: 1B records
+
+Problem:
+- Partition with NA data takes 90% of processing time
+- Other partitions finish early, idle waiting
+- Overall speed = slowest partition = 90% of total
+
+Detection:
+# Check distribution
+df.groupBy("region").count().show()
+
+# Output:
+# region            | count
+# North America     | 900000000
+# Europe            | 50000000
+# Asia              | 50000000
+
+# Ratio: 900M/50M = 18x skew (BAD)
+# Target: < 3x skew
+
+Solution 1: Filter early (Remove skewed data first)
+df.filter(col("region") != "North America")  # Process rest first
+# Then handle NA separately
+
+Solution 2: Salting (Add random salt to skewed key)
+df.withColumn(
+    "region_salt",
+    concat(col("region"), (rand() * 100).cast("int"))
+)
+# Now: North America_0, North America_1, ..., North America_99
+# Distributes 900M across 100 keys = 9M each = balanced
+
+Solution 3: Bucketing (Pre-organize data)
+df.write.bucketBy(500, "region").format("delta").mode("overwrite").save("/data")
+# Pre-divides into 500 buckets = automatic balancing
+
+Performance Impact:
+Before fix:   1 hour
+After fix:    10 minutes (6x faster)
+```
+
+**Q10: How do you handle late-arriving data in a streaming pipeline?**
+
+A:
+```
+Late-Arriving Data = Event arrives after processing window
+
+Example: Mobile app event sent at 2 PM, arrives at server at 5 PM
+  Event timestamp: 2:00 PM
+  Arrival time: 5:00 PM
+  Lateness: 3 hours
+
+Problem:
+- Window already closed
+- Event not counted in hourly metrics
+- Reports show missing data
+
+Solutions:
+
+1. Watermarking (Recommended)
+stream = spark.readStream \
+    .format("kafka") \
+    .load()
+
+result = stream \
+    .withWatermark("event_time", "10 minutes") \  # Allow 10 min late data
+    .groupBy(
+        window(col("event_time"), "1 minute"),
+        "category"
+    ) \
+    .count()
+
+# Spark behavior:
+# - Closes window 10 minutes after watermark passes
+# - Data arriving within 10 min grace period: COUNTED
+# - Data arriving after 10 min: IGNORED
+
+2. Late Data Handler
+result = stream \
+    .withWatermark("event_time", "1 hour") \
+    .groupBy(window(col("event_time"), "1 minute")).count()
+
+# Write to Delta with modes:
+query = result.writeStream \
+    .option("path", "/delta/metrics") \
+    .outputMode("update") \  # Update already-emitted windows
+    .trigger(processingTime="1 second") \
+    .start()
+
+# outputMode="update" allows updating closed windows with late data
+
+3. Separate Late Data Stream
+# Late data (> 1 hour)
+late_data = stream.filter(col("arrival_time") - col("event_time") > "1 hour")
+
+# Early data (< 1 hour)
+early_data = stream.filter(col("arrival_time") - col("event_time") <= "1 hour")
+
+# Process separately
+early_metrics = early_data.groupBy(window(col("event_time"), "1 min")).count()
+late_metrics = late_data.groupBy(window(col("event_time"), "1 min")).count()
+
+# Combine results
+union = early_metrics.union(late_metrics)
+
+Cost/Benefit:
+  - Watermark: Simple, moderate accuracy loss acceptable
+  - Late handler: Better accuracy, more resources
+  - Separate stream: Most accurate, highest complexity
+```
+
+**Q11: Design a solution for handling 100GB of daily logs with 99.9% uptime requirement.**
+
+A:
+```
+Architecture:
+
+1. Ingestion (Kafka)
+   - Logs from 1000 servers
+   - 100GB/day = ~100KB/second
+   - Kafka topics: Partitioned by server_id (1000 partitions)
+   - Replication: 3x (fault tolerance)
+   - Retention: 7 days
+
+2. Processing (Spark Structured Streaming)
+   - Mini-batches: 10-second windows
+   - Cluster: 16 executors (auto-scale 8-32)
+   - Checkpoint: /delta/checkpoints/logs
+   - Output: Delta Lake (APPEND mode)
+
+3. Storage (Delta Lake)
+   - Partitioning: By date (year/month/day)
+   - Compression: Snappy
+   - Optimize: Run hourly
+   - Retention: 90 days
+
+4. Monitoring
+   Alerts for:
+   - Lag > 5 minutes
+   - Failed batches > 1
+   - Data loss > 0.1%
+   - Costs > budget
+
+5. High Availability
+   - Kafka cluster: 3 brokers (1 failure tolerance)
+   - Spark cluster: Auto-scaling, auto-restart
+   - Checkpoint state: Replicated storage
+   - Manual recovery: Time-travel restore
+
+Code:
+
+stream = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "broker1:9092,broker2:9092,broker3:9092") \
+    .option("subscribe", "logs") \
+    .option("startingOffsets", "earliest") \
+    .load()
+
+parsed = stream \
+    .select(
+        from_json(col("value").cast("string"), log_schema).alias("data")
+    ) \
+    .select("data.*")
+
+# Add metadata
+with_meta = parsed \
+    .withColumn("ingestion_date", current_date()) \
+    .withColumn("ingestion_hour", hour(current_timestamp()))
+
+query = with_meta.writeStream \
+    .format("delta") \
+    .option("path", "/delta/logs") \
+    .option("checkpointLocation", "/delta/checkpoints/logs") \
+    .partitionBy("ingestion_date") \
+    .outputMode("append") \
+    .trigger(processingTime="10 seconds") \
+    .option("mergeSchema", "true") \
+    .start()
+
+Reliability Measures:
+- Checkpoint: Auto-recovery from last point
+- Replicated Kafka: No message loss
+- Delta transactions: No partial writes
+- Monitoring: Immediate alerts
+- Time travel: Rollback if needed
+
+Expected uptime: 99.9% (8.6 hours/year downtime acceptable)
+```
+
+**Q12: Explain cost optimization strategies for a Databricks data platform.**
+
+A:
+```
+Cost Drivers:
+1. Compute (Cluster runtime): 60%
+2. Storage (Delta tables): 25%
+3. Data transfer: 10%
+4. Workspace/admin: 5%
+
+Optimization Strategies:
+
+1. Cluster Right-Sizing
+   Current: 32 workers (m5.xlarge) always running
+   Cost: $32 × 24h × $0.5/hour × 30 days = $11,520/month
+   
+   Optimized:
+   - Production cluster: 16 workers (peak demand)
+   - Dev cluster: 4 workers (shared)
+   - Job cluster: Auto-create/destroy
+   - Auto-shutdown: 30 minutes idle
+   
+   Cost: ($8 × 24h × 20 days) + ($4 × 24h × 10 days) + (job clusters $1000) 
+       = $3,840 + $960 + $1,000 = $5,800/month
+   
+   Savings: 50% = $5,720/month
+
+2. Use Spot Instances (AWS)
+   On-demand: $0.50/hour
+   Spot (3-year reserved): $0.15/hour
+   Savings: 70%
+   
+   Risk: Spot termination (mitigate with fallback)
+
+3. Storage Optimization
+   Current: Raw data never deleted
+   - 5TB/month × 24 months = 120TB
+   - Cost: 120TB × $0.02/TB = $2,400/month
+   
+   Optimized:
+   - Keep raw data: 3 months = 15TB
+   - Archive to S3 Glacier: 9 months
+   - Delete > 1 year
+   
+   Cost: (15TB × $0.02) + (9TB × $0.004) = $336/month
+   
+   Savings: 86% = $2,064/month
+
+4. Query Optimization
+   Current: Slow queries scan full tables
+   - 100 queries/day × 5 TB scan × 1 hour = 500 compute hours
+   - Cost: 500h × $0.3/h = $150/day = $4,500/month
+   
+   Optimized:
+   - Add partition pruning: 50TB scan (90% reduction)
+   - Cache hot tables: 70% queries now 1 minute
+   - Broadcast joins: 30% faster
+   - Result: 50 compute hours
+   - Cost: 50h × $0.3/h = $15/day = $450/month
+   
+   Savings: 90% = $4,050/month
+
+5. Workload Isolation
+   Development: Dev cluster (low cost)
+   Testing: Shared cluster (off-peak only)
+   Production: Dedicated cluster (high reliability)
+   
+   Instead of: Everything on production cluster
+
+Total Potential Savings:
+  Cluster: $5,720/month
+  Spot instances: $5,600/month (60% of compute)
+  Storage: $2,064/month
+  Query optimization: $4,050/month
+  ────────────────────
+  Total: $17,434/month (if base was ~$30k)
+  = 58% cost reduction
+```
+
+---
+
+### SECTION 3: ADVANCED CONCEPTS & SYSTEM DESIGN (Level: Senior Engineer)
+
+**Q13: Design a real-time fraud detection system processing 1M transactions/hour.**
+
+A:
+```
+System Architecture:
+
+1. Data Ingestion (Kafka + Schema Registry)
+   - Topics: 
+     * transactions (raw events)
+     * card_swipes (POS data)
+     * customer_profiles (reference)
+   - Partitions: By transaction_id % 100 (100 partitions)
+   - Volume: 1M/hour = 280/second
+
+2. Feature Engineering (Spark Streaming)
+   - Calculate sliding window features:
+     * Transactions in last 1 hour
+     * Transactions in last 24 hours
+     * Average amount last 30 days
+     * Unique merchants (last hour)
+   - Join with:
+     * Customer profile
+     * Merchant data
+     * Device history
+
+3. ML Model Scoring (MLlib + MLflow)
+   - Model: Gradient Boosted Trees
+   - Input features: 50 engineered features
+   - Output: Fraud probability (0-1)
+   - Threshold: > 0.7 = fraud alert
+
+4. Real-Time Decision (< 100ms)
+   - If fraud_probability > 0.9: BLOCK transaction
+   - If fraud_probability > 0.7: CHALLENGE (ask password)
+   - Otherwise: ALLOW
+
+5. Output (Multi-destination)
+   - Delta Lake: All transactions (audit trail)
+   - Fraud alerts topic: Alerts to fraud team
+   - Cache: Update customer risk scores
+   - Metrics: Real-time dashboards
+
+Code:
+
+# Read transactions
+transactions = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "broker:9092") \
+    .option("subscribe", "transactions") \
+    .load()
+
+# Parse JSON
+parsed = transactions.select(
+    from_json(col("value").cast("string"), schema).alias("data")
+).select("data.*")
+
+# Feature engineering
+features = parsed \
+    .withWatermark("timestamp", "2 minutes") \
+    .groupBy(
+        col("customer_id"),
+        window(col("timestamp"), "1 hour", "5 minutes")
+    ) \
+    .agg(
+        count("*").alias("hourly_transactions"),
+        sum("amount").alias("hourly_amount"),
+        countDistinct("merchant_id").alias("unique_merchants")
+    )
+
+# Join with customer profiles
+enriched = parsed.join(
+    broadcast(spark.read.format("delta").load("/delta/customer_profiles")),
+    "customer_id"
+)
+
+# Load ML model
+model = MLFlowModel.load_model("fraud_detection_v2")
+
+# Score
+scored = model.transform(enriched)
+
+# Decision logic
+with_decision = scored.withColumn(
+    "action",
+    when(col("fraud_probability") > 0.9, "BLOCK")
+    .when(col("fraud_probability") > 0.7, "CHALLENGE")
+    .otherwise("ALLOW")
+)
+
+# Write fraud alerts (real-time)
+fraud_alerts = with_decision.filter(col("action") != "ALLOW")
+
+alerts_query = fraud_alerts.writeStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "broker:9092") \
+    .option("topic", "fraud_alerts") \
+    .option("checkpointLocation", "/delta/chkpt/fraud") \
+    .start()
+
+# Write all transactions (audit)
+audit_query = with_decision.writeStream \
+    .format("delta") \
+    .option("path", "/delta/transactions") \
+    .option("checkpointLocation", "/delta/chkpt/audit") \
+    .outputMode("append") \
+    .trigger(processingTime="5 seconds") \
+    .start()
+
+Performance Requirements:
+- Latency: < 100ms (scored before decision) ✓
+- Throughput: 1M/hour = 280/sec ✓
+- Accuracy: 95% (F1 score)
+- Availability: 99.99%
+
+Scaling:
+- Current: 1M/hour
+- Bottleneck: Model inference
+- Scale: Multiple scoring clusters, round-robin
+- Result: Can handle 10M/hour
+```
+
+**Q14: How would you migrate from Hadoop/Hive to Databricks with zero downtime?**
+
+A:
+```
+Migration Strategy: Dual-run with eventual cutover
+
+Phase 1: Setup & Testing (Week 1-2)
+  - Create Databricks workspace
+  - Set up networking (VPN/ExpressRoute)
+  - Copy historical data (S3 Distcp)
+  - Validate data integrity
+
+Phase 2: Parallel Processing (Week 3-4)
+  - Run Hive jobs on schedule (original)
+  - Run equivalent Spark jobs on Databricks
+  - Compare results daily
+  - Fix discrepancies
+
+Phase 3: Shadow Mode (Week 5-6)
+  - Databricks processes REAL data
+  - Results written to staging location
+  - Hive still producing for consumption
+  - Compare outputs: Should match 100%
+  - Monitor performance, costs
+
+Phase 4: Cutover (Week 7)
+  - Switch: Databricks → Primary
+  - Hive → Read-only (fallback)
+  - BI tools point to Databricks
+  - Monitor for 24 hours
+  - Keep Hive as backup for 1 month
+
+Phase 5: Decommission (Week 8+)
+  - Archive Hive data
+  - Delete Hadoop cluster (save ~60% costs)
+
+Detailed Cutover Plan:
+
+Friday 4 PM:
+- Stop all Hive jobs
+- Run final snapshot: Hive → Staging Delta
+- Start final Databricks run
+- Compare results (should be identical)
+
+Friday 6 PM:
+- If match: Switch BI tools to Databricks
+- If not match: Investigate (keep Hive as primary)
+
+Monday 9 AM:
+- Monitor Databricks jobs
+- Check business reports
+- Validate data quality
+- Alert if any issues
+
+Data Migration:
+
+Hive data → S3 → Databricks
+
+# Hive export
+hadoop distcp \
+  hdfs://hive-cluster/user/hive/warehouse/table \
+  s3a://databricks-bucket/hive_backup/
+
+# Databricks import
+spark.sql("""
+    CREATE TABLE table_name USING DELTA
+    LOCATION 's3://databricks-bucket/hive_backup/table'
+""")
+
+# Validate
+SELECT COUNT(*) FROM hive_old;  -- 1,000,000
+SELECT COUNT(*) FROM delta_new;  -- 1,000,000 (match!)
+
+Cost Impact:
+  Before: Hadoop cluster $30k/month
+  During: Both systems $50k/month (2 months)
+  After: Databricks $15k/month (50% savings)
+  
+  Total cost: (-$30k) + ($50k × 2) + ($15k × 12)
+  = -$30k + $100k + $180k = $250k (yearly)
+  = vs. Hadoop $360k/year
+  = 30% cost savings after migration
+
+Risk Mitigation:
+- Keep Hive running until 100% confident
+- Can revert in hours if needed
+- Dual systems for safety
+```
+
+**Q15: Explain best practices for managing Data Lake governance at scale (1000+ tables).**
+
+A:
+```
+Governance Framework:
+
+1. Catalog & Metadata (Unity Catalog)
+   - Single source of truth for all tables
+   - Automatic lineage tracking
+   - Column-level access control
+   - Data quality metrics
+
+Configuration:
+
+spark.sql("""
+    CREATE CATALOG company_data;
+""")
+
+spark.sql("""
+    CREATE SCHEMA company_data.raw;
+    CREATE SCHEMA company_data.processed;
+    CREATE SCHEMA company_data.analytics;
+""")
+
+# Each schema follows medallion architecture
+# raw: Bronze (untransformed)
+# processed: Silver (cleaned)
+# analytics: Gold (business-ready)
+
+2. Access Control (Role-Based)
+   
+   Data Engineer:
+   - Can read/write bronze, silver
+   - Can't access gold (read-only)
+   - Can't modify schemas
+   
+   Data Analyst:
+   - Can read gold only
+   - Can't write to production
+   - Can create personal notebooks
+   
+   Data Owner (Team Lead):
+   - Full access to owned tables
+   - Can grant/revoke access
+   - Can modify retention policies
+   
+   Admin:
+   - Full access to everything
+   - Can create workspaces
+   - Can audit access
+
+spark.sql("""
+    GRANT SELECT, READ_METADATA ON SCHEMA gold TO `analyst_group`;
+    GRANT ALL PRIVILEGES ON TABLE gold.sales TO `data_owner_user`;
+    REVOKE SELECT ON TABLE gold.customers FROM `external_user`;
+""")
+
+3. Data Quality & Expectations
+
+spark.sql("""
+    ALTER TABLE silver.orders
+    ADD CONSTRAINT positive_amount CHECK (amount > 0);
+    
+    ALTER TABLE silver.orders
+    ADD CONSTRAINT valid_date CHECK (order_date > '2000-01-01');
+""")
+
+# Monitor with expectations
+from databricks.sdk.service.quality import Rule
+
+rules = [
+    Rule(table="gold.customers", metric="row_count", min=1000000),
+    Rule(table="gold.customers", metric="freshness", max_age_hours=24),
+    Rule(table="gold.orders", metric="null_count", column="order_id", max=0),
+]
+
+4. Retention Policies
+
+spark.sql("""
+    ALTER TABLE bronze.events SET TBLPROPERTIES (
+        'delta.logRetentionDuration' = '30 days',
+        'delta.deletedFileRetentionDuration' = '7 days'
+    );
+    
+    -- Keeps 30 days of history
+    -- Vacuums files older than 7 days
+""")
+
+# Manual cleanup
+spark.sql("VACUUM bronze.events RETAIN 30 DAYS");
+
+5. Lineage & Impact Analysis
+
+# Auto-tracked by Unity Catalog
+spark.sql("""
+    SELECT * FROM system.access.table_lineage
+    WHERE downstream_table = 'gold.revenue_report'
+    ORDER BY timestamp DESC;
+""")
+
+# Output:
+# source_table             | target_table        | job_name
+# silver.orders            | gold.revenue_report | daily_etl
+# silver.customers         | gold.revenue_report | daily_etl
+# silver.products          | gold.revenue_report | daily_etl
+
+# Can answer: "If I change silver.orders, what breaks?"
+# Answer: gold.revenue_report
+
+6. Documentation & Metadata
+
+spark.sql("""
+    CREATE TABLE gold.customers (
+        customer_id BIGINT COMMENT 'Unique customer identifier',
+        email STRING COMMENT 'Customer email, normalized to lowercase',
+        country STRING COMMENT 'Country code (ISO 3166-1)',
+        signup_date DATE COMMENT 'Account creation date',
+        lifetime_value DECIMAL(10,2) COMMENT 'Total spend by customer'
+    )
+    COMMENT 'Master customer dimension table. Updated daily 2AM.'
+    USING DELTA
+    PARTITIONED BY (signup_year);
+""")
+
+# Enables:
+- Data dictionary (self-documenting)
+- Column-level understanding
+- Data lineage (from comments)
+- Impact analysis
+
+7. Monitoring & Alerts
+
+Metrics to track:
+- Data freshness (max age of data)
+- Completeness (% null values)
+- Accuracy (validation rule failures)
+- Availability (% uptime)
+- Performance (query time)
+
+spark.sql("""
+    SELECT 
+        table_name,
+        DATEDIFF(CURRENT_TIMESTAMP(), max_update) as hours_old,
+        CASE 
+            WHEN hours_old > 24 THEN 'ALERT'
+            WHEN hours_old > 12 THEN 'WARNING'
+            ELSE 'OK'
+        END as freshness_status
+    FROM table_metadata
+    WHERE environment = 'production';
+""")
+
+Alert thresholds:
+- Data not updated in 48 hours: CRITICAL
+- Data quality rule failure: HIGH
+- Query performance degradation: MEDIUM
+- Unused table access: INFORMATIONAL
+
+Scale Management (1000+ tables):
+
+Automation:
+- Auto-generate documentation from schema
+- Auto-compute data quality metrics
+- Auto-notify owners of issues
+- Auto-clean old data (retention policies)
+
+Governance:
+- Quarterly audits
+- Access reviews (who has what)
+- Cost allocation (by owner)
+- Data classification (PII, sensitive, public)
+
+Manual effort: 2-3 FTE to manage 1000+ tables
+Result: 90% reduction in data issues
+```
+
+---
+
+## Job Working Scenarios & Real-World Challenges
+
+### Scenario 1: Midnight Job Failure - 3 Hours Before Revenue Report
+
+**Situation:**
+```
+Time: 1 AM
+Status: Daily ETL job failed at 12:45 AM
+Impact: Revenue report depends on 3 AM, missing data
+Your action: You're on-call, report is at 9 AM for board meeting
+Pressure: Senior execs reviewing deal metrics
+```
+
+**What You Do:**
+
+```python
+# Cell 1: Immediate Diagnosis (5 minutes)
+# Check error logs
+logs = spark.read.format("text").load("/dbfs/logs/daily_etl_2024_12_25.log")
+logs.filter(col("value").contains("ERROR")).show(truncate=False)
+
+# Check job status
+import requests
+response = requests.get(
+    "https://databricks-instance.com/api/2.1/jobs/runs/list?job_id=123",
+    headers={"Authorization": f"Bearer {token}"}
+)
+last_run = response.json()["runs"][0]
+print(f"Status: {last_run['state']}")
+print(f"Error: {last_run.get('state_message')}")
+
+# Cell 2: Pinpoint Issue (10 minutes)
+# Scenario A: Data source issue
+try:
+    raw_data = spark.read.csv("s3://bucket/raw/2024-12-25/*")
+    print(f"Raw data count: {raw_data.count()}")
+except Exception as e:
+    print(f"ERROR: Can't read raw data - {e}")
+    print("ACTION: Notify data collection team")
+
+# Scenario B: Database connection issue
+try:
+    db_connection = spark.read.format("jdbc") \
+        .option("url", "jdbc:postgresql://db:5432/prod") \
+        .option("user", secret_user) \
+        .option("password", secret_pwd) \
+        .option("query", "SELECT 1") \
+        .load()
+    print("Database connection OK")
+except Exception as e:
+    print(f"ERROR: Database connection failed - {e}")
+
+# Scenario C: Transformation error
+try:
+    bronze = spark.read.format("delta").load("/delta/bronze/orders")
+    # Try transformation step by step
+    step1 = bronze.filter(col("amount") > 0)
+    print(f"After amount filter: {step1.count()}")
+    
+    step2 = step1.withColumn("date", to_date(col("date_str"), "yyyy-MM-dd"))
+    print(f"After date conversion: {step2.count()}")
+except Exception as e:
+    print(f"ERROR in transformation: {e}")
+    print(f"STACK TRACE: {traceback.format_exc()}")
+
+# Cell 3: Decision & Action (5 minutes)
+"""
+Decision Tree:
+1. If source data missing → Talk to source owner
+2. If database down → Use yesterday's cache
+3. If transformation error → Fix and rerun
+4. If disk space → Clean old checkpoints
+5. If timeout → Increase cluster size
+"""
+
+if "source_data_missing" in error:
+    # Action: Use cache from yesterday
+    cached_data = spark.read.format("delta") \
+        .option("versionAsOf", "0") \
+        .load("/delta/bronze/orders_cache")
+    cached_data.write.format("delta").mode("overwrite") \
+        .save("/delta/bronze/orders")
+    print("✓ Using cached data from yesterday")
+    
+elif "transformation_error" in error:
+    # Fix the specific error
+    # Rerun job
+    dbutils.notebook.run("./01_bronze_ingestion", timeout=3600)
+    dbutils.notebook.run("./02_silver_transformation", timeout=3600)
+    dbutils.notebook.run("./03_gold_analytics", timeout=3600)
+    print("✓ Rerunning full pipeline")
+
+# Cell 4: Communicate Status (2 minutes)
+import smtplib
+email_body = """
+INCIDENT UPDATE: Daily ETL Job
+
+Issue: DataFrame transformation failed on timestamp conversion
+Root Cause: Date format changed in source data
+Action Taken: Updated parsing logic, rerunning now
+ETA for data: 2:30 AM
+Board report ready: Yes (using cached data if needed)
+Next: Post-incident review to prevent recurrence
+"""
+
+# Send to team on Slack/Email
+print("✓ Status sent to stakeholders")
+```
+
+**Key Learnings:**
+- Always have a fallback (cached previous run)
+- Speed over perfection in crisis mode
+- Communicate early and often
+- Document root cause for post-incident review
+
+---
+
+### Scenario 2: Data Quality Issue Discovered in Production - Customer Segmentation Wrong
+
+**Situation:**
+```
+Time: 10 AM
+Issue: Analytics team notices customer segments in BI tool don't match expected values
+Impact: Marketing team already sent segmented emails based on old data
+Your action: Fix data and communicate impact
+```
+
+**Resolution:**
+
+```python
+# Cell 1: Identify Scope of Issue (10 minutes)
+# Compare old vs new customer counts
+old_count = spark.read.format("delta") \
+    .option("versionAsOf", "0") \
+    .load("/delta/gold/customer_dim") \
+    .groupBy("customer_tier").count()
+
+new_count = spark.read.format("delta") \
+    .load("/delta/gold/customer_dim") \
+    .groupBy("customer_tier").count()
+
+print("=== OLD DATA ===")
+old_count.show()
+print("\n=== CURRENT DATA ===")
+new_count.show()
+
+# Check what changed
+difference = spark.sql("""
+    SELECT 
+        customer_id,
+        old_tier,
+        new_tier,
+        CASE WHEN old_tier != new_tier THEN 'CHANGED' ELSE 'SAME' END as change_status
+    FROM (
+        SELECT 
+            c1.customer_id,
+            c1.customer_tier as old_tier,
+            c2.customer_tier as new_tier
+        FROM (
+            SELECT * FROM DESCRIBE HISTORY gold.customer_dim 
+            VERSION AS OF 0
+        ) c1
+        FULL OUTER JOIN (
+            SELECT * FROM gold.customer_dim
+        ) c2
+        ON c1.customer_id = c2.customer_id
+    )
+    WHERE old_tier != new_tier
+""")
+difference.show()
+
+# Cell 2: Find Root Cause (15 minutes)
+# Check recent changes in transformation
+spark.sql("""
+    SELECT * FROM DESCRIBE HISTORY gold.customer_dim 
+    ORDER BY version DESC LIMIT 5
+""").show()
+
+# Inspect the problematic transformation
+problem_df = spark.read.format("delta").load("/delta/silver/orders")
+problem_df.select("customer_id", "amount", "date").show()
+
+# Issue found: Decimal precision lost
+print("""
+ROOT CAUSE FOUND:
+- Amount column cast to INT (should be DECIMAL)
+- Lost all fractional amounts
+- This affected customer lifetime value calculations
+- Which affected customer segmentation logic
+""")
+
+# Cell 3: Fix Implementation (20 minutes)
+# Fix the silver layer
+corrected_orders = spark.sql("""
+    SELECT 
+        order_id,
+        customer_id,
+        product_id,
+        order_date,
+        CAST(amount AS DECIMAL(10,2)) as amount,  -- FIX: Correct cast
+        quantity,
+        discount_percent,
+        CAST(amount AS DECIMAL(10,2)) * (1 - discount_percent/100) as final_amount,
+        ingestion_date
+    FROM (
+        SELECT * FROM DESCRIBE HISTORY silver.orders 
+        VERSION AS OF 0  -- Use previous good version
+    )
+""")
+
+corrected_orders.write.format("delta").mode("overwrite") \
+    .save("/delta/silver/orders")
+
+# Rebuild gold tables
+dbutils.notebook.run("./03_gold_analytics", timeout=3600)
+
+# Verify fix
+fixed_count = spark.read.format("delta") \
+    .load("/delta/gold/customer_dim") \
+    .groupBy("customer_tier").count()
+
+print("✓ Data fixed and verified")
+fixed_count.show()
+
+# Cell 4: Prevent Future Issues (10 minutes)
+# Add data quality checks
+schema_check = spark.read.format("delta").load("/delta/silver/orders").schema
+
+# Schema validation
+expected_fields = {
+    "order_id": "bigint",
+    "amount": "decimal(10,2)",
+    "date": "date"
+}
+
+def validate_schema(df, expected):
+    actual = {field.name: str(field.dataType) for field in df.schema}
+    issues = []
+    for field, dtype in expected.items():
+        if actual.get(field) != dtype:
+            issues.append(f"{field}: expected {dtype}, got {actual.get(field)}")
+    return issues
+
+issues = validate_schema(corrected_orders, expected_fields)
+if issues:
+    print(f"SCHEMA VALIDATION FAILED: {issues}")
+    dbutils.notebook.exit("FAILED")
+else:
+    print("✓ Schema validation passed")
+
+# Cell 5: Rollback & Impact Mitigation (5 minutes)
+# Timeline of impact
+impact = spark.sql("""
+    SELECT 
+        COUNT(*) as customers_affected,
+        COUNT(DISTINCT customer_id) as unique_customers,
+        SUM(CASE WHEN old_tier != new_tier THEN 1 ELSE 0 END) as segment_changes
+    FROM changed_customers
+""")
+
+impact.show()
+
+# Send impact report
+email_content = """
+DATA QUALITY INCIDENT REPORT
+
+Issue: Customer segmentation data inconsistency
+Root Cause: Decimal precision loss in amount field (INT vs DECIMAL)
+Duration: 4 hours (6 AM - 10 AM)
+Customers Affected: 15,000
+Segments Changed: 2,340 customers moved to different tiers
+
+Actions Taken:
+1. ✓ Identified root cause (decimal casting error)
+2. ✓ Restored from correct version
+3. ✓ Rebuilt gold tables with correct logic
+4. ✓ Added schema validation to prevent recurrence
+
+Impact to Business:
+- Marketing emails: 2,340 incorrect recipients (Will resend correct version)
+- BI dashboards: Now showing correct data
+- Future runs: Will have validation gates
+
+Prevention:
+- Schema validation added to pipeline
+- Unit tests for decimal precision
+- Pre-release data quality checks
+"""
+print("✓ Impact report sent to stakeholders")
+```
+
+**Key Learnings:**
+- Quality gates prevent 80% of issues
+- Quick diagnosis saves hours
+- Transparency with business impact builds trust
+- Validation at each layer (Bronze → Silver → Gold)
+
+---
+
+### Scenario 3: Cluster Performance Degradation Under Load
+
+**Situation:**
+```
+Time: 2 PM
+Context: End of month, multiple jobs running simultaneously
+Symptom: All queries taking 10x longer than normal
+Impact: Dependent reports delayed, stakeholders waiting
+Your job: Restore performance within 30 minutes
+```
+
+**Troubleshooting:**
+
+```python
+# Cell 1: Rapid Assessment (5 minutes)
+import psutil
+import requests
+
+# Check cluster health
+cluster_info = {
+    "memory_usage": "85%",
+    "cpu_usage": "92%",
+    "active_executors": 32,
+    "failed_tasks": 150,
+    "pending_tasks": 500
+}
+
+print("CLUSTER STATUS:")
+for key, value in cluster_info.items():
+    print(f"  {key}: {value}")
+
+# Cell 2: Identify Root Cause (10 minutes)
+# Check running jobs
+jobs_query = spark.sql("""
+    SELECT 
+        * 
+    FROM system.access.audit_logs 
+    WHERE timestamp > CURRENT_TIMESTAMP - INTERVAL 1 HOUR 
+    AND action_type = 'RUN_NOTEBOOK'
+    ORDER BY timestamp DESC
+""")
+
+print("RECENTLY STARTED JOBS:")
+jobs_query.show(20, truncate=False)
+
+# Hypothesis: Multiple heavy jobs running together
+# Solution: Prioritize and sequence jobs
+
+# Cell 3: Quick Wins (5 minutes)
+# Action 1: Clear cache
+spark.catalog.clearCache()
+print("✓ Cleared cache (freed ~20GB)")
+
+# Action 2: Kill non-critical jobs
+job_ids_to_kill = [100, 101, 102]  # Heavy exploratory jobs
+for job_id in job_ids_to_kill:
+    requests.post(
+        f"https://databricks/api/2.1/jobs/runs/cancel?run_id={job_id}",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+print(f"✓ Killed {len(job_ids_to_kill)} non-critical jobs")
+
+# Action 3: Increase cluster workers temporarily
+# Scale from 16 to 32 workers
+cluster_config = {
+    "num_workers": 32,  # Up from 16
+    "autoscale": {
+        "min_workers": 16,
+        "max_workers": 32
+    }
+}
+print("✓ Initiated cluster scale-up (10 min ETA)")
+
+# Cell 4: Optimize Queries (10 minutes)
+# The slow queries are probably unoptimized
+slow_query = """
+SELECT o.*, c.*, p.*  -- PROBLEM: SELECT *
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+JOIN products p ON o.product_id = p.product_id
+WHERE o.date > '2024-12-01'  -- PROBLEM: Filter after join
+"""
+
+optimized_query = """
+SELECT 
+    o.order_id, o.amount, o.date,
+    c.customer_id, c.name,
+    p.product_id, p.category
+FROM orders o
+WHERE o.date > '2024-12-01'  -- GOOD: Filter first
+JOIN customers c ON o.customer_id = c.customer_id
+JOIN products p ON o.product_id = p.product_id
+"""
+
+print("Query optimization applied")
+
+# Cell 5: Monitor Recovery (Ongoing)
+def monitor_cluster():
+    metrics = {
+        "timestamp": datetime.now(),
+        "pending_tasks": 500,
+        "active_executors": 32,
+        "memory_available": "35%"
+    }
+    return metrics
+
+for i in range(6):  # Check every minute for 6 minutes
+    metrics = monitor_cluster()
+    print(f"T+{i*5} min: Pending tasks: {metrics['pending_tasks']}")
+    time.sleep(300)
+
+print("✓ Cluster returned to normal")
+
+# Cell 6: Post-Incident (After recovery)
+# Document changes made
+changes_log = """
+INCIDENT SUMMARY: Cluster Performance Degradation
+
+Time: 2:00 PM - 2:45 PM (45 minutes)
+Root Cause: 4 concurrent heavy jobs + memory-intensive cache
+
+Immediate Actions (5 min):
+1. Cleared 20GB cache
+2. Killed 3 non-critical exploratory jobs (job_ids: 100, 101, 102)
+3. Scaled cluster from 16 to 32 workers
+
+Optimizations (10 min):
+1. Optimized 5 slow queries (SELECT * → specific columns)
+2. Moved filters before joins in 3 queries
+3. Added broadcast hints to 2 queries
+
+Result:
+- Query time: 10x slow → Normal (restored in 35 min)
+- No data lost
+- Reports on schedule
+
+Prevention:
+1. Job scheduling policy: Only 2 heavy jobs concurrently
+2. Weekly slow query review
+3. Cluster auto-scaling alert at 75% capacity
+"""
+
+# Store incident log
+with open("/dbfs/incidents/2024-12-25_performance.log", "w") as f:
+    f.write(changes_log)
+
+print("✓ Incident documented")
+```
+
+**Key Learnings:**
+- Always have quick win actions (cache clear, kill non-critical)
+- Query optimization often beats infrastructure scaling
+- Monitoring prevents 50% of issues
+- Job scheduling prevents resource contention
+
+---
+
+### Scenario 4: Debugging Data Pipeline - Discrepancy Between Expected and Actual Results
+
+**Situation:**
+```
+Time: 4 PM
+Report shows: 10M orders processed
+Expected: 12M orders
+Missing: 2M orders (16% loss)
+Question: Where did data go?
+```
+
+**Investigation:**
+
+```python
+# Cell 1: Check Each Layer (Data Loss Detective)
+bronze_count = spark.read.format("delta").load("/delta/bronze/orders").count()
+silver_count = spark.read.format("delta").load("/delta/silver/orders").count()
+gold_count = spark.read.format("delta").load("/delta/gold/sales_fact").count()
+
+print(f"""
+Data Counts by Layer:
+Bronze (Raw): {bronze_count:,}
+Silver (Cleaned): {silver_count:,}
+Gold (Analytics): {gold_count:,}
+
+Loss Analysis:
+Bronze → Silver: {bronze_count - silver_count:,} ({((bronze_count - silver_count)/bronze_count*100):.1f}%)
+Silver → Gold: {silver_count - gold_count:,} ({((silver_count - gold_count)/silver_count*100):.1f}%)
+""")
+
+# Result: 1M lost in Silver, 1M lost in Gold
+
+# Cell 2: Find What's Being Filtered (Bronze → Silver)
+bronze = spark.read.format("delta").load("/delta/bronze/orders")
+silver = spark.read.format("delta").load("/delta/silver/orders")
+
+# Find records in bronze but not silver
+missing_from_silver = bronze.exceptAll(silver)
+
+print(f"Records in Bronze but not in Silver: {missing_from_silver.count()}")
+missing_from_silver.show(10)
+
+# Analyze why they're missing
+reasons = spark.sql("""
+    SELECT 
+        CASE 
+            WHEN order_id IS NULL THEN 'NULL order_id'
+            WHEN amount <= 0 THEN 'Negative/zero amount'
+            WHEN amount > 1000000 THEN 'Suspiciously high amount'
+            WHEN order_date IS NULL THEN 'NULL date'
+            WHEN order_date < '2000-01-01' THEN 'Invalid date (before 2000)'
+            ELSE 'Other reason'
+        END as filter_reason,
+        COUNT(*) as count
+    FROM bronze_raw
+    WHERE NOT EXISTS (
+        SELECT 1 FROM silver_clean 
+        WHERE silver_clean.order_id = bronze_raw.order_id
+    )
+    GROUP BY filter_reason
+    ORDER BY count DESC
+""")
+
+print("Reasons for data loss:")
+reasons.show()
+
+# Example output:
+# filter_reason              | count
+# Negative/zero amount       | 500,000
+# Invalid date               | 300,000
+# NULL order_id              | 200,000
+
+# Cell 3: Determine if Loss is Expected (10 minutes)
+# Question: Are these filters correct?
+
+# Check business rules
+print("""
+Business Rule Analysis:
+
+1. Amount > 0 filter:
+   - Expected: Yes, no free orders
+   - Lost: 500K orders
+   - Action: KEEP (legitimate filter)
+
+2. Invalid date filter:
+   - Expected: Yes, but should be manual review
+   - Lost: 300K orders
+   - Action: INVESTIGATE (might be valid data)
+
+3. NULL order_id:
+   - Expected: No, should never happen
+   - Lost: 200K orders
+   - Action: FIX (data quality issue)
+""")
+
+# Cell 4: Fix Data Quality Issues
+# For NULL order_id records
+null_ids = bronze.filter(col("order_id").isNull())
+print(f"Records with NULL order_id: {null_ids.count()}")
+
+# Can we recover them?
+null_ids_recovered = null_ids.select("*", 
+    row_number().over(Window.orderBy("ingestion_date")).alias("sequence_id")
+).withColumn(
+    "recovered_order_id",
+    concat(lit("RECOVERED_"), col("sequence_id"))
+)
+
+# For invalid dates, check if they're actually valid
+invalid_dates = bronze.filter(col("order_date") < '2000-01-01')
+invalid_dates_summary = spark.sql("""
+    SELECT 
+        YEAR(order_date) as year,
+        COUNT(*) as count
+    FROM invalid_dates_table
+    GROUP BY YEAR(order_date)
+    ORDER BY year
+""")
+
+# Decide: Keep or remove?
+# If most are 1970 (likely errors): Remove
+# If distributed: Might be valid → Keep
+
+# Cell 5: Fix Silver Layer
+fixed_silver = spark.sql("""
+    SELECT 
+        COALESCE(order_id, 
+                 concat('REC_', row_number() over(order by ingestion_date))
+        ) as order_id,
+        customer_id,
+        product_id,
+        order_date,
+        amount,
+        quantity
+    FROM bronze
+    WHERE 
+        amount > 0 AND  -- Keep: Valid business rule
+        (order_date >= '2000-01-01' OR order_date IS NULL) AND  -- Allow NULL for now
+        (customer_id IS NOT NULL)  -- This is required
+""")
+
+# Verify new count
+new_count = fixed_silver.count()
+print(f"Silver records after fix: {new_count:,}")
+print(f"Net change: {new_count - silver_count:,}")
+
+fixed_silver.write.format("delta").mode("overwrite").save("/delta/silver/orders")
+
+# Cell 6: Trace Through Gold Layer
+# Rerun gold layer creation
+dbutils.notebook.run("./03_gold_analytics", timeout=3600)
+
+# Verify final count
+final_count = spark.read.format("delta").load("/delta/gold/sales_fact").count()
+print(f"Final gold count: {final_count:,}")
+print(f"Recovery: {final_count - gold_count:,}")
+
+# Cell 7: Root Cause Report
+print("""
+MISSING DATA INVESTIGATION REPORT
+
+Original Issue: 2M orders missing (16% loss)
+
+Root Causes Identified:
+1. Bronze → Silver: 1M records lost
+   - 500K: Negative/zero amounts (Correct filter - KEEP)
+   - 300K: Invalid dates (Data quality issue - INVESTIGATE)
+   - 200K: NULL IDs (Data entry errors - FIX)
+
+2. Silver → Gold: 1M records lost
+   - 800K: Filtered during JOIN (no matching customer)
+   - 200K: Filtered during aggregation (NULL values)
+
+Actions Taken:
+1. Recovered 200K NULL ID records with unique identifiers
+2. Kept invalid date records (manual review queued)
+3. Added LEFT JOIN instead of INNER JOIN in gold layer
+4. Added data quality monitoring alerts
+
+Final Status:
+- Recovered: 1.2M records
+- Verified legitimate loss: 800K records
+- Net result: 11.2M records (93% of expected)
+- Gap analysis: Will do manual review of invalid dates
+
+Prevention:
+1. Data quality validation report before silver layer
+2. Weekly data loss analysis
+3. Alerting for >5% data loss from any layer
+""")
+```
+
+---
+
+### Scenario 5: Scaling From Dev to Production - First Time
+
+**Situation:**
+```
+Your pipeline works in dev cluster (2 workers)
+Now deploying to production (50 workers processing 500GB)
+Issues: Crashes, timeouts, unexpected behavior
+Challenge: Scale confidently without breaking production
+```
+
+**Deployment Strategy:**
+
+```python
+# Cell 1: Pre-Deployment Checklist
+deployment_checklist = """
+PRE-PRODUCTION DEPLOYMENT CHECKLIST
+
+Performance Testing:
+☐ Test with 10x production data volume
+☐ Measure execution time, memory usage
+☐ Identify bottlenecks
+☐ Have scaling plan
+
+Code Quality:
+☐ Code review completed
+☐ Unit tests passing
+☐ Error handling comprehensive
+☐ Logging at critical points
+
+Data Validation:
+☐ Row count checks
+☐ Schema validations
+☐ Business logic tests
+☐ Edge case handling
+
+Infrastructure:
+☐ Cluster configuration reviewed
+☐ Cost estimates calculated
+☐ Monitoring dashboards created
+☐ Alerting rules set up
+☐ Runbooks documented
+
+Rollback Plan:
+☐ Time travel version identified
+☐ Fallback script prepared
+☐ Communication plan ready
+"""
+
+print(deployment_checklist)
+
+# Cell 2: Staging Deployment (Dev → Staging)
+# First, deploy to staging cluster with 80% of production volume
+
+staging_config = {
+    "cluster": "staging-cluster",
+    "workers": 40,  # 80% of production (50)
+    "data_volume": "400GB",  # 80% of production (500GB)
+    "schedule": "Run every 6 hours first week"
+}
+
+# Run pipeline on staging
+%run /Shared/Production/01_bronze_ingestion
+%run /Shared/Production/02_silver_transformation
+%run /Shared/Production/03_gold_analytics
+
+# Validate results
+staging_gold = spark.read.format("delta").load("/staging/gold/sales_fact")
+prod_gold_cached = spark.read.format("delta") \
+    .option("versionAsOf", "0") \
+    .load("/delta/gold/sales_fact")
+
+# Compare metrics
+comparison = spark.sql("""
+    SELECT 
+        'Staging' as environment,
+        COUNT(*) as row_count,
+        SUM(final_amount) as total_revenue,
+        AVG(final_amount) as avg_amount,
+        MAX(order_date) as max_date
+    FROM staging_gold
+    
+    UNION ALL
+    
+    SELECT 
+        'Production' as environment,
+        COUNT(*),
+        SUM(final_amount),
+        AVG(final_amount),
+        MAX(order_date)
+    FROM prod_gold_cached
+""")
+
+comparison.show()
+
+print("""
+✓ Staging validation:
+  - Row counts within 1%
+  - Revenue calculations match
+  - Performance acceptable (< 2 hours)
+""")
+
+# Cell 3: Production Deployment (Shadow Mode)
+# Deploy to production but write to separate location
+# Keep production untouched
+
+production_shadow_config = {
+    "input": "/delta/bronze/orders",  # Real production data
+    "output": "/delta/gold_new/sales_fact",  # Shadow output
+    "schedule": "Run once per day"
+}
+
+# Run pipeline
+%run /Shared/Production/01_bronze_ingestion
+%run /Shared/Production/02_silver_transformation
+%run /Shared/Production/03_gold_analytics_shadow
+
+# Compare shadow vs current production
+shadow_count = spark.read.format("delta").load("/delta/gold_new/sales_fact").count()
+prod_count = spark.read.format("delta").load("/delta/gold/sales_fact").count()
+
+discrepancy = abs(shadow_count - prod_count) / prod_count * 100
+print(f"Shadow vs Production discrepancy: {discrepancy:.2f}%")
+
+if discrepancy < 1:
+    print("✓ Shadow deployment matches production")
+else:
+    print("✗ Discrepancy too high, investigating...")
+    # Find differences
+    only_in_shadow = spark.read.format("delta").load("/delta/gold_new/sales_fact") \
+        .exceptAll(spark.read.format("delta").load("/delta/gold/sales_fact"))
+    only_in_shadow.show(10)
+
+# Cell 4: Cutover to Production
+# Once shadow is validated, switch to production
+
+print("""
+CUTOVER PLAN:
+1. Backup current production table
+   RESTORE TABLE gold.sales_fact TIMESTAMP AS OF ...
+
+2. Swap shadow → production
+   ALTER TABLE gold.sales_fact SET LOCATION '/delta/gold_new/sales_fact'
+
+3. Monitor closely for 24 hours
+   - Check query latencies
+   - Verify data consistency
+   - Monitor costs
+
+4. Full cutover after 24h if no issues
+""")
+
+# Actual cutover
+# BACKUP: Create timestamped backup
+backup_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+spark.sql(f"""
+    CREATE TABLE IF NOT EXISTS gold.sales_fact_backup_{backup_timestamp} LIKE gold.sales_fact
+""")
+
+# SWAP: Move shadow to production
+spark.sql("""
+    DROP TABLE gold.sales_fact
+""")
+spark.sql("""
+    ALTER TABLE gold.sales_fact_new RENAME TO gold.sales_fact
+""")
+
+# Cell 5: Monitoring Post-Deployment
+monitoring_metrics = {
+    "Query latency P95": "< 30 seconds",
+    "Failed queries": "< 0.1%",
+    "Data freshness": "< 2 hours",
+    "Cost per day": "< $500",
+    "Cluster uptime": "> 99.5%"
+}
+
+# Set up alerts
+for metric, threshold in monitoring_metrics.items():
+    print(f"Monitoring {metric}: {threshold}")
+
+# Query performance analysis
+perf_analysis = spark.sql("""
+    SELECT 
+        query_name,
+        COUNT(*) as execution_count,
+        ROUND(AVG(duration_sec), 2) as avg_duration,
+        ROUND(MAX(duration_sec), 2) as max_duration,
+        ROUND(MIN(duration_sec), 2) as min_duration
+    FROM system.query_history
+    WHERE timestamp > CURRENT_TIMESTAMP - INTERVAL 1 HOUR
+    GROUP BY query_name
+    ORDER BY avg_duration DESC
+""")
+
+perf_analysis.show()
+
+# Cell 6: Rollback Plan (If Issues)
+print("""
+IF ISSUES DETECTED:
+
+1. Immediate Rollback (< 5 minutes)
+   RESTORE TABLE gold.sales_fact TO VERSION AS OF 50
+   # OR
+   ALTER TABLE gold.sales_fact SET LOCATION '/delta/gold_backup/sales_fact'
+
+2. Notify Stakeholders
+   Email: Switched back to previous version
+          Investigating issue
+          ETA for fix: 2 hours
+
+3. Root Cause Analysis
+   - Check error logs
+   - Reproduce in staging
+   - Fix and revalidate
+
+4. Redeploy
+   - Test fix in staging (4 hours)
+   - Deploy with monitoring (2 hours)
+   - Full cutover (next day if no issues)
+""")
+```
+
+**Key Learnings:**
+- Staging environment catches 80% of production issues
+- Shadow mode validates before cutover
+- Always have rollback plan ready
+- Gradual rollout reduces risk
+- Monitoring is critical post-deployment
+
+---
+
+## Common Mistakes & Solutions
+
+| Mistake | Impact | Prevention |
+|---------|--------|-----------|
+| `SELECT *` in joins | Slow queries, OOM errors | Always specify columns needed |
+| Partitioning by user_id | 10M+ files, metadata issues | Partition by date, region (low cardinality) |
+| No error handling | Silent failures, data corruption | Try-catch, assertions, validation |
+| Running without logging | Can't debug production issues | Log at every critical step |
+| Not testing edge cases | Failures on leap years, fiscal quarters | Test with boundary data |
+| Hardcoding paths/passwords | Security breach, maintenance nightmare | Use secrets, configurable paths |
+| No schema validation | Schema drift breaks downstream | Validate schema before processing |
+| Too many small files | Slow reads, metadata issues | Repartition to 100MB+ files |
+| Concurrent writes without coordination | Data corruption | Use Delta transactions, serialization |
+| Not monitoring costs | Unexpected bills, runaway clusters | Track per-query, per-job costs |
+
+---
+
+## Conclusion
+
+Databricks provides a comprehensive platform for data engineering, analytics, and machine learning. Key strengths include:
+- **Delta Lake**: ACID transactions and reliability
+- **Unified Analytics**: SQL, Python, Scala, R
+- **Performance**: Optimized Spark runtime
+- **Scalability**: Auto-scaling clusters
+- **Governance**: Unity Catalog and security
+- **Collaboration**: Shared workspaces and versioning
+
+Master these concepts and you'll be well-equipped to build robust data pipelines and analytics solutions. Remember:
+- **Design for failure**: Always have rollback plans
+- **Validate early**: Catch issues at each layer
+- **Monitor constantly**: Production surprises are expensive
+- **Communicate clearly**: Especially during incidents
+- **Document everything**: Future you (and your team) will thank you
