@@ -1,0 +1,1189 @@
+# Flask Complete Notes & Interview Questions for Backend Engineers
+
+## Table of Contents
+1. [Introduction & Architecture](#introduction--architecture)
+2. [Core Concepts](#core-concepts)
+3. [Routing & Request Handling](#routing--request-handling)
+4. [Application Factory Pattern](#application-factory-pattern)
+5. [Blueprints & Modular Structure](#blueprints--modular-structure)
+6. [Database Integration](#database-integration)
+7. [Authentication & Security](#authentication--security)
+8. [Error Handling & Logging](#error-handling--logging)
+9. [Interview Questions & Answers](#-interview-questions--answers)
+
+---
+
+## 📌 Introduction & Architecture
+
+**What is Flask?**
+Lightweight Python web framework for building web applications using a simple and flexible approach.
+
+```
+Philosophy: Micro-framework
+- Minimal core functionality
+- Extensive third-party extensions
+- Developer chooses components
+- Great for learning and simple projects
+
+Compared to Django:
+✓ Lightweight, faster startup
+✓ More control and flexibility
+✓ Lower learning curve
+✗ Less batteries-included
+✗ More manual setup required
+```
+
+**Flask Request-Response Cycle:**
+
+```
+1. Client sends HTTP request
+   ↓
+2. Flask routing matches URL to view function
+   ↓
+3. View function processes request
+   - Access request data (GET, POST, JSON)
+   - Database queries
+   - Business logic
+   ↓
+4. Return response
+   - HTML template rendered
+   - JSON data
+   - Redirect
+   ↓
+5. Response sent to client
+```
+
+**Installation:**
+```bash
+pip install flask
+```
+
+---
+
+## 🧮 Core Concepts
+
+### Basic Flask Application
+
+```python
+from flask import Flask
+
+# Create Flask app instance
+app = Flask(__name__)
+
+# Define route and view function
+@app.route('/')
+def hello():
+    return 'Hello, World!'
+
+# Run development server
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=5000)
+```
+
+**Run:**
+```bash
+python app.py
+```
+
+Visit: http://localhost:5000/
+
+### Request Object
+
+```python
+from flask import Flask, request
+
+app = Flask(__name__)
+
+@app.route('/submit', methods=['POST'])
+def submit():
+    # Access form data
+    name = request.form.get('name')
+    
+    # Access query parameters
+    page = request.args.get('page', default=1, type=int)
+    
+    # Access JSON data
+    data = request.get_json()
+    
+    # Access headers
+    token = request.headers.get('Authorization')
+    
+    # Access files
+    file = request.files.get('upload')
+    
+    # HTTP method
+    method = request.method
+    
+    # Full URL
+    url = request.url
+    
+    return {'status': 'success'}
+```
+
+### Response Object
+
+```python
+from flask import Flask, jsonify, make_response, render_template
+
+app = Flask(__name__)
+
+# Return JSON
+@app.route('/api/data')
+def json_response():
+    return jsonify({'key': 'value', 'count': 42})
+
+# Return HTML template
+@app.route('/page')
+def html_response():
+    return render_template('index.html', name='John')
+
+# Custom response with headers
+@app.route('/custom')
+def custom_response():
+    response = make_response('Custom content')
+    response.headers['Custom-Header'] = 'value'
+    response.status_code = 201
+    return response
+
+# Redirect
+from flask import redirect, url_for
+
+@app.route('/old')
+def old_route():
+    return redirect(url_for('new_route'))
+
+@app.route('/new')
+def new_route():
+    return 'New route'
+```
+
+### Context Locals
+
+```python
+from flask import Flask, request, g, has_request_context
+
+app = Flask(__name__)
+
+@app.before_request
+def before_request():
+    # Store data in g (request-local storage)
+    g.user_id = request.headers.get('User-ID')
+    g.request_start = time.time()
+
+@app.route('/context')
+def context_example():
+    # Access g in view function
+    user_id = g.user_id
+    elapsed = time.time() - g.request_start
+    return {'user_id': user_id, 'elapsed_ms': elapsed * 1000}
+
+# g is request-specific
+# Automatically cleaned up after request
+```
+
+---
+
+## 🔀 Routing & Request Handling
+
+### Route Decorators
+
+```python
+from flask import Flask
+
+app = Flask(__name__)
+
+# Simple route
+@app.route('/hello')
+def hello():
+    return 'Hello'
+
+# Dynamic routes with variables
+@app.route('/user/<name>')
+def user(name):
+    return f'Hello, {name}!'
+
+# Type conversion
+@app.route('/user/<int:user_id>')
+def get_user(user_id):
+    return f'User ID: {user_id}'
+
+# Multiple variable types
+@app.route('/posts/<int:year>/<int:month>/<slug>')
+def post(year, month, slug):
+    return f'{year}-{month}: {slug}'
+
+# URL building with url_for
+from flask import url_for
+
+@app.route('/links')
+def links():
+    return {
+        'user_link': url_for('user', name='john'),
+        'post_link': url_for('post', year=2024, month=1, slug='hello')
+    }
+
+# Multiple methods
+@app.route('/api/data', methods=['GET', 'POST', 'PUT', 'DELETE'])
+def api_endpoint():
+    if request.method == 'GET':
+        return 'Getting data'
+    elif request.method == 'POST':
+        return 'Creating data'
+    elif request.method == 'PUT':
+        return 'Updating data'
+    elif request.method == 'DELETE':
+        return 'Deleting data'
+```
+
+### Request Methods
+
+```python
+from flask import Flask, request
+
+app = Flask(__name__)
+
+# GET request (retrieve data)
+@app.route('/items')
+def get_items():
+    page = request.args.get('page', 1, type=int)
+    limit = request.args.get('limit', 10, type=int)
+    return {'page': page, 'limit': limit}
+
+# POST request (create data)
+@app.route('/items', methods=['POST'])
+def create_item():
+    data = request.get_json()
+    name = data.get('name')
+    description = data.get('description')
+    # Save to database
+    return {'id': 123, 'name': name}, 201
+
+# PUT request (update data)
+@app.route('/items/<int:item_id>', methods=['PUT'])
+def update_item(item_id):
+    data = request.get_json()
+    # Update database
+    return {'id': item_id, 'updated': True}
+
+# DELETE request (remove data)
+@app.route('/items/<int:item_id>', methods=['DELETE'])
+def delete_item(item_id):
+    # Delete from database
+    return '', 204  # No content
+
+# HEAD request (like GET but no body)
+@app.route('/items', methods=['HEAD'])
+def head_items():
+    return ''
+
+# OPTIONS request (describe communication options)
+@app.route('/items', methods=['OPTIONS'])
+def options_items():
+    return {'methods': ['GET', 'POST', 'PUT', 'DELETE']}
+```
+
+---
+
+## 🏗️ Application Factory Pattern
+
+**Best Practice for Scalable Applications:**
+
+```python
+# app/__init__.py
+from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
+
+db = SQLAlchemy()
+
+def create_app(config_name='development'):
+    """Application factory"""
+    app = Flask(__name__)
+    
+    # Load configuration
+    if config_name == 'development':
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dev.db'
+        app.config['DEBUG'] = True
+    elif config_name == 'production':
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://...'
+        app.config['DEBUG'] = False
+    
+    # Initialize extensions
+    db.init_app(app)
+    
+    # Register blueprints
+    from app.api import api_bp
+    from app.web import web_bp
+    app.register_blueprint(api_bp, url_prefix='/api')
+    app.register_blueprint(web_bp, url_prefix='')
+    
+    # Create tables
+    with app.app_context():
+        db.create_all()
+    
+    return app
+
+# wsgi.py (entry point for production)
+from app import create_app
+
+app = create_app(config_name='production')
+
+if __name__ == '__main__':
+    app.run()
+```
+
+**Usage:**
+```python
+# manage.py
+from app import create_app
+
+if __name__ == '__main__':
+    app = create_app('development')
+    app.run(debug=True)
+```
+
+---
+
+## 📦 Blueprints & Modular Structure
+
+**Organize large applications into modules:**
+
+```python
+# app/api/__init__.py
+from flask import Blueprint
+
+api_bp = Blueprint('api', __name__)
+
+# Import routes AFTER blueprint creation
+from . import routes
+
+# app/api/routes.py
+from flask import request, jsonify
+from . import api_bp
+from app.models import User
+from app import db
+
+@api_bp.route('/users', methods=['GET'])
+def list_users():
+    users = User.query.all()
+    return jsonify([u.to_dict() for u in users])
+
+@api_bp.route('/users', methods=['POST'])
+def create_user():
+    data = request.get_json()
+    user = User(name=data['name'], email=data['email'])
+    db.session.add(user)
+    db.session.commit()
+    return jsonify(user.to_dict()), 201
+
+@api_bp.route('/users/<int:user_id>', methods=['GET'])
+def get_user(user_id):
+    user = User.query.get_or_404(user_id)
+    return jsonify(user.to_dict())
+
+# app/web/__init__.py
+from flask import Blueprint
+
+web_bp = Blueprint('web', __name__, template_folder='templates')
+
+from . import routes
+
+# app/web/routes.py
+from flask import render_template
+from . import web_bp
+from app.models import User
+
+@web_bp.route('/')
+def index():
+    return render_template('index.html')
+
+@web_bp.route('/users')
+def users_page():
+    users = User.query.all()
+    return render_template('users.html', users=users)
+```
+
+**File Structure:**
+```
+flask_app/
+├── app/
+│   ├── __init__.py          (create_app factory)
+│   ├── models.py            (database models)
+│   ├── api/
+│   │   ├── __init__.py
+│   │   └── routes.py
+│   ├── web/
+│   │   ├── __init__.py
+│   │   ├── routes.py
+│   │   └── templates/
+│   │       ├── base.html
+│   │       ├── index.html
+│   │       └── users.html
+│   └── static/
+│       ├── css/
+│       ├── js/
+│       └── images/
+├── wsgi.py                  (production entry point)
+├── manage.py                (development entry point)
+└── config.py                (configuration)
+```
+
+---
+
+## 💾 Database Integration
+
+### Using Flask-SQLAlchemy
+
+```python
+# app/__init__.py
+from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
+
+db = SQLAlchemy()
+
+def create_app():
+    app = Flask(__name__)
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
+    db.init_app(app)
+    return app
+
+# app/models.py
+from app import db
+from datetime import datetime
+
+class User(db.Model):
+    __tablename__ = 'users'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationship
+    posts = db.relationship('Post', backref='author', lazy=True)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'email': self.email,
+            'created_at': self.created_at.isoformat()
+        }
+    
+    def __repr__(self):
+        return f'<User {self.name}>'
+
+class Post(db.Model):
+    __tablename__ = 'posts'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    content = db.Column(db.Text)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'content': self.content,
+            'author': self.author.to_dict(),
+            'created_at': self.created_at.isoformat()
+        }
+```
+
+### Database Operations
+
+```python
+from app import db
+from app.models import User, Post
+
+# Create
+user = User(name='John', email='john@example.com')
+db.session.add(user)
+db.session.commit()
+
+# Read
+user = User.query.get(1)
+user = User.query.filter_by(email='john@example.com').first()
+users = User.query.all()
+users = User.query.filter(User.name.contains('John')).all()
+
+# Update
+user = User.query.get(1)
+user.name = 'Jane'
+db.session.commit()
+
+# Delete
+user = User.query.get(1)
+db.session.delete(user)
+db.session.commit()
+
+# Complex queries
+from sqlalchemy import or_, and_
+
+# OR condition
+users = User.query.filter(or_(
+    User.name == 'John',
+    User.name == 'Jane'
+)).all()
+
+# AND condition
+users = User.query.filter(and_(
+    User.name.contains('J'),
+    User.email.contains('example.com')
+)).all()
+
+# Ordering and pagination
+users = User.query.order_by(User.created_at.desc()).all()
+page = User.query.paginate(page=1, per_page=10)
+items = page.items
+total = page.total
+pages = page.pages
+
+# Count
+count = User.query.count()
+
+# Relationship queries
+user = User.query.get(1)
+posts = user.posts  # Access related posts
+```
+
+---
+
+## 🔐 Authentication & Security
+
+### Session-Based Authentication
+
+```python
+from flask import Flask, session, request, redirect, url_for
+from werkzeug.security import generate_password_hash, check_password_hash
+from functools import wraps
+
+app = Flask(__name__)
+app.secret_key = 'your-secret-key-here'
+
+# Store passwords securely
+password_hash = generate_password_hash('password123', method='pbkdf2:sha256')
+
+# Verify password
+is_correct = check_password_hash(password_hash, 'password123')
+
+# Login
+@app.route('/login', methods=['POST'])
+def login():
+    email = request.form.get('email')
+    password = request.form.get('password')
+    
+    user = User.query.filter_by(email=email).first()
+    
+    if user and check_password_hash(user.password_hash, password):
+        session['user_id'] = user.id
+        return redirect(url_for('dashboard'))
+    
+    return 'Invalid credentials', 401
+
+# Logout
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+# Protected route
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    user_id = session['user_id']
+    user = User.query.get(user_id)
+    return f'Welcome, {user.name}'
+```
+
+### Token-Based Authentication (JWT)
+
+```python
+from flask import Flask, jsonify, request
+from functools import wraps
+import jwt
+from datetime import datetime, timedelta
+
+app = Flask(__name__)
+app.config['SECRET_KEY'] = 'your-secret-key'
+
+def generate_token(user_id):
+    """Generate JWT token"""
+    payload = {
+        'user_id': user_id,
+        'exp': datetime.utcnow() + timedelta(hours=24)
+    }
+    return jwt.encode(payload, app.config['SECRET_KEY'], algorithm='HS256')
+
+def verify_token(token):
+    """Verify JWT token"""
+    try:
+        payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+        return payload
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
+        return None
+
+def token_required(f):
+    """Decorator for protected routes"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('Authorization')
+        
+        if not token:
+            return {'message': 'Token missing'}, 401
+        
+        # Remove 'Bearer ' prefix if present
+        token = token.replace('Bearer ', '')
+        
+        payload = verify_token(token)
+        if not payload:
+            return {'message': 'Invalid token'}, 401
+        
+        request.user_id = payload['user_id']
+        return f(*args, **kwargs)
+    
+    return decorated
+
+@app.route('/api/login', methods=['POST'])
+def api_login():
+    data = request.get_json()
+    user = User.query.filter_by(email=data['email']).first()
+    
+    if user and check_password_hash(user.password_hash, data['password']):
+        token = generate_token(user.id)
+        return jsonify({'token': token})
+    
+    return {'message': 'Invalid credentials'}, 401
+
+@app.route('/api/protected')
+@token_required
+def protected_route():
+    user = User.query.get(request.user_id)
+    return jsonify({'message': f'Hello, {user.name}'})
+```
+
+---
+
+## 🚨 Error Handling & Logging
+
+### Error Handlers
+
+```python
+from flask import Flask, jsonify
+
+app = Flask(__name__)
+
+# Handle 404 Not Found
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'error': 'Resource not found'}), 404
+
+# Handle 500 Internal Server Error
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback()
+    return jsonify({'error': 'Internal server error'}), 500
+
+# Custom exception handler
+class APIException(Exception):
+    def __init__(self, message, status_code=400):
+        self.message = message
+        self.status_code = status_code
+
+@app.errorhandler(APIException)
+def handle_api_exception(error):
+    return jsonify({'error': error.message}), error.status_code
+
+@app.route('/api/data')
+def get_data():
+    if some_error:
+        raise APIException('Something went wrong', 400)
+    return {'data': 'value'}
+```
+
+### Logging
+
+```python
+import logging
+from logging.handlers import RotatingFileHandler
+import os
+
+# Configure logging
+if not os.path.exists('logs'):
+    os.mkdir('logs')
+
+file_handler = RotatingFileHandler('logs/flask_app.log', maxBytes=10240, backupCount=10)
+file_handler.setFormatter(logging.Formatter(
+    '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
+))
+file_handler.setLevel(logging.INFO)
+
+app.logger.addHandler(file_handler)
+app.logger.setLevel(logging.INFO)
+app.logger.info('Flask app startup')
+
+# Logging in routes
+@app.route('/process')
+def process():
+    app.logger.info('Processing request')
+    try:
+        result = expensive_operation()
+        app.logger.info(f'Processing successful: {result}')
+        return {'result': result}
+    except Exception as e:
+        app.logger.error(f'Processing failed: {str(e)}')
+        return {'error': str(e)}, 500
+```
+
+---
+
+## 🎯 INTERVIEW QUESTIONS & ANSWERS
+
+### Q1: Explain the Flask request-response lifecycle and how context works. Why is the `g` object important?
+
+**Answer:**
+
+**Flask Request-Response Lifecycle:**
+
+```
+1. HTTP Request arrives
+   ↓
+2. Flask receives request
+   ↓
+3. URL routing matches endpoint
+   ↓
+4. Hooks execute:
+   - @before_request (create g, check auth, etc.)
+   ↓
+5. View function executes
+   - Process request
+   - Access request data
+   - Query database
+   ↓
+6. Hooks execute:
+   - @after_request (modify response)
+   ↓
+7. Response sent to client
+   ↓
+8. Request context destroyed
+   - g cleaned up
+   - Database connections closed
+```
+
+**Context in Flask:**
+
+```
+Two contexts:
+1. Request Context: Active during request processing
+   - Created when request enters Flask
+   - Destroyed when response sent
+   - Includes: request, g, session
+
+2. Application Context: Global to app
+   - Created when app starts
+   - Includes: app, database
+
+Context locals: Thread-local storage
+- Each thread has its own data
+- Safe for concurrent requests
+```
+
+**The `g` Object:**
+
+```
+g = Request-local storage
+
+Lifetime:
+- Created at request start
+- Destroyed at request end
+- Specific to single request
+- NOT shared between requests
+
+Use cases:
+1. Store user info after authentication
+2. Cache query results
+3. Track request-specific data
+4. Pass data between decorators and views
+```
+
+**Code Example:**
+
+```python
+from flask import Flask, g, request
+import time
+
+app = Flask(__name__)
+app.secret_key = 'secret'
+
+@app.before_request
+def before_request():
+    # Store request start time
+    g.request_start = time.time()
+    
+    # Extract user from token/session
+    token = request.headers.get('Authorization')
+    if token:
+        g.user_id = extract_user_id(token)
+    else:
+        g.user_id = None
+
+@app.route('/api/data')
+def get_data():
+    # Check authentication
+    if not g.user_id:
+        return {'error': 'Unauthorized'}, 401
+    
+    # Cache expensive query
+    if not hasattr(g, 'user'):
+        g.user = User.query.get(g.user_id)
+    
+    user = g.user
+    
+    # Track timing
+    elapsed = time.time() - g.request_start
+    
+    return {
+        'user': user.name,
+        'elapsed_ms': elapsed * 1000
+    }
+
+# Without g (WRONG):
+user_cache = {}  # Global - shared across requests!
+
+@app.route('/bad')
+def bad_example(user_id):
+    # Concurrent requests will interfere
+    # User A may see User B's cached data
+    if user_id not in user_cache:
+        user_cache[user_id] = User.query.get(user_id)
+    return user_cache[user_id].to_dict()
+```
+
+**Why g is Important:**
+
+```
+1. Thread Safety:
+   - Each request thread has own g
+   - No race conditions
+   - Safe concurrency
+
+2. Clean Code:
+   - Pass data without function parameters
+   - Decorators can set values for views
+   - Views access without cluttering signatures
+
+3. Request Isolation:
+   - Can't accidentally use data from previous request
+   - Automatic cleanup prevents memory leaks
+   - Clear lifetime management
+
+4. Separation of Concerns:
+   - Middleware/decorators handle authentication
+   - Views don't need to know implementation
+   - Easy to test (mock g)
+```
+
+**Common Pattern:**
+
+```python
+# Authentication decorator
+from functools import wraps
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        token = request.headers.get('Authorization')
+        if not token:
+            return {'error': 'Unauthorized'}, 401
+        
+        # Extract user and store in g
+        g.user_id = verify_token(token)
+        g.user = User.query.get(g.user_id)
+        
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.route('/profile')
+@login_required
+def profile():
+    # View function can access g.user set by decorator
+    return {
+        'id': g.user.id,
+        'name': g.user.name,
+        'email': g.user.email
+    }
+```
+
+**Key Points:**
+🔑 Request context: Active during request processing
+🔑 g object: Request-local storage (not shared)
+🔑 Automatic cleanup: Prevents memory leaks
+🔑 Thread-safe: Each thread has own g
+🔑 Decorator pattern: Authenticate once, access in view
+
+---
+
+### Q2: What's the difference between Flask blueprints and application factory pattern? When and why would you use each?
+
+**Answer:**
+
+**Blueprints:**
+
+```
+What: Modular application component
+Purpose: Organize routes into logical groups
+
+Structure:
+- Encapsulate routes, error handlers, templates
+- Can be registered with app
+- Multiple blueprints per app
+- Can have url_prefix
+
+Use: Organize large applications into modules
+```
+
+**Application Factory Pattern:**
+
+```
+What: Function that creates Flask app
+Purpose: Create app instances with different configurations
+
+Structure:
+- create_app() function
+- Configuration management
+- Flexible initialization
+- Support multiple environments
+
+Use: Enable testing, multiple instances, configurations
+```
+
+**They Solve Different Problems:**
+
+```
+Blueprints: ORGANIZATION
+- How to structure code
+- Where files go
+- Route grouping
+
+Factory: INITIALIZATION
+- How to create app
+- Configuration management
+- Dependency injection
+```
+
+**Code - Blueprints Only (Monolithic):**
+
+```python
+# app.py
+from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
+
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
+db = SQLAlchemy(app)
+
+# All routes in one file - becomes unmanageable
+@app.route('/users')
+def list_users():
+    pass
+
+@app.route('/users/<int:id>')
+def get_user(id):
+    pass
+
+@app.route('/posts')
+def list_posts():
+    pass
+
+@app.route('/posts/<int:id>')
+def get_post(id):
+    pass
+
+# ... 100s more routes in single file
+```
+
+**Code - Factory + Blueprints (Modular):**
+
+```python
+# app/__init__.py - FACTORY
+from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
+
+db = SQLAlchemy()
+
+def create_app(config_name='development'):
+    """Create and configure app"""
+    app = Flask(__name__)
+    
+    # Configuration management
+    if config_name == 'development':
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dev.db'
+        app.config['DEBUG'] = True
+    elif config_name == 'testing':
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+        app.config['TESTING'] = True
+    elif config_name == 'production':
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://...'
+        app.config['DEBUG'] = False
+    
+    # Initialize extensions with app
+    db.init_app(app)
+    
+    # Register blueprints - MODULAR ORGANIZATION
+    from app.users import users_bp
+    from app.posts import posts_bp
+    from app.admin import admin_bp
+    
+    app.register_blueprint(users_bp, url_prefix='/api/users')
+    app.register_blueprint(posts_bp, url_prefix='/api/posts')
+    app.register_blueprint(admin_bp, url_prefix='/api/admin')
+    
+    # Create tables
+    with app.app_context():
+        db.create_all()
+    
+    return app
+
+# app/users/__init__.py - BLUEPRINT
+from flask import Blueprint
+
+users_bp = Blueprint('users', __name__)
+
+from . import routes  # Import after blueprint creation
+
+# app/users/routes.py
+from flask import request, jsonify
+from app.users import users_bp
+from app.models import User
+from app import db
+
+@users_bp.route('', methods=['GET'])
+def list_users():
+    users = User.query.all()
+    return jsonify([u.to_dict() for u in users])
+
+@users_bp.route('/<int:user_id>', methods=['GET'])
+def get_user(user_id):
+    user = User.query.get_or_404(user_id)
+    return jsonify(user.to_dict())
+
+# app/posts/__init__.py - ANOTHER BLUEPRINT
+from flask import Blueprint
+
+posts_bp = Blueprint('posts', __name__)
+
+from . import routes
+
+# app/posts/routes.py
+@posts_bp.route('', methods=['GET'])
+def list_posts():
+    posts = Post.query.all()
+    return jsonify([p.to_dict() for p in posts])
+
+# wsgi.py - ENTRY POINT
+from app import create_app
+
+app = create_app('production')
+
+if __name__ == '__main__':
+    app.run()
+```
+
+**When to Use Blueprints:**
+
+```
+Use blueprints when:
+✓ App has 50+ routes
+✓ Routes logically group (users, posts, admin)
+✓ Want separate templates per module
+✓ Need independent error handlers per module
+✓ Plan to reuse routes elsewhere
+
+Benefits:
+- Cleaner organization
+- Easier to maintain
+- Can extract to plugin
+- Better for team development
+```
+
+**When to Use Factory:**
+
+```
+Use factory pattern when:
+✓ Need multiple app configurations
+✓ Want to test (different db for tests)
+✓ Deploy to different environments
+✓ Need dependency injection
+✓ Want to create app instances dynamically
+
+Benefits:
+- Testable (inject test config)
+- Flexible configuration
+- Multiple environments
+- Can create multiple app instances
+```
+
+**Example - Testing with Factory:**
+
+```python
+# tests/conftest.py
+import pytest
+from app import create_app, db
+
+@pytest.fixture
+def app():
+    """Create app with test config"""
+    app = create_app('testing')
+    
+    with app.app_context():
+        db.create_all()
+        yield app
+        db.session.remove()
+        db.drop_all()
+
+@pytest.fixture
+def client(app):
+    """Test client"""
+    return app.test_client()
+
+@pytest.fixture
+def runner(app):
+    """CLI runner"""
+    return app.test_cli_runner()
+
+# tests/test_users.py
+def test_list_users(client):
+    response = client.get('/api/users')
+    assert response.status_code == 200
+    assert isinstance(response.json, list)
+
+def test_create_user(client):
+    response = client.post('/api/users',
+        json={'name': 'John', 'email': 'john@example.com'})
+    assert response.status_code == 201
+    assert response.json['name'] == 'John'
+```
+
+**Key Points:**
+🔑 Blueprints: Organize routes into modules
+🔑 Factory: Create app with different configs
+🔑 Use together: Factory creates app, blueprints organize routes
+🔑 Testing: Factory enables different config for tests
+🔑 Scalability: Both help as app grows
+
+---
+
+**Last Updated**: December 29, 2025
+**Version**: 1.0
+**Scope**: Complete Flask reference with 2 interview Q&A
