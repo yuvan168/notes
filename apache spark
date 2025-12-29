@@ -1,0 +1,3184 @@
+# Apache Spark Complete Notes
+
+## Table of Contents
+1. [Introduction to Apache Spark](#introduction-to-apache-spark)
+2. [Spark Architecture](#spark-architecture)
+3. [Spark Core Concepts](#spark-core-concepts)
+4. [RDD (Resilient Distributed Dataset)](#rdd-resilient-distributed-dataset)
+5. [DataFrame and Dataset](#dataframe-and-dataset)
+6. [Spark SQL](#spark-sql)
+7. [PySpark](#pyspark)
+8. [Spark Streaming](#spark-streaming)
+9. [MLlib (Machine Learning Library)](#mllib-machine-learning-library)
+10. [Performance Optimization](#performance-optimization)
+11. [Best Practices](#best-practices)
+12. [Common Pitfalls](#common-pitfalls)
+13. [Advanced Concepts](#advanced-concepts)
+
+---
+
+## Introduction to Apache Spark
+
+### What is Apache Spark?
+
+Apache Spark is an open-source, distributed computing framework designed for large-scale data processing and analytics. It provides a fast and general-purpose cluster computing system that can perform both batch processing and stream processing.
+
+**Key Characteristics:**
+- **Fast**: Uses in-memory computing for 100x faster performance than Hadoop MapReduce
+- **General-purpose**: Supports batch processing, streaming, machine learning, and graph processing
+- **Easy to use**: Multiple language support (Scala, Python, Java, R, SQL)
+- **Runs everywhere**: Can run on Hadoop, Kubernetes, standalone clusters, or cloud platforms
+- **Resilient**: Fault-tolerant through lineage and RDD recovery
+
+### History and Evolution
+
+- **2009**: Started at UC Berkeley AMPLab
+- **2013**: Open-sourced, became Apache project
+- **2014**: Apache Spark 1.0 released
+- **2016**: Spark 2.0 with emphasis on structured APIs (DataFrame, SQL)
+- **2020**: Spark 3.0 with adaptive query execution, accelerator support
+- **2024**: Spark continues to evolve with performance improvements
+
+### Use Cases
+
+1. **ETL (Extract, Transform, Load)**
+2. **Batch Processing**: Large-scale data processing jobs
+3. **Stream Processing**: Real-time data analysis
+4. **Machine Learning**: Building and training ML models
+5. **Graph Processing**: Social networks, recommendation systems
+6. **Interactive Analytics**: Ad-hoc queries and exploration
+7. **Data Integration**: Combining data from multiple sources
+
+### Advantages Over Hadoop
+
+| Feature | Spark | Hadoop MapReduce |
+|---------|-------|------------------|
+| Speed | 100x faster in-memory | Disk-based, slower |
+| Programming | Multiple languages | Java-centric |
+| Ease of Use | High-level APIs | Low-level programming |
+| Fault Tolerance | RDD lineage | Replica and checkpoint |
+| Latency | Low latency | High latency |
+| Processing | In-memory | Disk-based |
+
+---
+
+## Spark Architecture
+
+### Cluster Architecture
+
+**Master-Slave Model:**
+
+```
+┌──────────────────────────────────────────────┐
+│           Spark Driver Program               │
+│  (Runs SparkContext, manages application)    │
+└──────────────────────────────────────────────┘
+              ↓
+┌──────────────────────────────────────────────┐
+│      Cluster Manager (YARN/Mesos/K8s)       │
+│  (Allocates resources to application)        │
+└──────────────────────────────────────────────┘
+              ↓
+    ┌─────────────────────────────┬──────────────────┐
+    ↓                             ↓                  ↓
+┌─────────────┐           ┌──────────────┐   ┌──────────────┐
+│  Executor 1 │           │  Executor 2  │   │  Executor N  │
+│  Tasks, Cache│          │  Tasks, Cache│   │  Tasks, Cache│
+└─────────────┘           ┌──────────────┐   └──────────────┘
+    │ │                                │
+    ↓ ↓                                ↓
+  [Task]                            [Task]
+```
+
+### Components Explanation
+
+1. **Driver Program**
+   - Runs the main() method
+   - Creates SparkContext
+   - Executes SparkAction operations
+   - Sends work to executors
+   - Collects results
+
+2. **SparkContext**
+   - Entry point to Spark functionality
+   - Communicates with cluster manager
+   - Creates RDDs, accumulators, broadcast variables
+
+3. **Cluster Manager**
+   - YARN (Hadoop's resource manager)
+   - Mesos (Apache's resource manager)
+   - Kubernetes (Container orchestration)
+   - Standalone (Spark's own resource manager)
+
+4. **Executors**
+   - Run on worker nodes
+   - Execute tasks assigned by driver
+   - Cache data in memory
+   - Return results to driver
+
+5. **Worker Nodes**
+   - Physical machines in the cluster
+   - Run one or more executors
+   - Provide CPU, memory, storage
+
+### Deployment Modes
+
+1. **Local Mode**
+   ```python
+   # All processes run on single machine
+   spark = SparkSession.builder.master("local").appName("example").getOrCreate()
+   ```
+   - Good for development and testing
+   - Single-threaded or multi-threaded
+
+2. **Standalone Mode**
+   ```
+   spark = SparkSession.builder.master("spark://host:7077").appName("example").getOrCreate()
+   ```
+   - Spark's own cluster manager
+   - No dependency on Hadoop or Mesos
+
+3. **YARN Mode**
+   ```
+   spark = SparkSession.builder.master("yarn").appName("example").getOrCreate()
+   ```
+   - Runs on Hadoop cluster
+   - Two sub-modes: YARN-Client and YARN-Cluster
+
+4. **Mesos Mode**
+   - Coarse-grained: One executor per application
+   - Fine-grained: Multiple executors per application
+
+5. **Kubernetes Mode**
+   ```
+   spark = SparkSession.builder.master("k8s://https://host:port").appName("example").getOrCreate()
+   ```
+   - Native Kubernetes support
+   - Containers for Spark components
+
+---
+
+## Spark Core Concepts
+
+### SparkSession vs SparkContext
+
+**SparkContext** (Entry point for RDD API):
+```python
+from pyspark import SparkContext
+sc = SparkContext("local", "RDD Example")
+rdd = sc.textFile("data.txt")
+```
+
+**SparkSession** (Entry point for DataFrame/SQL API - Recommended):
+```python
+from pyspark.sql import SparkSession
+spark = SparkSession.builder \
+    .appName("example") \
+    .master("local") \
+    .getOrCreate()
+df = spark.read.csv("data.csv", header=True)
+```
+
+**Difference:**
+- SparkContext: Works with unstructured data, RDDs, older API
+- SparkSession: Works with structured data, DataFrames, modern API
+- SparkContext is still underlying but SparkSession simplifies usage
+
+### Lazy Evaluation
+
+**Key Concept**: Transformations are not executed immediately; they build an execution plan. Only actions trigger execution.
+
+```python
+# Transformation (lazy - not executed)
+rdd1 = sc.parallelize([1, 2, 3, 4, 5])
+rdd2 = rdd1.map(lambda x: x * 2)  # Not executed yet
+rdd3 = rdd2.filter(lambda x: x > 5)  # Not executed yet
+
+# Action (triggers execution)
+result = rdd3.collect()  # NOW everything is executed
+print(result)  # [6, 8, 10]
+```
+
+**Benefits:**
+- Optimization: Spark can optimize the entire pipeline
+- Efficiency: Only necessary computations run
+- Debugging: Can combine operations before execution
+
+### Transformations vs Actions
+
+**Transformations** (Return new RDD/DataFrame):
+```python
+# RDD Transformations
+rdd.map(func)          # Apply function to each element
+rdd.filter(func)       # Keep elements matching condition
+rdd.flatMap(func)      # Map then flatten
+rdd.reduceByKey(func)  # Aggregate by key
+rdd.join(other_rdd)    # Join two RDDs
+rdd.groupByKey()       # Group by key
+rdd.sortByKey()        # Sort by key
+rdd.union(other_rdd)   # Combine two RDDs
+rdd.distinct()         # Remove duplicates
+rdd.coalesce(n)        # Reduce partitions (no shuffle)
+rdd.repartition(n)     # Change partitions (with shuffle)
+```
+
+**Actions** (Return values or write to storage):
+```python
+rdd.collect()          # Return all elements to driver
+rdd.count()            # Count elements
+rdd.first()            # Get first element
+rdd.take(n)            # Get first n elements
+rdd.takeOrdered(n)     # Get first n sorted elements
+rdd.top(n)             # Get top n elements
+rdd.saveAsTextFile()   # Write to file
+rdd.foreach(func)      # Apply function to each element
+rdd.reduce(func)       # Aggregate all elements
+rdd.countByKey()       # Count by key (for key-value pairs)
+```
+
+**Diagram - Lazy Evaluation Flow:**
+```
+Code → Build DAG (Directed Acyclic Graph) → Action Triggered → Execution Plan → Execution
+       (No execution)                      (Lazy ends here)
+```
+
+### DAG (Directed Acyclic Graph)
+
+Spark builds a DAG of stages from transformations, optimizes it, then executes.
+
+```python
+# Code:
+rdd1 = sc.parallelize([1, 2, 3, 4, 5])
+rdd2 = rdd1.map(lambda x: x * 2)
+rdd3 = rdd2.filter(lambda x: x > 5)
+result = rdd3.collect()
+
+# DAG:
+# parallelize → map → filter → collect
+#    (Stage 0)  (Stage 0) (Stage 0) (Action)
+```
+
+---
+
+## RDD (Resilient Distributed Dataset)
+
+### What is RDD?
+
+RDD is an immutable, distributed collection of objects that can be processed in parallel.
+
+**Characteristics:**
+- **Resilient (Fault-tolerant)**: Can recover from node failures
+- **Distributed**: Data split across cluster nodes
+- **Immutable**: Cannot change once created
+- **Lazy**: Transformations not executed until action
+- **Untyped**: Contains any object type
+
+### Creating RDDs
+
+1. **From external storage**:
+```python
+from pyspark import SparkContext
+sc = SparkContext("local", "RDD Example")
+rdd = sc.textFile("path/to/file.txt")
+```
+
+2. **From existing collection**:
+```python
+rdd = sc.parallelize([1, 2, 3, 4, 5])
+rdd = sc.parallelize(range(100), numPartitions=4)
+```
+
+3. **From another RDD**:
+```python
+rdd1 = sc.parallelize([1, 2, 3])
+rdd2 = rdd1.map(lambda x: x * 2)
+```
+
+4. **From Hadoop InputFormat**:
+```python
+rdd = sc.hadoopFile("path/to/hadoopfile")
+```
+
+### RDD Operations
+
+**Map**:
+```python
+rdd = sc.parallelize([1, 2, 3, 4, 5])
+rdd2 = rdd.map(lambda x: x * 2)
+# Result: [2, 4, 6, 8, 10]
+```
+
+**FlatMap**:
+```python
+rdd = sc.parallelize(["hello world", "hi there"])
+rdd2 = rdd.flatMap(lambda x: x.split())
+# Result: ["hello", "world", "hi", "there"]
+```
+
+**Filter**:
+```python
+rdd = sc.parallelize([1, 2, 3, 4, 5])
+rdd2 = rdd.filter(lambda x: x > 2)
+# Result: [3, 4, 5]
+```
+
+**Reduce**:
+```python
+rdd = sc.parallelize([1, 2, 3, 4, 5])
+sum_result = rdd.reduce(lambda a, b: a + b)
+# Result: 15
+```
+
+**GroupByKey** (for RDDs of type key-value):
+```python
+rdd = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
+rdd2 = rdd.groupByKey()
+# Result: [("a", [1, 1]), ("b", [1])]
+```
+
+**ReduceByKey**:
+```python
+rdd = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
+rdd2 = rdd.reduceByKey(lambda x, y: x + y)
+# Result: [("a", 2), ("b", 1)]
+```
+
+**Join**:
+```python
+rdd1 = sc.parallelize([("a", 1), ("b", 2)])
+rdd2 = sc.parallelize([("a", 3), ("c", 4)])
+rdd3 = rdd1.join(rdd2)
+# Result: [("a", (1, 3))]
+```
+
+**Union**:
+```python
+rdd1 = sc.parallelize([1, 2, 3])
+rdd2 = sc.parallelize([3, 4, 5])
+rdd3 = rdd1.union(rdd2)
+# Result: [1, 2, 3, 3, 4, 5]
+```
+
+**Distinct**:
+```python
+rdd = sc.parallelize([1, 2, 2, 3, 3, 3])
+rdd2 = rdd.distinct()
+# Result: [1, 2, 3]
+```
+
+### Persistence (Caching)
+
+Cache RDDs to avoid recomputation when used multiple times.
+
+```python
+rdd = sc.parallelize(range(1000000))
+rdd.cache()  # Or .persist()
+result1 = rdd.count()  # Computed and cached
+result2 = rdd.collect()  # Uses cached data
+
+# Cache levels:
+rdd.persist(StorageLevel.MEMORY_ONLY)           # RAM only
+rdd.persist(StorageLevel.MEMORY_AND_DISK)       # RAM then disk
+rdd.persist(StorageLevel.DISK_ONLY)             # Disk only
+rdd.persist(StorageLevel.MEMORY_ONLY_2)         # RAM with replication
+rdd.persist(StorageLevel.OFF_HEAP)              # Off-heap memory
+
+# Remove cache
+rdd.unpersist()
+```
+
+### Partitioning
+
+RDDs are divided into partitions for parallel processing.
+
+```python
+# Create with specific partitions
+rdd = sc.parallelize(range(100), numPartitions=4)
+
+# Repartition (with shuffle - expensive)
+rdd2 = rdd.repartition(8)
+
+# Coalesce (reduce partitions - no shuffle, more efficient)
+rdd3 = rdd.coalesce(2)
+
+# Get number of partitions
+num_partitions = rdd.getNumPartitions()
+
+# Get partition data
+rdd.glom().collect()  # Each inner list is a partition
+```
+
+---
+
+## DataFrame and Dataset
+
+### DataFrame vs RDD vs Dataset
+
+| Aspect | RDD | DataFrame | Dataset |
+|--------|-----|-----------|---------|
+| Type | Untyped | Typed (rows/columns) | Strongly typed |
+| Schema | No schema | Has schema | Has schema |
+| Optimization | Manual | Catalyst optimizer | Catalyst optimizer |
+| Performance | Slower | Faster | Faster |
+| Language | Scala, Python, Java | All | Scala, Java |
+| SQL | No | Yes | Yes |
+| Ease of Use | Low | High | High |
+
+### Creating DataFrames
+
+1. **From structured data files**:
+```python
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.appName("example").getOrCreate()
+
+df = spark.read.csv("data.csv", header=True, inferSchema=True)
+df = spark.read.parquet("data.parquet")
+df = spark.read.json("data.json")
+```
+
+2. **From RDD**:
+```python
+rdd = sc.parallelize([(1, "Alice"), (2, "Bob"), (3, "Charlie")])
+df = rdd.toDF(["id", "name"])
+```
+
+3. **From Pandas DataFrame**:
+```python
+import pandas as pd
+pandas_df = pd.DataFrame({"id": [1, 2, 3], "name": ["Alice", "Bob", "Charlie"]})
+df = spark.createDataFrame(pandas_df)
+```
+
+4. **From raw data**:
+```python
+data = [("Alice", 25), ("Bob", 30), ("Charlie", 35)]
+df = spark.createDataFrame(data, ["name", "age"])
+```
+
+### DataFrame Operations
+
+**Select**:
+```python
+df.select("name", "age").show()
+df.select(df.name, df.age + 1).show()
+```
+
+**Filter/Where**:
+```python
+df.filter(df.age > 25).show()
+df.where((df.age > 25) & (df.name == "Alice")).show()
+```
+
+**GroupBy and Aggregate**:
+```python
+df.groupBy("department").count().show()
+df.groupBy("department").agg({"salary": "avg", "age": "max"}).show()
+```
+
+**Join**:
+```python
+df1.join(df2, df1.id == df2.id, how="inner").show()
+# how: "inner", "outer", "left", "right", "cross"
+```
+
+**Union/Concatenation**:
+```python
+df3 = df1.union(df2)
+df3 = df1.unionByName(df2)  # Match by column name
+```
+
+**Sort**:
+```python
+df.sort(df.age.desc()).show()
+df.orderBy("age", "name").show()
+```
+
+**Distinct**:
+```python
+df.distinct().show()
+```
+
+**Drop Duplicates**:
+```python
+df.dropDuplicates(["name"]).show()
+```
+
+### DataFrame Properties
+
+```python
+df.schema          # Get schema
+df.dtypes          # Get column names and types
+df.columns         # Get column names
+df.count()         # Number of rows
+df.rdd             # Convert to RDD
+df.toPandas()      # Convert to Pandas
+df.explain()       # Show execution plan
+```
+
+### Dataset
+
+Dataset is a strongly-typed distributed collection (Scala/Java only in PySpark era).
+
+```scala
+// Scala
+case class Person(name: String, age: Int)
+val ds = spark.createDataset(data)
+ds.map(_.age).collect()
+```
+
+---
+
+## Spark SQL
+
+### SQL Queries on DataFrames
+
+```python
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.appName("sql_example").getOrCreate()
+
+df = spark.read.csv("employees.csv", header=True, inferSchema=True)
+df.createOrReplaceTempView("employees")
+
+result = spark.sql("SELECT * FROM employees WHERE salary > 50000")
+result.show()
+```
+
+### DataFrame API vs SQL
+
+**Same result, different syntax:**
+
+```python
+# SQL
+spark.sql("SELECT department, AVG(salary) FROM employees GROUP BY department")
+
+# DataFrame API
+df.groupBy("department").agg({"salary": "avg"})
+```
+
+### Catalyst Optimizer
+
+Spark's query optimizer that:
+1. Parses SQL or DataFrame operations
+2. Creates logical plan
+3. Optimizes logical plan (predicate pushdown, join reordering)
+4. Creates physical plans
+5. Chooses best physical plan
+6. Generates bytecode for execution
+
+**Example optimization - Predicate Pushdown:**
+```python
+# Original query
+df.filter(df.salary > 50000).select(df.name)
+
+# Optimized (filter pushed before select for earlier reduction)
+df.filter(df.salary > 50000).select(df.name)
+```
+
+### Window Functions
+
+```python
+from pyspark.sql.window import Window
+from pyspark.sql.functions import row_number, rank, dense_rank
+
+# Partition window
+windowSpec = Window.partitionBy("department").orderBy("salary")
+
+df.withColumn("rank", rank().over(windowSpec)).show()
+df.withColumn("row_num", row_number().over(windowSpec)).show()
+df.withColumn("dense_rank", dense_rank().over(windowSpec)).show()
+```
+
+### SQL Functions
+
+```python
+from pyspark.sql.functions import (
+    col, when, sum, avg, max, min, count,
+    upper, lower, length, substring,
+    year, month, day, date_format,
+    lit, concat, coalesce
+)
+
+# String functions
+df.select(upper(col("name"))).show()
+df.select(length(col("name"))).show()
+
+# Date functions
+df.select(year(col("hire_date"))).show()
+
+# Aggregation
+df.agg(sum("salary"), avg("age"), max("salary")).show()
+
+# Conditional
+df.select(when(col("age") > 30, "Senior").otherwise("Junior")).show()
+
+# Null handling
+df.select(coalesce(col("bonus"), lit(0))).show()
+```
+
+---
+
+## PySpark
+
+### Setting Up PySpark
+
+```python
+# Install
+# pip install pyspark
+
+# Basic setup
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("MyApp") \
+    .config("spark.sql.shuffle.partitions", "200") \
+    .config("spark.executor.memory", "2g") \
+    .config("spark.executor.cores", "4") \
+    .master("local[*]") \
+    .getOrCreate()
+```
+
+### Python RDD Operations
+
+```python
+# Map
+rdd = sc.parallelize([1, 2, 3, 4])
+result = rdd.map(lambda x: x * 2).collect()
+
+# Filter
+result = rdd.filter(lambda x: x > 2).collect()
+
+# FlatMap
+rdd2 = sc.parallelize(["a b", "c d"])
+result = rdd2.flatMap(lambda x: x.split()).collect()
+
+# Reduce
+result = rdd.reduce(lambda a, b: a + b)
+```
+
+### Python UDFs (User Defined Functions)
+
+```python
+from pyspark.sql.functions import udf
+from pyspark.sql.types import IntegerType, StringType
+
+# Simple UDF
+def add_one(x):
+    return x + 1
+
+add_one_udf = udf(add_one, IntegerType())
+df.select(add_one_udf(col("age"))).show()
+
+# Lambda UDF
+multiply_by_two = udf(lambda x: x * 2, IntegerType())
+df.select(multiply_by_two(col("salary"))).show()
+
+# Pandas UDF (vectorized, faster)
+import pandas as pd
+@udf(returnType=IntegerType())
+def pandas_multiply(s):
+    return s * 2
+
+df.select(pandas_multiply(col("value"))).show()
+```
+
+### Reading/Writing Data
+
+```python
+# Read CSV
+df = spark.read.csv("data.csv", header=True, inferSchema=True, sep=",")
+df = spark.read.option("sep", ";").option("quote", "'").csv("data.csv")
+
+# Write CSV
+df.write.mode("overwrite").csv("output_path")
+df.write.mode("append").csv("output_path")
+
+# Read/Write Parquet (preferred for Spark)
+df = spark.read.parquet("data.parquet")
+df.write.parquet("output_path")
+
+# Read/Write JSON
+df = spark.read.json("data.json")
+df.write.json("output_path")
+
+# Read/Write Hive
+df = spark.read.table("hive_table")
+df.write.mode("overwrite").saveAsTable("new_hive_table")
+
+# Write modes: overwrite, append, ignore, error
+```
+
+---
+
+## Spark Streaming
+
+### Stream Processing Concepts
+
+Spark Streaming processes data in micro-batches. Each batch is processed as RDD/DataFrame.
+
+```
+Input Data Stream
+        ↓
+    [Batch 1] → Process → Output
+    [Batch 2] → Process → Output
+    [Batch 3] → Process → Output
+```
+
+### DStream (Discretized Stream)
+
+```python
+from pyspark.streaming import StreamingContext
+from pyspark import SparkContext
+
+sc = SparkContext("local[2]", "StreamingExample")
+ssc = StreamingContext(sc, batchDuration=5)  # 5-second batches
+
+# Create DStream from socket
+lines = ssc.socketTextStream("localhost", 9999)
+words = lines.flatMap(lambda line: line.split())
+wordCounts = words.map(lambda word: (word, 1)).reduceByKey(lambda a, b: a + b)
+wordCounts.pprint()
+
+ssc.start()
+ssc.awaitTermination()
+```
+
+### Structured Streaming
+
+Modern approach using DataFrames (recommended over DStream).
+
+```python
+from pyspark.sql.functions import *
+
+spark = SparkSession.builder.appName("StructuredStreaming").getOrCreate()
+
+# Read from socket
+df = spark.readStream \
+    .format("socket") \
+    .option("host", "localhost") \
+    .option("port", 9999) \
+    .load()
+
+# Process
+query = df.select(explode(split(col("value"), " ")).alias("word")) \
+    .groupBy("word") \
+    .count() \
+    .writeStream \
+    .outputMode("complete") \
+    .format("console") \
+    .option("checkpointLocation", "/tmp/checkpoint") \
+    .start()
+
+query.awaitTermination()
+```
+
+### Output Modes
+
+- **Append**: Add new rows to output (only new results)
+- **Complete**: Replace entire output (all results)
+- **Update**: Update changed rows (only updated results)
+
+### Sources and Sinks
+
+**Sources:**
+- Kafka
+- HDFS
+- S3
+- Socket
+- Rate (for testing)
+
+**Sinks:**
+- File system
+- Console
+- Kafka
+- Memory (for debugging)
+- Foreach (custom)
+
+---
+
+## MLlib (Machine Learning Library)
+
+### MLlib Overview
+
+MLlib is Spark's machine learning library with algorithms for:
+- Classification
+- Regression
+- Clustering
+- Collaborative filtering
+- Dimensionality reduction
+
+### ML Pipeline
+
+Modern approach using ML pipelines (DataFrame-based).
+
+```python
+from pyspark.ml import Pipeline
+from pyspark.ml.feature import StringIndexer, VectorAssembler
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.evaluation import BinaryClassificationEvaluator
+
+# Data preparation
+df = spark.read.csv("data.csv", header=True, inferSchema=True)
+
+# Feature engineering
+indexer = StringIndexer(inputCol="category", outputCol="category_idx")
+assembler = VectorAssembler(inputCols=["age", "income", "category_idx"], 
+                            outputCol="features")
+
+# Model
+lr = LogisticRegression(featuresCol="features", labelCol="label")
+
+# Pipeline
+pipeline = Pipeline(stages=[indexer, assembler, lr])
+
+# Train
+model = pipeline.fit(df)
+
+# Predict
+predictions = model.transform(test_df)
+
+# Evaluate
+evaluator = BinaryClassificationEvaluator(labelCol="label")
+auc = evaluator.evaluate(predictions)
+print(f"AUC: {auc}")
+```
+
+### Classification Algorithms
+
+```python
+from pyspark.ml.classification import (
+    LogisticRegression, DecisionTreeClassifier, RandomForestClassifier,
+    GBTClassifier, NaiveBayes, SVC
+)
+
+# Logistic Regression
+lr = LogisticRegression(maxIter=100, regParam=0.01)
+lr_model = lr.fit(train_df)
+
+# Decision Tree
+dt = DecisionTreeClassifier(maxDepth=5)
+dt_model = dt.fit(train_df)
+
+# Random Forest
+rf = RandomForestClassifier(numTrees=100, maxDepth=10)
+rf_model = rf.fit(train_df)
+
+# Gradient Boosting
+gbt = GBTClassifier(maxIter=20)
+gbt_model = gbt.fit(train_df)
+
+# Naive Bayes
+nb = NaiveBayes()
+nb_model = nb.fit(train_df)
+```
+
+### Regression Algorithms
+
+```python
+from pyspark.ml.regression import (
+    LinearRegression, DecisionTreeRegressor, RandomForestRegressor,
+    GBTRegressor
+)
+
+# Linear Regression
+lr = LinearRegression(maxIter=100, regParam=0.01, elasticNetParam=0.5)
+lr_model = lr.fit(train_df)
+
+# Decision Tree Regression
+dt = DecisionTreeRegressor(maxDepth=5)
+dt_model = dt.fit(train_df)
+
+# Random Forest Regression
+rf = RandomForestRegressor(numTrees=100, maxDepth=10)
+rf_model = rf.fit(train_df)
+```
+
+### Clustering Algorithms
+
+```python
+from pyspark.ml.clustering import KMeans, GMM, BisectingKMeans
+
+# K-Means
+kmeans = KMeans(k=3, seed=1)
+kmeans_model = kmeans.fit(features_df)
+predictions = kmeans_model.transform(features_df)
+
+# Gaussian Mixture Model
+gmm = GMM(k=3)
+gmm_model = gmm.fit(features_df)
+
+# Bisecting K-Means
+bkm = BisectingKMeans(k=3)
+bkm_model = bkm.fit(features_df)
+```
+
+### Feature Engineering
+
+```python
+from pyspark.ml.feature import (
+    StringIndexer, OneHotEncoder, VectorAssembler,
+    StandardScaler, MinMaxScaler, Normalizer,
+    Tokenizer, CountVectorizer, HashingTF, IDF,
+    PCA
+)
+
+# String Indexing
+indexer = StringIndexer(inputCol="category", outputCol="category_idx")
+
+# One-Hot Encoding
+encoder = OneHotEncoder(inputCols=["category_idx"], 
+                       outputCols=["category_vec"])
+
+# Vector Assembly
+assembler = VectorAssembler(inputCols=["age", "income", "category_vec"],
+                           outputCol="features")
+
+# Scaling
+scaler = StandardScaler(inputCol="features", outputCol="scaled_features")
+
+# Normalization
+normalizer = Normalizer(inputCol="features", outputCol="norm_features", p=2.0)
+
+# TF-IDF (for text)
+tokenizer = Tokenizer(inputCol="text", outputCol="words")
+tf = HashingTF(inputCol="words", outputCol="tf")
+idf = IDF(inputCol="tf", outputCol="tfidf")
+
+# PCA (dimensionality reduction)
+pca = PCA(k=10, inputCol="features", outputCol="pca_features")
+```
+
+---
+
+## Performance Optimization
+
+### Optimization Techniques
+
+1. **Partitioning**:
+```python
+df = spark.read.csv("data.csv", header=True)
+# Repartition if skewed
+df = df.repartition(200, "key_column")
+```
+
+2. **Caching**:
+```python
+df.cache()
+df.count()  # Force evaluation
+result1 = df.filter(...).collect()  # Uses cached data
+```
+
+3. **Broadcast Variables**:
+```python
+# For small data to be reused across tasks
+broadcast_var = sc.broadcast(small_dict)
+# Access in RDD transformations
+result = rdd.map(lambda x: broadcast_var.value[x])
+```
+
+4. **Accumulators**:
+```python
+# For aggregating values from tasks to driver
+counter = sc.accumulator(0)
+rdd.foreach(lambda x: counter.add(1) if x > 5 else None)
+print(f"Count: {counter.value}")
+```
+
+5. **Predicate Pushdown** (automatic with DataFrames):
+```python
+# Filter applied at source, not after
+df = spark.read.parquet("data.parquet")
+df.filter(df.date > "2024-01-01").select("name").show()
+```
+
+6. **Columnar Storage**:
+```python
+# Parquet is columnar, compresses well
+df.write.parquet("output_path")  # Preferred over CSV
+```
+
+7. **Join Optimization**:
+```python
+# Use hash join (smaller table)
+small_df = spark.broadcast(df_small)
+result = df_large.join(small_df, "key")
+
+# Avoid shuffle join
+df1.join(df2, df1.key == df2.key, "inner")
+```
+
+### Configuration Tuning
+
+```python
+spark = SparkSession.builder \
+    .appName("Tuned") \
+    .config("spark.sql.shuffle.partitions", "200") \
+    .config("spark.executor.memory", "4g") \
+    .config("spark.executor.cores", "4") \
+    .config("spark.driver.memory", "2g") \
+    .config("spark.sql.adaptive.enabled", "true") \
+    .config("spark.sql.adaptive.coalescePartitions.enabled", "true") \
+    .getOrCreate()
+```
+
+### Explain Query Plan
+
+```python
+df.explain()
+# Or detailed version
+df.explain(extended=True)
+# Shows logical and physical plans
+```
+
+---
+
+## Best Practices
+
+### 1. Use DataFrames/SQL Instead of RDD
+
+```python
+# Avoid (slower)
+rdd = sc.textFile("data.txt")
+result = rdd.map(lambda x: x.split(",")).map(lambda x: (x[0], int(x[1]))).reduceByKey(lambda a, b: a + b)
+
+# Prefer (faster)
+df = spark.read.csv("data.csv", header=True, inferSchema=True)
+result = df.groupBy("name").sum("value")
+```
+
+### 2. Avoid Unnecessary Shuffles
+
+```python
+# Avoid
+df1.join(df2).select(...).groupBy(...).count()  # Multiple shuffles
+
+# Prefer
+df = df1.join(df2).select(...).groupBy(...).count()  # One query
+```
+
+### 3. Use Broadcast for Small Data
+
+```python
+# Avoid (causes shuffle)
+df.join(small_df, "key")
+
+# Prefer (no shuffle)
+small_df = spark.broadcast(small_df)
+df.join(small_df, "key")
+```
+
+### 4. Cache When Reusing
+
+```python
+df = spark.read.csv("huge_file.csv")
+df.cache()
+result1 = df.filter(df.age > 30).count()
+result2 = df.filter(df.salary > 50000).count()  # Reuses cache
+df.unpersist()
+```
+
+### 5. Use Efficient File Formats
+
+```python
+# Avoid (slow, large)
+df.write.csv("output.csv")
+
+# Prefer (fast, compressed)
+df.write.parquet("output.parquet")
+```
+
+### 6. Partition Data Wisely
+
+```python
+# Avoid (too many small files)
+df.repartition(1).write.parquet("output")
+
+# Prefer
+df.repartition(50).write.parquet("output")
+
+# Check partitions
+df.rdd.getNumPartitions()
+```
+
+### 7. Write Idiomatic Code
+
+```python
+# Avoid (verbose)
+from pyspark.sql.functions import col
+df.select(col("name")).filter(col("age") > 30)
+
+# Prefer
+df.select("name").filter(df.age > 30)
+```
+
+---
+
+## Common Pitfalls
+
+### 1. **Not Understanding Lazy Evaluation**
+
+```python
+# Problem: Thinks computation happens here
+rdd = rdd.map(expensive_function)
+
+# Solution: It happens here (at action)
+result = rdd.collect()  # NOW runs
+```
+
+### 2. **Caching RDDs that Don't Need It**
+
+```python
+# Problem: Wasting memory
+rdd.cache()
+result = rdd.map(...).collect()  # Used once
+
+# Solution: Cache only if reused multiple times
+```
+
+### 3. **Using RDD When DataFrame is Available**
+
+```python
+# Problem: No optimization
+rdd.map(lambda x: (x[0], x[1])).reduceByKey(lambda a, b: a + b)
+
+# Solution: Use DataFrame API
+df.groupBy("col1").sum("col2")
+```
+
+### 4. **Not Setting Partitions Correctly**
+
+```python
+# Problem: Too few partitions (slow, data skew)
+df.repartition(1)
+
+# Solution: Based on data size
+df.repartition(200)
+```
+
+### 5. **Ignoring Data Skew**
+
+```python
+# Problem: Uneven partition sizes cause bottlenecks
+rdd.reduceByKey(func)  # If key distribution is skewed
+
+# Solution: Add salt to distribute better
+rdd.keyBy(lambda x: (x[0], random() % 100)).reduceByKey(func)
+```
+
+### 6. **Collecting Large Data**
+
+```python
+# Problem: Driver out of memory
+large_rdd.collect()
+
+# Solution: Sample or filter first
+large_rdd.take(1000)
+large_rdd.sample(False, 0.01).collect()  # 1% sample
+```
+
+### 7. **Not Using SQL Optimizations**
+
+```python
+# Problem: Manual operations not optimized
+df.select(...).filter(...).groupBy(...).agg(...)
+
+# Solution: Write as SQL for Catalyst optimization
+spark.sql("SELECT ... WHERE ... GROUP BY ...")
+```
+
+### 8. **Memory Leaks from Accumulators**
+
+```python
+# Problem: Accumulator persists across actions
+acc = sc.accumulator(0)
+rdd1.foreach(lambda x: acc.add(1))
+rdd2.foreach(lambda x: acc.add(1))
+# acc now has combined counts - not per action!
+
+# Solution: Create new accumulator per action
+acc1 = sc.accumulator(0)
+rdd1.foreach(lambda x: acc1.add(1))
+acc2 = sc.accumulator(0)
+rdd2.foreach(lambda x: acc2.add(1))
+```
+
+---
+
+## Advanced Concepts
+
+### 1. **Lineage and Fault Tolerance**
+
+RDDs maintain lineage (sequence of transformations). If a partition fails, Spark recomputes it from original source.
+
+```python
+rdd1 = sc.textFile("data.txt")
+rdd2 = rdd1.map(func1)
+rdd3 = rdd2.filter(func2)
+rdd4 = rdd3.reduceByKey(func3)
+
+# Lineage: data.txt → map → filter → reduceByKey
+# If rdd3 partition fails, recomputed from data.txt
+```
+
+### 2. **Shuffle Operations**
+
+Some operations require shuffle (moving data across partitions):
+- Join
+- ReduceByKey
+- GroupByKey
+- Repartition
+
+```python
+# Avoid multiple shuffles
+rdd.reduceByKey(func1).join(other_rdd).groupByKey()  # 3 shuffles!
+
+# Optimize
+result = rdd.reduceByKey(func1)
+result = result.join(other_rdd)
+result = result.groupByKey()  # Same result, readable
+```
+
+### 3. **Broadcast Join (Map-Side Join)**
+
+For joining large RDD with small data.
+
+```python
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("BroadcastJoin").getOrCreate()
+small_df = spark.read.csv("small.csv", header=True)
+large_df = spark.read.csv("large.csv", header=True)
+
+# Broadcast hint
+result = large_df.join(broadcast(small_df), "key")
+```
+
+### 4. **Adaptive Query Execution (AQE)**
+
+Spark dynamically optimizes execution based on runtime statistics.
+
+```python
+spark = SparkSession.builder \
+    .config("spark.sql.adaptive.enabled", "true") \
+    .config("spark.sql.adaptive.coalescePartitions.enabled", "true") \
+    .config("spark.sql.adaptive.skewJoin.enabled", "true") \
+    .getOrCreate()
+```
+
+### 5. **GraphX for Graph Processing**
+
+For graph algorithms (PageRank, connected components, etc.).
+
+```python
+from pyspark.graphx import GraphFrame
+
+# Create vertices
+vertices = spark.createDataFrame([(1, "Alice"), (2, "Bob")], ["id", "name"])
+
+# Create edges
+edges = spark.createDataFrame([(1, 2, "friend"), (2, 1, "friend")], 
+                              ["src", "dst", "relationship"])
+
+# Create graph
+graph = GraphFrame(vertices, edges)
+
+# PageRank
+ranks = graph.pageRank(resetProbability=0.15, maxIter=20)
+```
+
+### 6. **Delta Lake for ACID Transactions**
+
+Modern data lake with ACID guarantees.
+
+```python
+# Write with Delta Lake
+df.write.format("delta").mode("overwrite").save("path/to/delta")
+
+# Read
+df = spark.read.format("delta").load("path/to/delta")
+
+# ACID insert/update/delete
+spark.sql("UPDATE delta.table SET age = 30 WHERE name = 'Alice'")
+spark.sql("DELETE FROM delta.table WHERE age < 18")
+
+# Time travel
+df = spark.read.format("delta").option("versionAsOf", 0).load("path")
+```
+
+### 7. **Spark with Kubernetes**
+
+Native Kubernetes support for deployment.
+
+```
+spark-submit --master k8s://https://kubernetes-host:port \
+  --deploy-mode cluster \
+  --name spark-job \
+  --conf spark.executor.instances=3 \
+  --conf spark.executor.cores=2 \
+  --conf spark.executor.memory=4g \
+  local:///path/to/app.py
+```
+
+### 8. **Custom Partitioner**
+
+For specialized partitioning logic.
+
+```python
+class CustomPartitioner:
+    def __init__(self, num_partitions):
+        self.num_partitions = num_partitions
+    
+    def __call__(self, key):
+        # Custom logic
+        return hash(key) % self.num_partitions
+
+rdd = sc.parallelize([("a", 1), ("b", 2)])
+partitioner = CustomPartitioner(4)
+rdd_partitioned = rdd.partitionBy(partitioner)
+```
+
+---
+
+## Interview Questions and Keypoints
+
+### Key Interview Topics
+
+**1. Architecture**
+- Explain Spark cluster components (Driver, Executor, Cluster Manager)
+- Difference between Driver and Executor
+- How does Spark handle fault tolerance?
+
+**2. Core Concepts**
+- RDD vs DataFrame vs Dataset
+- Transformations vs Actions
+- Lazy evaluation and why it matters
+
+**3. Optimization**
+- How does Catalyst optimizer work?
+- What is predicate pushdown?
+- When to use caching?
+
+**4. Advanced**
+- Explain DAG and stages
+- How to handle data skew?
+- Broadcast join vs shuffle join
+
+### Quick Reference - Commands
+
+```python
+# Basic Setup
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.appName("app").getOrCreate()
+
+# Read Data
+df = spark.read.csv("file.csv", header=True, inferSchema=True)
+
+# Operations
+df.select("col1", "col2").filter(df.col1 > 100).show()
+df.groupBy("category").agg({"salary": "avg"}).show()
+
+# Machine Learning
+from pyspark.ml import Pipeline
+from pyspark.ml.classification import LogisticRegression
+```
+
+---
+
+## Practical Applications
+
+### Application 1: E-Commerce Data Analytics & Revenue Analysis
+
+**Business Context:**
+An e-commerce company processes millions of transactions daily and needs to analyze sales patterns, identify high-value customers, predict trends, and optimize inventory. Data includes orders, customer behavior, product details, and returns.
+
+**Problem Statement:**
+- Process 100GB+ of daily transaction data
+- Analyze customer purchase patterns across regions
+- Identify top products and seasonal trends
+- Detect anomalies and fraud
+- Real-time dashboard updates
+
+**Theory & Approach:**
+- Use DataFrames for structured transaction data (faster than RDD)
+- Leverage Catalyst optimizer for complex joins and aggregations
+- Partition by date for efficient time-based queries
+- Use broadcast joins for small dimension tables (products, customers)
+- Cache frequently accessed analysis results
+
+**Complete Implementation:**
+
+```python
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import (
+    col, sum, avg, max, min, count, countDistinct, 
+    date_format, year, month, quarter, 
+    when, case, broadcast, percent_rank, row_number
+)
+from pyspark.sql.window import Window
+from pyspark.ml.feature import StringIndexer, VectorAssembler
+from pyspark.ml.clustering import KMeans
+from datetime import datetime, timedelta
+
+# Initialize Spark Session with optimized config
+spark = SparkSession.builder \
+    .appName("E-Commerce Analytics") \
+    .config("spark.sql.shuffle.partitions", "200") \
+    .config("spark.sql.adaptive.enabled", "true") \
+    .config("spark.sql.adaptive.coalescePartitions.enabled", "true") \
+    .config("spark.driver.memory", "4g") \
+    .config("spark.executor.memory", "4g") \
+    .config("spark.executor.cores", "4") \
+    .master("local[*]") \
+    .getOrCreate()
+
+# ===== DATA INGESTION =====
+# Load transaction data (partitioned by date for efficiency)
+orders_df = spark.read \
+    .option("basePath", "/data/orders") \
+    .parquet("/data/orders/year=2024/month=*")
+
+# Load dimension tables
+customers_df = spark.read.parquet("/data/customers")
+products_df = spark.read.parquet("/data/products")
+returns_df = spark.read.parquet("/data/returns")
+
+# Schema inspection
+print("Orders Schema:")
+orders_df.printSchema()
+# output:
+# root
+#  |-- order_id: long
+#  |-- customer_id: long
+#  |-- product_id: long
+#  |-- quantity: integer
+#  |-- order_amount: decimal(10,2)
+#  |-- order_date: timestamp
+#  |-- region: string
+#  |-- payment_method: string
+
+# ===== DATA CLEANING & PREPARATION =====
+# Handle null values and data quality
+orders_clean = orders_df \
+    .filter(col("order_amount") > 0) \
+    .filter(col("quantity") > 0) \
+    .filter(col("order_date").isNotNull()) \
+    .dropDuplicates(["order_id"]) \
+    .na.fill({"payment_method": "Unknown"})
+
+# Join with dimension tables using broadcast for small tables
+customers_broadcast = broadcast(customers_df)
+products_broadcast = broadcast(products_df)
+
+enriched_orders = orders_clean \
+    .join(customers_broadcast, "customer_id", "left") \
+    .join(products_broadcast, "product_id", "left") \
+    .select(
+        "order_id", "customer_id", "product_id", 
+        "quantity", "order_amount", "order_date", 
+        "region", "customer_segment", "product_category", 
+        "product_name", "payment_method"
+    )
+
+# Cache enriched data (will be reused multiple times)
+enriched_orders.cache()
+total_orders = enriched_orders.count()
+print(f"Total orders processed: {total_orders}")
+
+# ===== REVENUE ANALYSIS BY REGION =====
+regional_analysis = enriched_orders \
+    .groupBy("region", "product_category") \
+    .agg(
+        sum("order_amount").alias("total_revenue"),
+        count("order_id").alias("order_count"),
+        avg("order_amount").alias("avg_order_value"),
+        countDistinct("customer_id").alias("unique_customers"),
+        max("order_amount").alias("max_order_value"),
+        min("order_amount").alias("min_order_value")
+    ) \
+    .withColumn(
+        "revenue_percentage",
+        (col("total_revenue") / sum("total_revenue").over(Window.partitionBy())) * 100
+    ) \
+    .orderBy(col("total_revenue").desc())
+
+print("\n=== REGIONAL REVENUE ANALYSIS ===")
+regional_analysis.show()
+
+# ===== TIME-BASED TREND ANALYSIS =====
+date_format_expr = date_format(col("order_date"), "yyyy-MM")
+
+monthly_trends = enriched_orders \
+    .withColumn("year_month", date_format_expr) \
+    .groupBy("year_month", "region") \
+    .agg(
+        sum("order_amount").alias("monthly_revenue"),
+        count("order_id").alias("order_count"),
+        countDistinct("customer_id").alias("unique_customers")
+    ) \
+    .orderBy("year_month")
+
+# Calculate month-over-month growth
+window_spec = Window.partitionBy("region").orderBy("year_month")
+monthly_growth = monthly_trends \
+    .withColumn(
+        "previous_revenue",
+        lag("monthly_revenue").over(window_spec)
+    ) \
+    .withColumn(
+        "growth_rate",
+        ((col("monthly_revenue") - col("previous_revenue")) / col("previous_revenue") * 100)
+    )
+
+print("\n=== MONTHLY TRENDS WITH GROWTH RATE ===")
+monthly_growth.filter(col("growth_rate").isNotNull()).show()
+
+# ===== CUSTOMER SEGMENTATION ANALYSIS =====
+# Create customer metrics for segmentation
+customer_metrics = enriched_orders \
+    .groupBy("customer_id", "customer_segment") \
+    .agg(
+        count("order_id").alias("purchase_frequency"),
+        sum("order_amount").alias("lifetime_value"),
+        avg("order_amount").alias("avg_order_value"),
+        max(col("order_date")).alias("last_purchase_date")
+    )
+
+# Calculate days since last purchase
+customer_metrics = customer_metrics.withColumn(
+    "days_since_last_purchase",
+    (unix_timestamp(lit(datetime.now())) - unix_timestamp(col("last_purchase_date"))) / 86400
+)
+
+# Segment customers using K-means clustering
+indexer = StringIndexer(inputCol="customer_segment", outputCol="segment_idx")
+assembler = VectorAssembler(
+    inputCols=["purchase_frequency", "lifetime_value", "avg_order_value", "days_since_last_purchase"],
+    outputCol="features"
+)
+kmeans = KMeans(k=4, seed=42)
+
+segments = indexer.fit(customer_metrics) \
+    .transform(customer_metrics) \
+    .pipe(lambda df: assembler.transform(df)) \
+    .pipe(lambda df: kmeans.fit(df).transform(df))
+
+print("\n=== CUSTOMER SEGMENTS ===")
+segments.select("customer_id", "lifetime_value", "prediction").show()
+
+# ===== TOP PRODUCTS ANALYSIS =====
+top_products = enriched_orders \
+    .groupBy("product_id", "product_name", "product_category") \
+    .agg(
+        count("order_id").alias("times_purchased"),
+        sum("quantity").alias("total_quantity_sold"),
+        sum("order_amount").alias("total_revenue"),
+        avg("order_amount").alias("avg_transaction_value"),
+        countDistinct("customer_id").alias("unique_customers")
+    ) \
+    .filter(col("total_revenue") > 1000)  # Min revenue threshold
+
+# Rank products by revenue
+window_rank = Window.orderBy(col("total_revenue").desc())
+top_products_ranked = top_products.withColumn(
+    "revenue_rank",
+    row_number().over(window_rank)
+).filter(col("revenue_rank") <= 20)
+
+print("\n=== TOP 20 PRODUCTS BY REVENUE ===")
+top_products_ranked.show()
+
+# ===== ANOMALY DETECTION (Fraud/Unusual Transactions) =====
+# Calculate statistics for anomaly detection
+stats = enriched_orders.agg(
+    avg("order_amount").alias("avg_amount"),
+    stddev("order_amount").alias("stddev_amount"),
+    max("quantity").alias("max_qty"),
+    avg("quantity").alias("avg_qty")
+).collect()[0]
+
+anomaly_threshold = stats["avg_amount"] + (3 * stats["stddev_amount"])
+
+anomalies = enriched_orders \
+    .filter(
+        (col("order_amount") > anomaly_threshold) |
+        (col("quantity") > stats["max_qty"] * 0.9)
+    ) \
+    .select(
+        "order_id", "customer_id", "order_amount", "quantity", 
+        "order_date", "region", "payment_method"
+    )
+
+print(f"\n=== DETECTED ANOMALIES (High-value or Suspicious Orders) ===")
+print(f"Anomaly threshold: ${anomaly_threshold:.2f}")
+anomalies.show()
+
+# ===== RETURN ANALYSIS =====
+# Join with returns data to analyze return patterns
+orders_with_returns = enriched_orders.alias("o") \
+    .join(
+        returns_df.alias("r"),
+        (col("o.order_id") == col("r.order_id")),
+        "left"
+    ) \
+    .select(
+        col("o.*"),
+        col("r.return_id"),
+        col("r.return_reason"),
+        col("r.return_date")
+    )
+
+return_analysis = orders_with_returns \
+    .filter(col("return_id").isNotNull()) \
+    .groupBy("product_category", "return_reason") \
+    .agg(
+        count("return_id").alias("return_count"),
+        count("order_id").alias("returned_orders")
+    ) \
+    .withColumn("return_rate", col("return_count") / col("returned_orders"))
+
+print("\n=== RETURN ANALYSIS BY CATEGORY ===")
+return_analysis.show()
+
+# ===== COHORT ANALYSIS =====
+# Analyze customer behavior by signup cohort
+cohort_analysis = enriched_orders \
+    .withColumn("order_month", date_format(col("order_date"), "yyyy-MM")) \
+    .withColumn("cohort_month", date_format(col("customer_signup_date"), "yyyy-MM")) \
+    .groupBy("cohort_month", "order_month", "customer_segment") \
+    .agg(
+        count("order_id").alias("orders"),
+        sum("order_amount").alias("revenue"),
+        countDistinct("customer_id").alias("active_customers")
+    ) \
+    .orderBy("cohort_month", "order_month")
+
+print("\n=== COHORT RETENTION ANALYSIS ===")
+cohort_analysis.show()
+
+# ===== WRITE RESULTS TO STORAGE =====
+# Save analysis results in efficient format
+regional_analysis.write.mode("overwrite").parquet("/output/regional_analysis")
+top_products_ranked.write.mode("overwrite").parquet("/output/top_products")
+anomalies.write.mode("overwrite").parquet("/output/anomalies")
+monthly_growth.write.mode("overwrite").parquet("/output/monthly_trends")
+
+# Create summary report
+summary_report = f"""
+E-COMMERCE ANALYTICS REPORT
+============================
+Report Date: {datetime.now()}
+Total Orders Processed: {total_orders}
+Date Range: {enriched_orders.agg(min("order_date"), max("order_date")).collect()[0]}
+
+Key Metrics:
+- Total Revenue: ${enriched_orders.agg(sum("order_amount")).collect()[0][0]:,.2f}
+- Average Order Value: ${enriched_orders.agg(avg("order_amount")).collect()[0][0]:,.2f}
+- Unique Customers: {enriched_orders.select(countDistinct("customer_id")).collect()[0][0]}
+- Regions: {enriched_orders.select(countDistinct("region")).collect()[0][0]}
+- Product Categories: {enriched_orders.select(countDistinct("product_category")).collect()[0][0]}
+
+Anomalies Detected: {anomalies.count()}
+Returns Processed: {orders_with_returns.filter(col("return_id").isNotNull()).count()}
+"""
+
+print(summary_report)
+
+# Stop Spark session
+spark.stop()
+```
+
+**Key Takeaways:**
+- Partitioning by date enables efficient time-based analysis
+- Broadcast joins prevent expensive shuffles for dimension tables
+- Caching enriched data improves performance when used multiple times
+- Window functions enable complex aggregations (ranking, growth rates)
+- Anomaly detection using statistical methods identifies outliers
+- DataFrame API with Catalyst optimization makes queries fast
+
+---
+
+### Application 2: Real-Time IoT Sensor Data Processing & Monitoring
+
+**Business Context:**
+A manufacturing company has 10,000+ IoT sensors monitoring temperature, pressure, humidity, and vibration across production facilities. Needs real-time monitoring, anomaly detection, and predictive maintenance.
+
+**Problem Statement:**
+- Process 1 million+ sensor readings per minute
+- Real-time alerting for anomalies
+- Predict equipment failures before they happen
+- Dashboard showing live facility status
+- Historical analysis for patterns
+
+**Theory & Approach:**
+- Use Structured Streaming for real-time micro-batch processing
+- Separate hot path (alerts) from cold path (storage)
+- Maintain windowed aggregations for trend detection
+- Apply statistical process control for anomaly detection
+- Use watermarks to handle late-arriving data
+
+**Implementation:**
+
+```python
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import (
+    col, avg, stddev, max, min, window, 
+    when, expr, broadcast
+)
+from pyspark.sql.types import StructType, StructField, StringType, DoubleType, LongType
+
+spark = SparkSession.builder \
+    .appName("IoT Sensor Stream Processing") \
+    .config("spark.sql.streaming.checkpointLocation", "/tmp/checkpoint") \
+    .getOrCreate()
+
+# ===== DEFINE SENSOR DATA SCHEMA =====
+sensor_schema = StructType([
+    StructField("sensor_id", StringType(), True),
+    StructField("facility_id", StringType(), True),
+    StructField("sensor_type", StringType(), True),  # temperature, pressure, humidity, vibration
+    StructField("value", DoubleType(), True),
+    StructField("timestamp", LongType(), True),
+    StructField("unit", StringType(), True)
+])
+
+# ===== READ STREAMING DATA FROM KAFKA =====
+sensor_stream = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("subscribe", "iot-sensors") \
+    .option("startingOffsets", "latest") \
+    .load() \
+    .select(from_json(col("value").cast("string"), sensor_schema).alias("data")) \
+    .select("data.*") \
+    .withColumn("event_time", from_unixtime(col("timestamp")))
+
+# ===== LOAD SENSOR CONFIGURATION & THRESHOLDS =====
+# Static configuration for normal operating ranges
+sensor_config = spark.read.parquet("/data/sensor_config")
+# Contains: sensor_id, min_normal, max_normal, alert_threshold, expected_value
+
+config_broadcast = broadcast(sensor_config)
+
+# ===== ENRICH STREAM WITH CONFIGURATION =====
+enriched_stream = sensor_stream \
+    .join(config_broadcast, "sensor_id", "left") \
+    .select(
+        col("sensor_id"),
+        col("facility_id"),
+        col("sensor_type"),
+        col("value"),
+        col("event_time"),
+        col("unit"),
+        col("min_normal"),
+        col("max_normal"),
+        col("alert_threshold")
+    )
+
+# ===== REAL-TIME ANOMALY DETECTION =====
+# Detect immediate anomalies (out of range)
+anomalies_stream = enriched_stream \
+    .withColumn(
+        "is_anomaly",
+        when(
+            (col("value") < col("min_normal")) | (col("value") > col("max_normal")),
+            True
+        ).otherwise(False)
+    ) \
+    .filter(col("is_anomaly") == True) \
+    .select(
+        col("sensor_id"),
+        col("facility_id"),
+        col("sensor_type"),
+        col("value"),
+        col("event_time"),
+        lit("OUT_OF_RANGE").alias("anomaly_type")
+    )
+
+# ===== WINDOWED STATISTICS FOR TREND DETECTION =====
+# 5-minute tumbling window with 30-second slide
+windowed_stats = enriched_stream \
+    .withWatermark("event_time", "10 minutes") \
+    .groupBy(
+        window(col("event_time"), "5 minutes", "30 seconds"),
+        col("sensor_id"),
+        col("facility_id"),
+        col("sensor_type")
+    ) \
+    .agg(
+        avg("value").alias("avg_value"),
+        stddev("value").alias("stddev_value"),
+        min("value").alias("min_value"),
+        max("value").alias("max_value"),
+        count("*").alias("reading_count")
+    ) \
+    .withColumn(
+        "trend_anomaly",
+        when(col("stddev_value") > 5.0, True).otherwise(False)
+    )
+
+# ===== ALERT GENERATION STREAM =====
+alerts_stream = anomalies_stream \
+    .union(
+        windowed_stats.filter(col("trend_anomaly") == True)
+            .select(
+                col("sensor_id"),
+                col("facility_id"),
+                col("sensor_type"),
+                col("avg_value").alias("value"),
+                col("window").cast("string").alias("event_time"),
+                lit("TREND_ANOMALY").alias("anomaly_type")
+            )
+    ) \
+    .withColumn("alert_timestamp", current_timestamp())
+
+# ===== OUTPUT 1: REAL-TIME ALERTS TO CONSOLE (for monitoring) =====
+alert_query = alerts_stream \
+    .writeStream \
+    .format("console") \
+    .option("checkpointLocation", "/tmp/alerts_checkpoint") \
+    .option("numRows", 50) \
+    .start()
+
+# ===== OUTPUT 2: WRITE ALERTS TO KAFKA TOPIC (for external systems) =====
+alert_kafka_query = alerts_stream \
+    .select(to_json(struct("*")).alias("value")) \
+    .writeStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("topic", "sensor-alerts") \
+    .option("checkpointLocation", "/tmp/kafka_alerts_checkpoint") \
+    .start()
+
+# ===== OUTPUT 3: PERSIST STATISTICS FOR ANALYTICS =====
+stats_query = windowed_stats \
+    .writeStream \
+    .format("parquet") \
+    .option("path", "/data/sensor_statistics") \
+    .option("checkpointLocation", "/tmp/stats_checkpoint") \
+    .partitionBy("facility_id", "sensor_type") \
+    .start()
+
+# ===== OUTPUT 4: LIVE DASHBOARD DATA (Append mode) =====
+dashboard_stream = windowed_stats \
+    .select(
+        col("sensor_id"),
+        col("facility_id"),
+        col("sensor_type"),
+        col("avg_value"),
+        col("max_value"),
+        col("min_value"),
+        col("reading_count"),
+        col("window").cast("string").alias("time_window")
+    )
+
+dashboard_query = dashboard_stream \
+    .writeStream \
+    .format("memory") \
+    .option("checkpointLocation", "/tmp/dashboard_checkpoint") \
+    .queryName("dashboard_stats") \
+    .start()
+
+# ===== BATCH QUERY ON STREAMING DATA (Ad-hoc analysis) =====
+# Can query live dashboard data
+spark.sql("SELECT * FROM dashboard_stats WHERE facility_id = 'FACILITY_001'").show()
+
+# ===== WAIT FOR TERMINATION =====
+spark.streams.awaitAnyTermination()
+```
+
+**Key Insights:**
+- Watermarking handles late-arriving sensor data gracefully
+- Windowed aggregations detect trends in addition to point anomalies
+- Multiple output sinks (console, Kafka, storage, memory) serve different purposes
+- Broadcasting static configuration reduces memory footprint
+- Real-time processing enables immediate alerting
+
+---
+
+### Application 3: Machine Learning Pipeline - Customer Churn Prediction
+
+**Business Context:**
+A telecom company wants to predict which customers are likely to churn (cancel service) so they can proactively offer retention deals.
+
+**Problem Statement:**
+- Predict customer churn 30 days in advance
+- Handle imbalanced classes (churn is rare event)
+- Explain which features drive churn
+- Score all customers in batch daily
+- A/B test retention offers
+
+**Implementation:**
+
+```python
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, when, datediff, lit, rand
+from pyspark.ml import Pipeline, PipelineModel
+from pyspark.ml.feature import (
+    StringIndexer, OneHotEncoder, VectorAssembler, StandardScaler
+)
+from pyspark.ml.classification import RandomForestClassifier, LogisticRegression
+from pyspark.ml.evaluation import BinaryClassificationEvaluator, MulticlassClassificationEvaluator
+from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
+
+spark = SparkSession.builder \
+    .appName("Churn Prediction") \
+    .config("spark.sql.adaptive.enabled", "true") \
+    .master("local[*]") \
+    .getOrCreate()
+
+# ===== LOAD DATA =====
+customer_data = spark.read.parquet("/data/customers_full")
+service_data = spark.read.parquet("/data/services")
+billing_data = spark.read.parquet("/data/billing")
+churn_labels = spark.read.parquet("/data/churn_labels")  # Historical labels
+
+# ===== DATA PREPARATION =====
+# Join datasets
+full_data = customer_data \
+    .join(service_data, "customer_id", "left") \
+    .join(billing_data, "customer_id", "left") \
+    .join(churn_labels, "customer_id", "left")
+
+# Calculate features
+# Recency: days since last service interaction
+# Frequency: number of service changes
+# Monetary: average monthly bill
+features_df = full_data \
+    .withColumn(
+        "days_since_last_interaction",
+        datediff(lit(datetime.now()), col("last_interaction_date"))
+    ) \
+    .withColumn(
+        "monthly_bill_increase",
+        (col("current_bill") - col("bill_6_months_ago")) / col("bill_6_months_ago") * 100
+    ) \
+    .withColumn(
+        "support_ticket_ratio",
+        col("support_tickets") / greatest(col("months_as_customer"), 1)
+    ) \
+    .withColumn(
+        "has_long_contract",
+        when(col("contract_length_months") > 12, 1).otherwise(0)
+    ) \
+    .select(
+        "customer_id",
+        "age",
+        "gender",
+        "service_type",
+        "monthly_charges",
+        "tenure_months",
+        "total_charges",
+        "days_since_last_interaction",
+        "monthly_bill_increase",
+        "support_ticket_ratio",
+        "has_long_contract",
+        "churn"  # Target variable
+    )
+
+# Handle missing values
+features_df = features_df.na.fill(
+    {
+        "monthly_bill_increase": 0,
+        "support_ticket_ratio": 0,
+        "days_since_last_interaction": 999
+    }
+)
+
+# Balance classes (churn is ~20% of data)
+churn_positive = features_df.filter(col("churn") == 1)
+churn_negative = features_df.filter(col("churn") == 0)
+
+# Downsample negative class
+churn_negative_sampled = churn_negative.sample(
+    withReplacement=False,
+    fraction=churn_positive.count() / churn_negative.count() * 0.8
+)
+
+balanced_df = churn_positive.union(churn_negative_sampled)
+
+# Split train/test
+train_df, test_df = balanced_df.randomSplit([0.8, 0.2], seed=42)
+
+print(f"Training set size: {train_df.count()}")
+print(f"Test set size: {test_df.count()}")
+
+# ===== FEATURE ENGINEERING PIPELINE =====
+# String indexing
+gender_indexer = StringIndexer(inputCol="gender", outputCol="gender_idx")
+service_indexer = StringIndexer(inputCol="service_type", outputCol="service_idx")
+
+# One-hot encoding
+gender_encoder = OneHotEncoder(inputCols=["gender_idx"], outputCols=["gender_vec"])
+service_encoder = OneHotEncoder(inputCols=["service_idx"], outputCols=["service_vec"])
+
+# Feature assembly
+feature_columns = [
+    "age", "tenure_months", "monthly_charges", "total_charges",
+    "days_since_last_interaction", "monthly_bill_increase",
+    "support_ticket_ratio", "has_long_contract",
+    "gender_vec", "service_vec"
+]
+assembler = VectorAssembler(inputCols=feature_columns, outputCol="features")
+
+# Scaling
+scaler = StandardScaler(inputCol="features", outputCol="scaled_features")
+
+# ===== TRAIN MODEL WITH HYPERPARAMETER TUNING =====
+rf = RandomForestClassifier(
+    featuresCol="scaled_features",
+    labelCol="churn",
+    numTrees=100,
+    seed=42,
+    weightCol=None
+)
+
+# Create pipeline
+pipeline = Pipeline(stages=[
+    gender_indexer, service_indexer,
+    gender_encoder, service_encoder,
+    assembler, scaler,
+    rf
+])
+
+# Hyperparameter grid
+param_grid = ParamGridBuilder() \
+    .addGrid(rf.maxDepth, [5, 10, 15]) \
+    .addGrid(rf.numTrees, [50, 100, 200]) \
+    .addGrid(rf.minInstancesPerNode, [1, 5, 10]) \
+    .build()
+
+# Cross-validator
+evaluator = BinaryClassificationEvaluator(labelCol="churn", metricName="areaUnderROC")
+cv = CrossValidator(
+    estimator=pipeline,
+    estimatorParamMaps=param_grid,
+    evaluator=evaluator,
+    numFolds=5
+)
+
+# Train with cross-validation
+print("Training model with cross-validation...")
+cv_model = cv.fit(train_df)
+
+# Get best model
+best_model = cv_model.bestModel
+
+# ===== EVALUATE MODEL =====
+predictions = best_model.transform(test_df)
+
+# ROC-AUC
+auc = evaluator.evaluate(predictions)
+print(f"ROC-AUC Score: {auc:.4f}")
+
+# Accuracy
+accuracy_evaluator = MulticlassClassificationEvaluator(
+    labelCol="churn",
+    predictionCol="prediction",
+    metricName="accuracy"
+)
+accuracy = accuracy_evaluator.evaluate(predictions)
+print(f"Accuracy: {accuracy:.4f}")
+
+# Precision & Recall
+precision_evaluator = MulticlassClassificationEvaluator(
+    labelCol="churn",
+    predictionCol="prediction",
+    metricName="weightedPrecision"
+)
+recall_evaluator = MulticlassClassificationEvaluator(
+    labelCol="churn",
+    predictionCol="prediction",
+    metricName="weightedRecall"
+)
+print(f"Precision: {precision_evaluator.evaluate(predictions):.4f}")
+print(f"Recall: {recall_evaluator.evaluate(predictions):.4f}")
+
+# Feature importance
+feature_importance = best_model.stages[-1].featureImportances
+feature_names = feature_columns
+
+importance_df = spark.createDataFrame(
+    [(feature_names[i], float(feature_importance[i])) for i in range(len(feature_names))],
+    ["feature", "importance"]
+).orderBy("importance", ascending=False)
+
+print("\n=== TOP FEATURES DRIVING CHURN ===")
+importance_df.show()
+
+# ===== SAVE MODEL =====
+best_model.save("/models/churn_prediction_model")
+
+# ===== BATCH SCORING ALL CUSTOMERS =====
+all_customers = spark.read.parquet("/data/customers_for_scoring")
+scored_customers = best_model.transform(all_customers)
+
+churn_risk = scored_customers \
+    .select(
+        col("customer_id"),
+        col("prediction").alias("will_churn"),
+        col("probability")[1].alias("churn_probability")
+    ) \
+    .filter(col("churn_probability") > 0.6) \
+    .orderBy(col("churn_probability").desc())
+
+print("\n=== HIGH-RISK CHURN CUSTOMERS ===")
+churn_risk.show()
+
+# ===== A/B TEST RETENTION OFFERS =====
+# Randomly assign customers to control and treatment groups
+test_customers = churn_risk \
+    .withColumn("random", rand()) \
+    .withColumn(
+        "test_group",
+        when(col("random") < 0.5, "control").otherwise("treatment")
+    ) \
+    .select("customer_id", "churn_probability", "test_group")
+
+# Save for retention offer execution
+test_customers.write.mode("overwrite").parquet("/data/retention_ab_test")
+
+print(f"Customers for retention offers: {churn_risk.count()}")
+print(f"Control group: {test_customers.filter(col('test_group') == 'control').count()}")
+print(f"Treatment group: {test_customers.filter(col('test_group') == 'treatment').count()}")
+
+spark.stop()
+```
+
+**Key Learnings:**
+- Handle class imbalance through sampling for better predictions
+- Cross-validation finds optimal hyperparameters
+- Feature importance reveals business drivers of churn
+- Batch scoring allows targeted interventions
+- A/B testing measures intervention effectiveness
+
+---
+
+### Application 4: ETL Pipeline - Data Lake Ingestion & Transformation
+
+**Business Context:**
+Enterprise needs to ingest data from 50+ source systems (databases, APIs, files) into a data lake for unified analytics.
+
+**Problem Statement:**
+- Handle diverse source formats and schemas
+- Ensure data quality and consistency
+- Detect schema changes automatically
+- Track data lineage
+- Handle incremental loads efficiently
+
+**Implementation:**
+
+```python
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import (
+    col, current_timestamp, md5, concat_ws, lit,
+    year, month, day, when, coalesce
+)
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+
+spark = SparkSession.builder \
+    .appName("Enterprise ETL") \
+    .config("spark.sql.adaptive.enabled", "true") \
+    .master("local[*]") \
+    .getOrCreate()
+
+# ===== UNIFIED SOURCE CONNECTOR =====
+def read_source(source_type, config):
+    """
+    Unified function to read from different sources
+    """
+    if source_type == "sql_server":
+        return spark.read \
+            .format("jdbc") \
+            .option("url", config["url"]) \
+            .option("dbtable", config["table"]) \
+            .option("user", config["user"]) \
+            .option("password", config["password"]) \
+            .option("numPartitions", 10) \
+            .load()
+    
+    elif source_type == "postgresql":
+        return spark.read \
+            .format("jdbc") \
+            .option("url", config["url"]) \
+            .option("dbtable", config["table"]) \
+            .option("user", config["user"]) \
+            .option("password", config["password"]) \
+            .option("driver", "org.postgresql.Driver") \
+            .load()
+    
+    elif source_type == "csv":
+        return spark.read \
+            .option("header", "true") \
+            .option("inferSchema", "true") \
+            .csv(config["path"])
+    
+    elif source_type == "parquet":
+        return spark.read.parquet(config["path"])
+    
+    elif source_type == "api":
+        # Simplified - would typically use requests library
+        import requests
+        import pandas as pd
+        data = requests.get(config["url"]).json()
+        pdf = pd.DataFrame(data)
+        return spark.createDataFrame(pdf)
+    
+    else:
+        raise ValueError(f"Unknown source type: {source_type}")
+
+# ===== SOURCE CONFIGURATIONS =====
+sources_config = [
+    {
+        "name": "customers_db",
+        "type": "sql_server",
+        "url": "jdbc:sqlserver://db.company.com:1433;database=CRM",
+        "table": "dbo.Customers",
+        "user": "etl_user",
+        "password": "***",
+        "business_key": ["customer_id"],
+        "incremental": True,
+        "timestamp_col": "updated_at"
+    },
+    {
+        "name": "products_db",
+        "type": "postgresql",
+        "url": "jdbc:postgresql://db.company.com:5432/inventory",
+        "table": "public.products",
+        "user": "etl_user",
+        "password": "***",
+        "business_key": ["product_id"],
+        "incremental": False
+    },
+    {
+        "name": "sales_csv",
+        "type": "csv",
+        "path": "/data/raw/sales_*.csv",
+        "business_key": ["order_id", "line_item"],
+        "incremental": True,
+        "timestamp_col": "sale_date"
+    },
+    {
+        "name": "weather_api",
+        "type": "api",
+        "url": "https://api.weather.com/data",
+        "business_key": ["location", "date"],
+        "incremental": True
+    }
+]
+
+# ===== INCREMENTAL LOAD TRACKING =====
+def get_last_checkpoint(source_name):
+    """Get last successful load timestamp"""
+    try:
+        checkpoint = spark.read.parquet(f"/checkpoints/{source_name}").collect()[0]
+        return checkpoint["last_load_time"]
+    except:
+        return None
+
+def save_checkpoint(source_name, timestamp):
+    """Save checkpoint after successful load"""
+    checkpoint_df = spark.createDataFrame(
+        [(timestamp,)],
+        ["last_load_time"]
+    )
+    checkpoint_df.write.mode("overwrite").parquet(f"/checkpoints/{source_name}")
+
+# ===== DATA QUALITY FRAMEWORK =====
+def validate_data_quality(df, quality_rules):
+    """Apply data quality checks"""
+    issues = {}
+    
+    for rule_name, rule_func in quality_rules.items():
+        result = df.filter(~rule_func(df)).count()
+        if result > 0:
+            issues[rule_name] = result
+    
+    return issues
+
+# ===== MAIN ETL PROCESS =====
+def process_source(source_config):
+    """
+    ETL process for a single source
+    Extract → Transform → Quality Check → Load
+    """
+    
+    source_name = source_config["name"]
+    print(f"\n{'='*60}")
+    print(f"Processing source: {source_name}")
+    print(f"{'='*60}")
+    
+    # ===== EXTRACT =====
+    print(f"[EXTRACT] Reading from {source_name}...")
+    
+    if source_config["incremental"]:
+        last_checkpoint = get_last_checkpoint(source_name)
+        config_copy = source_config.copy()
+        
+        # Add incremental filter
+        if last_checkpoint and source_config.get("timestamp_col"):
+            config_copy["extra_filter"] = f"{source_config['timestamp_col']} > '{last_checkpoint}'"
+        
+        df_raw = read_source(source_config["type"], config_copy)
+    else:
+        df_raw = read_source(source_config["type"], source_config)
+    
+    record_count = df_raw.count()
+    print(f"[EXTRACT] Loaded {record_count:,} records")
+    
+    # ===== TRANSFORM =====
+    print(f"[TRANSFORM] Applying business logic...")
+    
+    # Add metadata columns
+    df_transformed = df_raw \
+        .withColumn("_source_system", lit(source_name)) \
+        .withColumn("_load_timestamp", current_timestamp()) \
+        .withColumn("_load_date", current_timestamp().cast("date")) \
+        .withColumn(
+            "_record_hash",
+            md5(concat_ws("||", *df_raw.columns))
+        )
+    
+    # Apply transformations specific to source
+    if source_name == "customers_db":
+        df_transformed = df_transformed \
+            .filter(col("customer_status") != "deleted") \
+            .withColumn("email", lower(col("email"))) \
+            .withColumn("country", upper(col("country"))) \
+            .withColumn("is_vip", when(col("lifetime_value") > 100000, 1).otherwise(0))
+    
+    elif source_name == "products_db":
+        df_transformed = df_transformed \
+            .filter(col("active") == True) \
+            .withColumn("category", lower(col("category"))) \
+            .withColumn("margin_percent", (col("price") - col("cost")) / col("price") * 100)
+    
+    elif source_name == "sales_csv":
+        df_transformed = df_transformed \
+            .withColumn("sale_date", to_date(col("sale_date"), "yyyy-MM-dd")) \
+            .withColumn("quantity", col("quantity").cast("int")) \
+            .withColumn("amount", col("amount").cast("decimal(10,2)"))
+    
+    transformed_count = df_transformed.count()
+    print(f"[TRANSFORM] Transformed {transformed_count:,} records")
+    
+    # ===== DATA QUALITY CHECKS =====
+    print(f"[QUALITY] Checking data quality...")
+    
+    quality_rules = {
+        "null_business_key": lambda df: ~df[source_config["business_key"]].isnull().any(axis=1),
+        "valid_dates": lambda df: (col("created_at") <= col("updated_at")) if "created_at" in df.columns else True,
+        "positive_amounts": lambda df: (col("amount") >= 0) if "amount" in df.columns else True
+    }
+    
+    quality_issues = validate_data_quality(df_transformed, quality_rules)
+    
+    if quality_issues:
+        print(f"[QUALITY] Issues detected: {quality_issues}")
+        # Quarantine problematic records
+        for rule_name, count in quality_issues.items():
+            problem_df = df_transformed.filter(~quality_rules[rule_name](df_transformed))
+            problem_df.write.mode("append").parquet(f"/quarantine/{source_name}/{rule_name}")
+            print(f"[QUALITY] Quarantined {count} records for rule: {rule_name}")
+    
+    else:
+        print(f"[QUALITY] All quality checks passed ✓")
+    
+    # ===== LOAD =====
+    print(f"[LOAD] Writing to data lake...")
+    
+    # Partition by date for efficient querying
+    df_transformed \
+        .repartition(50, "_load_date") \
+        .write \
+        .mode("append") \
+        .partitionBy("_load_date") \
+        .parquet(f"/data/bronze/{source_name}")
+    
+    print(f"[LOAD] Successfully loaded to bronze layer")
+    
+    # ===== CHECKPOINT =====
+    if source_config["incremental"] and source_config.get("timestamp_col"):
+        max_timestamp = df_raw.agg({source_config["timestamp_col"]: "max"}).collect()[0][0]
+        save_checkpoint(source_name, max_timestamp)
+        print(f"[CHECKPOINT] Saved checkpoint: {max_timestamp}")
+    
+    return {
+        "source": source_name,
+        "status": "success",
+        "records_loaded": transformed_count,
+        "quality_issues": len(quality_issues)
+    }
+
+# ===== ORCHESTRATION =====
+load_results = []
+
+for source_config in sources_config:
+    try:
+        result = process_source(source_config)
+        load_results.append(result)
+    except Exception as e:
+        print(f"[ERROR] Failed to process {source_config['name']}: {str(e)}")
+        load_results.append({
+            "source": source_config['name'],
+            "status": "failed",
+            "error": str(e)
+        })
+
+# ===== GENERATE ETL REPORT =====
+print(f"\n{'='*60}")
+print("ETL EXECUTION SUMMARY")
+print(f"{'='*60}")
+
+for result in load_results:
+    status_icon = "✓" if result["status"] == "success" else "✗"
+    print(f"{status_icon} {result['source']:20} | {result['status']:10} | {result.get('records_loaded', 'N/A')} records")
+
+# Save report
+report_df = spark.createDataFrame(load_results)
+report_df.write.mode("append").parquet("/data/etl_reports")
+
+spark.stop()
+```
+
+**ETL Best Practices Demonstrated:**
+- Unified source abstraction handles diverse systems
+- Incremental loading reduces data transfer and processing
+- Data quality framework catches issues early
+- Metadata tracking enables audit trails
+- Checkpoint mechanism recovers from failures
+- Quarantine area isolates problematic records
+- Partitioning optimizes downstream queries
+
+---
+
+## Apache Spark Interview Q&A
+
+### BEGINNER LEVEL
+
+**Q1: What is Apache Spark and why is it better than Hadoop MapReduce?**
+
+A: Apache Spark is a distributed computing framework for large-scale data processing. Key advantages:
+
+| Aspect | Spark | Hadoop MapReduce |
+|--------|-------|------------------|
+| **Processing** | In-memory (100x faster) | Disk-based (slower) |
+| **Latency** | Low (milliseconds) | High (seconds/minutes) |
+| **Learning Curve** | Gentle, high-level APIs | Steep, verbose code |
+| **Use Cases** | Batch, streaming, ML, SQL | Batch only |
+| **Languages** | Scala, Python, Java, R, SQL | Primarily Java |
+| **Fault Tolerance** | RDD lineage | Replication |
+
+**Interview Talking Point**: Emphasize that Spark's in-memory computation makes it ideal for iterative algorithms and machine learning, where data is reused multiple times. This is the main reason why it replaced MapReduce.
+
+---
+
+**Q2: What is RDD and how is it different from DataFrame?**
+
+A:
+
+| Aspect | RDD | DataFrame |
+|--------|-----|-----------|
+| **Type** | Untyped | Typed (rows with schema) |
+| **Schema** | No schema | Has schema |
+| **Optimization** | No automatic optimization | Catalyst optimizer |
+| **Performance** | Slower | Faster |
+| **Use Cases** | Unstructured data | Structured data |
+| **API** | Low-level, verbose | High-level, expressive |
+
+**Code Example**:
+```python
+# RDD (older, slower)
+rdd = sc.parallelize([(1, "Alice"), (2, "Bob")])
+result = rdd.map(lambda x: (x[1], x[0])).collect()
+
+# DataFrame (newer, faster)
+df = spark.createDataFrame([(1, "Alice"), (2, "Bob")], ["id", "name"])
+result = df.select("name", "id")
+```
+
+**Interview Talking Point**: Always use DataFrames for new projects. RDDs are rarely needed except when working with unstructured data or legacy code.
+
+---
+
+**Q3: Explain lazy evaluation in Spark.**
+
+A: Spark doesn't execute transformations immediately. It builds an execution plan (DAG) and only executes when an action is called.
+
+**Example**:
+```python
+rdd = sc.parallelize([1, 2, 3, 4, 5])
+rdd2 = rdd.map(lambda x: x * 2)    # NOT executed
+rdd3 = rdd2.filter(lambda x: x > 5) # NOT executed
+result = rdd3.collect()              # NOW executed
+
+# Spark optimizes the entire pipeline before execution
+```
+
+**Benefits**:
+- Spark can see the entire computation pipeline and optimize it
+- Unnecessary computations can be eliminated
+- Multiple transformations can be combined
+
+**Interview Talking Point**: This is a key difference from traditional programming. If the action isn't called, nothing happens. It's confusing at first but powerful once understood.
+
+---
+
+**Q4: What are transformations vs actions? Give examples of each.**
+
+A:
+
+**Transformations** (Return RDD/DataFrame, lazy):
+- `map()`, `filter()`, `flatMap()`, `union()`, `join()`, `groupByKey()`, `sortByKey()`, `distinct()`
+
+**Actions** (Return results, trigger execution):
+- `collect()`, `count()`, `first()`, `take()`, `collect()`, `saveAsTextFile()`, `foreach()`, `reduce()`
+
+```python
+# Transformation (lazy)
+df_filtered = df.filter(df.age > 30)
+
+# Action (executes immediately)
+count = df_filtered.count()  # Execution happens here
+```
+
+**Interview Talking Point**: Understanding this distinction is critical. If you call only transformations, nothing happens. You need an action to trigger execution.
+
+---
+
+**Q5: What is a partition in Spark and why does it matter?**
+
+A: A partition is a logical division of data across cluster nodes. Each executor processes one partition in parallel.
+
+```python
+# Create with specific partitions
+rdd = sc.parallelize(range(100), numPartitions=4)  # 4 partitions of 25 elements each
+
+# Repartition (causes shuffle)
+rdd2 = rdd.repartition(8)
+
+# Coalesce (reduces partitions, more efficient)
+rdd3 = rdd.coalesce(2)
+
+# Check partition count
+print(rdd.getNumPartitions())  # 4
+```
+
+**Why it matters**:
+- Too few partitions: Underutilized cluster (slow)
+- Too many partitions: High overhead (slow)
+- Optimal rule: 2-4 partitions per core
+
+**Interview Talking Point**: Partitioning is crucial for performance. The number of partitions determines parallelism. For 100GB data on 10-core machine, use 40-100 partitions.
+
+---
+
+### INTERMEDIATE LEVEL
+
+**Q6: Explain the Spark execution model (stages and tasks).**
+
+A: Spark breaks a job into stages at shuffle boundaries. Each stage contains tasks that run in parallel.
+
+**Execution Flow**:
+```
+Job (entire action)
+  ├── Stage 1 (all transformations before first shuffle)
+  │   ├── Task 1 on partition 1
+  │   ├── Task 2 on partition 2
+  │   └── Task 3 on partition 3
+  ├── Stage 2 (transformations after shuffle)
+  │   ├── Task 4
+  │   └── Task 5
+```
+
+**Example**:
+```python
+df1 = spark.read.parquet("large_file.parquet")
+df2 = df1.filter(df1.age > 30)           # Same stage (no shuffle)
+df3 = df2.groupBy("department").sum()   # SHUFFLE - New stage
+df4 = df3.filter(df3.sum > 1000)        # Same stage (no shuffle)
+result = df4.collect()                   # Action
+```
+
+**Interview Talking Point**: Shuffles are expensive and create stage boundaries. Minimize shuffles for better performance. Use `explain()` to see stage breakdown.
+
+---
+
+**Q7: What is the difference between `groupByKey()` and `reduceByKey()`?**
+
+A:
+
+| Operation | groupByKey | reduceByKey |
+|-----------|-----------|-------------|
+| **What it does** | Groups by key, returns list | Groups and reduces immediately |
+| **Memory usage** | High (holds all values in memory) | Low (reduces before shuffling) |
+| **Performance** | Slow (full shuffle) | Fast (partial reduction before shuffle) |
+| **When to use** | Need all values for complex logic | Simple aggregation |
+
+**Code Example**:
+```python
+rdd = sc.parallelize([("a", 1), ("b", 2), ("a", 3), ("b", 4)])
+
+# groupByKey - BAD for simple aggregations
+result1 = rdd.groupByKey().mapValues(sum).collect()
+# Result: [("a", [1, 3]), ("b", [2, 4])] → [("a", 4), ("b", 6)]
+
+# reduceByKey - GOOD for simple aggregations
+result2 = rdd.reduceByKey(lambda x, y: x + y).collect()
+# Result: [("a", 4), ("b", 6)]
+```
+
+**Interview Talking Point**: Always use `reduceByKey()` over `groupByKey()` for aggregations. It's a common optimization mistake.
+
+---
+
+**Q8: How does Spark handle fault tolerance?**
+
+A: Spark uses **lineage** - it remembers the sequence of transformations used to build an RDD. If a partition fails, Spark recomputes it.
+
+**Example**:
+```python
+rdd1 = sc.textFile("data.txt")                    # Original source
+rdd2 = rdd1.map(lambda x: (x.split()[0], 1))    # Transformation 1
+rdd3 = rdd2.filter(lambda x: x[1] > 0)          # Transformation 2
+rdd4 = rdd3.reduceByKey(lambda a, b: a + b)    # Transformation 3
+
+# If rdd4 partition fails, Spark recomputes from textFile → map → filter → reduceByKey
+```
+
+**Wide vs Narrow Dependencies**:
+- **Narrow**: Each partition of parent RDD goes to one child partition (safe)
+- **Wide**: Each partition of parent RDD goes to multiple child partitions (shuffle)
+
+```python
+map(func)           # Narrow
+filter(func)        # Narrow
+join()              # Wide (shuffle)
+reduceByKey()       # Wide (shuffle)
+groupByKey()        # Wide (shuffle)
+```
+
+**Interview Talking Point**: Spark can recover from node failures automatically using lineage. This is more efficient than Hadoop's replication approach.
+
+---
+
+**Q9: What is caching/persistence and when should you use it?**
+
+A: Caching stores RDD/DataFrame in memory to avoid recomputation when used multiple times.
+
+```python
+df = spark.read.parquet("huge_file.parquet")
+df.cache()  # Store in memory
+
+# Used multiple times
+count1 = df.count()              # Computed and cached
+filtered = df.filter(df.age > 30)  # Uses cached data
+result = filtered.collect()      # Uses cached data
+
+df.unpersist()  # Remove from cache
+```
+
+**Cache Levels**:
+```python
+from pyspark import StorageLevel
+
+df.cache()                                           # MEMORY_ONLY
+df.persist(StorageLevel.MEMORY_ONLY)               # RAM only
+df.persist(StorageLevel.MEMORY_AND_DISK)           # RAM, then disk
+df.persist(StorageLevel.DISK_ONLY)                 # Disk only
+df.persist(StorageLevel.MEMORY_ONLY_2)             # RAM with replication
+```
+
+**When to cache**:
+- RDD/DataFrame used multiple times
+- Expensive computation (aggregations, joins, ML)
+- Don't cache: Used only once, small dataset, disk space limited
+
+**Interview Talking Point**: Caching is a performance optimization. Only cache when reused. Monitor memory usage or you'll get OOM errors.
+
+---
+
+**Q10: How do broadcast variables work and why are they useful?**
+
+A: Broadcast variables send a copy of data to each executor (instead of each task), reducing network overhead.
+
+```python
+# Small lookup table
+lookup_dict = {"A": "Apple", "B": "Banana", "C": "Cherry"}
+broadcast_var = sc.broadcast(lookup_dict)
+
+# Use in transformation
+rdd = sc.parallelize(["A", "B", "C", "A"])
+result = rdd.map(lambda x: broadcast_var.value[x]).collect()
+# Result: ["Apple", "Banana", "Cherry", "Apple"]
+```
+
+**Broadcast Join**:
+```python
+# Avoid expensive shuffle join
+small_df = spark.broadcast(spark.read.parquet("small.parquet"))
+large_df = spark.read.parquet("large.parquet")
+
+# No shuffle, much faster
+result = large_df.join(small_df, "key")
+```
+
+**Interview Talking Point**: Broadcast is critical for performance when joining large with small datasets. It eliminates the shuffle phase entirely.
+
+---
+
+**Q11: Explain the Catalyst optimizer.**
+
+A: Catalyst is Spark's query optimizer that automatically optimizes execution plans.
+
+**Optimization Techniques**:
+1. **Predicate Pushdown**: Move filters earlier in pipeline
+2. **Join Reordering**: Join smallest tables first
+3. **Constant Folding**: Evaluate constants at compile time
+4. **Dead Code Elimination**: Remove unused columns
+
+**Example**:
+```python
+# Original query
+df = spark.read.parquet("large_file.parquet")
+result = df.select("name", "salary").filter(df.department == "Sales")
+
+# Catalyst optimizes to:
+# 1. Filter first (reduces rows before select)
+# 2. Select only needed columns
+# Both are automatic!
+```
+
+**Visualize Plan**:
+```python
+df.explain()  # Shows logical plan
+df.explain(extended=True)  # Shows logical + physical plans
+```
+
+**Interview Talking Point**: This is why DataFrames are faster than RDDs - Catalyst can't optimize low-level RDD operations. Use DataFrames whenever possible.
+
+---
+
+### ADVANCED LEVEL
+
+**Q12: What is Adaptive Query Execution (AQE) and how does it improve performance?**
+
+A: AQE dynamically optimizes execution based on runtime statistics, adjusting the plan mid-execution.
+
+**Key Features**:
+1. **Dynamically coalesce partitions**: Merge small partitions to reduce overhead
+2. **Dynamically switch join strategies**: Change from sort-merge to broadcast join if one side is small
+3. **Dynamically handle data skew**: Detect and handle skewed joins
+
+**Enable AQE**:
+```python
+spark = SparkSession.builder \
+    .config("spark.sql.adaptive.enabled", "true") \
+    .config("spark.sql.adaptive.coalescePartitions.enabled", "true") \
+    .config("spark.sql.adaptive.skewJoin.enabled", "true") \
+    .getOrCreate()
+```
+
+**Example**: Join where one side turns out to be small
+```python
+# Spark initially plans sort-merge join (expensive)
+# During execution, realizes df2 is only 10MB
+# Dynamically switches to broadcast join (fast)
+result = df1.join(df2, "key")  # AQE handles optimization automatically
+```
+
+**Interview Talking Point**: AQE is a game-changer for query optimization. It adapts to real data characteristics, not assumptions.
+
+---
+
+**Q13: How would you handle data skew in Spark?**
+
+A: Data skew occurs when some partitions have much more data than others, causing bottlenecks.
+
+**Detection**:
+```python
+# Check partition sizes
+rdd.glom().map(len).collect()
+# Output: [10000, 9800, 10200, 1000000]  # Last partition is skewed!
+```
+
+**Solutions**:
+
+1. **Add Salt to Keys** (for reduceByKey):
+```python
+import random
+rdd = sc.parallelize([("A", 1), ("B", 1), ("A", 1)])
+
+# Without salt - "A" gets all data
+# rdd.reduceByKey(lambda a, b: a + b)
+
+# With salt - distribute "A" across multiple partitions
+salted_rdd = rdd.map(lambda x: ((x[0], random.randint(0, 100)), x[1]))
+result = salted_rdd.reduceByKey(lambda a, b: a + b)
+final = result.map(lambda x: (x[0][0], x[1])).reduceByKey(lambda a, b: a + b)
+```
+
+2. **Use AQE** (automatic):
+```python
+spark.config("spark.sql.adaptive.skewJoin.enabled", "true")
+```
+
+3. **Pre-filter High-Volume Keys**:
+```python
+# Process frequently occurring keys separately
+frequent_keys = ["A"]
+frequent_data = rdd.filter(lambda x: x[0] in frequent_keys).reduceByKey(...)
+other_data = rdd.filter(lambda x: x[0] not in frequent_keys).reduceByKey(...)
+result = frequent_data.union(other_data)
+```
+
+**Interview Talking Point**: Data skew is a common performance issue in production. Mention both detection and mitigation strategies.
+
+---
+
+**Q14: How do you optimize a slow Spark job?**
+
+A: Systematic approach to performance tuning:
+
+**Step 1: Identify bottleneck using `explain()`**:
+```python
+df.explain(extended=True)
+# Look for: Shuffle, large BroadcastExchange, full scans
+```
+
+**Step 2: Check Resource Allocation**:
+```python
+spark = SparkSession.builder \
+    .config("spark.executor.memory", "4g") \
+    .config("spark.executor.cores", "4") \
+    .config("spark.driver.memory", "2g") \
+    .config("spark.sql.shuffle.partitions", "200") \
+    .getOrCreate()
+```
+
+**Step 3: Apply Optimizations**:
+- Use broadcast joins for small tables
+- Push filters early
+- Cache frequently used DataFrames
+- Use efficient file formats (Parquet > CSV)
+- Partition data wisely
+
+**Step 4: Monitor with Spark UI**:
+- Check executor memory usage
+- Identify longest-running tasks
+- Look for uneven partition sizes
+
+**Example Optimization**:
+```python
+# BEFORE: Slow query
+df = spark.read.csv("large_file.csv")
+result = df.filter(df.age > 30).select("name", "salary") \
+    .groupBy("department").agg(sum("salary"))
+
+# AFTER: Optimized query
+df = spark.read.parquet("large_file.parquet")  # Parquet is faster
+df.cache()  # Cache if reused
+result = df.filter(df.age > 30) \
+    .select("name", "salary") \
+    .groupBy("department").agg(sum("salary"))
+```
+
+**Interview Talking Point**: Share specific optimizations you've done. Mention 2-3x or 10x improvements with concrete examples.
+
+---
+
+**Q15: What are the differences between Structured Streaming and DStream?**
+
+A:
+
+| Aspect | DStream | Structured Streaming |
+|--------|---------|---------------------|
+| **API** | RDD-based | DataFrame-based |
+| **Latency** | Micro-batch (seconds) | Micro-batch (milliseconds) |
+| **Optimization** | Manual | Catalyst optimizer |
+| **Stateful ops** | Complex | Simple |
+| **Watermarking** | Not supported | Supported (late data handling) |
+| **Trigger types** | Limited | Multiple options |
+| **Status** | Deprecated | Recommended |
+
+**Code Comparison**:
+
+DStream (older):
+```python
+from pyspark.streaming import StreamingContext
+ssc = StreamingContext(sc, batchDuration=5)
+lines = ssc.socketTextStream("localhost", 9999)
+words = lines.flatMap(lambda x: x.split())
+pairs = words.map(lambda x: (x, 1))
+pairs.reduceByKey(lambda a, b: a + b).pprint()
+ssc.start()
+ssc.awaitTermination()
+```
+
+Structured Streaming (newer):
+```python
+spark = SparkSession.builder.getOrCreate()
+df = spark.readStream \
+    .format("socket") \
+    .option("host", "localhost") \
+    .option("port", 9999) \
+    .load()
+
+result = df.select(explode(split(col("value"), " ")).alias("word")) \
+    .groupBy("word").count() \
+    .writeStream.format("console").start()
+
+result.awaitTermination()
+```
+
+**Interview Talking Point**: Always use Structured Streaming for new projects. DStream is legacy. Mention advantages: Catalyst optimization, watermarking, better API.
+
+---
+
+**Q16: How would you implement real-time fraud detection in Spark?**
+
+A: Combine streaming with stateful operations and historical data.
+
+**Architecture**:
+```python
+spark = SparkSession.builder.getOrCreate()
+
+# Historical fraud patterns
+fraud_patterns = spark.read.parquet("/data/fraud_rules")
+broadcast_patterns = broadcast(fraud_patterns)
+
+# Real-time transactions
+transactions = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("subscribe", "transactions") \
+    .load() \
+    .select(from_json(col("value").cast("string"), schema).alias("data")) \
+    .select("data.*")
+
+# Detect fraud
+suspicious = transactions \
+    .withWatermark("timestamp", "10 minutes") \
+    .groupBy("user_id", window(col("timestamp"), "5 minutes")) \
+    .agg(
+        count("*").alias("transaction_count"),
+        sum("amount").alias("total_amount"),
+        countDistinct("merchant_id").alias("unique_merchants")
+    ) \
+    .filter((col("transaction_count") > 10) | (col("total_amount") > 10000)) \
+    .join(broadcast_patterns, "user_id", "left") \
+    .filter(col("risk_score") > 0.8)
+
+# Write alerts
+suspicious.writeStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("topic", "fraud-alerts") \
+    .option("checkpointLocation", "/tmp/fraud_checkpoint") \
+    .start()
+```
+
+**Interview Talking Point**: Demonstrate knowledge of windowing, stateful operations, and combining real-time with batch data.
+
+---
+
+**Q17: Explain columnar storage (Parquet) vs row storage (CSV) and when to use each.**
+
+A:
+
+| Aspect | Parquet | CSV |
+|--------|---------|-----|
+| **Storage** | Columnar | Row-based |
+| **Compression** | 10-100x | 2-5x |
+| **Query Speed** | Very fast (column pruning) | Slow (must read all) |
+| **Schema Evolution** | Supported | Not supported |
+| **Size** | Small | Large |
+| **Human Readable** | No | Yes |
+| **Spark Use** | Optimized | Supported |
+
+**Performance Comparison**:
+```python
+# CSV: Must scan entire file
+df = spark.read.csv("data.csv")
+result = df.select("name").filter(df.age > 30).count()
+# Reads: ALL columns (wasteful)
+
+# Parquet: Only reads needed columns
+df = spark.read.parquet("data.parquet")
+result = df.select("name").filter(df.age > 30).count()
+# Reads: Only "name" and "age" columns (efficient)
+```
+
+**When to use**:
+- **Parquet**: For production data lakes, long-term storage, analytical queries
+- **CSV**: For data exchange, human-readable reports, one-time loads
+
+**Interview Talking Point**: Always use Parquet for Spark. It's optimized, compresses well, and supports schema evolution.
+
+---
+
+**Q18: How do you handle late-arriving data in Spark Streaming?**
+
+A: Use watermarks to define when to close a window.
+
+```python
+spark = SparkSession.builder.getOrCreate()
+
+df = spark.readStream \
+    .format("socket") \
+    .option("host", "localhost") \
+    .option("port", 9999) \
+    .load()
+
+# Define watermark: consider data more than 10 minutes late as invalid
+result = df.withWatermark("eventTime", "10 minutes") \
+    .groupBy(
+        window(col("eventTime"), "5 minutes"),
+        col("event_type")
+    ) \
+    .count() \
+    .writeStream \
+    .outputMode("update") \
+    .format("console") \
+    .start()
+
+result.awaitTermination()
+
+# Output mode explains how results are updated:
+# append - new rows only (fast, but cannot modify old windows)
+# update - changed rows (slower, allows late data to update window)
+# complete - all rows (slowest, but most accurate)
+```
+
+**Interview Talking Point**: Watermarks enable you to handle the trade-off between latency and accuracy. They're essential for production streaming systems.
+
+---
+
+**Q19: What is a shuffle and why is it expensive?**
+
+A: A shuffle is data movement across partitions/nodes. It's the most expensive operation in Spark.
+
+**Shuffle Triggers**:
+```python
+# These operations cause shuffles:
+rdd.reduceByKey(func)          # Shuffle
+rdd.groupByKey()               # Shuffle
+rdd.join(other_rdd)            # Shuffle
+df.repartition(n)              # Shuffle
+df.orderBy("column")           # Shuffle (includes sort)
+```
+
+**Why it's expensive**:
+1. Network I/O: Data moves across nodes
+2. Disk I/O: Intermediate data written to disk
+3. Serialization/Deserialization: Data converted for transfer
+4. Sorting: Keys sorted during shuffle
+
+**Minimize Shuffles**:
+```python
+# BAD: Multiple shuffles
+result = rdd.reduceByKey(func1) \
+    .join(other_rdd) \
+    .groupByKey() \
+    .reduceByKey(func2)
+
+# GOOD: Single shuffle
+result = rdd.reduceByKey(func1) \
+    .join(other_rdd) \
+    .reduceByKey(lambda a, b: a + b)  # Combine operations
+```
+
+**Interview Talking Point**: Shuffle is the enemy of Spark performance. Understanding when shuffles happen is critical for optimization.
+
+---
+
+**Q20: How would you implement a machine learning pipeline with hyperparameter tuning in Spark?**
+
+A:
+
+```python
+from pyspark.ml import Pipeline
+from pyspark.ml.feature import StringIndexer, VectorAssembler, StandardScaler
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.evaluation import BinaryClassificationEvaluator
+from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
+
+# Load data
+df = spark.read.parquet("/data/training_data")
+
+# Feature engineering
+indexer = StringIndexer(inputCol="category", outputCol="cat_idx")
+assembler = VectorAssembler(inputCols=["age", "cat_idx", "income"], 
+                           outputCol="features")
+scaler = StandardScaler(inputCol="features", outputCol="scaled_features")
+
+# Model
+lr = LogisticRegression(featuresCol="scaled_features", labelCol="target")
+
+# Pipeline
+pipeline = Pipeline(stages=[indexer, assembler, scaler, lr])
+
+# Hyperparameter grid
+param_grid = ParamGridBuilder() \
+    .addGrid(lr.regParam, [0.01, 0.1, 1.0]) \
+    .addGrid(lr.elasticNetParam, [0.0, 0.5, 1.0]) \
+    .addGrid(lr.maxIter, [10, 100, 1000]) \
+    .build()
+
+# Cross-validator
+evaluator = BinaryClassificationEvaluator(metricName="areaUnderROC")
+cv = CrossValidator(
+    estimator=pipeline,
+    estimatorParamMaps=param_grid,
+    evaluator=evaluator,
+    numFolds=5  # 5-fold cross-validation
+)
+
+# Train
+best_model = cv.fit(df)
+
+# Evaluate best model
+predictions = best_model.transform(df)
+auc = evaluator.evaluate(predictions)
+print(f"Best AUC: {auc}")
+
+# Save model
+best_model.save("/models/best_model")
+```
+
+**Interview Talking Point**: This demonstrates understanding of ML pipelines, feature engineering, cross-validation, and hyperparameter tuning - all critical skills.
+
+---
+
+## KEYPOINTS FOR INTERVIEW
+
+1. **Always use DataFrames over RDDs** - Catalyst optimizer makes them 10-100x faster
+2. **Understand lazy evaluation** - Critical distinction from traditional programming
+3. **Minimize shuffles** - They're the most expensive operation
+4. **Use broadcast joins** - Eliminate shuffles when joining small with large datasets
+5. **Cache only when reused** - Monitor memory to avoid OOM errors
+6. **Partition wisely** - 2-4 partitions per core is ideal
+7. **Use Parquet not CSV** - Compression and column pruning make it much faster
+8. **Explain your optimization approach** - Data analysis → Bottleneck identification → Solution → Results
+9. **Know when to use streaming** - Structured Streaming for new projects, DStream is deprecated
+10. **Handle data skew** - Either salt keys or use AQE
+11. **Check explain plans** - `df.explain()` reveals optimization opportunities
+12. **Monitor Spark UI** - Executor memory, stage timing, partition distribution
+13. **Think about fault tolerance** - Lineage, RDD recovery, checkpoints
+14. **Understand Catalyst** - Why it makes DataFrames faster than RDDs
+15. **Have real examples** - Concrete performance improvements from your experience
+
+---
+
+## Summary
+
+Apache Spark is a powerful, distributed computing framework that handles massive datasets efficiently. Key takeaways:
+
+1. **Lazy Evaluation**: Operations build execution plan until action is called
+2. **Distributed**: Data split across cluster for parallel processing
+3. **Fault-Tolerant**: Uses lineage to recover from failures
+4. **Fast**: In-memory computing 100x faster than Hadoop
+5. **Versatile**: Supports batch, streaming, ML, SQL, graph processing
+6. **Use DataFrames**: More optimized than RDDs for most use cases
+7. **Optimize Queries**: Understand partitioning, shuffles, and caching
+8. **Tune Configuration**: Memory, cores, and parallelism matter
+9. **Real-World Applications**: E-commerce, IoT, ML pipelines, ETL all benefit from Spark's power
+10. **Architecture Matters**: Choose deployment mode, serialization, and resource allocation carefully
