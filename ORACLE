@@ -1,0 +1,5658 @@
+# Oracle Database Complete Notes & Theory
+
+## Table of Contents
+1. [Oracle Fundamentals](#oracle-fundamentals)
+2. [Database Architecture](#database-architecture)
+3. [Installation & Setup](#installation--setup)
+4. [SQL Basics](#sql-basics)
+5. [Advanced SQL](#advanced-sql)
+6. [PL/SQL](#plsql)
+7. [Indexing & Performance](#indexing--performance)
+8. [Transactions & Locking](#transactions--locking)
+9. [Backup & Recovery](#backup--recovery)
+10. [Security](#security)
+11. [Common Issues & Solutions](#common-issues--solutions)
+12. [Interview Q&A](#interview-qa)
+
+---
+
+## Oracle Fundamentals
+
+### What is Oracle Database?
+Oracle Database is a powerful relational database management system (RDBMS) that:
+- Stores data in tables with rows and columns
+- Supports complex queries using SQL
+- Provides security features and backup mechanisms
+- Handles large-scale data storage and retrieval
+- Supports distributed databases across multiple servers
+
+### Key Features
+- **ACID Compliance**: Atomicity, Consistency, Isolation, Durability
+- **Scalability**: Handle millions of transactions
+- **Security**: User authentication, roles, privileges, encryption
+- **High Availability**: Replication, clustering (RAC)
+- **Performance**: Indexing, optimization, caching
+- **PL/SQL**: Procedural language for Oracle
+
+### Editions
+- **Oracle Database Express Edition (XE)**: Free, limited features
+- **Oracle Database Standard Edition**: Mid-range enterprises
+- **Oracle Database Enterprise Edition**: Large enterprises with maximum features
+
+---
+
+## Database Architecture
+
+### Instance vs Database
+```
+Instance: Memory structures + Background processes (SGA, PGA)
+Database: Physical files on disk (datafiles, control files, redo logs)
+```
+
+### Memory Components (SGA - System Global Area)
+
+#### 1. Buffer Cache
+- Stores data blocks in memory
+- Reduces disk I/O
+- Shared by all users
+- Size: `db_cache_size` parameter
+
+```sql
+-- Check buffer cache size
+SHOW PARAMETER db_cache_size;
+```
+
+#### 2. Shared Pool
+- Stores SQL statements
+- Stores parsed execution plans
+- Reduces parsing overhead
+- Size: `shared_pool_size` parameter
+
+```sql
+-- View shared pool usage
+SELECT * FROM v$sgastat WHERE pool='shared pool';
+```
+
+#### 3. Redo Log Buffer
+- Stores redo entries
+- Tracks all database changes
+- Size: `log_buffer` parameter
+
+#### 4. Large Pool (Optional)
+- Parallel execution buffers
+- RMAN backup buffers
+- I/O server processes
+
+### Process Components
+
+#### Server Processes
+- Handle user connections
+- Parse SQL statements
+- Execute queries
+- Fetch results
+
+#### Background Processes
+- **SMON** (System Monitor): Recovery, cleanup
+- **PMON** (Process Monitor): Cleanup failed processes
+- **DBWn** (Database Writer): Write dirty blocks to disk
+- **LGWR** (Log Writer): Write redo logs to disk
+- **CKPT** (Checkpoint): Coordinates checkpoints
+- **ARCH** (Archiver): Archive filled redo logs
+- **RECO** (Recoverer): Resolves in-doubt transactions
+
+### Physical Components
+
+#### Datafiles
+- Contain actual data
+- Belong to one tablespace
+- Cannot span multiple tablespaces
+- Extension: `.dbf`
+
+#### Control Files
+- Track database structure
+- Record datafile locations
+- Redo log file information
+- Usually multiplexed (copies)
+- Required to start database
+
+#### Redo Log Files
+- Record all database changes
+- Used for recovery
+- Organized in groups (usually 3+)
+- Each group has members
+
+#### Parameter File
+- Initialization parameters
+- Two types: `init.ora` or `spfile`
+- `spfile` is binary and persistent
+
+---
+
+## Installation & Setup
+
+### Prerequisites
+- Minimum 4GB RAM (1GB minimum)
+- 5GB disk space
+- Java Runtime Environment (JRE)
+
+### Basic Installation Steps (Windows)
+```bash
+# Run installer
+1. Download from oracle.com
+2. Run setup.exe
+3. Choose installation type
+4. Specify installation path
+5. Configure database
+6. Set passwords
+7. Complete installation
+```
+
+### Create Database
+```sql
+-- Manual creation
+CREATE DATABASE mydb
+  DATAFILE '/u01/oradata/mydb.dbf' SIZE 100M
+  LOGFILE GROUP 1 ('/u01/logs/log1a.rdo') SIZE 50M,
+          GROUP 2 ('/u01/logs/log2a.rdo') SIZE 50M;
+```
+
+### Connection
+```bash
+# Using sqlplus
+sqlplus username/password@database
+
+# Using command line
+sqlplus /nolog
+SQL> CONNECT username/password;
+```
+
+### Check Database Status
+```sql
+-- Is database open?
+SELECT status FROM v$instance;
+
+-- Show all parameters
+SHOW PARAMETER;
+
+-- Show specific parameter
+SHOW PARAMETER db_name;
+```
+
+---
+
+## SQL Basics
+
+### Data Types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| VARCHAR2(n) | Variable character | 'John' |
+| CHAR(n) | Fixed character | 'M' |
+| NUMBER(p,s) | Numeric | 150, 99.99 |
+| INTEGER | Whole number | 100 |
+| DATE | Date and time | 01-JAN-2025 |
+| TIMESTAMP | High precision date | 01-JAN-2025 14:30:45.123456 |
+| CLOB | Large text | Documents |
+| BLOB | Binary data | Images |
+| BOOLEAN | True/False | TRUE |
+
+### Create Table
+```sql
+CREATE TABLE employees (
+    emp_id NUMBER PRIMARY KEY,
+    emp_name VARCHAR2(50) NOT NULL,
+    salary NUMBER(10,2),
+    hire_date DATE DEFAULT SYSDATE,
+    dept_id NUMBER REFERENCES departments(dept_id)
+);
+```
+
+### Insert Data
+```sql
+-- Single row
+INSERT INTO employees (emp_id, emp_name, salary, dept_id)
+VALUES (1, 'John Doe', 50000, 10);
+
+-- Multiple rows
+INSERT INTO employees (emp_id, emp_name, salary, dept_id)
+SELECT emp_id, emp_name, salary, dept_id FROM emp_backup;
+
+-- Insert from select
+INSERT INTO archive_employees 
+SELECT * FROM employees WHERE hire_date < '01-JAN-2020';
+```
+
+### Update Data
+```sql
+-- Update specific records
+UPDATE employees 
+SET salary = salary * 1.1 
+WHERE dept_id = 10;
+
+-- Update with join
+UPDATE employees e
+SET e.salary = (SELECT avg_salary FROM dept_salaries d 
+                WHERE e.dept_id = d.dept_id)
+WHERE EXISTS (SELECT 1 FROM dept_salaries d 
+              WHERE e.dept_id = d.dept_id);
+```
+
+### Delete Data
+```sql
+-- Delete specific records
+DELETE FROM employees 
+WHERE emp_id = 5;
+
+-- Delete all records
+DELETE FROM employees;
+
+-- Delete with condition
+DELETE FROM employees 
+WHERE salary < 30000 AND hire_date < '01-JAN-2010';
+```
+
+### Select Queries
+```sql
+-- Basic select
+SELECT emp_id, emp_name, salary 
+FROM employees;
+
+-- With conditions
+SELECT * FROM employees 
+WHERE salary > 50000 AND dept_id = 10;
+
+-- With sorting
+SELECT emp_name, salary 
+FROM employees 
+ORDER BY salary DESC;
+
+-- With DISTINCT
+SELECT DISTINCT dept_id FROM employees;
+
+-- With LIMIT (rownum)
+SELECT * FROM employees 
+WHERE ROWNUM <= 10;
+
+-- OFFSET/FETCH (Oracle 12c+)
+SELECT * FROM employees 
+ORDER BY salary 
+OFFSET 10 ROWS FETCH NEXT 10 ROWS ONLY;
+```
+
+### Aggregate Functions
+```sql
+-- COUNT, SUM, AVG, MIN, MAX
+SELECT 
+    COUNT(*) as total_employees,
+    SUM(salary) as total_salary,
+    AVG(salary) as avg_salary,
+    MIN(salary) as min_salary,
+    MAX(salary) as max_salary
+FROM employees;
+
+-- GROUP BY
+SELECT dept_id, COUNT(*) as emp_count, AVG(salary) as avg_sal
+FROM employees
+GROUP BY dept_id;
+
+-- HAVING clause
+SELECT dept_id, COUNT(*) as emp_count
+FROM employees
+GROUP BY dept_id
+HAVING COUNT(*) > 5;
+```
+
+### String Functions
+```sql
+SELECT 
+    UPPER(emp_name) as upper_name,
+    LOWER(emp_name) as lower_name,
+    LENGTH(emp_name) as name_length,
+    SUBSTR(emp_name, 1, 5) as first_5_chars,
+    INSTR(emp_name, 'o') as position_of_o,
+    REPLACE(emp_name, 'John', 'Jon') as replaced,
+    TRIM('  ' || emp_name || '  ') as trimmed,
+    CONCAT(emp_name, ' - ', dept_id) as concatenated
+FROM employees;
+```
+
+### Number Functions
+```sql
+SELECT 
+    ROUND(salary, 0) as rounded,
+    TRUNC(salary, -3) as truncated,
+    ABS(-100) as absolute,
+    MOD(salary, 100) as modulo,
+    CEIL(3.2) as ceiling,
+    FLOOR(3.9) as floor
+FROM employees;
+```
+
+### Date Functions
+```sql
+SELECT 
+    SYSDATE as current_date,
+    TRUNC(SYSDATE) as today_midnight,
+    ADD_MONTHS(SYSDATE, 1) as next_month,
+    NEXT_DAY(SYSDATE, 'MONDAY') as next_monday,
+    LAST_DAY(SYSDATE) as last_day_of_month,
+    MONTHS_BETWEEN(SYSDATE, hire_date) as months_employed,
+    TO_DATE('01-JAN-2025', 'DD-MON-YYYY') as specific_date
+FROM employees;
+```
+
+---
+
+## Advanced SQL
+
+### Joins
+
+#### INNER JOIN
+```sql
+SELECT e.emp_name, d.dept_name, e.salary
+FROM employees e
+INNER JOIN departments d ON e.dept_id = d.dept_id;
+```
+
+#### LEFT JOIN
+```sql
+SELECT e.emp_name, d.dept_name
+FROM employees e
+LEFT JOIN departments d ON e.dept_id = d.dept_id;
+```
+
+#### RIGHT JOIN
+```sql
+SELECT e.emp_name, d.dept_name
+FROM employees e
+RIGHT JOIN departments d ON e.dept_id = d.dept_id;
+```
+
+#### FULL OUTER JOIN
+```sql
+SELECT e.emp_name, d.dept_name
+FROM employees e
+FULL OUTER JOIN departments d ON e.dept_id = d.dept_id;
+```
+
+#### CROSS JOIN
+```sql
+SELECT e.emp_name, d.dept_name
+FROM employees e
+CROSS JOIN departments d;
+```
+
+#### SELF JOIN
+```sql
+SELECT e1.emp_name as employee, e2.emp_name as manager
+FROM employees e1
+LEFT JOIN employees e2 ON e1.manager_id = e2.emp_id;
+```
+
+### Subqueries
+
+#### Scalar Subquery
+```sql
+SELECT emp_name, salary,
+       (SELECT AVG(salary) FROM employees) as avg_salary
+FROM employees;
+```
+
+#### IN Subquery
+```sql
+SELECT emp_name, salary
+FROM employees
+WHERE dept_id IN (SELECT dept_id FROM departments 
+                  WHERE location = 'New York');
+```
+
+#### EXISTS Subquery
+```sql
+SELECT emp_name
+FROM employees e
+WHERE EXISTS (SELECT 1 FROM projects p 
+              WHERE p.emp_id = e.emp_id);
+```
+
+#### Correlated Subquery
+```sql
+SELECT emp_name, salary
+FROM employees e1
+WHERE salary > (SELECT AVG(salary) FROM employees e2 
+                WHERE e1.dept_id = e2.dept_id);
+```
+
+### Set Operations
+
+#### UNION (removes duplicates)
+```sql
+SELECT emp_name FROM employees
+UNION
+SELECT emp_name FROM archived_employees;
+```
+
+#### UNION ALL (keeps duplicates)
+```sql
+SELECT emp_name FROM employees
+UNION ALL
+SELECT emp_name FROM archived_employees;
+```
+
+#### INTERSECT (common records)
+```sql
+SELECT emp_name FROM employees
+INTERSECT
+SELECT emp_name FROM project_members;
+```
+
+#### MINUS (difference)
+```sql
+SELECT emp_name FROM employees
+MINUS
+SELECT emp_name FROM inactive_employees;
+```
+
+### Window Functions
+
+#### ROW_NUMBER
+```sql
+SELECT emp_name, salary, dept_id,
+       ROW_NUMBER() OVER (PARTITION BY dept_id ORDER BY salary DESC) as rank
+FROM employees;
+```
+
+#### RANK
+```sql
+SELECT emp_name, salary,
+       RANK() OVER (ORDER BY salary DESC) as rank
+FROM employees;
+```
+
+#### DENSE_RANK
+```sql
+SELECT emp_name, salary,
+       DENSE_RANK() OVER (ORDER BY salary DESC) as dense_rank
+FROM employees;
+```
+
+#### LAG and LEAD
+```sql
+SELECT emp_name, salary,
+       LAG(salary, 1, 0) OVER (ORDER BY salary) as previous_salary,
+       LEAD(salary, 1, 0) OVER (ORDER BY salary) as next_salary
+FROM employees;
+```
+
+#### SUM Window Function
+```sql
+SELECT emp_name, salary,
+       SUM(salary) OVER (ORDER BY salary 
+           ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as running_total
+FROM employees;
+```
+
+### CTE (Common Table Expression)
+
+#### Simple CTE
+```sql
+WITH emp_salaries AS (
+    SELECT emp_id, emp_name, salary,
+           AVG(salary) OVER () as avg_sal
+    FROM employees
+)
+SELECT * FROM emp_salaries
+WHERE salary > avg_sal;
+```
+
+#### Recursive CTE
+```sql
+WITH RECURSIVE org_chart AS (
+    -- Base case: CEO
+    SELECT emp_id, emp_name, manager_id, 1 as level
+    FROM employees
+    WHERE manager_id IS NULL
+    
+    UNION ALL
+    
+    -- Recursive case
+    SELECT e.emp_id, e.emp_name, e.manager_id, oc.level + 1
+    FROM employees e
+    INNER JOIN org_chart oc ON e.manager_id = oc.emp_id
+)
+SELECT * FROM org_chart
+ORDER BY level, emp_id;
+```
+
+### CASE Expression
+```sql
+-- Simple CASE
+SELECT emp_name, salary,
+       CASE dept_id
+           WHEN 10 THEN 'Sales'
+           WHEN 20 THEN 'IT'
+           WHEN 30 THEN 'HR'
+           ELSE 'Other'
+       END as dept_name
+FROM employees;
+
+-- Searched CASE
+SELECT emp_name, salary,
+       CASE
+           WHEN salary >= 100000 THEN 'Senior'
+           WHEN salary >= 50000 THEN 'Mid'
+           ELSE 'Junior'
+       END as level
+FROM employees;
+```
+
+---
+
+## PL/SQL
+
+### Basic Structure
+```sql
+DECLARE
+    -- Variable declarations
+    v_emp_name VARCHAR2(50);
+    v_salary NUMBER;
+    CURSOR c_emp IS SELECT * FROM employees;
+BEGIN
+    -- Executable statements
+    SELECT emp_name, salary INTO v_emp_name, v_salary
+    FROM employees WHERE emp_id = 1;
+    
+    DBMS_OUTPUT.PUT_LINE('Name: ' || v_emp_name);
+    DBMS_OUTPUT.PUT_LINE('Salary: ' || v_salary);
+    
+EXCEPTION
+    -- Exception handling
+    WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('Employee not found');
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+END;
+/
+```
+
+### Variable Declaration
+```sql
+DECLARE
+    -- Scalar variables
+    v_name VARCHAR2(50);
+    v_salary NUMBER(10,2) := 50000;
+    v_date DATE := SYSDATE;
+    
+    -- Table and record types
+    TYPE emp_record IS RECORD (
+        emp_id NUMBER,
+        emp_name VARCHAR2(50),
+        salary NUMBER
+    );
+    v_emp emp_record;
+    
+    -- Collections
+    TYPE emp_table IS TABLE OF emp_record;
+    v_emp_list emp_table;
+BEGIN
+    -- Code
+END;
+/
+```
+
+### Procedures
+```sql
+-- Create procedure
+CREATE OR REPLACE PROCEDURE raise_salary (
+    p_emp_id IN NUMBER,
+    p_percent IN NUMBER DEFAULT 10
+) IS
+    v_salary NUMBER;
+BEGIN
+    SELECT salary INTO v_salary FROM employees 
+    WHERE emp_id = p_emp_id;
+    
+    UPDATE employees 
+    SET salary = salary * (1 + p_percent/100)
+    WHERE emp_id = p_emp_id;
+    
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('Salary raised by ' || p_percent || '%');
+    
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('Employee not found');
+END raise_salary;
+/
+
+-- Call procedure
+BEGIN
+    raise_salary(1, 15);
+END;
+/
+
+EXEC raise_salary(1, 15);
+```
+
+### Functions
+```sql
+CREATE OR REPLACE FUNCTION get_emp_bonus (
+    p_emp_id IN NUMBER
+) RETURN NUMBER IS
+    v_salary NUMBER;
+    v_bonus NUMBER;
+BEGIN
+    SELECT salary INTO v_salary 
+    FROM employees 
+    WHERE emp_id = p_emp_id;
+    
+    v_bonus := CASE
+        WHEN v_salary >= 100000 THEN v_salary * 0.20
+        WHEN v_salary >= 50000 THEN v_salary * 0.15
+        ELSE v_salary * 0.10
+    END;
+    
+    RETURN v_bonus;
+    
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RAISE_APPLICATION_ERROR(-20001, 'Employee not found');
+END get_emp_bonus;
+/
+
+-- Call function
+SELECT emp_name, get_emp_bonus(emp_id) as bonus
+FROM employees;
+```
+
+### Packages
+```sql
+-- Package specification
+CREATE OR REPLACE PACKAGE emp_pkg IS
+    PROCEDURE hire_employee(p_name VARCHAR2, p_salary NUMBER);
+    FUNCTION get_salary(p_emp_id NUMBER) RETURN NUMBER;
+END emp_pkg;
+/
+
+-- Package body
+CREATE OR REPLACE PACKAGE BODY emp_pkg IS
+    PROCEDURE hire_employee(p_name VARCHAR2, p_salary NUMBER) IS
+    BEGIN
+        INSERT INTO employees (emp_id, emp_name, salary)
+        VALUES (emp_seq.NEXTVAL, p_name, p_salary);
+        COMMIT;
+    END hire_employee;
+    
+    FUNCTION get_salary(p_emp_id NUMBER) RETURN NUMBER IS
+        v_salary NUMBER;
+    BEGIN
+        SELECT salary INTO v_salary FROM employees 
+        WHERE emp_id = p_emp_id;
+        RETURN v_salary;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN RETURN NULL;
+    END get_salary;
+END emp_pkg;
+/
+
+-- Call package
+EXEC emp_pkg.hire_employee('Alice', 60000);
+SELECT emp_pkg.get_salary(1) FROM dual;
+```
+
+### Triggers
+```sql
+-- BEFORE INSERT trigger
+CREATE OR REPLACE TRIGGER employees_bi
+BEFORE INSERT ON employees
+FOR EACH ROW
+BEGIN
+    :NEW.hire_date := SYSDATE;
+    :NEW.emp_id := emp_seq.NEXTVAL;
+END;
+/
+
+-- AFTER UPDATE trigger
+CREATE OR REPLACE TRIGGER employees_au
+AFTER UPDATE ON employees
+FOR EACH ROW
+BEGIN
+    INSERT INTO salary_history (emp_id, old_salary, new_salary, change_date)
+    VALUES (:OLD.emp_id, :OLD.salary, :NEW.salary, SYSDATE);
+END;
+/
+
+-- Enable/Disable trigger
+ALTER TRIGGER employees_bi ENABLE;
+ALTER TRIGGER employees_bi DISABLE;
+
+-- Drop trigger
+DROP TRIGGER employees_bi;
+```
+
+### Cursors
+```sql
+-- Explicit cursor
+DECLARE
+    CURSOR c_employees IS
+        SELECT emp_id, emp_name, salary FROM employees
+        WHERE dept_id = 10
+        ORDER BY salary DESC;
+    
+    v_emp_record c_employees%ROWTYPE;
+BEGIN
+    OPEN c_employees;
+    LOOP
+        FETCH c_employees INTO v_emp_record;
+        EXIT WHEN c_employees%NOTFOUND;
+        
+        DBMS_OUTPUT.PUT_LINE(v_emp_record.emp_name || ': ' || 
+                           v_emp_record.salary);
+    END LOOP;
+    CLOSE c_employees;
+END;
+/
+
+-- Implicit cursor with FOR loop
+BEGIN
+    FOR emp_record IN (SELECT emp_id, emp_name FROM employees)
+    LOOP
+        DBMS_OUTPUT.PUT_LINE(emp_record.emp_name);
+    END LOOP;
+END;
+/
+
+-- Cursor with parameters
+CREATE OR REPLACE PROCEDURE show_dept_employees (
+    p_dept_id IN NUMBER
+) IS
+    CURSOR c_emp (p_dept_id NUMBER) IS
+        SELECT emp_name, salary FROM employees
+        WHERE dept_id = p_dept_id;
+BEGIN
+    FOR emp IN c_emp(p_dept_id)
+    LOOP
+        DBMS_OUTPUT.PUT_LINE(emp.emp_name || ': ' || emp.salary);
+    END LOOP;
+END;
+/
+```
+
+### Exception Handling
+```sql
+DECLARE
+    v_salary NUMBER;
+    v_emp_id NUMBER := 999;
+BEGIN
+    SELECT salary INTO v_salary FROM employees 
+    WHERE emp_id = v_emp_id;
+    
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('Employee not found');
+    WHEN TOO_MANY_ROWS THEN
+        DBMS_OUTPUT.PUT_LINE('Query returned too many rows');
+    WHEN ZERO_DIVIDE THEN
+        DBMS_OUTPUT.PUT_LINE('Division by zero');
+    WHEN DUP_VAL_ON_INDEX THEN
+        DBMS_OUTPUT.PUT_LINE('Duplicate value');
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+        DBMS_OUTPUT.PUT_LINE('Error code: ' || SQLCODE);
+END;
+/
+```
+
+---
+
+## Indexing & Performance
+
+### Types of Indexes
+
+#### B-Tree Index (Default)
+```sql
+-- Single column index
+CREATE INDEX idx_emp_name ON employees(emp_name);
+
+-- Composite index
+CREATE INDEX idx_dept_sal ON employees(dept_id, salary);
+
+-- Unique index
+CREATE UNIQUE INDEX idx_emp_email ON employees(email);
+```
+
+#### Bitmap Index (Good for low cardinality)
+```sql
+CREATE BITMAP INDEX idx_emp_gender ON employees(gender);
+```
+
+#### Function-Based Index
+```sql
+CREATE INDEX idx_emp_name_upper ON employees(UPPER(emp_name));
+
+-- Query using the function
+SELECT * FROM employees 
+WHERE UPPER(emp_name) = 'JOHN';
+```
+
+#### Partitioned Index
+```sql
+CREATE INDEX idx_orders_date ON orders(order_date)
+PARTITION BY RANGE (order_date) (
+    PARTITION p_2024 VALUES LESS THAN (TO_DATE('01-JAN-2025', 'DD-MON-YYYY')),
+    PARTITION p_2025 VALUES LESS THAN (MAXVALUE)
+);
+```
+
+### Index Management
+```sql
+-- View indexes
+SELECT * FROM user_indexes;
+SELECT * FROM user_ind_columns;
+
+-- Analyze index
+ANALYZE INDEX idx_emp_name COMPUTE STATISTICS;
+
+-- Rebuild index
+ALTER INDEX idx_emp_name REBUILD;
+
+-- Drop index
+DROP INDEX idx_emp_name;
+
+-- Disable/Enable index
+ALTER INDEX idx_emp_name UNUSABLE;
+ALTER INDEX idx_emp_name REBUILD;
+
+-- Mark index unusable
+ALTER INDEX idx_emp_name UNUSABLE;
+```
+
+### Query Optimization
+
+#### EXPLAIN PLAN
+```sql
+-- Generate execution plan
+EXPLAIN PLAN FOR
+SELECT emp_name, salary FROM employees 
+WHERE dept_id = 10 AND salary > 50000;
+
+-- View plan
+SELECT PLAN_TABLE_OUTPUT FROM TABLE(DBMS_XPLAN.DISPLAY());
+```
+
+#### Hints
+```sql
+-- Force index usage
+SELECT /*+ INDEX(e idx_emp_name) */ emp_name 
+FROM employees e 
+WHERE emp_name LIKE 'J%';
+
+-- Force full table scan
+SELECT /*+ FULL(e) */ emp_name 
+FROM employees e 
+WHERE emp_name LIKE 'J%';
+
+-- Parallel execution
+SELECT /*+ PARALLEL(e, 4) */ emp_name, salary 
+FROM employees e 
+WHERE dept_id = 10;
+
+-- Append hint (for INSERT)
+INSERT /*+ APPEND */ INTO employees 
+SELECT * FROM employees_backup;
+```
+
+### Statistics
+```sql
+-- Gather statistics
+EXEC DBMS_STATS.gather_table_stats('HR', 'EMPLOYEES');
+
+-- Gather for all tables
+EXEC DBMS_STATS.gather_database_stats();
+
+-- View table statistics
+SELECT * FROM user_tables WHERE table_name = 'EMPLOYEES';
+
+-- View column statistics
+SELECT * FROM user_tab_cols WHERE table_name = 'EMPLOYEES';
+```
+
+---
+
+## Transactions & Locking
+
+### ACID Properties
+
+| Property | Definition |
+|----------|-----------|
+| Atomicity | All or nothing - transaction completes or rolls back entirely |
+| Consistency | Database moves from one valid state to another |
+| Isolation | Transactions don't interfere with each other |
+| Durability | Committed data survives failures |
+
+### Transaction Control
+```sql
+-- Start transaction (implicit)
+INSERT INTO employees (emp_id, emp_name) VALUES (100, 'John');
+UPDATE employees SET salary = 50000 WHERE emp_id = 1;
+
+-- Commit transaction
+COMMIT;
+
+-- Rollback transaction
+ROLLBACK;
+
+-- Savepoint
+SAVEPOINT sp1;
+INSERT INTO employees VALUES (101, 'Jane', 55000);
+-- If error occurs
+ROLLBACK TO sp1;
+
+-- Set transaction
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+BEGIN
+    -- Statements
+    COMMIT;
+END;
+```
+
+### Isolation Levels
+
+| Level | Dirty Read | Nonrepeatable Read | Phantom Read |
+|-------|-----------|-------------------|-------------|
+| READ UNCOMMITTED | Yes | Yes | Yes |
+| READ COMMITTED | No | Yes | Yes |
+| REPEATABLE READ | No | No | Yes |
+| SERIALIZABLE | No | No | No |
+
+```sql
+-- Set isolation level
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+```
+
+### Locking
+
+#### Row-Level Locks
+```sql
+-- FOR UPDATE lock
+SELECT * FROM employees WHERE emp_id = 1 FOR UPDATE;
+
+-- WITH lock
+SELECT * FROM employees WHERE emp_id = 1 FOR UPDATE NOWAIT;
+
+-- WAIT with timeout
+SELECT * FROM employees WHERE emp_id = 1 FOR UPDATE WAIT 5;
+```
+
+#### View Locks
+```sql
+-- Current locks
+SELECT * FROM v$lock;
+
+-- Locked objects
+SELECT * FROM v$locked_object;
+
+-- Lock conflicts
+SELECT * FROM v$session_wait;
+```
+
+#### Kill Session
+```sql
+-- Find blocking session
+SELECT blocking_session, sid, serial# FROM v$session 
+WHERE blocking_session IS NOT NULL;
+
+-- Kill session
+ALTER SYSTEM KILL SESSION 'sid,serial#';
+```
+
+---
+
+## Backup & Recovery
+
+### Backup Types
+
+#### Logical Backup (Export/Import)
+```bash
+# Export data
+expdp username/password@db DIRECTORY=dump_dir 
+       DUMPFILE=backup.dmp LOGFILE=export.log
+
+# Import data
+impdp username/password@db DIRECTORY=dump_dir 
+       DUMPFILE=backup.dmp LOGFILE=import.log
+```
+
+#### Physical Backup (RMAN)
+```bash
+# Connect to RMAN
+rman target / catalog rman_catalog/password@db
+
+# Backup database
+BACKUP DATABASE;
+
+# Backup with archive logs
+BACKUP DATABASE PLUS ARCHIVELOG;
+
+# Incremental backup
+BACKUP INCREMENTAL LEVEL 1 DATABASE;
+
+# List backups
+LIST BACKUP;
+```
+
+### Recovery
+
+#### Recover from RMAN Backup
+```sql
+-- Startup mount
+STARTUP MOUNT;
+
+-- Restore database
+RMAN> RESTORE DATABASE;
+RMAN> RECOVER DATABASE;
+
+-- Open database
+ALTER DATABASE OPEN RESETLOGS;
+```
+
+#### Recover Using Archive Logs
+```sql
+-- Mount database
+STARTUP MOUNT;
+
+-- Recover
+RECOVER DATABASE USING BACKUP CONTROLFILE;
+
+-- Or apply specific archive
+RECOVER DATABASE USING BACKUP CONTROLFILE 
+UNTIL CANCEL;
+```
+
+### Archive Logs
+```sql
+-- Enable archiving
+SHUTDOWN IMMEDIATE;
+STARTUP MOUNT;
+ALTER DATABASE ARCHIVELOG;
+ALTER DATABASE OPEN;
+
+-- Check archive status
+SELECT log_mode FROM v$database;
+
+-- View archive logs
+SELECT * FROM v$archived_log;
+
+-- Delete old archive logs
+DELETE FROM v$archived_log WHERE TRUNC(completion_time) < SYSDATE - 30;
+```
+
+---
+
+## Security
+
+### Users & Privileges
+
+#### Create User
+```sql
+-- Create user
+CREATE USER john IDENTIFIED BY password123
+DEFAULT TABLESPACE users
+QUOTA 100M ON users;
+
+-- Create user with profile
+CREATE USER alice IDENTIFIED BY password123
+DEFAULT TABLESPACE users
+PROFILE limited_profile;
+```
+
+#### Grant Privileges
+```sql
+-- System privileges
+GRANT CREATE SESSION TO john;
+GRANT CREATE TABLE TO john;
+GRANT CREATE PROCEDURE TO john;
+
+-- Object privileges
+GRANT SELECT, INSERT, UPDATE ON employees TO john;
+GRANT ALL PRIVILEGES ON employees TO john;
+
+-- With GRANT option
+GRANT SELECT ON employees TO john WITH GRANT OPTION;
+```
+
+#### Roles
+```sql
+-- Create role
+CREATE ROLE hr_role;
+
+-- Grant privileges to role
+GRANT SELECT, INSERT, UPDATE ON employees TO hr_role;
+
+-- Assign role to user
+GRANT hr_role TO john;
+
+-- Predefined roles
+GRANT DBA TO john;              -- All system privileges
+GRANT RESOURCE TO john;         -- CREATE object privileges
+GRANT CONNECT TO john;          -- CREATE SESSION only
+```
+
+### Revoke Privileges
+```sql
+REVOKE SELECT ON employees FROM john;
+REVOKE CREATE SESSION FROM john;
+REVOKE hr_role FROM john;
+```
+
+### View Privileges
+```sql
+-- User privileges
+SELECT * FROM user_sys_privs;
+SELECT * FROM user_role_privs;
+
+-- Table privileges
+SELECT * FROM user_tab_privs;
+SELECT * FROM user_col_privs;
+
+-- All privileges granted
+SELECT * FROM dba_sys_privs WHERE grantee = 'JOHN';
+SELECT * FROM dba_role_privs WHERE grantee = 'JOHN';
+```
+
+### Profiles & Limits
+```sql
+-- Create profile
+CREATE PROFILE limited_profile LIMIT
+    SESSIONS_PER_USER 1
+    CPU_PER_SESSION 3600
+    CONNECT_TIME 480
+    IDLE_TIME 60
+    PASSWORD_LIFE_TIME 90;
+
+-- Assign profile to user
+ALTER USER john PROFILE limited_profile;
+
+-- View profiles
+SELECT * FROM dba_profiles WHERE profile = 'LIMITED_PROFILE';
+```
+
+### Encryption
+```sql
+-- Transparent Data Encryption (TDE)
+ALTER TABLE employees ENCRYPT 
+ENCRYPTION ALGORITHM AES192;
+
+-- Column encryption
+CREATE TABLE secure_data (
+    id NUMBER,
+    secret_data ENCRYPTED VARCHAR2(100)
+);
+
+-- Encrypt password
+CREATE USER john IDENTIFIED BY password123
+CONTAINER=ALL;
+```
+
+---
+
+## Common Issues & Solutions
+
+### Issue: ORA-00001 - Unique Constraint Violated
+```sql
+-- Cause: Attempt to insert duplicate value in unique column
+-- Solution 1: Check existing values
+SELECT COUNT(*) FROM employees WHERE emp_id = 100;
+
+-- Solution 2: Use next sequence value
+INSERT INTO employees (emp_id, emp_name) 
+VALUES (emp_seq.NEXTVAL, 'John');
+
+-- Solution 3: Handle in application
+BEGIN
+    INSERT INTO employees VALUES (100, 'John', 50000);
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+        UPDATE employees SET emp_name = 'John' WHERE emp_id = 100;
+END;
+```
+
+### Issue: ORA-00904 - Invalid Column Name
+```sql
+-- Cause: Misspelled column or schema name
+-- Solution 1: Check table structure
+DESC employees;
+
+-- Solution 2: Check user_tab_columns
+SELECT column_name FROM user_tab_columns 
+WHERE table_name = 'EMPLOYEES';
+
+-- Solution 3: Verify column name spelling
+SELECT emp_name, salary FROM employees;  -- Correct
+SELECT emp_name, sal FROM employees;     -- Wrong - ORA-00904
+```
+
+### Issue: ORA-01830 - Date Format Error
+```sql
+-- Cause: Invalid date format in TO_DATE
+-- Wrong
+SELECT * FROM employees 
+WHERE hire_date = TO_DATE('2025-01-01', 'DD-MON-YYYY');
+
+-- Correct
+SELECT * FROM employees 
+WHERE hire_date = TO_DATE('01-JAN-2025', 'DD-MON-YYYY');
+```
+
+### Issue: ORA-12514 - TNS Could Not Resolve Service Name
+```bash
+# Cause: Database service not registered or not started
+# Solution 1: Check service name in tnsnames.ora
+# File location: $ORACLE_HOME/network/admin/tnsnames.ora
+
+# Solution 2: Start database
+STARTUP;
+
+# Solution 3: Register service
+lsnrctl reload
+
+# Solution 4: Connect using direct path
+sqlplus username/password@(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1521)))(CONNECT_DATA=(SERVICE_NAME=orcl)))
+```
+
+### Issue: ORA-01555 - Snapshot Too Old
+```sql
+-- Cause: Long-running queries with UNDO tablespace issue
+-- Solution 1: Increase UNDO retention
+ALTER SYSTEM SET undo_retention=900;
+
+-- Solution 2: Increase UNDO tablespace size
+ALTER TABLESPACE undotbs1 ADD DATAFILE 
+    '/u01/oradata/undotbs01_02.dbf' SIZE 500M;
+
+-- Solution 3: Commit more frequently in loop
+FOR i IN 1..1000000 LOOP
+    -- Process record
+    IF MOD(i, 1000) = 0 THEN
+        COMMIT;
+    END IF;
+END LOOP;
+```
+
+### Issue: ORA-00060 - Deadlock Detected
+```sql
+-- Cause: Two transactions waiting for each other
+-- Solution 1: Reduce lock time
+BEGIN
+    UPDATE accounts SET balance = balance - 100 WHERE acc_id = 1;
+    UPDATE accounts SET balance = balance + 100 WHERE acc_id = 2;
+    COMMIT;  -- Commit quickly
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+END;
+
+-- Solution 2: Use consistent lock order
+BEGIN
+    UPDATE accounts SET balance = balance - 100 WHERE acc_id = 1;
+    UPDATE accounts SET balance = balance + 100 WHERE acc_id = 2;
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+END;
+```
+
+### Issue: ORA-06502 - Numeric or Value Error
+```sql
+-- Cause: Value too large for NUMBER variable
+-- Wrong
+DECLARE
+    v_num NUMBER(3);
+BEGIN
+    v_num := 9999;  -- Exceeds 3 digits
+END;
+
+-- Correct
+DECLARE
+    v_num NUMBER(5);
+BEGIN
+    v_num := 9999;
+END;
+```
+
+---
+
+## Interview Q&A
+
+### Basic Questions
+
+**Q1: What is Oracle Database?**
+A: Oracle Database is an enterprise-grade RDBMS that stores data in tables and provides SQL for querying, PL/SQL for procedural logic, and features like indexing, security, backup/recovery for managing large-scale data.
+
+**Q2: Difference between Instance and Database?**
+A: Instance = Memory structures (SGA) + Background processes; Database = Physical files (datafiles, control files, redo logs). One database can have multiple instances.
+
+**Q3: What are the main memory components in Oracle?**
+A: Buffer Cache (data blocks), Shared Pool (SQL/execution plans), Redo Log Buffer (changes), Large Pool (parallel buffers).
+
+**Q4: Explain ACID properties.**
+A: Atomicity (all-or-nothing), Consistency (valid state to valid state), Isolation (no interference), Durability (survives failures).
+
+**Q5: What is a sequence?**
+A: Auto-increment mechanism that generates unique numeric values.
+```sql
+CREATE SEQUENCE emp_seq START WITH 1 INCREMENT BY 1;
+INSERT INTO employees (emp_id, emp_name) 
+VALUES (emp_seq.NEXTVAL, 'John');
+```
+
+### Intermediate Questions
+
+**Q6: What are the different types of joins?**
+A: INNER JOIN (matching records), LEFT JOIN (all left + matching), RIGHT JOIN (all right + matching), FULL OUTER JOIN (all from both), CROSS JOIN (Cartesian product).
+
+**Q7: Explain window functions.**
+A: Functions operating on row partitions with order - ROW_NUMBER(), RANK(), DENSE_RANK(), LAG(), LEAD(), SUM() OVER(), etc.
+
+**Q8: What is a CTE?**
+A: Common Table Expression provides named temporary result set, improves readability, supports recursion.
+
+**Q9: Difference between TRUNCATE and DELETE.**
+A: TRUNCATE deletes all rows instantly (faster), cannot rollback, resets identity; DELETE removes rows gradually (slower), can rollback, doesn't reset identity.
+
+**Q10: What is a trigger?**
+A: PL/SQL code executed automatically on DML events (INSERT, UPDATE, DELETE) on a table.
+
+### Advanced Questions
+
+**Q11: Explain the difference between UNION and UNION ALL.**
+A: UNION removes duplicates (slower); UNION ALL keeps duplicates (faster).
+
+**Q12: What is a bitmap index and when to use it?**
+A: Index for low-cardinality columns (few unique values), uses bitmap representation, faster for queries on such columns.
+
+**Q13: What is database normalization?**
+A: Process of organizing data to minimize redundancy:
+- 1NF: No repeating groups
+- 2NF: Remove partial dependencies
+- 3NF: Remove transitive dependencies
+- BCNF: Every determinant is a candidate key
+
+**Q14: Explain locking in Oracle.**
+A: Mechanism to prevent concurrent modification conflicts:
+```sql
+SELECT * FROM employees WHERE emp_id = 1 FOR UPDATE;
+-- Locks row until transaction ends
+```
+
+**Q15: What is a package?**
+A: Grouped collection of procedures, functions, and variables for code organization and reusability.
+
+### Performance & Optimization
+
+**Q16: How to improve query performance?**
+A:
+1. Create appropriate indexes
+2. Use EXPLAIN PLAN to analyze
+3. Avoid full table scans
+4. Use hints if needed
+5. Optimize subqueries
+6. Use batch processing
+7. Archive old data
+
+**Q17: What is the difference between a view and a materialized view?**
+A: View (virtual, no storage, executed each time); Materialized View (physical, stored, refreshed periodically).
+
+**Q18: What are the benefits of using prepared statements?**
+A: Prevent SQL injection, reuse execution plans, improve performance, better security.
+
+**Q19: How to monitor database performance?**
+A:
+```sql
+SELECT * FROM v$session;           -- Active sessions
+SELECT * FROM v$sql;               -- SQL statements
+SELECT * FROM v$wait_stat;         -- Wait statistics
+SELECT * FROM dba_hist_sysmetric;  -- Historical metrics
+```
+
+**Q20: What is an execution plan?**
+A: Shows how Oracle executes a query, including steps, cost, cardinality, useful for optimization.
+
+---
+
+## Best Practices
+
+### 1. Database Design
+- Use appropriate data types
+- Normalize data
+- Define primary/foreign keys
+- Use constraints
+
+### 2. Query Optimization
+```sql
+-- Bad: Full table scan
+SELECT * FROM employees WHERE emp_name LIKE '%John%';
+
+-- Good: Use index
+SELECT * FROM employees WHERE emp_name LIKE 'John%';
+```
+
+### 3. Error Handling
+```sql
+BEGIN
+    -- Code
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        -- Handle
+    WHEN OTHERS THEN
+        -- Log error
+        RAISE;
+END;
+```
+
+### 4. Use Bind Variables
+```sql
+-- Bad: String concatenation
+v_sql := 'SELECT * FROM employees WHERE emp_id = ' || p_emp_id;
+
+-- Good: Bind variables
+PREPARE stmt FROM 'SELECT * FROM employees WHERE emp_id = ?';
+```
+
+### 5. Transactions
+```sql
+-- Commit frequently
+FOR i IN 1..1000000 LOOP
+    INSERT INTO archive SELECT * FROM data WHERE id = i;
+    IF MOD(i, 10000) = 0 THEN
+        COMMIT;
+    END IF;
+END LOOP;
+```
+
+### 6. Documentation
+```sql
+CREATE OR REPLACE PROCEDURE process_employees (
+    p_dept_id IN NUMBER  -- Department ID
+) IS
+    -- Process employees in given department
+    -- Returns: None
+    -- Raises: INVALID_DEPT_ID if dept doesn't exist
+BEGIN
+    -- Implementation
+END;
+```
+
+---
+
+## Useful System Views
+
+| View | Purpose |
+|------|---------|
+| v$database | Database information |
+| v$instance | Instance information |
+| v$session | Active sessions |
+| v$lock | Active locks |
+| v$sql | SQL statements in cache |
+| v$tablespace | Tablespace info |
+| v$datafile | Datafile information |
+| user_tables | User's tables |
+| user_indexes | User's indexes |
+| user_views | User's views |
+| dba_users | All database users |
+| dba_privileges | All privileges |
+
+---
+
+## Quick Reference Commands
+
+```sql
+-- Connection
+sqlplus username/password
+CONNECT username/password;
+DISCONNECT;
+
+-- Database info
+SELECT name FROM v$database;
+SELECT instance_name FROM v$instance;
+SELECT log_mode FROM v$database;
+
+-- Tablespace info
+SELECT tablespace_name, sum(bytes)/1024/1024 size_mb 
+FROM dba_data_files GROUP BY tablespace_name;
+
+-- Table info
+DESC table_name;
+SELECT * FROM user_tables;
+SELECT * FROM user_tab_columns WHERE table_name='TABLE_NAME';
+
+-- Index management
+CREATE INDEX idx_name ON table_name(column_name);
+DROP INDEX idx_name;
+ANALYZE INDEX idx_name COMPUTE STATISTICS;
+
+-- PL/SQL compilation
+CREATE OR REPLACE PROCEDURE proc_name IS BEGIN NULL; END;
+SHOW ERRORS;
+
+-- Session info
+SELECT * FROM v$session WHERE type != 'BACKGROUND';
+ALTER SYSTEM KILL SESSION 'sid,serial#';
+```
+
+---
+
+---
+
+## Practical Application Examples & Process Notes
+
+### Real-World Scenario 1: Employee Management System
+
+#### Process Overview
+1. Create database schema
+2. Set up users and security
+3. Implement business logic
+4. Handle transactions
+5. Monitor and optimize
+
+#### Complete Implementation
+
+```sql
+-- Step 1: Create tablespaces
+CREATE TABLESPACE users_ts DATAFILE '/u01/oradata/users_ts.dbf' SIZE 500M;
+CREATE TABLESPACE temp_ts TEMPFILE '/u01/oradata/temp_ts.dbf' SIZE 100M;
+
+-- Step 2: Create schema and tables
+CREATE TABLE departments (
+    dept_id NUMBER PRIMARY KEY,
+    dept_name VARCHAR2(50) NOT NULL UNIQUE,
+    location VARCHAR2(50),
+    budget NUMBER(12,2),
+    manager_id NUMBER REFERENCES employees(emp_id),
+    created_date DATE DEFAULT SYSDATE,
+    modified_date DATE DEFAULT SYSDATE
+);
+
+CREATE TABLE employees (
+    emp_id NUMBER PRIMARY KEY,
+    emp_name VARCHAR2(100) NOT NULL,
+    email VARCHAR2(100) UNIQUE,
+    phone VARCHAR2(20),
+    salary NUMBER(10,2) NOT NULL CHECK (salary > 0),
+    commission_pct NUMBER(3,2) CHECK (commission_pct BETWEEN 0 AND 100),
+    dept_id NUMBER REFERENCES departments(dept_id),
+    manager_id NUMBER REFERENCES employees(emp_id),
+    hire_date DATE DEFAULT SYSDATE NOT NULL,
+    job_title VARCHAR2(50),
+    status VARCHAR2(20) DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'INACTIVE', 'ON_LEAVE')),
+    created_date DATE DEFAULT SYSDATE,
+    modified_date DATE DEFAULT SYSDATE
+);
+
+CREATE TABLE salary_history (
+    history_id NUMBER PRIMARY KEY,
+    emp_id NUMBER REFERENCES employees(emp_id),
+    old_salary NUMBER(10,2),
+    new_salary NUMBER(10,2),
+    change_reason VARCHAR2(200),
+    change_date DATE DEFAULT SYSDATE,
+    changed_by VARCHAR2(50)
+);
+
+CREATE TABLE attendance (
+    attendance_id NUMBER PRIMARY KEY,
+    emp_id NUMBER REFERENCES employees(emp_id),
+    attendance_date DATE NOT NULL,
+    check_in TIME,
+    check_out TIME,
+    hours_worked NUMBER(5,2),
+    status VARCHAR2(20),
+    UNIQUE(emp_id, attendance_date)
+);
+
+-- Step 3: Create sequences
+CREATE SEQUENCE dept_seq START WITH 100 INCREMENT BY 1;
+CREATE SEQUENCE emp_seq START WITH 1000 INCREMENT BY 1;
+CREATE SEQUENCE sal_hist_seq START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE attend_seq START WITH 1 INCREMENT BY 1;
+
+-- Step 4: Create indexes for performance
+CREATE INDEX idx_emp_dept ON employees(dept_id);
+CREATE INDEX idx_emp_manager ON employees(manager_id);
+CREATE INDEX idx_emp_hire_date ON employees(hire_date);
+CREATE INDEX idx_sal_hist_emp ON salary_history(emp_id);
+CREATE INDEX idx_sal_hist_date ON salary_history(change_date);
+CREATE INDEX idx_attendance_emp ON attendance(emp_id);
+CREATE INDEX idx_attendance_date ON attendance(attendance_date);
+
+-- Step 5: Create views for common queries
+CREATE OR REPLACE VIEW emp_with_dept AS
+SELECT 
+    e.emp_id, e.emp_name, e.salary,
+    d.dept_name, d.location,
+    e.hire_date, e.job_title
+FROM employees e
+LEFT JOIN departments d ON e.dept_id = d.dept_id;
+
+CREATE OR REPLACE VIEW dept_salary_summary AS
+SELECT 
+    d.dept_id,
+    d.dept_name,
+    COUNT(e.emp_id) as emp_count,
+    ROUND(AVG(e.salary), 2) as avg_salary,
+    SUM(e.salary) as total_salary,
+    MIN(e.salary) as min_salary,
+    MAX(e.salary) as max_salary
+FROM departments d
+LEFT JOIN employees e ON d.dept_id = e.dept_id
+GROUP BY d.dept_id, d.dept_name;
+```
+
+#### Business Logic - Procedures
+
+```sql
+-- Hire new employee
+CREATE OR REPLACE PROCEDURE hire_employee (
+    p_emp_name IN VARCHAR2,
+    p_email IN VARCHAR2,
+    p_salary IN NUMBER,
+    p_dept_id IN NUMBER,
+    p_job_title IN VARCHAR2,
+    p_emp_id OUT NUMBER
+) IS
+    v_emp_id NUMBER;
+BEGIN
+    -- Validate inputs
+    IF p_salary <= 0 THEN
+        RAISE_APPLICATION_ERROR(-20001, 'Salary must be greater than 0');
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM departments WHERE dept_id = p_dept_id) THEN
+        RAISE_APPLICATION_ERROR(-20002, 'Invalid department ID');
+    END IF;
+    
+    -- Get next employee ID
+    SELECT emp_seq.NEXTVAL INTO v_emp_id FROM dual;
+    
+    -- Insert employee
+    INSERT INTO employees (
+        emp_id, emp_name, email, salary, dept_id, 
+        job_title, hire_date
+    ) VALUES (
+        v_emp_id, p_emp_name, p_email, p_salary, p_dept_id,
+        p_job_title, SYSDATE
+    );
+    
+    -- Return new emp_id
+    p_emp_id := v_emp_id;
+    
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('Employee ' || p_emp_name || ' hired successfully');
+    
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20003, 'Email already exists');
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error hiring employee: ' || SQLERRM);
+END hire_employee;
+/
+
+-- Give salary increase
+CREATE OR REPLACE PROCEDURE raise_salary (
+    p_emp_id IN NUMBER,
+    p_increase_percent IN NUMBER
+) IS
+    v_old_salary NUMBER;
+    v_new_salary NUMBER;
+BEGIN
+    -- Get current salary
+    SELECT salary INTO v_old_salary 
+    FROM employees 
+    WHERE emp_id = p_emp_id;
+    
+    -- Calculate new salary
+    v_new_salary := v_old_salary * (1 + p_increase_percent / 100);
+    
+    -- Update salary
+    UPDATE employees 
+    SET salary = v_new_salary, modified_date = SYSDATE
+    WHERE emp_id = p_emp_id;
+    
+    -- Record history
+    INSERT INTO salary_history (
+        history_id, emp_id, old_salary, new_salary, 
+        change_reason, changed_by
+    ) VALUES (
+        sal_hist_seq.NEXTVAL, p_emp_id, v_old_salary, v_new_salary,
+        'Salary increase: ' || p_increase_percent || '%',
+        USER
+    );
+    
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('Salary updated from ' || v_old_salary || 
+                        ' to ' || v_new_salary);
+    
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RAISE_APPLICATION_ERROR(-20004, 'Employee not found');
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error: ' || SQLERRM);
+END raise_salary;
+/
+
+-- Record attendance
+CREATE OR REPLACE PROCEDURE record_attendance (
+    p_emp_id IN NUMBER,
+    p_attendance_date IN DATE,
+    p_check_in IN VARCHAR2,
+    p_check_out IN VARCHAR2,
+    p_status IN VARCHAR2
+) IS
+    v_hours_worked NUMBER(5,2);
+BEGIN
+    -- Calculate hours worked
+    IF p_check_in IS NOT NULL AND p_check_out IS NOT NULL THEN
+        v_hours_worked := (TO_DATE(p_check_out, 'HH24:MI') - 
+                          TO_DATE(p_check_in, 'HH24:MI')) * 24;
+    ELSE
+        v_hours_worked := 0;
+    END IF;
+    
+    -- Insert or update attendance
+    MERGE INTO attendance a
+    USING DUAL
+    ON (a.emp_id = p_emp_id AND a.attendance_date = p_attendance_date)
+    WHEN MATCHED THEN
+        UPDATE SET
+            a.check_in = p_check_in,
+            a.check_out = p_check_out,
+            a.hours_worked = v_hours_worked,
+            a.status = p_status
+    WHEN NOT MATCHED THEN
+        INSERT (
+            attendance_id, emp_id, attendance_date, 
+            check_in, check_out, hours_worked, status
+        ) VALUES (
+            attend_seq.NEXTVAL, p_emp_id, p_attendance_date,
+            p_check_in, p_check_out, v_hours_worked, p_status
+        );
+    
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('Attendance recorded successfully');
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error: ' || SQLERRM);
+END record_attendance;
+/
+```
+
+#### Triggers for Auditing
+
+```sql
+-- Track employee modifications
+CREATE OR REPLACE TRIGGER emp_audit_trigger
+AFTER INSERT OR UPDATE ON employees
+FOR EACH ROW
+BEGIN
+    IF INSERTING THEN
+        DBMS_OUTPUT.PUT_LINE('New employee: ' || :NEW.emp_name);
+    ELSIF UPDATING THEN
+        IF :OLD.salary != :NEW.salary THEN
+            DBMS_OUTPUT.PUT_LINE('Salary changed for ' || :NEW.emp_name);
+        END IF;
+    END IF;
+END emp_audit_trigger;
+/
+
+-- Prevent deletion of active employees
+CREATE OR REPLACE TRIGGER prevent_emp_delete
+BEFORE DELETE ON employees
+FOR EACH ROW
+BEGIN
+    IF :OLD.status = 'ACTIVE' THEN
+        RAISE_APPLICATION_ERROR(-20005, 
+            'Cannot delete active employee. Mark as INACTIVE first.');
+    END IF;
+END prevent_emp_delete;
+/
+```
+
+#### Setup Process - Step by Step
+
+```sql
+-- Execute these commands in order:
+
+-- 1. Create user
+CREATE USER hr_user IDENTIFIED BY HR_Password123
+DEFAULT TABLESPACE users_ts
+QUOTA 100M ON users_ts;
+
+-- 2. Grant privileges
+GRANT CONNECT, RESOURCE TO hr_user;
+GRANT CREATE PROCEDURE, CREATE TRIGGER, CREATE VIEW TO hr_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON departments TO hr_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON employees TO hr_user;
+
+-- 3. Connect as user
+CONNECT hr_user/HR_Password123;
+
+-- 4. Run all the CREATE TABLE, SEQUENCE, INDEX commands above
+
+-- 5. Test the procedures
+DECLARE
+    v_emp_id NUMBER;
+BEGIN
+    -- Insert department first
+    INSERT INTO departments (dept_id, dept_name, location, budget)
+    VALUES (dept_seq.NEXTVAL, 'IT', 'New York', 500000);
+    
+    -- Hire employee
+    hire_employee('John Doe', 'john@company.com', 75000, 100, 'Developer', v_emp_id);
+    DBMS_OUTPUT.PUT_LINE('New Employee ID: ' || v_emp_id);
+    
+    -- Give raise
+    raise_salary(v_emp_id, 10);
+    
+    -- Record attendance
+    record_attendance(v_emp_id, SYSDATE, '09:00', '17:30', 'PRESENT');
+END;
+/
+```
+
+---
+
+### Real-World Scenario 2: E-Commerce Order Management
+
+#### Database Schema
+
+```sql
+-- Products
+CREATE TABLE products (
+    product_id NUMBER PRIMARY KEY,
+    product_name VARCHAR2(100) NOT NULL,
+    category VARCHAR2(50),
+    price NUMBER(10,2) NOT NULL,
+    quantity_in_stock NUMBER NOT NULL CHECK (quantity_in_stock >= 0),
+    supplier_id NUMBER,
+    created_date DATE DEFAULT SYSDATE
+);
+
+-- Customers
+CREATE TABLE customers (
+    customer_id NUMBER PRIMARY KEY,
+    first_name VARCHAR2(50),
+    last_name VARCHAR2(50),
+    email VARCHAR2(100) UNIQUE,
+    phone VARCHAR2(20),
+    country VARCHAR2(50),
+    city VARCHAR2(50),
+    postal_code VARCHAR2(20),
+    created_date DATE DEFAULT SYSDATE
+);
+
+-- Orders
+CREATE TABLE orders (
+    order_id NUMBER PRIMARY KEY,
+    customer_id NUMBER REFERENCES customers(customer_id),
+    order_date DATE DEFAULT SYSDATE,
+    ship_date DATE,
+    delivery_date DATE,
+    total_amount NUMBER(10,2),
+    status VARCHAR2(20) DEFAULT 'PENDING',
+    payment_method VARCHAR2(20)
+);
+
+-- Order Items
+CREATE TABLE order_items (
+    order_item_id NUMBER PRIMARY KEY,
+    order_id NUMBER REFERENCES orders(order_id),
+    product_id NUMBER REFERENCES products(product_id),
+    quantity NUMBER NOT NULL,
+    unit_price NUMBER(10,2),
+    discount_percent NUMBER(5,2) DEFAULT 0,
+    line_total NUMBER(10,2)
+);
+
+-- Create sequences
+CREATE SEQUENCE prod_seq START WITH 1000 INCREMENT BY 1;
+CREATE SEQUENCE cust_seq START WITH 1000 INCREMENT BY 1;
+CREATE SEQUENCE ord_seq START WITH 1000 INCREMENT BY 1;
+CREATE SEQUENCE ord_item_seq START WITH 1 INCREMENT BY 1;
+```
+
+#### Order Processing Logic
+
+```sql
+-- Place new order
+CREATE OR REPLACE PROCEDURE place_order (
+    p_customer_id IN NUMBER,
+    p_payment_method IN VARCHAR2,
+    p_order_id OUT NUMBER
+) IS
+    v_order_id NUMBER;
+    v_total DECIMAL := 0;
+BEGIN
+    -- Get next order ID
+    SELECT ord_seq.NEXTVAL INTO v_order_id FROM dual;
+    
+    -- Insert order header
+    INSERT INTO orders (
+        order_id, customer_id, order_date, 
+        payment_method, status, total_amount
+    ) VALUES (
+        v_order_id, p_customer_id, SYSDATE,
+        p_payment_method, 'PENDING', 0
+    );
+    
+    p_order_id := v_order_id;
+    COMMIT;
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20001, 'Error creating order: ' || SQLERRM);
+END place_order;
+/
+
+-- Add item to order
+CREATE OR REPLACE PROCEDURE add_order_item (
+    p_order_id IN NUMBER,
+    p_product_id IN NUMBER,
+    p_quantity IN NUMBER,
+    p_discount_percent IN NUMBER DEFAULT 0
+) IS
+    v_unit_price NUMBER(10,2);
+    v_line_total NUMBER(10,2);
+    v_stock_available NUMBER;
+BEGIN
+    -- Check stock
+    SELECT quantity_in_stock INTO v_stock_available
+    FROM products WHERE product_id = p_product_id;
+    
+    IF v_stock_available < p_quantity THEN
+        RAISE_APPLICATION_ERROR(-20002, 
+            'Insufficient stock. Available: ' || v_stock_available);
+    END IF;
+    
+    -- Get unit price
+    SELECT price INTO v_unit_price
+    FROM products WHERE product_id = p_product_id;
+    
+    -- Calculate line total
+    v_line_total := p_quantity * v_unit_price * 
+                   (1 - p_discount_percent / 100);
+    
+    -- Insert order item
+    INSERT INTO order_items (
+        order_item_id, order_id, product_id, quantity,
+        unit_price, discount_percent, line_total
+    ) VALUES (
+        ord_item_seq.NEXTVAL, p_order_id, p_product_id, p_quantity,
+        v_unit_price, p_discount_percent, v_line_total
+    );
+    
+    -- Reduce stock
+    UPDATE products
+    SET quantity_in_stock = quantity_in_stock - p_quantity
+    WHERE product_id = p_product_id;
+    
+    -- Update order total
+    UPDATE orders
+    SET total_amount = (SELECT SUM(line_total) FROM order_items 
+                       WHERE order_id = p_order_id)
+    WHERE order_id = p_order_id;
+    
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('Item added to order');
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error: ' || SQLERRM);
+END add_order_item;
+/
+
+-- Complete order
+CREATE OR REPLACE PROCEDURE complete_order (
+    p_order_id IN NUMBER,
+    p_ship_date IN DATE
+) IS
+BEGIN
+    UPDATE orders
+    SET status = 'COMPLETED',
+        ship_date = p_ship_date
+    WHERE order_id = p_order_id;
+    
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('Order completed and ready to ship');
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error: ' || SQLERRM);
+END complete_order;
+/
+```
+
+---
+
+### Real-World Scenario 3: Financial Transaction Processing
+
+#### Transaction Workflow
+
+```sql
+-- Accounts table
+CREATE TABLE accounts (
+    account_id NUMBER PRIMARY KEY,
+    account_holder VARCHAR2(100) NOT NULL,
+    account_type VARCHAR2(20),
+    balance NUMBER(15,2) NOT NULL DEFAULT 0,
+    created_date DATE DEFAULT SYSDATE
+);
+
+-- Transactions table
+CREATE TABLE transactions (
+    transaction_id NUMBER PRIMARY KEY,
+    from_account_id NUMBER REFERENCES accounts(account_id),
+    to_account_id NUMBER REFERENCES accounts(account_id),
+    amount NUMBER(15,2) NOT NULL,
+    transaction_type VARCHAR2(20),
+    status VARCHAR2(20) DEFAULT 'PENDING',
+    transaction_date DATE DEFAULT SYSDATE,
+    completed_date DATE,
+    notes VARCHAR2(200)
+);
+
+-- Create sequences
+CREATE SEQUENCE acct_seq START WITH 1000 INCREMENT BY 1;
+CREATE SEQUENCE txn_seq START WITH 1 INCREMENT BY 1;
+
+-- Money transfer with proper transaction handling
+CREATE OR REPLACE PROCEDURE transfer_money (
+    p_from_account IN NUMBER,
+    p_to_account IN NUMBER,
+    p_amount IN NUMBER,
+    p_transaction_id OUT NUMBER
+) IS
+    v_from_balance NUMBER(15,2);
+    v_to_balance NUMBER(15,2);
+    v_txn_id NUMBER;
+    SAVEPOINT before_transfer;
+BEGIN
+    -- Start transaction
+    SAVEPOINT before_transfer;
+    
+    -- Validate amount
+    IF p_amount <= 0 THEN
+        RAISE_APPLICATION_ERROR(-20001, 'Amount must be positive');
+    END IF;
+    
+    -- Lock source account FOR UPDATE
+    SELECT balance INTO v_from_balance FROM accounts
+    WHERE account_id = p_from_account FOR UPDATE;
+    
+    -- Check sufficient balance
+    IF v_from_balance < p_amount THEN
+        RAISE_APPLICATION_ERROR(-20002, 'Insufficient balance');
+    END IF;
+    
+    -- Get transaction ID
+    SELECT txn_seq.NEXTVAL INTO v_txn_id FROM dual;
+    
+    -- Debit from account
+    UPDATE accounts SET balance = balance - p_amount
+    WHERE account_id = p_from_account;
+    
+    -- Lock destination account
+    SELECT balance INTO v_to_balance FROM accounts
+    WHERE account_id = p_to_account FOR UPDATE;
+    
+    -- Credit to account
+    UPDATE accounts SET balance = balance + p_amount
+    WHERE account_id = p_to_account;
+    
+    -- Record transaction
+    INSERT INTO transactions (
+        transaction_id, from_account_id, to_account_id,
+        amount, transaction_type, status, completed_date
+    ) VALUES (
+        v_txn_id, p_from_account, p_to_account,
+        p_amount, 'TRANSFER', 'COMPLETED', SYSDATE
+    );
+    
+    COMMIT;
+    p_transaction_id := v_txn_id;
+    DBMS_OUTPUT.PUT_LINE('Transfer successful. TXN ID: ' || v_txn_id);
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK TO before_transfer;
+        RAISE_APPLICATION_ERROR(-20999, 'Transfer failed: ' || SQLERRM);
+END transfer_money;
+/
+```
+
+---
+
+### Performance Optimization Process
+
+#### Step 1: Identify Slow Queries
+
+```sql
+-- Monitor slow queries
+SELECT sql_id, sql_text, elapsed_time, executions, 
+       ROUND(elapsed_time/executions/1000000, 2) as avg_time_sec
+FROM v$sql
+WHERE elapsed_time > 5000000  -- > 5 seconds
+ORDER BY elapsed_time DESC;
+```
+
+#### Step 2: Analyze Execution Plan
+
+```sql
+-- Analyze query performance
+SET PAGESIZE 0 FEEDBACK 1 VERIFY OFF HEADING OFF ECHO OFF;
+SET LONG 80000 LONGCHUNKSIZE 80000 LINESIZE 1000 
+    TRIMOUT ON TRIMSPOOL ON;
+
+EXPLAIN PLAN FOR
+SELECT e.emp_name, d.dept_name, e.salary
+FROM employees e
+JOIN departments d ON e.dept_id = d.dept_id
+WHERE e.salary > 50000
+ORDER BY e.salary DESC;
+
+SELECT PLAN_TABLE_OUTPUT FROM TABLE(DBMS_XPLAN.DISPLAY());
+```
+
+#### Step 3: Create Indexes
+
+```sql
+-- Create appropriate indexes
+CREATE INDEX idx_emp_salary ON employees(salary DESC);
+CREATE INDEX idx_emp_dept_sal ON employees(dept_id, salary DESC);
+
+-- Verify index usage
+SELECT index_name, column_name, column_position
+FROM user_ind_columns
+WHERE table_name = 'EMPLOYEES'
+ORDER BY index_name, column_position;
+```
+
+#### Step 4: Monitor Performance
+
+```sql
+-- Before and after comparison
+SELECT COUNT(*) FROM employees WHERE salary > 50000;
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY());
+
+-- Check index statistics
+SELECT index_name, leaf_blocks, distinct_keys, avg_leaf_blocks_per_key
+FROM user_indexes
+WHERE table_name = 'EMPLOYEES';
+```
+
+---
+
+### Data Migration Process
+
+#### Complete Migration Workflow
+
+```sql
+-- Step 1: Create backup of old data
+CREATE TABLE employees_backup AS SELECT * FROM employees;
+CREATE TABLE departments_backup AS SELECT * FROM departments;
+
+-- Step 2: Data validation before migration
+CREATE OR REPLACE PROCEDURE validate_migration_data IS
+    v_emp_count NUMBER;
+    v_dept_count NUMBER;
+BEGIN
+    -- Count records
+    SELECT COUNT(*) INTO v_emp_count FROM employees_backup;
+    SELECT COUNT(*) INTO v_dept_count FROM departments_backup;
+    
+    DBMS_OUTPUT.PUT_LINE('Backup records - Employees: ' || v_emp_count);
+    DBMS_OUTPUT.PUT_LINE('Backup records - Departments: ' || v_dept_count);
+    
+    -- Check for NULL values in required fields
+    SELECT COUNT(*) INTO v_emp_count FROM employees_backup
+    WHERE emp_name IS NULL OR email IS NULL;
+    
+    IF v_emp_count > 0 THEN
+        DBMS_OUTPUT.PUT_LINE('WARNING: ' || v_emp_count || 
+                           ' records with NULL required fields');
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('All required fields are populated');
+    END IF;
+END validate_migration_data;
+/
+
+-- Step 3: Transform data if needed
+CREATE OR REPLACE PROCEDURE transform_employee_data IS
+BEGIN
+    -- Example: Convert email to lowercase
+    UPDATE employees SET email = LOWER(email);
+    
+    -- Remove duplicate records
+    DELETE FROM employees e1
+    WHERE ROWID > (SELECT MIN(ROWID) FROM employees e2
+                   WHERE e1.emp_id = e2.emp_id);
+    
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('Data transformation completed');
+END transform_employee_data;
+/
+
+-- Step 4: Migrate data
+BEGIN
+    -- Clear target tables
+    DELETE FROM employees;
+    DELETE FROM departments;
+    
+    -- Copy from backup
+    INSERT INTO departments SELECT * FROM departments_backup;
+    INSERT INTO employees SELECT * FROM employees_backup;
+    
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('Migration completed successfully');
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        DBMS_OUTPUT.PUT_LINE('Migration failed: ' || SQLERRM);
+END;
+/
+
+-- Step 5: Verification
+SELECT COUNT(*) as total_departments FROM departments;
+SELECT COUNT(*) as total_employees FROM employees;
+SELECT COUNT(*) as null_emails FROM employees WHERE email IS NULL;
+```
+
+---
+
+### Backup & Recovery Implementation
+
+#### Automated Backup Strategy
+
+```bash
+#!/bin/bash
+# Oracle Backup Script (backup_oracle.sh)
+
+BACKUP_DIR="/backups/oracle"
+DB_NAME="ORCL"
+DATE=$(date +"%Y%m%d_%H%M%S")
+LOG_FILE="$BACKUP_DIR/backup_$DATE.log"
+
+# Full backup
+rman target / @rman_full_backup.rcv > $LOG_FILE 2>&1
+
+# Check backup status
+if [ $? -eq 0 ]; then
+    echo "Backup successful at $DATE" | mail -s "Backup Report" admin@company.com
+else
+    echo "Backup failed at $DATE" | mail -s "ALERT: Backup Failed" admin@company.com
+fi
+```
+
+#### Point-in-Time Recovery
+
+```sql
+-- Configure for recovery
+ALTER DATABASE ARCHIVELOG;
+ALTER SYSTEM SET db_recovery_file_dest='/u01/fra' SCOPE=BOTH;
+
+-- Perform recovery to specific point in time
+STARTUP MOUNT;
+RECOVER DATABASE UNTIL TIME '2025-12-29 14:30:00';
+ALTER DATABASE OPEN RESETLOGS;
+
+-- Verify recovery
+SELECT open_cursors, open_files FROM v$instance;
+```
+
+---
+
+### Monitoring & Maintenance Procedures
+
+#### Health Check Procedure
+
+```sql
+CREATE OR REPLACE PROCEDURE database_health_check IS
+    v_free_space NUMBER;
+    v_total_space NUMBER;
+    v_alert_sessions NUMBER;
+BEGIN
+    -- Check tablespace usage
+    SELECT SUM(bytes)/1024/1024/1024 INTO v_total_space
+    FROM dba_data_files;
+    
+    SELECT SUM(bytes)/1024/1024/1024 INTO v_free_space
+    FROM dba_free_space;
+    
+    DBMS_OUTPUT.PUT_LINE('Tablespace Usage: ' || 
+        ROUND((v_total_space - v_free_space)/v_total_space*100, 2) || '%');
+    
+    -- Check alert sessions
+    SELECT COUNT(*) INTO v_alert_sessions FROM v$session
+    WHERE status = 'ACTIVE' AND wait_time > 60000;
+    
+    IF v_alert_sessions > 0 THEN
+        DBMS_OUTPUT.PUT_LINE('ALERT: ' || v_alert_sessions || 
+                           ' sessions waiting > 1 minute');
+    END IF;
+    
+    -- Check invalid objects
+    SELECT COUNT(*) INTO v_alert_sessions FROM dba_objects
+    WHERE status = 'INVALID';
+    
+    IF v_alert_sessions > 0 THEN
+        DBMS_OUTPUT.PUT_LINE('ALERT: ' || v_alert_sessions || 
+                           ' invalid objects found');
+    END IF;
+    
+    DBMS_OUTPUT.PUT_LINE('Health check completed');
+END database_health_check;
+/
+
+-- Schedule health check
+BEGIN
+    DBMS_SCHEDULER.CREATE_JOB (
+        job_name => 'health_check_job',
+        job_type => 'PLSQL_BLOCK',
+        job_action => 'BEGIN database_health_check; END;',
+        start_date => TRUNC(SYSDATE) + 2/24,
+        repeat_interval => 'FREQ=DAILY',
+        enabled => TRUE
+    );
+END;
+/
+```
+
+---
+
+## Comprehensive Concepts, Theory & Key Points
+
+### 1. RELATIONAL DATABASE CONCEPTS
+
+#### 1.1 Normalization - Theory & Practice
+
+**Theory:**
+Normalization is the process of organizing data to minimize redundancy and dependency. It improves data integrity, reduces storage space, and makes queries efficient.
+
+**First Normal Form (1NF)** - Eliminate Repeating Groups
+```
+BEFORE (Not normalized):
+StudentCourses Table:
+| StudentID | StudentName | Courses           |
+|-----------|-------------|-------------------|
+| 1         | John        | Math, Physics     |
+| 2         | Jane        | Chemistry, Bio    |
+
+AFTER (1NF):
+StudentCourses Table:
+| StudentID | StudentName | Course     |
+|-----------|-------------|------------|
+| 1         | John        | Math       |
+| 1         | John        | Physics    |
+| 2         | Jane        | Chemistry  |
+| 2         | Jane        | Bio        |
+
+Key Points:
+- Each cell contains only atomic (indivisible) values
+- No repeating groups of columns
+- Each row is unique
+```
+
+**Second Normal Form (2NF)** - Remove Partial Dependencies
+```
+BEFORE (Not 2NF):
+StudentCourses Table:
+| StudentID | CourseID | StudentName | CourseName |
+|-----------|----------|-------------|------------|
+| 1         | C1       | John        | Math       |
+| 1         | C2       | John        | Physics    |
+
+AFTER (2NF):
+Students Table:
+| StudentID | StudentName |
+|-----------|-------------|
+| 1         | John        |
+
+Courses Table:
+| CourseID | CourseName |
+|----------|------------|
+| C1       | Math       |
+| C2       | Physics    |
+
+Enrollments Table:
+| StudentID | CourseID |
+|-----------|----------|
+| 1         | C1       |
+| 1         | C2       |
+
+Key Points:
+- Must be in 1NF first
+- Non-key attributes must depend on entire primary key
+- Remove columns that depend only on part of composite key
+```
+
+**Third Normal Form (3NF)** - Remove Transitive Dependencies
+```
+BEFORE (Not 3NF):
+Students Table:
+| StudentID | StudentName | DeptID | DeptName  | DeptLocation |
+|-----------|-------------|--------|-----------|--------------|
+| 1         | John        | D1     | Computer | New York     |
+
+AFTER (3NF):
+Students Table:
+| StudentID | StudentName | DeptID |
+|-----------|-------------|--------|
+| 1         | John        | D1     |
+
+Departments Table:
+| DeptID | DeptName  | DeptLocation |
+|--------|-----------|--------------|
+| D1     | Computer  | New York     |
+
+Key Points:
+- Must be in 2NF first
+- No non-key attribute depends on another non-key attribute
+- Remove columns that depend on other non-key columns
+```
+
+**Implementation in Oracle:**
+```sql
+-- Properly normalized schema
+CREATE TABLE departments (
+    dept_id NUMBER PRIMARY KEY,
+    dept_name VARCHAR2(50) UNIQUE NOT NULL,
+    location VARCHAR2(50)
+);
+
+CREATE TABLE employees (
+    emp_id NUMBER PRIMARY KEY,
+    emp_name VARCHAR2(100) NOT NULL,
+    dept_id NUMBER NOT NULL REFERENCES departments(dept_id),
+    salary NUMBER(10,2)
+);
+
+CREATE TABLE projects (
+    project_id NUMBER PRIMARY KEY,
+    project_name VARCHAR2(100) NOT NULL,
+    dept_id NUMBER REFERENCES departments(dept_id)
+);
+
+CREATE TABLE emp_projects (
+    emp_id NUMBER REFERENCES employees(emp_id),
+    project_id NUMBER REFERENCES projects(project_id),
+    hours_allocated NUMBER,
+    PRIMARY KEY (emp_id, project_id)
+);
+
+Key Points:
+- Eliminates data anomalies (insertion, update, deletion)
+- Reduces disk space usage
+- Improves query performance
+- Makes maintenance easier
+```
+
+---
+
+### 2. DATA TYPES - COMPREHENSIVE GUIDE
+
+#### Character Data Types
+```sql
+-- VARCHAR2: Variable length, efficient storage
+CREATE TABLE test_varchar (
+    id NUMBER,
+    description VARCHAR2(255)  -- 0-4000 bytes
+);
+-- Key Points:
+-- - Only stores used bytes (if 50 chars used in 255 field, stores 50)
+-- - More efficient than CHAR
+-- - Best for varying length strings
+
+-- CHAR: Fixed length, pads with spaces
+CREATE TABLE test_char (
+    id NUMBER,
+    code CHAR(10)  -- Always 10 characters
+);
+-- Key Points:
+-- - Pads with spaces if content is shorter
+-- - Wastes space but faster for fixed-length data
+-- - Good for codes or flags
+
+-- NVARCHAR2: Unicode support
+CREATE TABLE test_nvarchar (
+    id NUMBER,
+    name NVARCHAR2(50)
+);
+
+-- INSERT vs CHAR length comparison
+INSERT INTO test_varchar VALUES (1, 'ABC');      -- Stores 3 bytes
+INSERT INTO test_char VALUES (1, 'ABC');         -- Stores 10 bytes (ABC + 7 spaces)
+```
+
+#### Numeric Data Types
+```sql
+-- NUMBER(p,s): precision (total digits), scale (decimals)
+CREATE TABLE test_numbers (
+    id NUMBER,
+    salary NUMBER(10,2),          -- 10 total digits, 2 decimal (99999999.99)
+    quantity NUMBER(5),           -- 5 total digits, 0 decimal (99999)
+    percentage NUMBER(3,2),       -- 3 total digits, 2 decimal (9.99)
+    precise_value NUMBER(38,10)   -- Maximum precision
+);
+
+-- Practical examples
+INSERT INTO test_numbers VALUES (1, 50000.50, 100, 9.99, 1234567890.1234567890);
+
+-- INTEGER: Whole numbers only
+CREATE TABLE test_integer (
+    count_value INTEGER
+);
+
+Key Points:
+- NUMBER is most flexible and default
+- Use INTEGER when decimal not needed
+- Always specify precision and scale for clarity
+- Precision affects storage and performance
+```
+
+#### Date & Time Data Types
+```sql
+-- DATE: Date and time (precision: seconds)
+CREATE TABLE test_date (
+    id NUMBER,
+    event_date DATE DEFAULT SYSDATE
+);
+
+-- TIMESTAMP: Higher precision (microseconds)
+CREATE TABLE test_timestamp (
+    id NUMBER,
+    exact_time TIMESTAMP DEFAULT SYSTIMESTAMP,
+    with_tz TIMESTAMP WITH TIME ZONE
+);
+
+-- Examples
+INSERT INTO test_date VALUES (1, SYSDATE);
+INSERT INTO test_timestamp VALUES (1, SYSTIMESTAMP);
+
+-- Comparisons
+SELECT event_date FROM test_date WHERE event_date > SYSDATE - 7;
+SELECT exact_time FROM test_timestamp 
+WHERE exact_time > SYSTIMESTAMP - INTERVAL '1' DAY;
+
+Key Points:
+- DATE is sufficient for most applications
+- TIMESTAMP needed for high-precision timing
+- TIMESTAMP WITH TIME ZONE for distributed systems
+- Use SYSDATE vs SYSTIMESTAMP appropriately
+```
+
+#### LOB (Large Object) Data Types
+```sql
+-- CLOB: Character Large Object (text up to 4GB)
+CREATE TABLE documents (
+    doc_id NUMBER PRIMARY KEY,
+    content CLOB,
+    created_date DATE DEFAULT SYSDATE
+);
+
+-- BLOB: Binary Large Object (images, files up to 4GB)
+CREATE TABLE media (
+    media_id NUMBER PRIMARY KEY,
+    file_content BLOB,
+    file_type VARCHAR2(50),
+    file_size NUMBER
+);
+
+-- Working with CLOB
+DECLARE
+    v_content CLOB;
+BEGIN
+    DBMS_LOB.createtemporary(v_content, TRUE);
+    DBMS_LOB.append(v_content, 'Document content here...');
+    INSERT INTO documents (doc_id, content) 
+    VALUES (1, v_content);
+END;
+/
+
+Key Points:
+- LOBs are stored separately from table data
+- Efficient for large content storage
+- Automatic cleanup with TEMPORARY
+- Use DBMS_LOB package for manipulation
+```
+
+---
+
+### 3. CONSTRAINTS - THEORY & IMPLEMENTATION
+
+#### Types of Constraints
+
+**PRIMARY KEY Constraint**
+```sql
+-- Single column primary key
+CREATE TABLE departments (
+    dept_id NUMBER PRIMARY KEY,
+    dept_name VARCHAR2(50)
+);
+
+-- Composite primary key
+CREATE TABLE emp_projects (
+    emp_id NUMBER,
+    project_id NUMBER,
+    assignment_date DATE,
+    PRIMARY KEY (emp_id, project_id, assignment_date)
+);
+
+-- Using CONSTRAINT clause for naming
+CREATE TABLE employees (
+    emp_id NUMBER CONSTRAINT pk_employees PRIMARY KEY,
+    emp_name VARCHAR2(50)
+);
+
+Theory:
+- Uniquely identifies each row
+- Prevents duplicate records
+- Indexes automatically created
+- Cannot be NULL
+- Only one per table
+```
+
+**FOREIGN KEY Constraint**
+```sql
+CREATE TABLE employees (
+    emp_id NUMBER PRIMARY KEY,
+    emp_name VARCHAR2(50),
+    dept_id NUMBER CONSTRAINT fk_emp_dept 
+        REFERENCES departments(dept_id)
+);
+
+-- With ON DELETE CASCADE
+CREATE TABLE order_items (
+    item_id NUMBER PRIMARY KEY,
+    order_id NUMBER CONSTRAINT fk_order_items_order
+        REFERENCES orders(order_id)
+        ON DELETE CASCADE
+);
+
+-- With ON DELETE SET NULL
+CREATE TABLE projects (
+    project_id NUMBER PRIMARY KEY,
+    manager_id NUMBER CONSTRAINT fk_project_manager
+        REFERENCES employees(emp_id)
+        ON DELETE SET NULL
+);
+
+Theory:
+- Maintains referential integrity
+- Ensures data consistency
+- Cascading deletes available
+- Prevents orphaned records
+- Can reference same table (self-referencing)
+```
+
+**UNIQUE Constraint**
+```sql
+CREATE TABLE employees (
+    emp_id NUMBER PRIMARY KEY,
+    email VARCHAR2(100) CONSTRAINT uc_emp_email UNIQUE,
+    ssn VARCHAR2(20) UNIQUE,
+    emp_name VARCHAR2(50)
+);
+
+-- Multiple columns unique
+CREATE TABLE user_credentials (
+    user_id NUMBER,
+    app_id NUMBER,
+    username VARCHAR2(50),
+    CONSTRAINT uc_user_app UNIQUE (user_id, app_id)
+);
+
+Theory:
+- Ensures all values in column(s) are unique
+- NULL values allowed (multiple NULLs possible)
+- Can have multiple UNIQUE constraints
+- Index automatically created for performance
+```
+
+**CHECK Constraint**
+```sql
+CREATE TABLE employees (
+    emp_id NUMBER PRIMARY KEY,
+    salary NUMBER(10,2) CONSTRAINT ck_salary 
+        CHECK (salary > 0),
+    age NUMBER(3) CONSTRAINT ck_age 
+        CHECK (age >= 18 AND age <= 75),
+    status VARCHAR2(20) CONSTRAINT ck_status 
+        CHECK (status IN ('ACTIVE', 'INACTIVE', 'ON_LEAVE')),
+    commission_pct NUMBER(3,2) 
+        CHECK (commission_pct BETWEEN 0 AND 100)
+);
+
+Theory:
+- Business rule validation at database level
+- Prevents invalid data entry
+- Complex conditions supported
+- Performance impact minimal
+```
+
+**NOT NULL Constraint**
+```sql
+CREATE TABLE employees (
+    emp_id NUMBER NOT NULL,
+    emp_name VARCHAR2(50) NOT NULL,
+    email VARCHAR2(100),
+    hire_date DATE NOT NULL DEFAULT SYSDATE
+);
+
+Theory:
+- Mandatory field requirement
+- Cannot insert/update NULL
+- Different from UNIQUE
+- Every row must have value
+```
+
+**DEFAULT Constraint**
+```sql
+CREATE TABLE employees (
+    emp_id NUMBER PRIMARY KEY,
+    emp_name VARCHAR2(50) NOT NULL,
+    hire_date DATE DEFAULT SYSDATE,
+    status VARCHAR2(20) DEFAULT 'ACTIVE',
+    created_date DATE DEFAULT SYSDATE,
+    created_by VARCHAR2(50) DEFAULT USER
+);
+
+-- Insert with defaults
+INSERT INTO employees (emp_id, emp_name) 
+VALUES (1, 'John Doe');
+-- hire_date, status, created_date, created_by filled with defaults
+
+Theory:
+- Provides default value when not specified
+- Improves data consistency
+- Reduces application logic
+- Can be expression or literal
+```
+
+---
+
+### 4. INDEXES - DEEP DIVE
+
+#### Index Types & Selection
+
+**B-Tree Index (Default)**
+```sql
+CREATE INDEX idx_emp_name ON employees(emp_name);
+
+Theory:
+- Balanced tree structure
+- Fast for equality and range queries
+- Good for columns with high cardinality (many unique values)
+- Default index type
+- Best for: WHERE emp_name = 'John' OR emp_name LIKE 'J%'
+
+CREATE INDEX idx_emp_hire_range ON employees(hire_date);
+-- Useful for: WHERE hire_date BETWEEN '01-JAN-2025' AND '31-DEC-2025'
+
+-- Composite index - column order matters
+CREATE INDEX idx_emp_dept_sal ON employees(dept_id, salary DESC);
+-- Good for: WHERE dept_id = 10 AND salary > 50000
+-- Can also use: WHERE dept_id = 10 (leading column)
+-- Less useful for: WHERE salary = 50000 (not leading column)
+```
+
+**Bitmap Index**
+```sql
+CREATE BITMAP INDEX idx_emp_status ON employees(status);
+CREATE BITMAP INDEX idx_emp_gender ON employees(gender);
+
+Theory:
+- Uses bitmap representation
+- Excellent for low cardinality (few unique values)
+- Very fast for AND/OR operations
+- Slow for high cardinality
+- Best for: Status, Gender, Active/Inactive flags
+- Queries: WHERE status = 'ACTIVE' AND gender = 'M'
+
+-- Performance: Bitmap vs B-Tree for low cardinality
+-- Bitmap: 10x faster
+-- B-Tree: More storage
+```
+
+**Function-Based Index**
+```sql
+-- Index on function result
+CREATE INDEX idx_emp_name_upper ON employees(UPPER(emp_name));
+
+-- Query using same function
+SELECT * FROM employees WHERE UPPER(emp_name) = 'JOHN DOE';
+-- Uses index - very fast
+
+-- Another example
+CREATE INDEX idx_hire_year ON employees(EXTRACT(YEAR FROM hire_date));
+
+SELECT * FROM employees 
+WHERE EXTRACT(YEAR FROM hire_date) = 2025;
+-- Uses function-based index
+
+Theory:
+- Indexes computed column values
+- Must use same function in WHERE clause
+- Requires extra storage
+- Good for common transformations
+```
+
+**Partitioned Index**
+```sql
+CREATE INDEX idx_orders_date ON orders(order_date)
+PARTITION BY RANGE (order_date) (
+    PARTITION p_2023 VALUES LESS THAN (TO_DATE('01-JAN-2024', 'DD-MON-YYYY')),
+    PARTITION p_2024 VALUES LESS THAN (TO_DATE('01-JAN-2025', 'DD-MON-YYYY')),
+    PARTITION p_2025 VALUES LESS THAN (MAXVALUE)
+);
+
+Theory:
+- Divides index into partitions
+- Reduces index size per partition
+- Faster searches in large indexes
+- Better maintenance performance
+- Good for time-series data
+```
+
+#### Index Best Practices
+
+```sql
+-- GOOD: Selective index
+CREATE INDEX idx_emp_active ON employees(emp_id)
+WHERE status = 'ACTIVE';
+-- Faster, smaller, only indexes active employees
+
+-- AVOID: Too many indexes
+CREATE INDEX idx1 ON employees(col1);
+CREATE INDEX idx2 ON employees(col2);
+CREATE INDEX idx3 ON employees(col3);
+-- Slows down INSERT/UPDATE/DELETE
+
+-- GOOD: Composite index for common query pattern
+CREATE INDEX idx_dept_status ON employees(dept_id, status);
+-- Supports: WHERE dept_id = 10 AND status = 'ACTIVE'
+-- Supports: WHERE dept_id = 10
+-- Doesn't support efficiently: WHERE status = 'ACTIVE'
+
+Key Points:
+- Create indexes on columns in WHERE clauses
+- Index leading columns for composite indexes
+- Drop unused indexes (monitor with v$segment_stat)
+- Rebuild fragmented indexes periodically
+- Consider index maintenance overhead
+```
+
+---
+
+### 5. VIEWS - CONCEPTS & USE CASES
+
+#### View Types & Benefits
+
+**Simple View**
+```sql
+CREATE VIEW emp_details AS
+SELECT 
+    emp_id, emp_name, salary, dept_id,
+    ROUND(salary * 0.1, 2) as bonus
+FROM employees
+WHERE status = 'ACTIVE';
+
+-- Use like table
+SELECT * FROM emp_details WHERE salary > 50000;
+
+Benefits:
+- Hides column details
+- Security (restrict columns visible)
+- Simplifies complex queries
+- Provides virtual table appearance
+```
+
+**Complex View with Joins**
+```sql
+CREATE VIEW dept_salary_summary AS
+SELECT 
+    d.dept_id,
+    d.dept_name,
+    COUNT(e.emp_id) as emp_count,
+    ROUND(AVG(e.salary), 2) as avg_salary,
+    SUM(e.salary) as total_salary,
+    MIN(e.salary) as min_salary,
+    MAX(e.salary) as max_salary
+FROM departments d
+LEFT JOIN employees e ON d.dept_id = e.dept_id
+GROUP BY d.dept_id, d.dept_name;
+
+SELECT * FROM dept_salary_summary 
+WHERE emp_count > 5;
+
+Benefits:
+- Pre-computed aggregations
+- Consistent business logic
+- Hides complexity
+- Single point of maintenance
+```
+
+**Materialized View (Physical Storage)**
+```sql
+CREATE MATERIALIZED VIEW mv_sales_summary AS
+SELECT 
+    DATE_TRUNC(order_date, 'MONTH') as month,
+    product_category,
+    COUNT(*) as order_count,
+    SUM(total_amount) as total_sales
+FROM orders
+GROUP BY DATE_TRUNC(order_date, 'MONTH'), product_category;
+
+-- Refresh periodically
+EXEC DBMS_MVIEW.refresh('mv_sales_summary');
+
+-- Or schedule automatic refresh
+BEGIN
+    DBMS_MVIEW.refresh(
+        list => 'mv_sales_summary',
+        method => 'C',  -- Complete refresh
+        rollback_seg => 'RBS01',
+        push_deferred_rpc => TRUE
+    );
+END;
+/
+
+Benefits:
+- Actual data stored (fast queries)
+- Reduced computation
+- Good for complex aggregations
+- Trade-off: Storage vs Query Performance
+```
+
+**Updatable Views**
+```sql
+-- View must have single base table for DML
+CREATE VIEW emp_salary_info AS
+SELECT emp_id, emp_name, salary, dept_id
+FROM employees;
+
+-- Can INSERT, UPDATE, DELETE through view
+UPDATE emp_salary_info SET salary = 60000 WHERE emp_id = 1;
+
+-- WITH CHECK OPTION ensures inserted data meets view conditions
+CREATE OR REPLACE VIEW active_employees AS
+SELECT emp_id, emp_name, salary
+FROM employees
+WHERE status = 'ACTIVE'
+WITH CHECK OPTION;
+
+-- This will succeed
+UPDATE active_employees SET salary = 60000 WHERE emp_id = 1;
+
+-- This will fail (status change not allowed through view)
+UPDATE active_employees SET status = 'INACTIVE' WHERE emp_id = 1;
+```
+
+---
+
+### 6. SEQUENCES - THEORY & PATTERNS
+
+#### Sequence Fundamentals
+
+```sql
+-- Basic sequence creation
+CREATE SEQUENCE emp_seq
+    START WITH 1000
+    INCREMENT BY 1
+    MINVALUE 1
+    MAXVALUE 99999999
+    CYCLE
+    CACHE 20;
+
+Theory:
+- START WITH: First value (default 1)
+- INCREMENT BY: Increment amount (default 1)
+- MINVALUE: Minimum value
+- MAXVALUE: Maximum value
+- CYCLE: Restart from MINVALUE when MAXVALUE reached
+- CACHE: Cache size in memory (speeds up access)
+
+-- Using sequences
+INSERT INTO employees (emp_id, emp_name)
+VALUES (emp_seq.NEXTVAL, 'John Doe');
+
+-- Get current value
+SELECT emp_seq.CURRVAL FROM dual;
+
+Key Points:
+- NEXTVAL increments and returns value
+- CURRVAL returns last used value
+- Cannot reference CURRVAL before NEXTVAL
+- Sequence independent of table
+- Useful for surrogate keys
+```
+
+#### Common Sequence Patterns
+
+```sql
+-- Pattern 1: ID generation with padding
+CREATE SEQUENCE cust_seq START WITH 1000 INCREMENT BY 1;
+
+INSERT INTO customers (cust_id, cust_name)
+VALUES ('CUST' || LPAD(cust_seq.NEXTVAL, 6, '0'), 'John');
+-- Result: CUST001000
+
+-- Pattern 2: Year-based sequence reset
+CREATE SEQUENCE ord_seq_2025
+    START WITH 1
+    INCREMENT BY 1
+    MAXVALUE 999999;
+
+INSERT INTO orders (order_id, order_date)
+VALUES ('2025' || LPAD(ord_seq_2025.NEXTVAL, 6, '0'), SYSDATE);
+-- Result: 2025000001
+
+-- Pattern 3: Multi-database sequence coordination
+-- Store sequence value in control table
+CREATE TABLE seq_control (
+    seq_name VARCHAR2(50) PRIMARY KEY,
+    seq_value NUMBER
+);
+
+INSERT INTO seq_control VALUES ('ORD_SEQ', 1000);
+
+CREATE OR REPLACE FUNCTION get_next_order_id RETURN VARCHAR2 IS
+    v_id VARCHAR2(20);
+BEGIN
+    UPDATE seq_control SET seq_value = seq_value + 1 
+    WHERE seq_name = 'ORD_SEQ'
+    RETURNING seq_value INTO v_id;
+    
+    RETURN 'ORD' || v_id;
+END get_next_order_id;
+/
+
+Key Points:
+- Gaps possible (transaction rollback)
+- No guarantees of contiguous values
+- Cache improves performance
+- Cannot disable/enable (drop and recreate if needed)
+```
+
+---
+
+### 7. TRANSACTION MANAGEMENT - DETAILED
+
+#### Transaction States & Lifecycle
+
+```
+TRANSACTION LIFECYCLE:
+
+START TRANSACTION (Implicit)
+     |
+     v
+EXECUTE STATEMENTS (SQL)
+     |
+     +-- DML: INSERT, UPDATE, DELETE
+     +-- DDL: CREATE, ALTER (Auto-commits)
+     |
+     v
+SAVEPOINT (Optional checkpoint)
+     |
+     v
+ROLLBACK TO SAVEPOINT (Undo to checkpoint)
+     |
+     v
+COMMIT (Make permanent) OR ROLLBACK (Discard all)
+     |
+     v
+TRANSACTION END
+```
+
+**Practical Implementation:**
+```sql
+-- Complex transaction with savepoints
+BEGIN
+    -- Step 1: Insert employee
+    INSERT INTO employees VALUES (1, 'John', 50000);
+    SAVEPOINT sp1;
+    
+    -- Step 2: Insert department (may fail)
+    INSERT INTO departments VALUES (10, 'IT');
+    SAVEPOINT sp2;
+    
+    -- Step 3: Insert assignment
+    INSERT INTO emp_dept_assign VALUES (1, 10);
+    
+    -- If error occurs, can rollback to specific point
+    ROLLBACK TO sp2;  -- Undoes step 3
+    -- Step 1 and 2 still committed
+    
+    COMMIT;  -- Make all changes permanent
+    
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+        ROLLBACK;  -- Undo everything
+        DBMS_OUTPUT.PUT_LINE('Duplicate key error');
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE;
+END;
+/
+```
+
+#### Isolation Levels - Complete Guide
+
+```sql
+-- Level 1: READ UNCOMMITTED (Dirty Read Possible)
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+BEGIN
+    SELECT * FROM employees WHERE emp_id = 1;  -- Sees uncommitted changes
+END;
+/
+
+Theory:
+- Lowest isolation level
+- Can read uncommitted data (dirty read)
+- Rarely used
+- Fastest performance
+
+-- Level 2: READ COMMITTED (Default in Oracle)
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+BEGIN
+    SELECT * FROM employees WHERE emp_id = 1;  -- Sees only committed data
+END;
+/
+
+Theory:
+- Default in Oracle
+- Cannot see uncommitted changes
+- Can have non-repeatable reads
+- Non-serializable
+
+-- Level 3: REPEATABLE READ
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+BEGIN
+    SELECT * FROM employees WHERE emp_id = 1;  -- First read
+    -- Other transaction cannot update this row
+    SELECT * FROM employees WHERE emp_id = 1;  -- Same data guaranteed
+END;
+/
+
+Theory:
+- Row-level consistency
+- Prevents non-repeatable reads
+- Phantom reads possible
+- Medium isolation
+
+-- Level 4: SERIALIZABLE (Highest)
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+BEGIN
+    SELECT * FROM employees WHERE dept_id = 10;  -- First range read
+    -- Other transaction cannot insert/update/delete rows in range
+    SELECT * FROM employees WHERE dept_id = 10;  -- Exact same result set
+END;
+/
+
+Theory:
+- Highest isolation level
+- Prevents phantom reads
+- Transactions execute serially
+- Highest overhead
+```
+
+#### Lock Types & Mechanisms
+
+```sql
+-- Implicit lock (Row-level)
+BEGIN
+    -- Automatically locked when updated
+    UPDATE employees SET salary = 60000 WHERE emp_id = 1;
+    
+    -- Try to update same row from another session -> WAIT
+    -- Lock released on COMMIT or ROLLBACK
+    COMMIT;
+END;
+/
+
+-- Explicit lock - FOR UPDATE
+BEGIN
+    SELECT * FROM employees WHERE emp_id = 1 FOR UPDATE;
+    -- Row locked, no other session can update
+    
+    -- Other updates possible
+    UPDATE employees SET salary = 60000 WHERE emp_id = 1;
+    
+    COMMIT;  -- Lock released
+END;
+/
+
+-- NOWAIT option (no blocking)
+BEGIN
+    SELECT * FROM employees WHERE emp_id = 1 
+    FOR UPDATE NOWAIT;
+    -- If row locked by another session, immediately fail
+    -- Instead of waiting
+END;
+/
+
+-- WAIT with timeout
+BEGIN
+    SELECT * FROM employees WHERE emp_id = 1 
+    FOR UPDATE WAIT 5;
+    -- Wait max 5 seconds for lock
+    -- Then fail if still locked
+END;
+/
+
+Deadlock Resolution:
+```sql
+-- Deadlock example
+SESSION 1:
+BEGIN
+    UPDATE accounts SET balance = balance - 100 WHERE acc_id = 1;
+    -- Lock account 1
+    DBMS_LOCK.sleep(2);  -- Wait 2 seconds
+    UPDATE accounts SET balance = balance + 100 WHERE acc_id = 2;
+    -- Try to lock account 2 - DEADLOCK
+END;
+
+SESSION 2:
+BEGIN
+    UPDATE accounts SET balance = balance + 100 WHERE acc_id = 2;
+    -- Lock account 2
+    DBMS_LOCK.sleep(2);
+    UPDATE accounts SET balance = balance - 100 WHERE acc_id = 1;
+    -- Try to lock account 1 - DEADLOCK
+END;
+
+-- Solution: Always acquire locks in same order
+BEGIN
+    UPDATE accounts SET balance = balance - 100 WHERE acc_id = 1;
+    UPDATE accounts SET balance = balance + 100 WHERE acc_id = 2;
+    COMMIT;
+END;
+
+BEGIN
+    UPDATE accounts SET balance = balance - 100 WHERE acc_id = 1;
+    UPDATE accounts SET balance = balance + 100 WHERE acc_id = 2;
+    COMMIT;
+END;
+```
+
+---
+
+### 8. SQL JOINS - VISUAL & PRACTICAL
+
+#### Join Types Visualization
+
+```
+INNER JOIN: A ∩ B (Common records)
+-----------
+SELECT * FROM employees e
+INNER JOIN departments d ON e.dept_id = d.dept_id;
+
+Result: Only employees with matching departments
+
+LEFT JOIN: A ∪ (A ∩ B) (All from left + matching)
+-----------
+SELECT * FROM employees e
+LEFT JOIN departments d ON e.dept_id = d.dept_id;
+
+Result: All employees, departments filled with NULL if not found
+
+RIGHT JOIN: B ∪ (A ∩ B) (All from right + matching)
+-----------
+SELECT * FROM employees e
+RIGHT JOIN departments d ON e.dept_id = d.dept_id;
+
+Result: All departments, employees filled with NULL if not found
+
+FULL OUTER JOIN: A ∪ B (All from both)
+-----------
+SELECT * FROM employees e
+FULL OUTER JOIN departments d ON e.dept_id = d.dept_id;
+
+Result: All employees and all departments, NULL where no match
+
+CROSS JOIN: A × B (Cartesian product)
+-----------
+SELECT * FROM employees e
+CROSS JOIN departments d;
+
+Result: Every employee paired with every department
+```
+
+#### Advanced Join Patterns
+
+```sql
+-- Multiple joins
+SELECT 
+    e.emp_name,
+    d.dept_name,
+    p.project_name,
+    pr.hours_allocated
+FROM employees e
+JOIN departments d ON e.dept_id = d.dept_id
+JOIN emp_projects pr ON e.emp_id = pr.emp_id
+JOIN projects p ON pr.project_id = p.project_id
+WHERE pr.hours_allocated > 20;
+
+-- Self-join (Manager hierarchy)
+SELECT 
+    e1.emp_name as employee,
+    e2.emp_name as manager
+FROM employees e1
+LEFT JOIN employees e2 ON e1.manager_id = e2.emp_id;
+
+-- Anti-join (Find records not in another table)
+SELECT * FROM employees e
+WHERE NOT EXISTS (
+    SELECT 1 FROM emp_projects ep 
+    WHERE ep.emp_id = e.emp_id
+);
+-- Employees not assigned to any project
+
+-- Semi-join (Exists but don't repeat)
+SELECT DISTINCT e.* FROM employees e
+WHERE EXISTS (
+    SELECT 1 FROM emp_projects ep 
+    WHERE ep.emp_id = e.emp_id
+    AND ep.hours_allocated > 40
+);
+-- Employees allocated > 40 hours
+
+Key Points:
+- JOIN order affects performance
+- Index on join columns crucial
+- Use EXISTS instead of IN for large datasets
+- Explicit joins better than implicit (WHERE clause joins)
+```
+
+---
+
+### 9. SUBQUERIES - PATTERNS & OPTIMIZATION
+
+#### Subquery Classifications
+
+```sql
+-- Scalar subquery (returns single value)
+SELECT 
+    emp_name, 
+    salary,
+    (SELECT AVG(salary) FROM employees) as avg_salary
+FROM employees;
+
+Performance: Can return multiple rows, but compared against single value
+
+-- Inline view subquery (returns result set)
+SELECT 
+    dept_name,
+    emp_count
+FROM (
+    SELECT 
+        dept_id,
+        COUNT(*) as emp_count
+    FROM employees
+    GROUP BY dept_id
+) dept_emp_count
+WHERE emp_count > 5;
+
+Performance: Good for complex aggregations
+
+-- Correlated subquery (references outer query)
+SELECT 
+    e.emp_name,
+    e.salary
+FROM employees e
+WHERE salary > (
+    SELECT AVG(salary)
+    FROM employees e2
+    WHERE e2.dept_id = e.dept_id
+);
+
+Performance: Can be slow (executed for each outer row)
+
+-- Uncorrelated subquery (independent)
+SELECT 
+    e.emp_name,
+    e.salary
+FROM employees e
+WHERE dept_id IN (
+    SELECT dept_id
+    FROM departments
+    WHERE location = 'New York'
+);
+
+Performance: Faster (executed once)
+```
+
+#### Subquery Performance Optimization
+
+```sql
+-- SLOW: IN with subquery on large dataset
+SELECT * FROM orders o
+WHERE customer_id IN (
+    SELECT customer_id FROM customers 
+    WHERE registration_date > '01-JAN-2025'
+);
+
+-- FASTER: EXISTS clause
+SELECT o.* FROM orders o
+WHERE EXISTS (
+    SELECT 1 FROM customers c
+    WHERE c.customer_id = o.customer_id
+    AND c.registration_date > '01-JAN-2025'
+);
+
+-- FASTEST: JOIN (when possible)
+SELECT o.* FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+WHERE c.registration_date > '01-JAN-2025';
+
+Key Points:
+- EXISTS is generally faster than IN for large sets
+- JOINs often better than subqueries
+- Correlate when necessary but be aware of cost
+- Use EXPLAIN PLAN to verify optimization
+```
+
+---
+
+### 10. INDEXING STRATEGY - COMPREHENSIVE
+
+#### When to Create Indexes
+
+```sql
+-- DO create indexes:
+-- 1. Foreign key columns
+CREATE INDEX idx_emp_dept ON employees(dept_id);
+
+-- 2. Columns in WHERE clause
+CREATE INDEX idx_emp_status ON employees(status);
+
+-- 3. Join condition columns
+CREATE INDEX idx_order_cust ON orders(customer_id);
+
+-- 4. Columns in ORDER BY
+CREATE INDEX idx_emp_salary_desc ON employees(salary DESC);
+
+-- 5. Columns with high selectivity
+CREATE INDEX idx_emp_email ON employees(email);
+-- 100 unique values for 10000 rows = Good selectivity
+
+-- DON'T create indexes:
+-- 1. Low selectivity columns
+-- CREATE INDEX idx_emp_gender ON employees(gender);
+-- Only 2 values (M/F) - full table scan faster
+
+-- 2. Small tables
+-- CREATE INDEX idx_small ON small_table(col);
+-- < 1000 rows doesn't benefit from index
+
+-- 3. Heavily updated columns
+-- CREATE INDEX idx_updated_date ON orders(updated_date);
+-- Index maintenance cost > benefit
+
+-- 4. NULL heavy columns
+-- CREATE INDEX idx_optional_field ON table(optional_field);
+-- NULLs not indexed, reduces effectiveness
+```
+
+#### Index Maintenance
+
+```sql
+-- Analyze index for statistics
+ANALYZE INDEX idx_emp_dept COMPUTE STATISTICS;
+
+-- View index info
+SELECT index_name, table_name, column_name, column_position
+FROM user_ind_columns
+ORDER BY index_name, column_position;
+
+-- Find unused indexes
+SELECT index_name, table_name, monitoring
+FROM user_indexes
+WHERE monitoring = 'YES';
+
+-- Check index fragmentation
+SELECT index_name, leaf_blocks, distinct_keys, avg_leaf_blocks_per_key
+FROM user_indexes
+WHERE table_name = 'EMPLOYEES';
+
+-- Rebuild fragmented index
+ALTER INDEX idx_emp_dept REBUILD;
+
+-- Drop unused index
+DROP INDEX idx_emp_email;
+
+Key Points:
+- Regular analysis maintains performance
+- Monitor index usage
+- Rebuild when fragmented
+- Drop unused indexes (overhead on DML)
+```
+
+---
+
+### 11. WINDOW FUNCTIONS - ADVANCED PATTERNS
+
+#### Window Function Framework
+
+```sql
+-- Syntax: func() OVER (PARTITION BY ... ORDER BY ... frame)
+
+-- ROW_NUMBER: Unique number per row
+SELECT 
+    emp_name,
+    salary,
+    dept_id,
+    ROW_NUMBER() OVER (PARTITION BY dept_id ORDER BY salary DESC) as rank_in_dept
+FROM employees;
+
+/* Output:
+emp_name | salary | dept_id | rank_in_dept
+John     | 90000  | 10      | 1
+Jane     | 80000  | 10      | 2
+Bob      | 95000  | 20      | 1
+*/
+
+-- RANK: Rank with gaps
+SELECT 
+    emp_name,
+    salary,
+    RANK() OVER (ORDER BY salary DESC) as rank
+FROM employees;
+
+/* Output:
+emp_name | salary | rank
+John     | 90000  | 1
+John     | 90000  | 1     <- Same rank
+Alice    | 85000  | 3     <- Gap after tie
+*/
+
+-- DENSE_RANK: Rank without gaps
+SELECT 
+    emp_name,
+    salary,
+    DENSE_RANK() OVER (ORDER BY salary DESC) as dense_rank
+FROM employees;
+
+/* Output:
+emp_name | salary | dense_rank
+John     | 90000  | 1
+John     | 90000  | 1
+Alice    | 85000  | 2     <- No gap
+*/
+
+-- LAG/LEAD: Previous/Next row values
+SELECT 
+    emp_name,
+    hire_date,
+    salary,
+    LAG(salary) OVER (ORDER BY hire_date) as prev_emp_salary,
+    LEAD(salary) OVER (ORDER BY hire_date) as next_emp_salary
+FROM employees;
+
+-- Running total
+SELECT 
+    order_date,
+    amount,
+    SUM(amount) OVER (ORDER BY order_date 
+        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as running_total
+FROM orders;
+
+-- Moving average
+SELECT 
+    order_date,
+    amount,
+    ROUND(AVG(amount) OVER (ORDER BY order_date 
+        ROWS BETWEEN 3 PRECEDING AND CURRENT ROW), 2) as moving_avg_4days
+FROM orders;
+
+Key Points:
+- PARTITION BY divides data into groups
+- ORDER BY sorts within partition
+- Frame clause defines range (ROWS BETWEEN)
+- Computed after WHERE, before ORDER BY
+```
+
+---
+
+## Conclusion
+
+Oracle Database is a comprehensive RDBMS with powerful features for enterprise applications. Mastery requires understanding:
+- Database architecture and memory management
+- SQL and PL/SQL programming
+- Performance optimization and indexing
+- Security and user management
+- Backup and recovery procedures
+- Transaction control and locking
+- Normalization and data design
+- Advanced SQL patterns and optimization
+
+Regular practice with real-world scenarios and staying updated with Oracle releases ensures continued proficiency.
+
+---
+
+## Complete Interview Q&A
+
+### LEVEL 1: BASIC QUESTIONS
+
+**Q1: What is Oracle Database and why is it widely used?**
+
+A: Oracle Database is an enterprise-grade RDBMS that:
+- Stores structured data in tables using SQL
+- Provides ACID compliance for data integrity
+- Offers scalability to handle millions of transactions
+- Provides robust security with users, roles, and privileges
+- Features advanced recovery mechanisms
+
+Why widely used:
+- Industry standard for large enterprises
+- High reliability and uptime
+- Strong consistency guarantees
+- Excellent performance optimization
+- Comprehensive tooling and ecosystem
+
+---
+
+**Q2: What is the difference between Instance and Database?**
+
+A: 
+```
+Instance:
+- Memory structures (SGA - System Global Area, PGA - Program Global Area)
+- Background processes (SMON, PMON, DBWn, LGWR, ARCH)
+- Running processes and connections
+- Can be started/stopped
+- One database can have multiple instances (RAC)
+
+Database:
+- Physical files on disk (datafiles, control files, redo logs)
+- Permanent storage
+- One database = one set of physical files
+- Cannot run without instance
+```
+
+Analogy: Instance is like the running software, Database is the persistent storage.
+
+---
+
+**Q3: Explain the main memory components of Oracle (SGA)?**
+
+A:
+```
+System Global Area (SGA) Components:
+
+1. Buffer Cache (DB_CACHE_SIZE)
+   - Caches data blocks from disk
+   - Reduces I/O operations
+   - Shared among all users
+   - Most important for performance
+
+2. Shared Pool (SHARED_POOL_SIZE)
+   - Stores parsed SQL statements
+   - Stores execution plans
+   - Stores package code
+   - Reduces CPU for parsing
+
+3. Redo Log Buffer (LOG_BUFFER)
+   - Stores redo entries (all changes)
+   - Flushed to redo log files by LGWR
+   - Small but critical for recovery
+
+4. Large Pool (LARGE_POOL_SIZE)
+   - Parallel query buffers
+   - RMAN backup buffers
+   - Session memory for some operations
+
+Query to check:
+SHOW PARAMETER sga
+SELECT name, bytes FROM v$sgastat;
+```
+
+---
+
+**Q4: What are the background processes and their roles?**
+
+A:
+```
+Key Background Processes:
+
+1. SMON (System Monitor)
+   - Recovery on instance startup
+   - Cleans up temporary segments
+   - Coalesces free space
+
+2. PMON (Process Monitor)
+   - Cleans up failed user processes
+   - Rolls back incomplete transactions
+   - Frees locked resources
+
+3. DBWn (Database Writer)
+   - Writes dirty blocks to disk
+   - Triggered at checkpoints
+   - Improves performance by batch writing
+
+4. LGWR (Log Writer)
+   - Writes redo log buffer to redo log files
+   - Triggered on commit
+   - Critical for durability
+
+5. CKPT (Checkpoint)
+   - Coordinates checkpoint process
+   - Updates control files and datafiles
+
+6. ARCH (Archiver)
+   - Archives filled redo logs
+   - Only in ARCHIVELOG mode
+   - Essential for recovery
+
+7. RECO (Recoverer)
+   - Resolves in-doubt transactions
+   - Distributed transaction recovery
+```
+
+---
+
+**Q5: What is ACID compliance and why is it important?**
+
+A:
+```
+ACID Properties:
+
+A - Atomicity:
+  - All-or-nothing principle
+  - Transaction completes fully or not at all
+  - Example: Money transfer - debit AND credit both happen
+
+C - Consistency:
+  - Database moves from one valid state to another
+  - Constraints enforced
+  - Example: Account balance never negative
+
+I - Isolation:
+  - Transactions don't interfere
+  - Each transaction works independently
+  - Prevents dirty reads, non-repeatable reads, phantom reads
+
+D - Durability:
+  - Committed data survives failures
+  - Persistent on disk
+  - Recovery mechanism ensures restoration
+
+Why Important:
+- Data integrity guaranteed
+- Business rules enforced
+- Reliability in production systems
+- Compliance with regulations (financial, healthcare)
+```
+
+---
+
+**Q6: What is a transaction and transaction control?**
+
+A:
+```
+Transaction: Logical unit of work with multiple SQL statements
+
+BEGIN TRANSACTION (Implicit)
+  SQL 1
+  SQL 2
+  SQL 3
+COMMIT or ROLLBACK (Explicit)
+
+Transaction Control Commands:
+
+1. COMMIT - Makes changes permanent
+   BEGIN
+       INSERT INTO employees VALUES (1, 'John', 50000);
+       UPDATE departments SET budget = budget + 100000;
+       COMMIT;  -- Both changes permanent
+   END;
+
+2. ROLLBACK - Undo all changes
+   BEGIN
+       UPDATE accounts SET balance = balance - 100;
+       IF error_occurs THEN
+           ROLLBACK;  -- Undo everything
+       END IF;
+   END;
+
+3. SAVEPOINT - Create checkpoint
+   BEGIN
+       INSERT INTO table1 VALUES (...);
+       SAVEPOINT sp1;
+       INSERT INTO table2 VALUES (...);  -- Fails
+       ROLLBACK TO sp1;  -- Undo table2 only
+       COMMIT;  -- table1 committed
+   END;
+
+Best Practices:
+- Keep transactions short
+- Commit frequently to avoid locks
+- Use savepoints for complex operations
+- Handle exceptions with rollback
+```
+
+---
+
+**Q7: What are the different types of constraints?**
+
+A:
+```
+Constraint Types:
+
+1. PRIMARY KEY
+   - Uniquely identifies each row
+   - Cannot be NULL
+   - Only one per table
+   - Automatically indexed
+   
+   CREATE TABLE employees (
+       emp_id NUMBER PRIMARY KEY,
+       emp_name VARCHAR2(50)
+   );
+
+2. FOREIGN KEY
+   - References primary key in another table
+   - Maintains referential integrity
+   - Prevents orphaned records
+   
+   CREATE TABLE orders (
+       order_id NUMBER PRIMARY KEY,
+       emp_id NUMBER REFERENCES employees(emp_id)
+   );
+
+3. UNIQUE
+   - All values must be unique
+   - Multiple NULLs allowed
+   - Multiple per table
+   
+   CREATE TABLE employees (
+       emp_id NUMBER,
+       email VARCHAR2(100) UNIQUE
+   );
+
+4. CHECK
+   - Business rule validation
+   - Prevents invalid data
+   
+   CREATE TABLE employees (
+       salary NUMBER CHECK (salary > 0)
+   );
+
+5. NOT NULL
+   - Mandatory field
+   - Must have value
+   
+   CREATE TABLE employees (
+       emp_name VARCHAR2(50) NOT NULL
+   );
+
+6. DEFAULT
+   - Default value when not specified
+   
+   CREATE TABLE employees (
+       status VARCHAR2(20) DEFAULT 'ACTIVE'
+   );
+```
+
+---
+
+**Q8: What is an INDEX and why is it important?**
+
+A:
+```
+Index: Data structure that speeds up data retrieval
+
+Benefits:
+- Faster query execution (avoids full table scans)
+- Reduced CPU and I/O
+- Automatically used by optimizer
+- Improves ORDER BY performance
+
+Drawbacks:
+- Slows INSERT, UPDATE, DELETE (index maintenance)
+- Uses disk space
+- Can become fragmented
+
+Types:
+1. B-Tree (Default) - Balanced tree, good for most queries
+2. Bitmap - For low cardinality (few unique values)
+3. Function-Based - Index on computed expression
+4. Partitioned - Divided indexes for large tables
+
+Example:
+CREATE INDEX idx_emp_email ON employees(email);
+
+Query will use index:
+SELECT * FROM employees WHERE email = 'john@company.com';
+
+Query won't use index:
+SELECT * FROM employees WHERE email LIKE '%company%';
+-- Starts with %, requires full scan
+
+Best Practices:
+- Index columns in WHERE clause
+- Index foreign key columns
+- Avoid indexing low cardinality columns
+- Monitor and drop unused indexes
+```
+
+---
+
+**Q9: What is a VIEW and what are its benefits?**
+
+A:
+```
+View: Virtual table based on SELECT query
+
+Benefits:
+- Hides table complexity
+- Security (restrict visible columns)
+- Reusability (stored query)
+- Data independence (structure changes don't break code)
+- Single point of maintenance
+
+Types:
+1. Simple View - Single table, no aggregation
+   CREATE VIEW emp_details AS
+   SELECT emp_id, emp_name, salary
+   FROM employees
+   WHERE status = 'ACTIVE';
+
+2. Complex View - Joins, aggregations, functions
+   CREATE VIEW dept_summary AS
+   SELECT dept_id, COUNT(*) as emp_count, AVG(salary)
+   FROM employees
+   GROUP BY dept_id;
+
+3. Materialized View - Actual data stored
+   CREATE MATERIALIZED VIEW sales_summary AS
+   SELECT product, SUM(amount) FROM orders GROUP BY product;
+
+Usage:
+SELECT * FROM emp_details;
+
+Limitations:
+- Cannot index views (except materialized views)
+- Performance depends on underlying query
+- Complex views slower than base tables
+```
+
+---
+
+**Q10: What is a SEQUENCE and how is it used?**
+
+A:
+```
+Sequence: Auto-increment mechanism for generating unique values
+
+Creation:
+CREATE SEQUENCE emp_seq
+    START WITH 1000
+    INCREMENT BY 1
+    MAXVALUE 999999
+    CACHE 20;
+
+Parameters:
+- START WITH: First value
+- INCREMENT BY: Increment amount
+- MAXVALUE: Maximum value
+- CACHE: Cache in memory for performance
+
+Usage:
+INSERT INTO employees (emp_id, emp_name)
+VALUES (emp_seq.NEXTVAL, 'John Doe');
+
+-- NEXTVAL: Get next value (increments)
+-- CURRVAL: Get current value (no increment)
+
+SELECT emp_seq.CURRVAL FROM dual;
+
+Key Points:
+- Sequence independent of table
+- NEXTVAL always increments (gaps possible on rollback)
+- CURRVAL returns last used value
+- Commonly used for surrogate keys
+- Multi-user safe (internal locking)
+
+Example with DEFAULT:
+CREATE TABLE employees (
+    emp_id NUMBER DEFAULT emp_seq.NEXTVAL PRIMARY KEY,
+    emp_name VARCHAR2(50)
+);
+
+INSERT INTO employees (emp_name) VALUES ('Jane Doe');
+-- emp_id automatically filled
+```
+
+---
+
+### LEVEL 2: INTERMEDIATE QUESTIONS
+
+**Q11: Explain different SQL JOIN types with examples.**
+
+A:
+```
+INNER JOIN - Common records only
+SELECT e.emp_name, d.dept_name
+FROM employees e
+INNER JOIN departments d ON e.dept_id = d.dept_id;
+
+Result: Only employees with matching departments
+Missing: Employees with NULL dept_id, departments with no employees
+
+LEFT JOIN - All from left + matching right
+SELECT e.emp_name, d.dept_name
+FROM employees e
+LEFT JOIN departments d ON e.dept_id = d.dept_id;
+
+Result: All employees, NULL for departments if not found
+
+RIGHT JOIN - All from right + matching left
+SELECT e.emp_name, d.dept_name
+FROM employees e
+RIGHT JOIN departments d ON e.dept_id = d.dept_id;
+
+Result: All departments, NULL for employees if not found
+
+FULL OUTER JOIN - All from both
+SELECT e.emp_name, d.dept_name
+FROM employees e
+FULL OUTER JOIN departments d ON e.dept_id = d.dept_id;
+
+Result: All employees and all departments, NULL where no match
+
+CROSS JOIN - Cartesian product
+SELECT e.emp_name, d.dept_name
+FROM employees e
+CROSS JOIN departments d;
+
+Result: Every employee paired with every department
+
+SELF JOIN - Join table to itself
+SELECT e1.emp_name as employee, e2.emp_name as manager
+FROM employees e1
+LEFT JOIN employees e2 ON e1.manager_id = e2.emp_id;
+
+Result: Employee-manager hierarchy
+
+Performance Tip:
+- INNER JOIN fastest (filters rows early)
+- LEFT JOIN slightly slower
+- FULL OUTER JOIN slowest
+- Index join columns for better performance
+```
+
+---
+
+**Q12: What are subqueries and their types?**
+
+A:
+```
+Subquery: Query within another query
+
+Types:
+
+1. Scalar Subquery (Returns single value)
+   SELECT emp_name, salary,
+          (SELECT AVG(salary) FROM employees) as avg_salary
+   FROM employees;
+   
+   Can be used in SELECT, WHERE, HAVING
+
+2. Row Subquery (Returns single row, multiple columns)
+   SELECT * FROM employees
+   WHERE (emp_id, dept_id) = (SELECT emp_id, dept_id 
+                              FROM employees WHERE emp_name = 'John');
+
+3. Table Subquery (Returns multiple rows)
+   SELECT * FROM employees
+   WHERE emp_id IN (SELECT emp_id FROM projects WHERE budget > 100000);
+
+4. Correlated Subquery (References outer query)
+   SELECT emp_name, salary
+   FROM employees e1
+   WHERE salary > (SELECT AVG(salary) 
+                   FROM employees e2 
+                   WHERE e1.dept_id = e2.dept_id);
+   
+   Executes for each outer row - can be slow
+
+5. Uncorrelated Subquery (Independent)
+   SELECT emp_name FROM employees
+   WHERE dept_id IN (SELECT dept_id FROM departments 
+                    WHERE location = 'New York');
+   
+   Executes once - faster
+
+Performance Optimization:
+SLOW - Correlated subquery:
+SELECT * FROM orders o
+WHERE customer_id = (SELECT customer_id FROM customers 
+                     WHERE orders.customer_id = customers.customer_id);
+
+FASTER - JOIN:
+SELECT o.* FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id;
+
+Key Points:
+- Use EXISTS instead of IN for large datasets
+- Join usually better than subquery
+- Correlated subqueries execute multiple times
+- EXPLAIN PLAN helps identify performance issues
+```
+
+---
+
+**Q13: What are WINDOW FUNCTIONS and their applications?**
+
+A:
+```
+Window Functions: Perform calculations across row sets
+
+ROW_NUMBER - Unique sequential number
+SELECT emp_name, salary, dept_id,
+       ROW_NUMBER() OVER (PARTITION BY dept_id ORDER BY salary DESC) as rank
+FROM employees;
+
+RANK - Rank with gaps for ties
+SELECT emp_name, salary,
+       RANK() OVER (ORDER BY salary DESC) as rank
+FROM employees;
+
+DENSE_RANK - Rank without gaps
+SELECT emp_name, salary,
+       DENSE_RANK() OVER (ORDER BY salary DESC) as dense_rank
+FROM employees;
+
+LAG - Previous row value
+SELECT emp_name, salary,
+       LAG(salary) OVER (ORDER BY hire_date) as prev_salary
+FROM employees;
+
+LEAD - Next row value
+SELECT emp_name, salary,
+       LEAD(salary) OVER (ORDER BY hire_date) as next_salary
+FROM employees;
+
+SUM Window Function - Aggregation over partition
+SELECT order_date, amount,
+       SUM(amount) OVER (ORDER BY order_date 
+           ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as running_total
+FROM orders;
+
+MOVING AVERAGE - Average over frame
+SELECT order_date, amount,
+       AVG(amount) OVER (ORDER BY order_date 
+           ROWS BETWEEN 3 PRECEDING AND CURRENT ROW) as moving_avg
+FROM orders;
+
+Advantages:
+- Don't group results (unlike GROUP BY)
+- Can access multiple rows simultaneously
+- Flexible partitioning and ordering
+- Efficient for ranking and running totals
+
+Frame Options:
+- UNBOUNDED PRECEDING: From first row
+- CURRENT ROW: Current row only
+- n PRECEDING: Previous n rows
+- UNBOUNDED FOLLOWING: To last row
+```
+
+---
+
+**Q14: What is the difference between WHERE and HAVING clauses?**
+
+A:
+```
+WHERE Clause:
+- Filters individual rows BEFORE grouping
+- Works on row-level data
+- Applied to base tables
+- Can use non-aggregated columns
+- More efficient (filters early)
+
+Example:
+SELECT dept_id, COUNT(*) as emp_count
+FROM employees
+WHERE salary > 50000  -- Filters rows BEFORE GROUP BY
+GROUP BY dept_id;
+
+HAVING Clause:
+- Filters groups AFTER grouping
+- Works on grouped data
+- Cannot use without GROUP BY
+- Can use aggregated functions
+- Applied after GROUP BY
+
+Example:
+SELECT dept_id, COUNT(*) as emp_count
+FROM employees
+WHERE salary > 50000
+GROUP BY dept_id
+HAVING COUNT(*) > 5;  -- Filters groups AFTER GROUP BY
+
+Key Difference:
+WHERE:  Reduces rows before grouping
+HAVING: Reduces groups after grouping
+
+Performance Impact:
+WHERE more efficient - filters data early
+
+Combined Example:
+SELECT dept_id, COUNT(*) as emp_count, AVG(salary)
+FROM employees
+WHERE hire_date >= '01-JAN-2020'  -- WHERE: Filter rows first
+GROUP BY dept_id
+HAVING COUNT(*) > 3;  -- HAVING: Filter groups second
+```
+
+---
+
+**Q15: Explain the concept of NORMALIZATION.**
+
+A:
+```
+Normalization: Organizing data to minimize redundancy
+
+Benefits:
+- Reduces data redundancy
+- Improves data integrity
+- Reduces storage space
+- Improves query performance
+- Easier maintenance
+
+Drawbacks:
+- More complex queries (more joins)
+- Can reduce performance for reporting
+- Requires careful design
+
+Normal Forms:
+
+1NF - Atomic values (no repeating groups)
+BEFORE:
+StudentID | Courses
+1         | Math, Physics, Chemistry
+
+AFTER:
+StudentID | Course
+1         | Math
+1         | Physics
+1         | Chemistry
+
+2NF - No partial dependencies (remove columns dependent on part of PK)
+BEFORE:
+StudentID | CourseID | StudentName | CourseName
+1         | C1       | John        | Math
+
+AFTER:
+Students:
+StudentID | StudentName
+1         | John
+
+Courses:
+CourseID | CourseName
+C1       | Math
+
+Enrollments:
+StudentID | CourseID
+1         | C1
+
+3NF - No transitive dependencies (non-key columns don't depend on other non-key columns)
+BEFORE:
+StudentID | StudentName | DeptID | DeptName
+
+AFTER:
+Students:
+StudentID | StudentName | DeptID
+
+Departments:
+DeptID | DeptName
+
+Key Points:
+- Most tables in 3NF
+- BCNF rarely needed
+- Denormalization for performance (carefully)
+- Balance between normalization and query performance
+```
+
+---
+
+**Q16: What are CTEs (Common Table Expressions) and recursive CTEs?**
+
+A:
+```
+CTE: Named temporary result set
+
+Simple CTE:
+WITH emp_salaries AS (
+    SELECT emp_id, emp_name, salary,
+           AVG(salary) OVER () as avg_sal
+    FROM employees
+)
+SELECT * FROM emp_salaries
+WHERE salary > avg_sal;
+
+Benefits:
+- Improves readability
+- Reusable within same query
+- Simplifies complex logic
+- Supports recursion
+
+Multiple CTEs:
+WITH dept_totals AS (
+    SELECT dept_id, SUM(salary) as total_sal
+    FROM employees
+    GROUP BY dept_id
+),
+high_depts AS (
+    SELECT * FROM dept_totals WHERE total_sal > 500000
+)
+SELECT * FROM high_depts;
+
+Recursive CTE: Self-referencing CTE
+WITH RECURSIVE org_chart AS (
+    -- Base case: CEO
+    SELECT emp_id, emp_name, manager_id, 1 as level
+    FROM employees
+    WHERE manager_id IS NULL
+    
+    UNION ALL
+    
+    -- Recursive case
+    SELECT e.emp_id, e.emp_name, e.manager_id, oc.level + 1
+    FROM employees e
+    INNER JOIN org_chart oc ON e.manager_id = oc.emp_id
+)
+SELECT * FROM org_chart
+ORDER BY level, emp_id;
+
+Use Cases:
+- Hierarchical data (org structure, categories)
+- Tree traversal
+- Path finding
+- Bill of materials
+
+Performance:
+- More efficient than subqueries
+- Recursive CTEs can be slower (check execution plan)
+```
+
+---
+
+**Q17: What is MERGE statement and when to use it?**
+
+A:
+```
+MERGE: Conditional INSERT/UPDATE in single operation
+
+Syntax:
+MERGE INTO target_table t
+USING source_table s
+ON t.key_column = s.key_column
+WHEN MATCHED THEN
+    UPDATE SET t.col1 = s.col1, t.col2 = s.col2
+WHEN NOT MATCHED THEN
+    INSERT (key_column, col1, col2) 
+    VALUES (s.key_column, s.col1, s.col2);
+
+Example - Upsert operation:
+MERGE INTO employees t
+USING emp_staging s
+ON t.emp_id = s.emp_id
+WHEN MATCHED THEN
+    UPDATE SET 
+        t.salary = s.salary,
+        t.dept_id = s.dept_id
+WHEN NOT MATCHED THEN
+    INSERT (emp_id, emp_name, salary, dept_id)
+    VALUES (s.emp_id, s.emp_name, s.salary, s.dept_id);
+
+Advantages:
+- Atomic operation
+- Faster than separate UPDATE and INSERT
+- Cleaner code
+- Single table scan
+
+When to Use:
+- Data warehouse updates
+- Synchronizing tables
+- ETL operations
+- Bulk data loads
+
+DELETE Clause:
+MERGE INTO employees t
+USING emp_staging s
+ON t.emp_id = s.emp_id
+WHEN MATCHED AND s.action = 'DELETE' THEN
+    DELETE
+WHEN MATCHED AND s.action = 'UPDATE' THEN
+    UPDATE SET t.salary = s.salary
+WHEN NOT MATCHED THEN
+    INSERT (emp_id, emp_name, salary)
+    VALUES (s.emp_id, s.emp_name, s.salary);
+```
+
+---
+
+**Q18: Explain TRANSACTION ISOLATION LEVELS in detail.**
+
+A:
+```
+Isolation Levels: Control transaction visibility
+
+READ UNCOMMITTED (Lowest isolation)
+- Can read uncommitted data (dirty read)
+- Fastest performance
+- Rarely used in production
+- Example:
+  Transaction 1: UPDATE account SET balance = 900 (not committed)
+  Transaction 2: Can read balance = 900 (dirty)
+
+READ COMMITTED (Oracle default)
+- Cannot read uncommitted data
+- Non-repeatable reads possible
+- Good for most applications
+- Example:
+  Transaction 1: Read balance = 1000
+  Transaction 2: Commits UPDATE balance = 900
+  Transaction 1: Read balance = 900 (different)
+
+REPEATABLE READ
+- Cannot have non-repeatable reads
+- Phantom reads possible
+- Row-level consistency
+- Example:
+  Transaction 1: Read rows WHERE dept = 10 (5 rows)
+  Transaction 2: Inserts new row WHERE dept = 10
+  Transaction 1: Read same query (still 5 rows guaranteed)
+
+SERIALIZABLE (Highest isolation)
+- Highest isolation level
+- Transactions execute serially
+- Prevents phantom reads
+- Slowest performance
+- Example:
+  Transaction 1: Read rows WHERE dept = 10
+  Transaction 2: Cannot insert new row WHERE dept = 10
+
+Problem Matrix:
+┌──────────────┬──────────┬──────────────────┬──────────┐
+│ Level        │ Dirty    │ Non-repeatable   │ Phantom  │
+├──────────────┼──────────┼──────────────────┼──────────┤
+│ Uncommitted  │ YES      │ YES              │ YES      │
+│ Committed    │ NO       │ YES              │ YES      │
+│ Repeatable   │ NO       │ NO               │ YES      │
+│ Serializable │ NO       │ NO               │ NO       │
+└──────────────┴──────────┴──────────────────┴──────────┘
+
+Setting in Oracle:
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+BEGIN
+    -- Transaction code
+    COMMIT;
+END;
+```
+
+---
+
+**Q19: What are LOCKS and deadlock resolution?**
+
+A:
+```
+Locks: Prevent concurrent modification conflicts
+
+Types:
+
+Row-Level Lock (Most common):
+- Exclusive (X): Only one transaction can hold
+- Share (S): Multiple transactions can read
+
+Table-Level Lock:
+- Exclusive: No other access allowed
+- Share: Only reads allowed
+
+Explicit Locking:
+SELECT * FROM employees WHERE emp_id = 1 FOR UPDATE;
+-- Locks row until transaction ends
+-- Other sessions wait or fail
+
+FOR UPDATE NOWAIT:
+SELECT * FROM employees WHERE emp_id = 1 FOR UPDATE NOWAIT;
+-- If locked, immediately fail instead of waiting
+
+FOR UPDATE WAIT n:
+SELECT * FROM employees WHERE emp_id = 1 FOR UPDATE WAIT 5;
+-- Wait max 5 seconds, then fail
+
+Deadlock: Two transactions waiting for each other
+
+DEADLOCK EXAMPLE:
+Session 1:
+BEGIN
+    UPDATE accounts SET balance = balance - 100 WHERE acc_id = 1;
+    DBMS_LOCK.sleep(2);
+    UPDATE accounts SET balance = balance + 100 WHERE acc_id = 2;
+END;
+
+Session 2:
+BEGIN
+    UPDATE accounts SET balance = balance + 100 WHERE acc_id = 2;
+    DBMS_LOCK.sleep(2);
+    UPDATE accounts SET balance = balance - 100 WHERE acc_id = 1;
+END;
+-- DEADLOCK occurs
+
+RESOLUTION STRATEGIES:
+
+1. Always acquire locks in same order:
+   Both transactions: Lock acc_id 1, then acc_id 2
+
+2. Keep transactions short:
+   - Reduce lock time
+   - Release locks quickly
+   - COMMIT frequently
+
+3. Use lower isolation levels:
+   - Read Committed instead of Serializable
+   - Reduces lock duration
+
+4. Monitor and kill:
+   SELECT blocking_session FROM v$session 
+   WHERE blocking_session IS NOT NULL;
+   
+   ALTER SYSTEM KILL SESSION 'sid,serial#';
+
+Best Practice:
+- Design to minimize lock contention
+- Avoid user-held locks
+- Keep transactions short and focused
+```
+
+---
+
+**Q20: Explain INDEXES in detail and best practices.**
+
+A:
+```
+Index: Data structure for fast data retrieval
+
+Types:
+
+B-Tree Index (Default):
+- Balanced tree structure
+- Good for equality and range queries
+- Best for high cardinality columns
+- CREATE INDEX idx_emp_name ON employees(emp_name);
+
+Bitmap Index:
+- Bit vector representation
+- Excellent for low cardinality (few unique values)
+- Fast for AND/OR operations
+- CREATE BITMAP INDEX idx_status ON employees(status);
+
+Function-Based Index:
+- Index on computed expression
+- CREATE INDEX idx_upper_name ON employees(UPPER(emp_name));
+- Query must use same function: WHERE UPPER(emp_name) = 'JOHN'
+
+When to Create:
+- Columns in WHERE clause
+- Join condition columns
+- ORDER BY columns
+- Foreign key columns
+- High cardinality (many unique values)
+
+When NOT to Create:
+- Low cardinality (< 10 unique values)
+- NULL-heavy columns
+- Heavily updated columns
+- Small tables (< 1000 rows)
+- Columns rarely queried
+
+Composite Index (Multiple columns):
+CREATE INDEX idx_dept_sal ON employees(dept_id, salary DESC);
+
+Good for: WHERE dept_id = 10 AND salary > 50000
+Less good for: WHERE salary > 50000 (leading column not used)
+
+Index Maintenance:
+-- Analyze for statistics
+ANALYZE INDEX idx_emp_name COMPUTE STATISTICS;
+
+-- Check fragmentation
+SELECT index_name, leaf_blocks, distinct_keys
+FROM user_indexes WHERE table_name = 'EMPLOYEES';
+
+-- Rebuild fragmented index
+ALTER INDEX idx_emp_name REBUILD;
+
+-- Drop unused index
+DROP INDEX idx_emp_name;
+
+Performance Impact:
+- Reads: Much faster (often 10-100x)
+- Writes: Slower (INSERT/UPDATE/DELETE requires index update)
+- Storage: Additional disk space needed
+
+Hints:
+SELECT /*+ INDEX(e idx_emp_name) */ *
+FROM employees e WHERE emp_name = 'John';
+
+SELECT /*+ FULL(e) */ *
+FROM employees e WHERE status = 'ACTIVE';
+-- Forces full table scan if index slower
+```
+
+---
+
+### LEVEL 3: ADVANCED QUESTIONS
+
+**Q21: What is EXPLAIN PLAN and how to use it for optimization?**
+
+A:
+```
+EXPLAIN PLAN: Shows query execution plan
+
+Generate Plan:
+EXPLAIN PLAN FOR
+SELECT e.emp_name, d.dept_name, e.salary
+FROM employees e
+JOIN departments d ON e.dept_id = d.dept_id
+WHERE e.salary > 50000
+ORDER BY e.salary DESC;
+
+View Plan:
+SELECT PLAN_TABLE_OUTPUT 
+FROM TABLE(DBMS_XPLAN.DISPLAY());
+
+Output Interpretation:
+Id | Operation            | Name              | Rows | Cost |
+---|----------------------|-------------------|------|------|
+0  | SELECT STATEMENT     |                   | 100  | 50   |
+1  | SORT ORDER BY        |                   | 100  | 50   |
+2  | HASH JOIN            |                   | 100  | 48   |
+3  | TABLE ACCESS FULL    | EMPLOYEES         | 500  | 10   |
+4  | TABLE ACCESS FULL    | DEPARTMENTS       | 50   | 8    |
+
+Key Metrics:
+- Operation: Type of operation performed
+- Name: Table or index name
+- Rows: Estimated number of rows
+- Cost: Optimizer cost estimation
+
+Optimization Tips:
+
+1. Avoid FULL TABLE SCAN:
+   Add index on WHERE columns
+   CREATE INDEX idx_emp_salary ON employees(salary);
+
+2. Use Index when available:
+   Make sure column is indexed
+   Write query to use index
+
+3. Check Join Order:
+   JOIN smaller result sets first
+   Use hints if needed:
+   SELECT /*+ LEADING(d) */ ...
+
+4. Avoid expensive operations:
+   Minimize SORT operations
+   Reduce GROUP BY when possible
+
+Example - Before and After:
+
+SLOW QUERY:
+SELECT * FROM employees e
+WHERE SUBSTR(emp_name, 1, 1) = 'J'
+AND salary > 50000;
+-- SUBSTR prevents index usage
+
+FAST QUERY:
+SELECT * FROM employees e
+WHERE emp_name LIKE 'J%'
+AND salary > 50000;
+-- Can use index on emp_name
+
+Verify with EXPLAIN PLAN for both to compare costs.
+```
+
+---
+
+**Q22: How does OPTIMIZER work and when do you use HINTS?**
+
+A:
+```
+Query Optimizer: Determines best execution plan
+
+Optimizer Types:
+
+1. Rule-Based Optimizer (Old)
+   - Uses predefined rules
+   - Mostly deprecated
+   - Can be inefficient
+
+2. Cost-Based Optimizer (Modern)
+   - Calculates execution cost
+   - Uses statistics
+   - Generally better decisions
+
+Optimizer Decision Factors:
+- Table statistics (rows, blocks)
+- Column statistics (distinct values, NULL count)
+- Index statistics (leaf blocks, depth)
+- Join methods available
+- CPU and I/O costs
+
+Hints: Manual optimizer guidance
+
+HINT SYNTAX:
+SELECT /*+ HINT_NAME */ column
+FROM table;
+
+Common Hints:
+
+1. INDEX hint - Force index usage
+   SELECT /*+ INDEX(e idx_emp_name) */
+   FROM employees e WHERE emp_name = 'John';
+
+2. FULL hint - Force full table scan
+   SELECT /*+ FULL(e) */
+   FROM employees e WHERE status = 'ACTIVE';
+
+3. LEADING hint - Join order
+   SELECT /*+ LEADING(d) */
+   FROM employees e JOIN departments d ON e.dept_id = d.dept_id;
+
+4. USE_HASH hint - Hash join
+   SELECT /*+ USE_HASH(e d) */
+   FROM employees e JOIN departments d ON e.dept_id = d.dept_id;
+
+5. PARALLEL hint - Parallel execution
+   SELECT /*+ PARALLEL(e 4) */
+   FROM employees e WHERE dept_id = 10;
+
+When to Use Hints:
+- Optimizer making poor choices
+- After analyzing EXPLAIN PLAN
+- Performance critical queries
+- Temporary fix (better to update statistics)
+
+When NOT to Use Hints:
+- Statistics accurate
+- Optimizer performing well
+- First attempt at optimization
+
+Update Statistics:
+EXEC DBMS_STATS.gather_table_stats('HR', 'EMPLOYEES');
+EXEC DBMS_STATS.gather_database_stats();
+
+Key Points:
+- Good statistics more important than hints
+- Hints can become liabilities (version upgrades, data changes)
+- Use judiciously
+- Document why hint is needed
+```
+
+---
+
+**Q23: What is PARTITIONING and when to use it?**
+
+A:
+```
+Partitioning: Divide large table into smaller pieces
+
+Benefits:
+- Faster query performance (smaller scans)
+- Easier maintenance (partition-level backup/recovery)
+- Improved manageability
+- Better resource utilization
+
+Types:
+
+RANGE Partitioning (By value range):
+CREATE TABLE orders (
+    order_id NUMBER,
+    order_date DATE,
+    amount NUMBER
+)
+PARTITION BY RANGE (order_date) (
+    PARTITION p_2023 VALUES LESS THAN (TO_DATE('01-JAN-2024', 'DD-MON-YYYY')),
+    PARTITION p_2024 VALUES LESS THAN (TO_DATE('01-JAN-2025', 'DD-MON-YYYY')),
+    PARTITION p_2025 VALUES LESS THAN (MAXVALUE)
+);
+
+Usage:
+INSERT INTO orders VALUES (1, '15-JUN-2024', 1000);  -- Goes to p_2024
+
+LIST Partitioning (By value list):
+CREATE TABLE employees (
+    emp_id NUMBER,
+    dept_id NUMBER,
+    emp_name VARCHAR2(50)
+)
+PARTITION BY LIST (dept_id) (
+    PARTITION p_it VALUES (10, 20),
+    PARTITION p_hr VALUES (30, 40),
+    PARTITION p_other VALUES (DEFAULT)
+);
+
+HASH Partitioning (By hash function):
+CREATE TABLE customers (
+    cust_id NUMBER,
+    cust_name VARCHAR2(50)
+)
+PARTITION BY HASH (cust_id) PARTITIONS 4;
+
+COMPOSITE Partitioning (Multiple levels):
+CREATE TABLE sales (
+    sale_date DATE,
+    region VARCHAR2(20),
+    amount NUMBER
+)
+PARTITION BY RANGE (sale_date)
+SUBPARTITION BY LIST (region) (
+    PARTITION p_2024
+    SUBPARTITION BY LIST (region) (
+        SUBPARTITION p_2024_us VALUES ('USA'),
+        SUBPARTITION p_2024_eu VALUES ('EUROPE')
+    )
+);
+
+When to Use:
+- Tables > 2GB
+- High insert/update volume
+- Historical data with time ranges
+- Geographic data partitioning
+- Multi-region systems
+
+Query on Partition:
+SELECT * FROM orders 
+WHERE order_date >= '01-JAN-2025'
+  AND order_date < '01-JAN-2026';
+-- Automatically scans only p_2025
+
+Maintenance:
+-- Add new partition
+ALTER TABLE orders 
+ADD PARTITION p_2026 VALUES LESS THAN (TO_DATE('01-JAN-2027', 'DD-MON-YYYY'));
+
+-- Drop old partition
+ALTER TABLE orders 
+DROP PARTITION p_2020;
+
+Key Points:
+- Partition key selection critical
+- Can improve performance dramatically
+- Adds complexity
+- Requires monitoring
+```
+
+---
+
+**Q24: Explain BACKUP & RECOVERY strategies.**
+
+A:
+```
+Backup Types:
+
+1. Physical Backup (RMAN)
+   - Copies database files
+   - Complete database recovery possible
+   - Faster recovery
+   - Production standard
+   
+   RMAN> BACKUP DATABASE;
+   RMAN> BACKUP DATABASE PLUS ARCHIVELOG;
+
+2. Logical Backup (Export/Import)
+   - Exports data as SQL
+   - Selective restore possible
+   - Slower than physical
+   - Good for table-level recovery
+   
+   expdp scott/tiger DIRECTORY=dump_dir DUMPFILE=backup.dmp
+   impdp scott/tiger DIRECTORY=dump_dir DUMPFILE=backup.dmp
+
+Backup Strategy:
+
+Full Backup:
+RMAN> BACKUP DATABASE;
+-- Complete copy of all datafiles
+-- Foundation for recovery
+
+Incremental Backup:
+RMAN> BACKUP INCREMENTAL LEVEL 0 DATABASE;  -- Full
+RMAN> BACKUP INCREMENTAL LEVEL 1 DATABASE;  -- Changes only
+
+Archive Log Backup:
+RMAN> BACKUP ARCHIVELOG ALL;
+-- Essential for point-in-time recovery
+
+Recovery Scenarios:
+
+Complete Recovery (No data loss):
+1. Database lost/corrupted
+   RMAN> RESTORE DATABASE;
+   RMAN> RECOVER DATABASE;
+   ALTER DATABASE OPEN RESETLOGS;
+
+2. Tablespace lost:
+   ALTER TABLESPACE users OFFLINE IMMEDIATE;
+   RMAN> RESTORE TABLESPACE users;
+   RMAN> RECOVER TABLESPACE users;
+   ALTER TABLESPACE users ONLINE;
+
+Point-in-Time Recovery:
+-- Recover to specific point in time
+RMAN> RECOVER DATABASE UNTIL TIME '29-DEC-2025 14:30:00';
+
+Incomplete Recovery:
+-- Cannot go beyond missing archive logs
+-- Requires RESETLOGS (some data loss)
+
+Best Practices:
+1. Regular backups (daily minimum)
+2. Test recovery procedures
+3. Multiple backup copies
+4. Off-site backup copies
+5. Archive log retention
+6. Document backup location and procedure
+7. Monitor backup success
+8. Redundant storage (RAID, cloud)
+
+Testing Recovery:
+-- Clone to test environment
+-- Verify data integrity
+-- Document recovery time
+
+3-2-1 Strategy:
+- 3 copies of data
+- 2 different media
+- 1 off-site copy
+```
+
+---
+
+**Q25: What is HIGH AVAILABILITY and clustering?**
+
+A:
+```
+High Availability: System continuously operational
+
+Components:
+
+1. RAC (Real Application Cluster)
+   - Multiple instances on same database
+   - Load balancing across instances
+   - Automatic failover
+   - Shared storage required
+   
+   Instance 1 ─┐
+   Instance 2 ─┼─ Shared Datafiles
+   Instance 3 ─┘
+
+2. Data Guard
+   - Primary + Standby database
+   - Synchronous or asynchronous replication
+   - Automatic failover (broker)
+   - Geographical separation possible
+   
+   Primary Database ──(Log Shipping)──> Standby Database
+
+3. Replication
+   - Multiple copies of data
+   - Reduces recovery time
+   - Can be read-only or multi-master
+
+HA Architecture:
+
+┌─────────────┐
+│  Primary DB │
+└──────┬──────┘
+       │ Log Shipping
+       ▼
+┌─────────────┐
+│ Standby DB  │ (Read-only in Physical Standby)
+└─────────────┘
+
+Failover Scenarios:
+
+1. Graceful Failover (Planned):
+   - Warning to users
+   - Controlled switchover
+   - Minimal data loss
+   - Data Guard Broker:
+     DGMGRL> SWITCHOVER TO standby_db;
+
+2. Crash Failover (Unplanned):
+   - Automatic failover
+   - Possible data loss
+   - Faster recovery
+   - Application reconnects automatically
+
+Configuration:
+
+Data Guard Broker:
+DGMGRL> CREATE CONFIGURATION 'dr_config' AS PRIMARY IS prod_db;
+DGMGRL> ADD DATABASE stand_db AS STANDBY;
+DGMGRL> ENABLE CONFIGURATION;
+
+Monitoring:
+-- Check redo log shipping
+SELECT dest_name, status FROM v$archive_dest;
+
+-- Data Guard status
+DGMGRL> SHOW CONFIGURATION;
+
+Benefits:
+- Continuous availability
+- Disaster recovery
+- Load balancing
+- Zero downtime upgrade
+
+RPO (Recovery Point Objective): Maximum data loss tolerance
+RTO (Recovery Time Objective): Maximum downtime tolerance
+
+Example SLA:
+RPO: 5 minutes (acceptable data loss)
+RTO: 1 minute (acceptable downtime)
+```
+
+---
+
+**Q26: What is PERFORMANCE TUNING and best practices?**
+
+A:
+```
+Performance Tuning: Systematic optimization
+
+Levels:
+
+1. Application Level
+   - Efficient SQL queries
+   - Connection pooling
+   - Reduce round-trips
+   - Batch processing
+   
+   -- Bad: Individual inserts
+   FOR i IN 1..1000 LOOP
+       INSERT INTO table VALUES (i, data);
+   END LOOP;
+   
+   -- Good: Batch insert
+   INSERT INTO table
+   SELECT * FROM source_table WHERE batch = 1;
+
+2. Database Level
+   - Indexes
+   - Query optimization
+   - Parameter tuning
+   - Statistics
+   
+   -- Check buffer hit ratio
+   SELECT (1 - (phyrd / (phyrd + lrd))) * 100 as hit_ratio
+   FROM (SELECT SUM(DECODE(name, 'physical reads', value)) phyrd,
+                SUM(DECODE(name, 'session logical reads', value)) lrd
+         FROM v$statname sn, v$sesstat ss
+         WHERE sn.statistic# = ss.statistic#);
+
+3. System Level
+   - CPU allocation
+   - Memory allocation
+   - I/O configuration
+   - Storage optimization
+
+Tuning Steps:
+
+1. Identify Bottleneck:
+   SELECT * FROM v$session_wait;
+   -- WHERE event NOT IN ('SQL*Net read from client', ...);
+
+2. Analyze Wait Events:
+   -- CPU: Few waits, high CPU
+   -- I/O: Many 'db file sequential read'
+   -- Lock: Many 'enqueue' waits
+
+3. Optimize Query:
+   EXPLAIN PLAN FOR SELECT ... ;
+   -- Add indexes
+   -- Rewrite query
+   -- Use hints
+
+4. Monitor Improvement:
+   -- Before: 1000ms
+   -- After: 100ms
+   -- Improvement: 90%
+
+Common Optimization Techniques:
+
+Indexing:
+CREATE INDEX idx_emp_dept_sal ON employees(dept_id, salary DESC);
+
+Query Rewrite:
+SELECT DISTINCT dept_id FROM employees;
+-- vs
+SELECT dept_id FROM employees GROUP BY dept_id;
+-- GROUP BY faster with indexes
+
+Partitioning:
+ALTER TABLE large_table ADD PARTITION ...;
+-- Smaller partitions scan faster
+
+Archive Old Data:
+DELETE FROM orders WHERE order_date < '01-JAN-2020';
+-- Reduces table size
+
+Materialized Views:
+CREATE MATERIALIZED VIEW sales_summary AS ...;
+-- Pre-computed aggregations
+
+Parameters Tuning:
+ALTER SYSTEM SET db_cache_size = 4G;
+ALTER SYSTEM SET shared_pool_size = 2G;
+
+Key Points:
+- Profile before optimizing
+- Use tools (AWR, ADDM)
+- Document changes
+- Test thoroughly
+- Monitor continuously
+```
+
+---
+
+**Q27: What is ETL and data loading best practices?**
+
+A:
+```
+ETL: Extract, Transform, Load
+
+Extract:
+-- From various sources
+SELECT * FROM legacy_system.employees;
+SELECT * FROM csv_file;
+
+Transform:
+-- Data validation and manipulation
+SELECT 
+    emp_id,
+    TRIM(emp_name) as emp_name,           -- Clean
+    UPPER(email) as email,                 -- Standardize
+    CASE WHEN salary > 0 THEN salary       -- Validate
+         ELSE 0 END as salary,
+    SYSDATE as load_date
+FROM source_data;
+
+Load:
+-- Into target table
+INSERT INTO employees SELECT ...;
+
+ETL Tools:
+- Oracle Data Integrator (ODI)
+- Informatica
+- Talend
+- Custom PL/SQL
+
+Best Practices:
+
+1. Staging Table:
+   -- Load to temporary table first
+   INSERT INTO employees_staging SELECT ...;
+   
+   -- Validate data
+   SELECT COUNT(*) FROM employees_staging 
+   WHERE salary < 0;
+   
+   -- Move to production
+   TRUNCATE TABLE employees;
+   INSERT INTO employees SELECT * FROM employees_staging;
+
+2. Data Quality Checks:
+   -- Before loading
+   SELECT COUNT(*), COUNT(DISTINCT emp_id)
+   FROM source_data;
+   
+   -- Check for duplicates
+   SELECT emp_id, COUNT(*)
+   FROM source_data
+   GROUP BY emp_id
+   HAVING COUNT(*) > 1;
+   
+   -- Check for invalid data
+   SELECT * FROM source_data
+   WHERE email NOT LIKE '%@%.%';
+
+3. Incremental Loading:
+   -- Only new/changed data
+   MERGE INTO employees t
+   USING (SELECT * FROM employees_staging s
+          WHERE s.load_date > (SELECT MAX(load_date) 
+                               FROM employees)) s
+   ON t.emp_id = s.emp_id
+   WHEN MATCHED THEN UPDATE SET ...
+   WHEN NOT MATCHED THEN INSERT ...;
+
+4. Batch Processing:
+   FOR batch IN 1..100 LOOP
+       INSERT INTO employees
+       SELECT * FROM employees_staging
+       WHERE batch_num = batch;
+       COMMIT;  -- Commit frequently
+   END LOOP;
+
+5. Error Handling:
+   BEGIN
+       -- ETL process
+       INSERT INTO employees SELECT ...;
+       COMMIT;
+   EXCEPTION
+       WHEN DUP_VAL_ON_INDEX THEN
+           ROLLBACK;
+           INSERT INTO error_log VALUES (SYSDATE, SQLERRM);
+       WHEN OTHERS THEN
+           ROLLBACK;
+           RAISE;
+   END;
+
+6. Performance:
+   -- Disable constraints temporarily
+   ALTER TABLE employees DISABLE CONSTRAINT fk_emp_dept;
+   INSERT INTO employees SELECT ...;
+   ALTER TABLE employees ENABLE CONSTRAINT fk_emp_dept;
+   
+   -- Rebuild indexes after large load
+   ALTER INDEX idx_emp_name REBUILD;
+
+Typical ETL Pipeline:
+```sql
+CREATE OR REPLACE PROCEDURE etl_employees IS
+    v_start_time TIMESTAMP;
+    v_source_count NUMBER;
+    v_loaded_count NUMBER;
+BEGIN
+    v_start_time := SYSTIMESTAMP;
+    
+    -- Extract
+    INSERT INTO emp_staging
+    SELECT * FROM legacy_emp_table;
+    
+    SELECT COUNT(*) INTO v_source_count FROM emp_staging;
+    
+    -- Transform
+    UPDATE emp_staging SET email = LOWER(email);
+    DELETE FROM emp_staging WHERE salary < 0;
+    
+    -- Load
+    INSERT INTO employees
+    SELECT * FROM emp_staging;
+    
+    SELECT COUNT(*) INTO v_loaded_count FROM employees;
+    
+    COMMIT;
+    
+    DBMS_OUTPUT.PUT_LINE('Loaded ' || v_loaded_count || 
+                        ' of ' || v_source_count || ' records');
+    DBMS_OUTPUT.PUT_LINE('Duration: ' || 
+        (SYSTIMESTAMP - v_start_time));
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        INSERT INTO etl_error_log VALUES 
+            (SYSDATE, SQLERRM);
+        RAISE;
+END;
+```
+```
+
+---
+
+**Q28: Explain SECURITY and user management.**
+
+A:
+```
+User Management:
+
+Create User:
+CREATE USER john IDENTIFIED BY strong_password123
+DEFAULT TABLESPACE users
+TEMPORARY TABLESPACE temp
+QUOTA 100M ON users;
+
+Authentication:
+- Password: Standard authentication
+- External: OS authentication
+- Certificate: Digital certificate
+- LDAP: Directory service
+
+System Privileges:
+
+CREATE SESSION - Connect to database
+CREATE TABLE - Create tables
+CREATE PROCEDURE - Create PL/SQL objects
+SELECT ANY TABLE - Query any table
+DELETE ANY TABLE - Delete from any table
+
+Granting Privileges:
+GRANT CREATE SESSION TO john;
+GRANT CREATE TABLE TO john;
+GRANT SELECT, INSERT, UPDATE ON employees TO john;
+
+Object Privileges:
+SELECT - Query table
+INSERT - Insert rows
+UPDATE - Modify rows
+DELETE - Delete rows
+ALTER - Modify structure
+EXECUTE - Run procedure
+ALL - All privileges
+
+Role Management:
+
+Create Role:
+CREATE ROLE dba_role;
+
+Grant Privileges to Role:
+GRANT CREATE TABLE, CREATE PROCEDURE TO dba_role;
+
+Assign Role to User:
+GRANT dba_role TO john;
+
+Predefined Roles:
+DBA - All system privileges (use carefully)
+RESOURCE - CREATE object privileges
+CONNECT - CREATE SESSION only (limited)
+
+Revoke Privileges:
+REVOKE CREATE TABLE FROM john;
+REVOKE dba_role FROM john;
+
+Privilege Hierarchy:
+```
+DBA (Full access)
+├── Resource (Create objects)
+│   ├── CREATE TABLE
+│   ├── CREATE PROCEDURE
+│   └── CREATE SEQUENCE
+└── Connect (Limited access)
+    └── CREATE SESSION only
+```
+
+Profile & Limits:
+CREATE PROFILE limited_profile LIMIT
+    SESSIONS_PER_USER 1
+    CPU_PER_SESSION 3600
+    CONNECT_TIME 480
+    IDLE_TIME 60
+    PASSWORD_LIFE_TIME 90
+    PASSWORD_GRACE_TIME 7;
+
+ALTER USER john PROFILE limited_profile;
+
+Monitoring Users:
+SELECT * FROM dba_users WHERE username = 'JOHN';
+
+Active Sessions:
+SELECT sid, serial#, username, status 
+FROM v$session WHERE type != 'BACKGROUND';
+
+Kill Session:
+ALTER SYSTEM KILL SESSION 'sid,serial#';
+
+Audit Trail:
+AUDIT SELECT ON employees BY john;
+AUDIT DELETE ON employees BY john;
+
+View Audit Log:
+SELECT * FROM dba_audit_trail 
+WHERE username = 'JOHN' AND audit_option = 'DELETE';
+
+Encryption:
+
+Column Encryption:
+CREATE TABLE secure_data (
+    id NUMBER,
+    secret_data ENCRYPTED VARCHAR2(100)
+);
+
+Transparent Data Encryption (TDE):
+-- Encrypt tablespace
+ALTER TABLESPACE users ENCRYPTION ONLINE;
+
+Network Encryption:
+-- SSL/TLS for database connections
+
+Best Practices:
+1. Principle of Least Privilege
+   - Grant minimum permissions needed
+   
+2. Strong Passwords
+   - Enforce complexity requirements
+   - Regular password changes
+   
+3. Segregation of Duties
+   - Different users for different tasks
+   
+4. Monitor Access
+   - Audit critical operations
+   - Review audit logs regularly
+   
+5. Secure Connections
+   - Use SSL/TLS for network traffic
+   - Encryption for sensitive data
+```
+
+---
+
+### LEVEL 4: SCENARIO-BASED QUESTIONS
+
+**Q29: How would you handle a situation where the database is running out of tablespace?**
+
+A:
+```
+Scenario: "Database is full. What do you do?"
+
+Immediate Actions:
+
+1. Verify Issue:
+   SELECT tablespace_name, SUM(bytes)/1024/1024/1024 as size_gb,
+          SUM(free_space)/1024/1024/1024 as free_gb
+   FROM dba_data_files
+   JOIN dba_free_space ON dba_data_files.file_id = dba_free_space.file_id
+   GROUP BY tablespace_name;
+
+2. Identify Large Objects:
+   SELECT owner, segment_name, segment_type, bytes/1024/1024 as size_mb
+   FROM dba_segments
+   WHERE tablespace_name = 'USERS'
+   ORDER BY bytes DESC;
+
+Short-term Solutions:
+
+1. Resize Existing Datafile:
+   ALTER DATABASE DATAFILE '/u01/oradata/users01.dbf' RESIZE 10G;
+
+2. Add New Datafile:
+   ALTER TABLESPACE users ADD DATAFILE '/u01/oradata/users02.dbf' 
+       SIZE 5G AUTOEXTEND ON MAXSIZE 20G;
+
+3. Enable Autoextend:
+   ALTER DATABASE DATAFILE '/u01/oradata/users01.dbf'
+       AUTOEXTEND ON MAXSIZE 20G;
+
+Long-term Solutions:
+
+1. Archive Old Data:
+   CREATE TABLE orders_archive AS
+   SELECT * FROM orders 
+   WHERE order_date < '01-JAN-2024';
+   
+   DELETE FROM orders WHERE order_date < '01-JAN-2024';
+
+2. Purge Redo Logs:
+   -- Delete old redo logs safely
+   ALTER SESSION SET db_recovery_file_dest_size = 100G;
+
+3. Compress Data:
+   ALTER TABLE large_table COMPRESS;
+
+4. Drop Unused Indexes:
+   SELECT index_name FROM dba_indexes 
+   WHERE table_owner = 'SCOTT' AND not_used > 0;
+   
+   DROP INDEX index_name;
+
+5. Partition Large Tables:
+   CREATE TABLE orders_part (
+       order_id NUMBER,
+       order_date DATE
+   )
+   PARTITION BY RANGE (order_date) ...;
+
+Monitor Progress:
+SELECT tablespace_name, 
+       ROUND((used_space/total_space)*100, 2) as percent_used
+FROM (
+    SELECT ts.tablespace_name, 
+           SUM(ts.bytes) as total_space,
+           SUM(DECODE(us.status, 'USED', us.bytes, 0)) as used_space
+    FROM dba_tablespaces ts, dba_data_files ts, dba_free_space us
+    GROUP BY ts.tablespace_name
+);
+```
+
+---
+
+**Q30: How would you troubleshoot a slow query?**
+
+A:
+```
+Scenario: "Users report the dashboard is slow. How do you fix it?"
+
+Step 1: Identify the Query
+SELECT sql_id, sql_text, elapsed_time, executions, 
+       ROUND(elapsed_time/executions/1000000, 2) as avg_sec
+FROM v$sql
+WHERE elapsed_time > 5000000  -- > 5 seconds
+ORDER BY elapsed_time DESC
+FETCH FIRST 10 ROWS ONLY;
+
+Step 2: Get Execution Plan
+EXPLAIN PLAN FOR
+SELECT * FROM dashboard_query;
+
+SELECT PLAN_TABLE_OUTPUT FROM TABLE(DBMS_XPLAN.DISPLAY());
+
+Step 3: Analyze Issues
+Look for:
+- FULL TABLE SCAN on large tables
+- SORT operations
+- Cartesian products
+- Multiple joins
+
+Step 4: Identify Bottleneck
+
+CASE A: Full Table Scan
+Problem:
+  0 | SELECT STATEMENT
+  1 |   TABLE ACCESS FULL | EMPLOYEES
+
+Solution: Add index
+  CREATE INDEX idx_emp_dept ON employees(dept_id);
+
+CASE B: Missing Join Condition
+Problem:
+  0 | SELECT STATEMENT
+  1 |   HASH JOIN
+  2 |     TABLE ACCESS FULL | EMPLOYEES
+  3 |     TABLE ACCESS FULL | DEPARTMENTS
+
+Look for: Cartesian product (rows = emp_rows * dept_rows)
+
+Solution: Fix join condition
+  SELECT * FROM employees e, departments d
+  WHERE e.dept_id = d.dept_id;  -- Add condition
+
+CASE C: Sorting
+Problem:
+  0 | SELECT STATEMENT
+  1 |   SORT ORDER BY
+  2 |     TABLE ACCESS FULL | ORDERS
+
+Solution: Add index on order column
+  CREATE INDEX idx_orders_date ON orders(order_date DESC);
+
+CASE D: Subquery Issue
+Problem:
+  SELECT * FROM employees e
+  WHERE emp_id IN (
+      SELECT emp_id FROM projects WHERE budget > 100000
+  );
+
+Solution: Use EXISTS or JOIN
+  SELECT DISTINCT e.* FROM employees e
+  JOIN projects p ON e.emp_id = p.emp_id
+  WHERE p.budget > 100000;
+
+Step 5: Gather Statistics
+-- Statistics might be stale
+EXEC DBMS_STATS.gather_table_stats('SCHEMA', 'TABLE_NAME');
+
+Step 6: Test and Verify
+-- Before optimization
+SELECT DBMS_UTILITY.get_time FROM dual;
+SELECT * FROM dashboard_query;
+SELECT DBMS_UTILITY.get_time FROM dual;
+-- Time difference = execution time
+
+-- After optimization
+-- Compare execution times
+
+Optimization Checklist:
+☐ Add indexes on WHERE columns
+☐ Add indexes on JOIN columns
+☐ Add indexes on ORDER BY columns
+☐ Reduce sorting operations
+☐ Use appropriate data types
+☐ Join in correct order
+☐ Update statistics
+☐ Use EXPLAIN PLAN
+☐ Consider materialized views
+☐ Archive old data
+```
+
+---
+
+## Conclusion
+
+Oracle Database is a comprehensive RDBMS with powerful features for enterprise applications. Mastery requires understanding:
+- Database architecture and memory management
+- SQL and PL/SQL programming
+- Performance optimization and indexing
+- Security and user management
+- Backup and recovery procedures
+- Transaction control and locking
+- Normalization and data design
+- Advanced SQL patterns and optimization
+- Real-world scenario handling
+
+Regular practice with real-world scenarios and staying updated with Oracle releases ensures continued proficiency.
