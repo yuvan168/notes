@@ -1,0 +1,5057 @@
+# Power BI: Complete Notes and Theory
+
+## Table of Contents
+1. [Introduction & Setup](#introduction--setup)
+2. [Core Concepts](#core-concepts)
+3. [Data Sources & Connections](#data-sources--connections)
+4. [Data Modeling](#data-modeling)
+5. [DAX Functions](#dax-functions)
+6. [Visualizations](#visualizations)
+7. [Reports & Dashboards](#reports--dashboards)
+8. [Advanced Topics](#advanced-topics)
+9. [Performance Optimization](#performance-optimization)
+10. [Best Practices](#best-practices)
+11. [Common Pitfalls](#common-pitfalls)
+
+---
+
+## Introduction & Setup
+
+### What is Power BI?
+
+**Power BI** is a Microsoft business analytics and data visualization tool that transforms raw data into interactive, insightful visualizations and reports. It bridges the gap between data sources and business decision-makers.
+
+**Key Components:**
+- **Power BI Desktop**: Desktop application for building reports (Windows only)
+- **Power BI Service**: Cloud-based SaaS for sharing and collaborating
+- **Power BI Mobile**: Mobile apps for iOS, Android, Windows
+- **Power BI Report Server**: On-premises deployment option
+
+**Why Use Power BI?**
+- **Self-service BI**: Non-technical users can create reports
+- **Integration**: Connects to 100+ data sources
+- **Real-time**: Refreshable data and live connections
+- **Scalable**: From personal dashboards to enterprise deployments
+- **Cost-effective**: Affordable pricing ($10/user/month for Pro, $20 for Premium)
+- **Security**: Row-level security (RLS), encryption, compliance ready
+
+### Installation & Setup
+
+```
+1. Download Power BI Desktop from Microsoft website
+2. Install (Windows 10 or later required)
+3. Launch and sign in with Microsoft account
+4. Recommended: Install Power BI Report Server (on-premises)
+```
+
+### KEYPOINTS:
+- Power BI Desktop is for development; Service is for sharing
+- Data models should be optimized BEFORE publishing
+- Always schedule refreshes for data freshness
+- Use RLS for multi-tenant security
+
+---
+
+## Core Concepts
+
+### Understanding the Power BI Architecture
+
+**Three-Tier Architecture:**
+
+```
+┌─────────────────────────────────┐
+│   PRESENTATION LAYER            │
+│   (Reports & Dashboards)        │
+│   - Visualizations              │
+│   - Slicers & Filters           │
+│   - Interactive Elements        │
+└──────────────┬──────────────────┘
+               │
+┌──────────────▼──────────────────┐
+│   LOGIC LAYER                   │
+│   (Data Model & DAX)            │
+│   - Relationships               │
+│   - Calculated Columns          │
+│   - Measures                    │
+│   - Security Rules              │
+└──────────────┬──────────────────┘
+               │
+┌──────────────▼──────────────────┐
+│   DATA LAYER                    │
+│   (Data Sources)                │
+│   - Databases (SQL, Oracle)     │
+│   - Cloud (Azure, AWS)          │
+│   - Files (Excel, CSV)          │
+│   - APIs (Web, OData)           │
+└─────────────────────────────────┘
+```
+
+### 1. Datasets - Complete Theory
+
+**What is a Dataset? (Deep Understanding)**
+A dataset is a collection of data imported or connected from various sources. It represents the foundation of your Power BI model and contains all tables, relationships, and calculated elements.
+
+**Why Datasets Matter:**
+- Control data refresh
+- Define security rules
+- Manage performance
+- Share across reports
+- Enable reusability
+
+**Types of Datasets with Deep Explanation:**
+
+#### Import Mode (MOST COMMON)
+```
+Theory:
+- Data physically copied into Power BI's columnar xVelocity engine
+- Data compressed to ~10% of original size
+- Queries run against in-memory copy
+- Completely offline after import
+
+Performance Profile:
+✓ Query speed: Instant (milliseconds)
+✓ Typical dataset: < 1GB
+✓ Refresh time: 5-30 minutes depending on size
+✓ Concurrent users: Limited by capacity
+
+Example Scenario:
+- Daily sales data (10M rows)
+- Import at 2 AM every night
+- Query returns results instantly
+- Users see latest data all day
+- Size on disk: 500MB → 50MB in Power BI
+
+Best For:
+✓ Most business scenarios
+✓ Historical analysis
+✓ Data warehouse feeds
+✓ Sensitive data (isolated copy)
+
+When to Avoid:
+✗ Real-time stock prices
+✗ Datasets > 10GB
+✗ Frequently changing data (< 1 hour)
+```
+
+#### DirectQuery Mode
+```
+Theory:
+- No data storage in Power BI
+- Each query runs against source database
+- Source database handles all computation
+- Real-time accuracy guaranteed
+- Network latency on every query
+
+Performance Profile:
+✓ Data freshness: Real-time (seconds)
+✓ Query speed: Depends on source (seconds to minutes)
+✓ Dataset size: Unlimited
+✓ Storage needed: None (except model metadata)
+
+Example Scenario:
+- Real-time IoT sensor data from Azure SQL
+- User clicks date filter
+- Power BI sends SQL query to database
+- Database executes and returns results
+- User sees latest values
+- Typical latency: 2-5 seconds
+
+Best For:
+✓ Real-time requirements
+✓ Very large datasets (100GB+)
+✓ Data sensitive to currency
+✓ Audit requirements (source of truth)
+
+When to Avoid:
+✗ Slow data sources
+✗ Need for complex DAX
+✗ Multiple visuals (many queries)
+✗ Offline requirements
+```
+
+#### Live Connection
+```
+Theory:
+- Connection to Analysis Services (on-premises or Azure)
+- or Connection to Power BI Premium dataset
+- Shared data model across organization
+- Single source of truth for calculations
+- Real-time or scheduled refresh
+
+Example Scenario:
+- Enterprise Analysis Services cube exists
+- 500 users in company
+- All Power BI reports connect to same model
+- Business logic defined once
+- 300 users building different reports
+- All see consistent numbers
+
+Best For:
+✓ Enterprise deployments
+✓ Shared data models
+✓ Consistency requirements
+✓ Governance at scale
+```
+
+#### Composite Mode (Advanced)
+```
+Theory:
+- Mix Import + DirectQuery in same model
+- Some tables imported for speed
+- Other tables DirectQuery for real-time
+- Balances performance and freshness
+- Requires careful design
+
+Example Architecture:
+┌─ Import: Product Catalog (rarely changes)
+├─ Import: Customer (daily update)
+└─ DirectQuery: Daily Sales (real-time)
+
+Use Case:
+- Product prices change rarely → Import
+- Customer info updated daily → Import
+- Sales happening now → DirectQuery
+- Result: Good performance + real-time sales
+
+Best For:
+✓ Large + real-time requirements
+✓ Performance optimization
+✓ Selective real-time needs
+```
+
+**Dataset Components:**
+```
+Dataset
+├── Tables (from various sources)
+│   ├── Column 1 (Data Type)
+│   ├── Column 2 (Data Type)
+│   └── Column 3 (Data Type)
+├── Relationships
+│   ├── One-to-Many
+│   ├── Many-to-One
+│   └── Many-to-Many
+├── Calculated Columns
+│   └── Added to tables
+├── Measures
+│   └── Aggregations and calculations
+└── Security Roles
+    └── Row-level security rules
+```
+
+**KEYPOINTS:**
+- Start with Import mode (simplest)
+- Use DirectQuery only if necessary (real-time requirement)
+- Test performance before using at scale
+- Monitor dataset size (aim for < 2GB)
+- Understand refresh implications for each mode
+- Premium capacity enables larger imports
+
+### 2. Data Model - Complete Theory
+
+**What is a Data Model? (Deep Understanding)**
+A data model is the blueprint of how data is organized, related, and structured in Power BI. It determines:
+- How fast queries run
+- What calculations are possible
+- How much memory is used
+- How easy it is to maintain
+- Whether results are correct
+
+**Importance of Good Data Modeling:**
+```
+Poor Model:          Good Model:
+- Slow queries       - Fast queries
+- Incorrect results  - Accurate results
+- Hard to maintain   - Easy to maintain
+- Duplicated logic   - Reusable measures
+- Large dataset      - Small dataset
+```
+
+**The Foundation: Normalization vs Denormalization**
+```
+Normalization (Database Design):
+- Each fact stored once
+- Reduces redundancy
+- Eliminates anomalies
+- More complex queries
+
+Example:
+Customer Table: CustomerID, Name, Country
+Order Table: OrderID, CustomerID, Amount
+→ Customer info never repeated
+→ Query joins tables
+→ Larger schema
+
+Denormalization (Analytics Design):
+- Flatten data for speed
+- Repeat some information
+- Simpler queries
+- Larger storage
+
+Example:
+Orders Table: OrderID, CustomerID, CustomerName, Amount
+→ Customer name in every row
+→ Single table query
+→ Larger dataset
+
+Power BI Recommendation:
+Use denormalized data in Power BI (flatten it in Power Query)
+Then apply Star Schema (hybrid approach)
+```
+
+**Star Schema (Most Common Architecture):**
+```
+                    ┌─────────────┐
+                    │ Dimension   │
+                    │ (Date)      │
+                    └─────┬───────┘
+                          │
+┌────────────┐     ┌──────▼──────┐     ┌─────────────┐
+│ Dimension  │     │   FACT      │     │ Dimension   │
+│(Product)   ├─────┤  TABLE      ├─────┤(Customer)   │
+│            │     │ (Sales)     │     │             │
+└────────────┘     └──────▲──────┘     └─────────────┘
+                          │
+                    ┌─────┴───────┐
+                    │ Dimension   │
+                    │ (Location)  │
+                    └─────────────┘
+```
+
+**Why Star Schema Works:**
+```
+1. Easy to Understand
+   - One central fact table
+   - Dimensions around it
+   - Clear relationships
+   - Business users grasp it instantly
+
+2. Performance
+   - Few joins needed
+   - Optimal for aggregations
+   - Works well with in-memory
+   - Queries execute fast
+
+3. Maintenance
+   - Dim tables change rarely
+   - Fact table grows predictably
+   - New analysis = new fact table
+   - Old dimensions stay stable
+
+4. Analysis
+   - Flexible drill-down
+   - Natural hierarchies
+   - Intuitive filtering
+```
+
+**Components Explained:**
+
+**Fact Tables (The Center):**
+```
+Characteristics:
+- Contains measures (numbers to analyze)
+- One row per transaction/event
+- Large (millions of rows typical)
+- Foreign keys to dimensions
+- Additive data (can be summed)
+
+Example: Sales Fact Table
+SalesID | DateID | ProductID | CustomerID | LocationID | Amount | Quantity | Cost
+1       | 20240101 | 100      | 500        | 5          | 1000   | 10       | 600
+2       | 20240101 | 101      | 501        | 6          | 500    | 5        | 300
+
+Can aggregate:
+- Total Amount = 1500 ✓
+- Count of rows = 2 ✓
+
+Cannot meaningfully aggregate:
+- Average of DateID = meaningless
+- Sum of CustomerID = meaningless
+```
+
+**Dimension Tables (The Context):**
+```
+Characteristics:
+- Contains attributes (text and categories)
+- One row per unique value
+- Small (thousands of rows typical)
+- Primary key to fact table
+- Descriptive information
+
+Example: Date Dimension
+DateID | Date       | Month | Quarter | Year | MonthName | DayName
+20240101 | 1/1/2024   | 1     | Q1      | 2024 | January   | Monday
+20240102 | 1/2/2024   | 1     | Q1      | 2024 | January   | Tuesday
+
+Example: Product Dimension
+ProductID | ProductName | Category    | Subcategory | Brand   | Price
+100       | Laptop A    | Electronics | Computers   | BrandX  | 1000
+101       | Mouse B     | Electronics | Accessories | BrandY  | 25
+```
+
+**Key concepts:**
+- **Fact Table**: Contains measures (sales, revenue, quantity) - tells WHAT happened
+- **Dimension Table**: Contains descriptive attributes (date, product, customer) - tells WHO, WHAT, WHERE, WHEN
+- **Relationships**: Foreign key connections between tables - links dimensions to facts
+
+**KEYPOINTS:**
+- Fact tables are large, dimensions are small
+- Every fact table needs a date dimension
+- Use surrogate keys (integer IDs) for performance
+- Dimension tables update less frequently than facts
+
+### 3. Measures vs Calculated Columns - Complete Theory
+
+**Understanding Context (Critical Concept)**
+
+Power BI's strength is CONTEXT. DAX evaluates differently based on context.
+
+Two types of context in DAX:
+```
+1. ROW CONTEXT
+   - Executes for each row independently
+   - "What happens to this specific row?"
+   - Used by: Calculated Columns
+   - Speed: Row-level evaluation
+   - Memory: Stored permanently
+
+2. FILTER CONTEXT
+   - Executes based on active filters
+   - "What values are visible right now?"
+   - Used by: Measures
+   - Speed: Evaluated on-demand
+   - Memory: Not stored
+```
+
+**Calculated Columns - Deep Dive**
+
+```
+Why Called "Calculated"?
+- Formula evaluated for EACH ROW
+- Result stored in model
+- Always available in every visual
+- Calculated once when data loads
+
+Example Walkthrough:
+Sales Table:
+ProductID | Price | Quantity
+100       | 50    | 2
+101       | 75    | 3
+102       | 25    | 1
+
+Formula: Revenue = [Price] * [Quantity]
+
+Execution (Line by Line):
+Row 1: 50 * 2 = 100 (stored)
+Row 2: 75 * 3 = 225 (stored)
+Row 3: 25 * 1 = 25 (stored)
+
+Result:
+ProductID | Price | Quantity | Revenue
+100       | 50    | 2        | 100 ← stored
+101       | 75    | 3        | 225 ← stored
+102       | 25    | 1        | 25  ← stored
+
+When Used in Visual:
+- No calculation needed
+- Value fetched from storage
+- Instant availability
+- But increases model size
+
+Best For:
+✓ Row-level logic
+✓ Used in many visuals
+✓ Complex expressions
+✓ Security (RLS depends on it)
+
+Avoid For:
+✗ Simple aggregations (use measures)
+✗ Time intelligence
+✗ Dynamic filtering
+✗ Memory-sensitive scenarios
+```
+
+**Measures - The Calculation Engine**
+
+```
+Why Called "Measures"?
+- Measure something (quantity to analyze)
+- Aggregates across rows
+- Respects filter context
+- Changes with filters
+
+Example Walkthrough:
+Sales Table (with Calculated Column Revenue):
+ProductID | Price | Quantity | Revenue
+100       | 50    | 2        | 100
+101       | 75    | 3        | 225
+102       | 25    | 1        | 25
+
+Formula: Total Revenue = SUM([Revenue])
+
+Without Filters:
+Calculation: 100 + 225 + 25 = 350
+Result: 350
+
+With Filter (ProductID = 100):
+Filter Context: Only show rows where ProductID = 100
+Calculation: 100 (only that row's revenue)
+Result: 100
+
+With Filter (ProductID > 100):
+Filter Context: ProductID 101, 102
+Calculation: 225 + 25 = 250
+Result: 250
+
+Key Point:
+- Same formula
+- Different results based on filters
+- This is filter context in action!
+
+Best For:
+✓ Aggregations (sum, average, count)
+✓ Dynamic calculations
+✓ Time intelligence
+✓ Responsive to filters
+✓ Keeps model small
+
+Avoid For:
+✗ Row-specific logic
+✗ Data type conversions
+✗ Complex filtering at row level
+```
+
+**Head-to-Head Comparison:**
+
+```
+                    | Calculated Column | Measure
+────────────────────┼──────────────────┼──────────
+Context             | Row Context       | Filter Context
+Timing              | Load time         | Query time
+Storage             | Stored (large)    | Not stored (small)
+Performance         | Instant (if made) | Slower (if complex)
+Responds to filters | No (stored value) | Yes (recalculated)
+Memory impact       | Increases model   | No impact
+Use in security     | Yes (RLS)         | No
+Complexity          | Simple formulas   | Complex DAX
+Examples            | Revenue, Margin   | Total, Average
+────────────────────────────────────────────────────
+```
+
+**Decision Tree:**
+```
+Do I need row-level value?
+├─ YES (e.g., revenue per transaction)
+│   └─ Calculated Column ✓
+└─ NO
+    └─ Do I need aggregation?
+        ├─ YES (sum, average, count)
+        │   └─ Measure ✓
+        └─ NO → Neither (reference existing column)
+
+        Is it used in many visuals?
+        ├─ YES → Calculated Column
+        └─ NO → Measure (more flexible)
+        
+        Does it need to respond to filters?
+        ├─ YES → Measure ✓
+        └─ NO → Calculated Column (faster)
+```
+
+**Real-World Example:**
+
+```
+Scenario: E-commerce Dashboard
+
+Data Model:
+Orders Table:
+- OrderID, OrderDate, ProductID, CustomerID, Quantity, UnitPrice
+
+Choose Calculated Column For:
+1. Revenue = [Quantity] * [UnitPrice]
+   → Row-specific calculation
+   → Used in many visuals
+   → Reduces DAX complexity
+   → Stored permanently
+   
+2. OrderMonth = MONTH([OrderDate])
+   → Row-specific value
+   → Needed for grouping
+   → Speeds up visual creation
+   
+3. IsLargeOrder = IF([Quantity] > 100, "Yes", "No")
+   → Row-level categorization
+   → Used in security/filtering
+
+Choose Measures For:
+1. Total Revenue = SUM([Revenue])
+   → Depends on filters
+   → Changes with date filter
+   → Not stored
+   
+2. Avg Order Value = AVERAGE([Revenue])
+   → Aggregation
+   → Responsive to all filters
+   → Dynamic calculation
+   
+3. Revenue vs Last Year = [Revenue] - [Revenue Last Year]
+   → Time intelligence
+   → Complex context changes
+   → Filter-dependent
+
+Result:
+- Model size: 500MB (includes all calculated columns)
+- Query speed: Fast (measures optimized)
+- Flexibility: High (measures respond to filters)
+```
+
+**KEYPOINTS:**
+- Row Context = Calculated Columns
+- Filter Context = Measures
+- If unsure, use Measures (more flexible)
+- Minimize calculated columns (model size impact)
+- Test performance before storing large columns
+- Security (RLS) requires calculated columns
+
+---
+
+## Data Sources & Connections
+
+### Connecting to Data Sources
+
+**Popular Data Sources:**
+
+```
+DATABASES:
+├── SQL Server
+├── Oracle
+├── MySQL
+├── PostgreSQL
+└── Access
+
+CLOUD SERVICES:
+├── Azure SQL Database
+├── Azure Data Lake
+├── Amazon S3
+├── Google Analytics
+├── Salesforce
+└── Dynamics 365
+
+FILES:
+├── Excel
+├── CSV
+├── JSON
+├── XML
+└── PDF
+
+OTHER:
+├── Web APIs
+├── SharePoint
+├── OData Feeds
+└── R Scripts
+```
+
+### Connection Methods
+
+**1. Import Data (Most Common)**
+```
+Power BI → Load Data → Transform → Load to Model
+Benefits: Fast queries, offline capability
+Drawback: Refresh needed for updates
+```
+
+**2. DirectQuery**
+```
+Power BI → Query Source → Results shown
+Benefits: Real-time data, no copying
+Drawback: Slower queries, depends on source
+```
+
+**Example Code:**
+
+```
+// In Power Query (M language)
+let
+    Source = Sql.Database("server-name", "database-name"),
+    dbo_Table = Source{[Schema="dbo",Item="TableName"]}[Data],
+    #"Changed Type" = Table.TransformColumnTypes(dbo_Table,{
+        {"ID", Int64.Type}, 
+        {"Name", Text.Type}, 
+        {"Amount", Currency.Type}
+    })
+in
+    #"Changed Type"
+```
+
+### Power Query (Data Transformation)
+
+**Power Query** is the ETL (Extract, Transform, Load) engine:
+
+**Key Transformations:**
+```
+1. Filter Rows
+   - Remove nulls
+   - Keep specific values
+   
+2. Remove Duplicates
+   - Based on columns
+   
+3. Pivot/Unpivot
+   - Convert rows to columns (pivot)
+   - Convert columns to rows (unpivot)
+   
+4. Merge Queries
+   - Combine multiple sources
+   
+5. Append Queries
+   - Stack data vertically
+   
+6. Group By
+   - Aggregate data
+   
+7. Custom Columns
+   - Add calculated columns in M language
+```
+
+**Example - Clean Sales Data:**
+```
+Power Query Steps:
+1. Remove rows where Amount is null
+2. Remove duplicate transactions (by ID)
+3. Add date column extracted from timestamp
+4. Convert Amount to Currency type
+5. Remove unnecessary columns
+6. Load to Power BI model
+```
+
+**KEYPOINTS:**
+- Clean data in Power Query, not in measures
+- Reuse queries for consistency
+- Fold operations when possible (DirectQuery)
+- Document custom logic
+
+---
+
+## Data Modeling
+
+### Creating Relationships
+
+**Types of Relationships:**
+
+```
+1. ONE-TO-MANY (Most Common)
+   Customer ──1◄───Many── Order
+   One customer has many orders
+   Examples: Customer→Invoice, Product→Sales
+   
+2. MANY-TO-MANY
+   Product ───Many◄───Many── Supplier
+   One product from many suppliers
+   Requires bridge table
+   
+3. ONE-TO-ONE
+   Person ──1◄───1── Passport
+   One person has one passport
+   Rare in business data
+```
+
+**Creating Relationships:**
+
+```
+In Power BI Desktop:
+1. Go to Model View
+2. Drag from foreign key to primary key
+3. Set cardinality and cross-filter direction
+4. Mark as active or inactive
+```
+
+**Example - Sales Model:**
+```
+Customer Table          Order Table           Product Table
+├── CustomerID (PK)     ├── OrderID (PK)     ├── ProductID (PK)
+├── Name                ├── CustomerID (FK)   ├── ProductName
+├── Country             ├── ProductID (FK)    ├── Category
+└── Segment             ├── OrderDate         ├── Price
+                        ├── Quantity          └── Cost
+                        └── Amount
+
+Relationships:
+Customer ──1◄───Many── Order ──Many►───1── Product
+                            (Foreign keys)
+```
+
+### Calculated Columns vs Measures
+
+**Calculated Column - Row Context:**
+```
+// Add a column to Orders table
+Profit = Orders[Amount] - (Orders[Quantity] * Products[Cost])
+
+Evaluates for EACH ROW separately
+Creates new column in model
+Increases model size
+```
+
+**Measure - Filter Context:**
+```
+// Aggregation across filtered rows
+Total Sales = SUM(Orders[Amount])
+Average Order Value = AVERAGE(Orders[Amount])
+YTD Revenue = CALCULATE(SUM(Orders[Amount]), 
+                        YEAR(Orders[OrderDate]) = YEAR(TODAY()))
+
+Evaluates based on filters applied
+Not stored (calculated dynamically)
+Reduces model size
+```
+
+**Decision Guide:**
+```
+Use Calculated Column if:
+  ✓ Need the value per row
+  ✓ Used in row-level security
+  ✓ Referenced in multiple measures
+
+Use Measure if:
+  ✓ Need aggregation
+  ✓ Need time intelligence
+  ✓ Value changes with filters
+```
+
+### Hierarchies
+
+**What is a Hierarchy?**
+A hierarchy is a nested grouping of fields, like drill-down paths:
+
+```
+Geography Hierarchy:
+Country → Region → City → Store
+
+Date Hierarchy:
+Year → Quarter → Month → Day
+
+Product Hierarchy:
+Category → Subcategory → Product
+```
+
+**Creating Hierarchies:**
+
+```
+In Model View:
+1. Right-click column
+2. Create hierarchy
+3. Drag other columns into hierarchy
+4. Order from largest to smallest scope
+```
+
+**Using in Visuals:**
+```
+Drag "Geography" into a Map visual
+User can drill: Country → Region → City
+```
+
+---
+
+## DAX Functions - Complete Theory and Examples
+
+### Understanding DAX (Data Analysis Expressions)
+
+**What is DAX?**
+DAX is the calculation language for Power BI, similar to Excel formulas but with crucial differences. It's designed specifically for business analytics and works with tabular data models.
+
+**DAX vs Excel - Key Differences:**
+
+```
+EXCEL:                          DAX:
+SUM(A1:A10)                     SUM(TableName[ColumnName])
+References cells                References tables and columns
+Row-by-row evaluation           Batch evaluation (entire column)
+Hard to reuse                   Highly reusable measures
+Limited to one sheet            Works across entire model
+@column reference               @ or implicit/explicit context
+```
+
+**Why DAX is Powerful:**
+```
+1. Context Awareness
+   - Understands filter context
+   - Knows relationships
+   - Respects table structure
+   
+2. Efficiency
+   - Optimized for analytics
+   - Batch processes columns
+   - Leverages relationships
+   
+3. Flexibility
+   - Time intelligence built-in
+   - Advanced filtering
+   - Statistical functions
+```
+
+**Key Concepts Before Writing DAX:**
+
+```
+1. Tables and Columns
+   - Always reference as Table[Column]
+   - Tables are collections of rows
+   - Columns are vectors of data
+   
+2. Context
+   - Filter Context: What's being filtered
+   - Row Context: Which row am I evaluating
+   
+3. Relationships
+   - DAX follows relationships automatically
+   - Can cross between tables
+   - Validates referential integrity
+```
+
+### Common DAX Functions
+
+### 1. Aggregation Functions - Complete Theory
+
+**What are Aggregation Functions?**
+Functions that combine multiple values into a single result. They're the backbone of analytics.
+
+**Understanding Aggregation:**
+
+```
+Raw Data (Sales Table):
+ProductID | Amount
+100       | 1000
+101       | 500
+100       | 750
+
+Aggregations Possible:
+- SUM([Amount]) → 2250 (sum all)
+- AVERAGE([Amount]) → 750 (average)
+- COUNT() → 3 (count rows)
+- MAX([Amount]) → 1000 (highest)
+- MIN([Amount]) → 500 (lowest)
+```
+
+**SUM() - Summing All Values**
+```
+Theory:
+- Adds all numeric values
+- Ignores blanks and text
+- Returns 0 if no values
+- Most common aggregation
+
+Formula:
+Total Revenue = SUM(Sales[Amount])
+
+Example Execution:
+Raw values: [1000, 500, 750]
+Process: 1000 + 500 + 750 = 2250
+Result: 2250
+
+With Filter (ProductID = 100):
+Raw values: [1000, 750]
+Process: 1000 + 750 = 1750
+Result: 1750 (respects filter context)
+
+Use Cases:
+✓ Total sales, revenue, quantity
+✓ Total cost, expenses
+✓ Running totals
+```
+
+**SUMX() - Sum with Row Context**
+```
+Theory:
+- Like SUM() but can use row context
+- Evaluates expression for each row
+- Combines all row results
+- More complex, less common
+
+Formula:
+Total Revenue = SUMX(Sales, Sales[Quantity] * Sales[Price])
+
+Example Execution:
+Sales Table:
+Quantity | Price
+2        | 50    → 2 * 50 = 100
+3        | 75    → 3 * 75 = 225
+1        | 25    → 1 * 25 = 25
+
+Process: 100 + 225 + 25 = 350
+Result: 350
+
+Key Difference from SUM:
+- SUM: Adds existing column values
+- SUMX: Calculates expression per row, then sums
+
+When SUMX is Necessary:
+✓ Calculate revenue from quantity × price
+✓ When formula needs row-by-row evaluation
+✓ Complex expressions combining columns
+
+When SUM is Better:
+✗ Just adding existing column
+✗ If calculated column already exists (use SUM instead)
+```
+
+**AVERAGE() - Find the Mean**
+```
+Theory:
+- Sums all values, divides by count
+- Ignores blank/text values
+- Used for: Avg order value, avg age, etc.
+
+Formula:
+Average Order Value = AVERAGE(Orders[Amount])
+
+Example:
+Values: [1000, 500, 750]
+Calculation: (1000 + 500 + 750) / 3 = 750
+Result: 750
+
+Filter Impact:
+With Filter (ProductID = 100):
+Values: [1000, 750]
+Calculation: (1000 + 750) / 2 = 875
+Result: 875
+
+Use Cases:
+✓ Average order value
+✓ Average customer age
+✓ Average product rating
+✓ Performance benchmarks
+```
+
+**COUNT() and COUNTA()**
+```
+Theory - COUNT():
+- Counts cells with numeric values
+- Ignores text and blanks
+- Used for: Counting transactions, events
+
+Formula:
+Transaction Count = COUNT(Orders[Amount])
+
+Example:
+Values: [1000, , 750, "text", 500]  (blank and text present)
+Count: 3 (only numeric: 1000, 750, 500)
+Result: 3
+
+Theory - COUNTA():
+- Counts all non-blank cells
+- Includes text and numbers
+- Used for: Counting entries, names
+
+Formula:
+Customer Count = COUNTA(Customers[Name])
+
+Example:
+Values: ["Alice", "Bob", , "Charlie"]  (one blank)
+Count: 3 (non-blank values)
+Result: 3
+
+Practical Examples:
+Count of Orders = COUNT(Orders[OrderID])
+Count of Customers = COUNTA(Customers[CustomerID])
+```
+
+**MIN() and MAX()**
+```
+Theory:
+- MIN: Lowest value
+- MAX: Highest value
+- Used for: Range, boundaries, limits
+
+Formulas:
+Lowest Price = MIN(Products[Price])
+Highest Sales = MAX(Sales[Amount])
+
+Example:
+Prices: [50, 75, 25, 100]
+MIN result: 25
+MAX result: 100
+
+Use Cases:
+✓ Finding outliers
+✓ Performance tracking
+✓ Setting thresholds
+✓ Data quality checks
+
+Advanced: Use with FILTER
+Highest Q1 Sales = MAXX(
+    FILTER(Sales, QUARTER(Sales[Date]) = 1),
+    Sales[Amount]
+)
+```
+
+**COUNTBLANK() - Count Empty Cells**
+```
+Theory:
+- Counts blank/empty cells
+- Opposite of COUNTA
+- Used for: Data quality, completeness
+
+Formula:
+Missing Values = COUNTBLANK(Orders[CustomerID])
+
+Example Data:
+Orders[CustomerID]: [100, , 101, , 102]
+COUNTBLANK result: 2 (two blanks)
+
+Use Case:
+- Data quality dashboard
+- Track incomplete records
+- Monitor data entry
+```
+
+**Comparison Table:**
+```
+Function    | Counts              | Ignores
+─────────────────────────────────────────────
+COUNT       | Numeric values      | Blanks, text
+COUNTA      | All non-blank       | Blanks only
+COUNTBLANK  | Blanks only         | Data
+COUNTROWS   | Table rows          | (all rows)
+```
+
+**KEYPOINTS:**
+- SUM: Most used aggregation
+- AVERAGE: For means
+- COUNT/COUNTA: For frequencies
+- Use SUMX/AVERAGEX when need row-level calculation
+- Aggregations respect filter context
+
+
+### 2. Text Functions - Complete Theory
+
+**Why Text Functions Matter:**
+Text data is messy. Text functions clean it, transform it, and extract meaningful information.
+
+**Text Function Categories:**
+
+```
+Type 1: Combining Text
+- CONCATENATE, &
+
+Type 2: Extracting Parts
+- LEFT, RIGHT, MID
+
+Type 3: Case Changing
+- UPPER, LOWER
+
+Type 4: Measuring Text
+- LEN
+
+Type 5: Cleaning Text
+- TRIM
+
+Type 6: Finding Text
+- FIND, SEARCH
+
+Type 7: Replacing Text
+- SUBSTITUTE
+```
+
+**CONCATENATE() - Combining Strings**
+
+```
+Theory:
+- Joins multiple text strings
+- Creates new text value
+- Used for: Combining names, creating codes
+
+Formula:
+Full Name = CONCATENATE(Customers[FirstName], " ", Customers[LastName])
+-- Or using & operator:
+Full Name = Customers[FirstName] & " " & Customers[LastName]
+
+Example Execution:
+FirstName: "John"
+LastName: "Smith"
+Formula: "John" & " " & "Smith"
+Result: "John Smith"
+
+More Complex Example:
+Order Code = Customers[CustomerID] & "-" & YEAR(Orders[OrderDate]) & "-" & Orders[OrderID]
+
+Input:
+CustomerID: 100
+OrderDate: 1/15/2024
+OrderID: 5001
+
+Calculation:
+"100" & "-" & "2024" & "-" & "5001"
+Result: "100-2024-5001"
+
+Use Cases:
+✓ Creating composite keys
+✓ Combining first/last names
+✓ Building order codes
+✓ Creating display text
+```
+
+**LEFT() and RIGHT() - Extract End Characters**
+
+```
+Theory - LEFT():
+- Extracts first N characters
+- Counts from left
+- Used for: Area codes, prefixes
+
+Formula:
+Area Code = LEFT(Phone[Number], 3)
+
+Example:
+Input: "555-123-4567"
+LEFT(input, 3) = "555"
+Result: Area code extracted
+
+Theory - RIGHT():
+- Extracts last N characters
+- Counts from right
+- Used for: Last digits, suffixes
+
+Formula:
+Last 4 = RIGHT(Phone[Number], 4)
+
+Example:
+Input: "555-123-4567"
+RIGHT(input, 4) = "4567"
+Result: Last 4 digits extracted
+
+Practical Examples:
+Zip Code = RIGHT(Address[FullAddress], 5)
+Product Code = LEFT(Products[SKU], 2)
+```
+
+**MID() - Extract Middle Characters**
+
+```
+Theory:
+- Extracts substring from middle
+- Needs position and length
+- Used for: Parsing formatted data
+
+Formula:
+MID(text, start_position, length)
+
+Example:
+Input: "20240115"
+Position: 5 (start at 5th character)
+Length: 2
+MID(input, 5, 2) = "01"
+Result: "01" (month extracted)
+
+Real Example - Parse Formatted Date:
+Date Format: "2024-01-15"
+Year = LEFT(Date, 4) = "2024"
+Month = MID(Date, 6, 2) = "01"
+Day = RIGHT(Date, 2) = "15"
+
+Use Cases:
+✓ Parsing standardized codes
+✓ Extracting substrings
+✓ Reformatting data
+```
+
+**UPPER() and LOWER() - Case Conversion**
+
+```
+Theory:
+- UPPER: Convert to all uppercase
+- LOWER: Convert to all lowercase
+- Used for: Standardization, comparison
+
+Formulas:
+Product Upper = UPPER(Products[Name])
+Category Lower = LOWER(Products[Category])
+
+Example:
+Input: "Microsoft Power BI"
+UPPER(input) = "MICROSOFT POWER BI"
+LOWER(input) = "microsoft power bi"
+
+Why This Matters:
+Raw data: "Power BI", "power bi", "POWER BI"
+Without normalization: 3 different values
+After LOWER: "power bi" (consistent)
+Result: Can group correctly
+
+Real Example - Product Comparison:
+ProductsA[Name]: "LAPTOP"
+ProductsB[Name]: "laptop"
+Direct comparison: FALSE (different case)
+
+After normalization:
+LOWER(ProductsA) = "laptop"
+LOWER(ProductsB) = "laptop"
+After LOWER: TRUE (matches!)
+
+Use Cases:
+✓ Standardizing names
+✓ Preparing for comparison
+✓ Cleaning user input
+```
+
+**LEN() - Text Length**
+
+```
+Theory:
+- Counts characters in string
+- Includes spaces
+- Used for: Validation, truncation
+
+Formula:
+Name Length = LEN(Customers[FirstName])
+
+Example:
+"John" → LEN = 4
+"Alexandra" → LEN = 9
+"Jo" → LEN = 2
+
+Validation Example:
+Too Long Check = IF(LEN(Products[Name]) > 50, "Truncate", "OK")
+
+If LEN > 50 chars: Flag for review
+Result: Data quality check
+
+Use Cases:
+✓ Validating data
+✓ Checking formats
+✓ Planning display width
+```
+
+**TRIM() - Remove Extra Spaces**
+
+```
+Theory:
+- Removes leading/trailing spaces
+- Removes extra spaces between words
+- Doesn't handle tabs/special chars
+
+Formula:
+Clean Name = TRIM(Customers[Name])
+
+Example:
+Input: "  John  Smith  "
+After TRIM: "John Smith"
+Removed: Leading, trailing, and extra spaces
+
+Data Quality Example:
+Raw: ["John", " John ", "John  "]
+TRIM: ["John", "John", "John"]
+Result: Now all match
+
+Use Cases:
+✓ Cleaning imported data
+✓ Preparing for comparison
+✓ Data quality
+```
+
+**FIND() and SEARCH() - Locate Text**
+
+```
+Theory - FIND():
+- Finds position of text
+- Case-sensitive
+- Returns position number (1-based)
+
+Formula:
+Position = FIND("@", Email[Address])
+
+Example:
+Input: "john@company.com"
+FIND("@", input) = 5
+Result: @ is at position 5
+
+Theory - SEARCH():
+- Same as FIND but case-insensitive
+- More forgiving
+- Returns position number
+
+Use Case Difference:
+Email: "JOHN@COMPANY.COM"
+FIND("@") = 5 (works)
+FIND("@") = ERROR if uppercase/lowercase don't match
+
+SEARCH("@") = 5 (works regardless of case)
+
+Practical Example - Extract Email Domain:
+Email: "john@company.com"
+Position = FIND("@", Email)
+Domain = MID(Email, Position + 1, LEN(Email))
+Result: "company.com"
+
+Use Cases:
+✓ Validating email format
+✓ Parsing domains
+✓ Extracting substrings
+```
+
+**KEYPOINTS:**
+- & operator faster than CONCATENATE
+- Always use LOWER/UPPER for comparisons
+- TRIM is essential for data quality
+- LEFT/RIGHT for fixed-position extraction
+- MID when position varies
+
+
+### 3. Date Functions - Complete Theory
+
+**Why Date Functions Matter:**
+Dates are fundamental to business analysis. Date functions enable:
+- Trend analysis over time
+- Year-over-year comparison
+- Seasonal analysis
+- Time-based filtering
+
+**Date Understanding:**
+```
+Computers store dates as numbers
+Behind the scenes:
+January 1, 1900 = 1
+January 2, 1900 = 2
+January 1, 2024 = 45,000+ (approximately)
+
+DAX converts display: 1/1/2024
+Internally: 45000+
+
+Why This Matters:
+- Can do math with dates
+- Can format for display
+- Can extract parts
+```
+
+**TODAY() - Current Date**
+
+```
+Theory:
+- Returns current date
+- Time component: 00:00:00
+- Recalculates when report refreshes
+- Dynamic (changes daily)
+
+Formula:
+Current Date = TODAY()
+
+Example:
+If today is 1/15/2024:
+TODAY() = 1/15/2024
+
+Days Ago Calculation:
+Days Since Order = TODAY() - Orders[OrderDate]
+
+Example:
+Order Date: 1/10/2024
+TODAY(): 1/15/2024
+Difference: 5 (days)
+
+Use Cases:
+✓ Age calculation
+✓ Days overdue
+✓ Freshness indicator
+✓ Current period filtering
+```
+
+**NOW() - Current DateTime**
+
+```
+Theory:
+- Returns current date AND time
+- Includes time component
+- Recalculates on refresh
+- More precise than TODAY()
+
+Formula:
+Current DateTime = NOW()
+
+Example:
+Result: 1/15/2024 14:30:45
+
+When to Use:
+✓ Timestamp needed (with time)
+✓ Logging activity
+✗ Daily analysis (use TODAY instead)
+
+Difference from TODAY():
+TODAY() = 1/15/2024
+NOW() = 1/15/2024 14:30:45
+```
+
+**DATE() - Create Specific Date**
+
+```
+Theory:
+- Creates date from year, month, day
+- Useful for hardcoding dates
+- Used in comparisons
+
+Formula:
+DATE(year, month, day)
+
+Example:
+Fiscal Year End = DATE(2024, 12, 31)
+Q1 Start = DATE(2024, 1, 1)
+
+Practical Use:
+IF(Orders[OrderDate] >= DATE(2024, 1, 1), "2024", "Earlier")
+
+Calculation:
+If OrderDate >= Jan 1, 2024: "2024"
+If OrderDate < Jan 1, 2024: "Earlier"
+
+Use Cases:
+✓ Fixed date comparisons
+✓ Fiscal calendars
+✓ Hard-coded thresholds
+```
+
+**YEAR(), MONTH(), DAY() - Extract Parts**
+
+```
+Theory:
+- Extract specific parts of date
+- Return numeric values
+- Used for grouping and filtering
+
+Formulas:
+Year = YEAR(Orders[OrderDate])
+Month = MONTH(Orders[OrderDate])
+Day = DAY(Orders[OrderDate])
+
+Example Extraction:
+Date: 3/15/2024
+YEAR(date) = 2024
+MONTH(date) = 3
+DAY(date) = 15
+
+Real Example - Age Calculation:
+Birth Date: 3/15/2000
+Current Date: 3/15/2024
+Age = YEAR(TODAY()) - YEAR([BirthDate]) = 24
+
+More Complex Age (accounting for month):
+Age = DATEDIFF([BirthDate], TODAY(), YEAR)
+Result: 24 (more accurate)
+
+Use Cases:
+✓ Creating date hierarchies
+✓ Grouping by year/month
+✓ Age calculations
+✓ Fiscal year analysis
+```
+
+**QUARTER() - Extract Quarter**
+
+```
+Theory:
+- Returns quarter number (1, 2, 3, 4)
+- Useful for quarterly analysis
+- Q1: Jan-Mar, Q2: Apr-Jun, Q3: Jul-Sep, Q4: Oct-Dec
+
+Formula:
+Quarter = QUARTER(Orders[OrderDate])
+
+Examples:
+January 15 → Q1
+April 20 → Q2
+July 10 → Q3
+December 5 → Q4
+
+Use in Measure:
+Q1 Sales = CALCULATE(
+    SUM(Sales[Amount]),
+    QUARTER(Sales[OrderDate]) = 1
+)
+
+Creates hierarchies:
+Year → Quarter → Month → Day
+Perfect for drill-down
+
+Use Cases:
+✓ Quarterly reporting
+✓ Budget comparison
+✓ Business cycles
+✓ Financial analysis
+```
+
+**WEEKDAY() - Day of Week**
+
+```
+Theory:
+- Returns day of week (1-7)
+- Default: 1=Sunday, 2=Monday... 7=Saturday
+- Can customize numbering
+
+Formula:
+DayOfWeek = WEEKDAY(Orders[OrderDate])
+
+Example:
+Monday = 2
+Friday = 6
+Sunday = 1
+
+Practical Use:
+Is Weekday = IF(WEEKDAY(Orders[OrderDate]) IN {2,3,4,5,6}, "Weekday", "Weekend")
+
+Use Cases:
+✓ Weekend vs weekday analysis
+✓ Staffing analysis
+✓ Customer behavior patterns
+✓ Performance by day of week
+```
+
+**EOMONTH() - End of Month**
+
+```
+Theory:
+- Returns last day of month
+- Add months parameter for future months
+- Useful for fiscal dates
+
+Formula:
+EOMONTH(start_date, months_to_add)
+
+Examples:
+Last Day of This Month = EOMONTH(TODAY(), 0)
+Result: 1/31/2024
+
+Last Day of Next Month = EOMONTH(TODAY(), 1)
+Result: 2/29/2024
+
+Last Day of Previous Month = EOMONTH(TODAY(), -1)
+Result: 12/31/2023
+
+Practical - Month-End Sales:
+Month End Sales = CALCULATE(
+    SUM(Sales[Amount]),
+    Sales[OrderDate] = EOMONTH(TODAY(), 0)
+)
+
+Use Cases:
+✓ Fiscal month calculations
+✓ Month-end reports
+✓ Financial statements
+✓ Snapshot data (inventory)
+```
+
+**DATEDIFF() - Time Differences**
+
+```
+Theory:
+- Calculates difference between dates
+- Multiple unit options (day, month, year, etc.)
+- Returns numeric result
+
+Formula:
+DATEDIFF(date1, date2, unit)
+
+Example:
+Days Between = DATEDIFF(Orders[OrderDate], TODAY(), DAY)
+
+If OrderDate = 1/10/2024 and TODAY = 1/15/2024:
+DATEDIFF = 5 (days)
+
+Different Units:
+Days = DATEDIFF(start, end, DAY)
+Months = DATEDIFF(start, end, MONTH)
+Years = DATEDIFF(start, end, YEAR)
+
+Practical - Customer Age:
+Customer Age (Years) = DATEDIFF(Customers[BirthDate], TODAY(), YEAR)
+
+Order Aging:
+Days Since Order = DATEDIFF(Orders[OrderDate], TODAY(), DAY)
+Days Since Order = IF(
+    [Days Since Order] > 30, 
+    "Overdue", 
+    "Current"
+)
+
+Use Cases:
+✓ Age calculations
+✓ Payment terms
+✓ SLA tracking
+✓ Tenure analysis
+```
+
+**KEYPOINTS:**
+- TODAY() for current date only
+- NOW() includes time component
+- Extract year/month/day for grouping
+- EOMONTH for fiscal calculations
+- DATEDIFF for differences
+- All dates have time component (usually 00:00:00)
+
+### 4. Logical Functions - Complete Theory
+
+**Why Logical Functions Matter:**
+
+Logical functions let you make decisions based on conditions. They transform raw data into business logic.
+
+**IF() - The Decision Function**
+
+```
+Theory:
+- Tests condition (TRUE or FALSE)
+- Returns one value if TRUE
+- Returns different value if FALSE
+- Building block of business logic
+
+Syntax:
+IF(condition, value_if_true, value_if_false)
+
+Example:
+Status = IF([Sales] > 1000, "High", "Low")
+
+Execution with Values:
+Sales = 1500
+Condition: 1500 > 1000 = TRUE
+Value if true: "High"
+Result: "High"
+
+Sales = 500
+Condition: 500 > 1000 = FALSE
+Value if false: "Low"
+Result: "Low"
+
+More Complex Example:
+Revenue Grade = IF(
+    [Revenue] > 100000,
+    "Premium",
+    IF([Revenue] > 50000, "Standard", "Basic")
+)
+
+Nested IF Logic:
+Revenue = 75000
+Step 1: 75000 > 100000? FALSE → Check inner IF
+Step 2: 75000 > 50000? TRUE → Return "Standard"
+Result: "Standard"
+
+Use Cases:
+✓ Categorizing values
+✓ Flagging exceptions
+✓ Business rules
+✓ Data quality checks
+```
+
+**AND() - All Conditions Must Be True**
+
+```
+Theory:
+- All conditions TRUE → return TRUE
+- Any condition FALSE → return FALSE
+- Used for: Multiple requirements
+
+Syntax:
+AND(condition1, condition2, ...)
+
+Example:
+Eligible = AND(
+    [Age] >= 18,
+    [Income] > 30000,
+    [CreditScore] > 650
+)
+
+Evaluation (Person A):
+Age = 25 (≥ 18) ✓
+Income = 45000 (> 30000) ✓
+CreditScore = 700 (> 650) ✓
+Result: TRUE (all pass)
+
+Evaluation (Person B):
+Age = 25 (≥ 18) ✓
+Income = 45000 (> 30000) ✓
+CreditScore = 600 (> 650) ✗
+Result: FALSE (one fails)
+
+In Business Logic:
+Sales Agent Bonus = IF(
+    AND([Sales] > Target, [Retention] > 95%, [Errors] = 0),
+    Bonus_Amount,
+    0
+)
+→ Only get bonus if ALL conditions met
+```
+
+**OR() - Any Condition Is True**
+
+```
+Theory:
+- Any condition TRUE → return TRUE
+- All conditions FALSE → return FALSE
+- Used for: Alternative paths
+
+Syntax:
+OR(condition1, condition2, ...)
+
+Example:
+Alert = OR(
+    [Inventory] < 100,
+    [Quality] < 80,
+    [Return Rate] > 5%
+)
+
+Evaluation:
+Inventory = 50 ✓ (< 100)
+Quality = 95 ✓ (no alert)
+Return Rate = 3% ✓ (no alert)
+Result: TRUE (at least one triggers alert)
+
+Business Logic:
+Priority = IF(
+    OR([Issue] = "Critical", [Escalated] = TRUE, [Overdue] = TRUE),
+    "High",
+    "Normal"
+)
+→ Alert if ANY condition is true
+```
+
+**NOT() - Negate Condition**
+
+```
+Theory:
+- TRUE becomes FALSE
+- FALSE becomes TRUE
+- Inverts condition
+
+Example:
+Not Shipped = NOT([Shipped] = TRUE)
+Equivalent to: [Shipped] = FALSE
+
+Use Case:
+Inactive = NOT([LastPurchase] > TODAY() - 365)
+→ Customers who haven't purchased in a year
+
+Practical:
+Active Discount Eligible = AND(
+    NOT([HasActiveDiscount] = TRUE),
+    [PurchaseHistory] > 3
+)
+→ Not currently has discount AND has history
+```
+
+**SWITCH() - Multiple Conditions**
+
+```
+Theory:
+- Test value against multiple options
+- Return appropriate result
+- Cleaner than nested IFs
+- Better performance than nested IFs
+
+Syntax:
+SWITCH(expression, value1, result1, value2, result2, ...)
+
+Example:
+Grade = SWITCH(
+    [Score],
+    "A", "Excellent",
+    "B", "Good",
+    "C", "Average",
+    "F", "Fail",
+    "Unknown"
+)
+
+Evaluation with Score = "B":
+Check: B = A? NO
+Check: B = B? YES → Return "Good"
+
+Why Better Than IF:
+✗ Nested IF (hard to read):
+IF([Score] = "A", "Excellent", 
+   IF([Score] = "B", "Good",
+      IF([Score] = "C", "Average",
+         IF([Score] = "F", "Fail", "Unknown"))))
+
+✓ SWITCH (clear):
+SWITCH([Score], "A", "Excellent", "B", "Good", ...)
+
+Performance:
+- SWITCH: Evaluates expression once
+- Nested IF: Evaluates each condition
+- SWITCH faster for many conditions
+
+Real Example:
+Quarter Code = SWITCH(
+    QUARTER([Date]),
+    1, "Q1",
+    2, "Q2",
+    3, "Q3",
+    4, "Q4"
+)
+```
+
+**KEYPOINTS:**
+- IF: Simple TRUE/FALSE decision
+- AND: ALL conditions must pass
+- OR: ANY condition can pass
+- NOT: Invert condition
+- SWITCH: Cleaner than nested IF
+
+
+### 5. CALCULATE() - The Most Important Function
+
+**Why CALCULATE is Critical**
+
+CALCULATE is the foundation of advanced DAX. Without it:
+- Can't compare periods
+- Can't create benchmarks
+- Can't build complex analytics
+- Can't override filters
+
+Understanding CALCULATE unlocks Power BI's real power.
+
+**What CALCULATE Does:**
+
+```
+Normally:
+User selects date filter
+Visual shows only filtered data
+Result respects filter
+
+With CALCULATE:
+You can override or modify filters
+Say: "Show me total sales, ignoring the date filter"
+Or: "Show me sales just for Electronics"
+Or: "Show me sales from specific dates"
+
+This is Filter Context Control.
+```
+
+**CALCULATE Syntax:**
+
+```
+CALCULATE(
+    expression,                    ← What to calculate
+    filter1,                       ← Filter to apply
+    filter2,                       ← Another filter
+    ... more filters
+)
+
+Example:
+CALCULATE(
+    SUM(Sales[Amount]),            ← Sum of amounts
+    Products[Category] = "Electronics"  ← Where category is Electronics
+)
+
+Breakdown:
+- CALCULATE: Function name
+- SUM(Sales[Amount]): Expression (what to calculate)
+- Products[Category] = "Electronics": Filter condition
+
+Result: Sum of amount where category = Electronics
+```
+
+**Filter Override vs Filter Addition:**
+
+```
+Normal Measure (respects all filters):
+Total Sales = SUM(Sales[Amount])
+
+If user filters by:
+- Date: 2024
+- Region: North
+Result: Sum of sales in North region in 2024
+
+CALCULATE with Specific Filter:
+Total Electronics = CALCULATE(
+    SUM(Sales[Amount]),
+    Products[Category] = "Electronics"
+)
+
+If user filters by:
+- Date: 2024
+- Region: North
+- Category: Clothing (user selected)
+
+Result: Sum of Electronics sales (ignores user's category filter!)
+Category filter overridden to just Electronics
+Date and Region filters STILL APPLY
+
+Filter Precedence:
+CALCULATE filters override conflicting user filters
+Other filters still apply
+```
+
+**Detailed Example - Year-to-Date Sales:**
+
+```
+Business Scenario:
+Dashboard shows sales by month
+User selects "March 2024"
+We want: Sum of all sales from January-March 2024
+Not just March data
+
+Formula:
+YTD Sales = CALCULATE(
+    SUM(Sales[Amount]),
+    DATESYTD(Dates[Date])
+)
+
+Step-by-Step Execution:
+
+1. User selects March 2024
+   Filter context: March = 3, Year = 2024
+
+2. DATESYTD(Dates[Date]) generates dates
+   January 1 through March 31, 2024
+
+3. CALCULATE says: "Sum sales but only for these dates"
+   Overrides the "just show March" default
+
+4. SUM calculated for Jan + Feb + Mar
+   Result: YTD total (not just March)
+
+Without CALCULATE:
+User sees: March sales only
+With CALCULATE:
+User sees: Jan + Feb + Mar sales
+
+Why This Matters:
+- Shows cumulative progress
+- Compares to annual target
+- Executive view of year-to-date performance
+```
+
+**Pattern 1: Remove All Filters**
+
+```
+Scenario:
+Need "Total Company Sales" - all data without any filters
+
+Formula:
+Total Company Sales = CALCULATE(
+    SUM(Sales[Amount]),
+    ALL(Dates),
+    ALL(Customers),
+    ALL(Products),
+    ALL(Regions)
+)
+
+What It Does:
+1. Calculate SUM of sales
+2. Remove filter on Dates (ignore date selection)
+3. Remove filter on Customers (ignore customer selection)
+4. Remove filter on Products (ignore product selection)
+5. Remove filter on Regions (ignore region selection)
+
+Result: Sum of ALL sales regardless of user filters
+
+Example:
+User selects: Region = North, Product = Laptop
+Normal measure: Shows North Laptop sales only
+This measure: Shows ALL sales (ignores North, ignores Laptop)
+
+Use Case:
+- Benchmark total
+- Company-wide KPI
+- Percentage of total calculation
+```
+
+**Pattern 2: Replace One Filter**
+
+```
+Scenario:
+User selects Region = "North"
+We want: Sum of sales from Region = "South" (opposite)
+
+Formula:
+South Sales = CALCULATE(
+    SUM(Sales[Amount]),
+    Regions[Region] = "South"
+)
+
+What It Does:
+1. Normal: Shows North sales (user's filter)
+2. CALCULATE: Says "ignore region filter, use South"
+
+Result: Compares North (user choice) vs South (hardcoded)
+
+Use Case:
+- Competitive comparison
+- Territory comparison
+- Performance benchmarking
+```
+
+**Pattern 3: Add Additional Filters**
+
+```
+Scenario:
+User selects some filters
+We want: Additionally filter by high-value products
+
+Formula:
+Premium Sales = CALCULATE(
+    SUM(Sales[Amount]),
+    Products[Price] > 1000
+)
+
+What It Does:
+1. Respects user's existing filters
+2. ADDS another condition: Price > 1000
+
+Result: Sum of sales meeting ALL conditions
+- User's selections (date, region, etc.)
+- PLUS products with price > 1000
+
+If user selects:
+- Date: 2024
+- Region: North
+Result: North 2024 sales where price > 1000
+Filters combine (all must be true)
+```
+
+**Pattern 4: Year-over-Year Comparison**
+
+```
+Scenario:
+Compare this year's sales to last year's
+
+Formula:
+This Year Sales = CALCULATE(
+    SUM(Sales[Amount]),
+    YEAR(Sales[Date]) = YEAR(TODAY())
+)
+
+Last Year Sales = CALCULATE(
+    SUM(Sales[Amount]),
+    YEAR(Sales[Date]) = YEAR(TODAY()) - 1
+)
+
+Growth = [This Year Sales] - [Last Year Sales]
+
+Execution:
+Step 1: User selects March 2024
+Step 2: [This Year Sales] calculates
+        Filters: Year = 2024, Month = March
+        Result: March 2024 sales
+
+Step 3: [Last Year Sales] calculates
+        Filters: Year = 2023, Month = March (preserved!)
+        Result: March 2023 sales
+
+Step 4: Growth = March 2024 - March 2023
+        Result: Year-over-year comparison
+
+Use Case:
+- Track growth rates
+- Annual comparisons
+- Trend analysis
+- Target variance
+```
+
+**Pattern 5: Percentage of Total**
+
+```
+Scenario:
+Show each product as percentage of total sales
+
+Formula:
+% of Total = 
+    SUM(Sales[Amount]) 
+    / CALCULATE(SUM(Sales[Amount]), ALL(Products))
+
+What It Does:
+Numerator: Sum for selected product (with filters)
+Denominator: Sum of ALL products (no filter)
+Result: Product / Total
+
+Example:
+User sees:
+- Electronics: $5M / $10M = 50%
+- Clothing: $3M / $10M = 30%
+- Other: $2M / $10M = 20%
+Total: 100%
+
+If user filters to 2024:
+Calculation uses only 2024 data
+Electronics: $2M / $4M = 50% (in 2024)
+etc.
+
+Use Case:
+- Market share
+- Product mix analysis
+- Category contribution
+```
+
+**Common Mistakes with CALCULATE:**
+
+```
+Mistake 1: Filter Condition Syntax
+✗ Wrong: CALCULATE(SUM(...), Category)
+✓ Right: CALCULATE(SUM(...), Category = "Electronics")
+Filters need condition (= comparison)
+
+Mistake 2: Column References
+✗ Wrong: CALCULATE(SUM(...), [Category] = "Electronics")
+✓ Right: CALCULATE(SUM(...), Products[Category] = "Electronics")
+Always use Table[Column] format
+
+Mistake 3: Multiple Conditions
+✗ Wrong: CALCULATE(SUM(...), Category, Region)
+✓ Right: CALCULATE(SUM(...), 
+              Products[Category] = "Electronics",
+              Regions[Region] = "North")
+Each filter needs full condition
+
+Mistake 4: Overusing ALL()
+✗ Use ALL() when you need to clear ALL filters
+✓ Use specific filters when clearing specific table
+CALCULATE(..., ALL(Dates)) = Clear date filter only
+CALCULATE(..., ALL()) = Clear ALL filters (rarely used)
+```
+
+**KEYPOINTS:**
+- CALCULATE is the most important DAX function
+- Default: Respects all user filters + adds specified filters
+- Use filters to override context
+- ALL() removes specific table filters
+- Pattern matching: YTD, YoY, % of total
+- Always use Table[Column] syntax
+
+
+### 6. Context Functions - Complete Theory
+
+**What Are Context Functions?**
+
+Context functions read or manipulate the current evaluation context. They let you know:
+- What filters are active
+- What values are visible
+- What relationships exist
+
+**RELATED() - Cross-Table Lookup**
+
+```
+Theory:
+- Retrieves value from related table
+- Follows established relationships
+- Replaces VLOOKUP from Excel
+- Much more efficient
+- Works in both directions (following foreign key)
+
+Why RELATED is Important:
+- Databases split info across tables (normalization)
+- Users want info combined
+- RELATED joins them back together
+
+Scenario:
+Orders Table has: OrderID, ProductID, Amount
+Products Table has: ProductID, ProductName, Price
+
+Need: Product name in Orders context
+
+Formula:
+Product Name = RELATED(Products[ProductName])
+
+How It Works:
+1. Orders has ProductID
+2. RELATED follows relationship to Products
+3. Gets ProductName from that row
+4. Returns value
+
+Example Data:
+Orders:
+OrderID | ProductID | Amount
+1       | 100       | 50
+
+Products:
+ProductID | ProductName | Price
+100       | Laptop      | 999
+
+Execution:
+1. Look at current order (OrderID 1)
+2. Get ProductID (100)
+3. Find ProductID 100 in Products
+4. Get ProductName from that row
+5. Return: "Laptop"
+
+Complex Example - Multi-level:
+Orders → Products → Categories
+
+Formula (from Orders):
+Category Name = RELATED(Products[CategoryID])
+Then: Category Name = RELATED(Categories[CategoryName])
+
+Use Cases:
+✓ Add dimension info to facts
+✓ Display names instead of IDs
+✓ Combine tables without joins
+✓ Keep model clean
+```
+
+**RELATEDTABLE() - Get Filtered Related Records**
+
+```
+Theory:
+- Returns entire related table (filtered)
+- Gets all matching records
+- Used with COUNTA or other aggregations
+- More advanced than RELATED
+
+Scenario:
+Customer has many Orders
+Need: Count of orders per customer
+
+Formula:
+Order Count = COUNTA(RELATEDTABLE(Orders))
+
+Execution (for Customer 100):
+1. Find all orders where CustomerID = 100
+2. Return those order rows
+3. COUNTA counts them
+4. Result: Number of orders
+
+Real Example:
+First Purchase Date = MIN(
+    RELATEDTABLE(Orders)[OrderDate]
+)
+→ Gets earliest order date for customer
+
+Use Cases:
+✓ Count related records
+✓ Aggregate related data
+✓ Find min/max in related table
+✓ Check for duplicates
+```
+
+**VALUES() - Get Filtered Values**
+
+```
+Theory:
+- Returns unique values in current filter context
+- Respects active filters
+- Returns table (list of values)
+- Used rarely (advanced)
+
+Example:
+If user filters to Product = "Laptop":
+VALUES(Products[ProductID])
+Returns: Just the IDs matching "Laptop"
+
+Use Case:
+Checking what's visible to user
+(Advanced scenario: conditional logic based on filtering)
+```
+
+**DISTINCT() - Unique Values**
+
+```
+Theory:
+- Similar to VALUES
+- Returns distinct values from column
+- Slightly different behavior (technical)
+- Rarely used in practice
+
+When to Use:
+✓ Counting unique customers: COUNTA(DISTINCT(Customers[ID]))
+```
+
+**KEYPOINTS:**
+- RELATED: Single value from related table
+- RELATEDTABLE: Multiple related records
+- VALUES/DISTINCT: List of values (rarely used)
+- RELATED most common for joins
+
+
+### 7. Time Intelligence Functions - Complete Theory
+
+**What is Time Intelligence?**
+
+Time intelligence handles business needs:
+- Compare current vs previous periods
+- Calculate year-to-date
+- Year-over-year growth
+- Seasonal analysis
+
+**SAMEPERIODLASTYEAR() - Previous Year's Data**
+
+```
+Theory:
+- Returns data from same period last year
+- Automatically adjusts dates
+- Perfect for YoY comparison
+
+Formula:
+Sales Last Year = CALCULATE(
+    SUM(Sales[Amount]),
+    SAMEPERIODLASTYEAR(Dates[Date])
+)
+
+How It Works:
+Current Filter: January 2024
+SAMEPERIODLASTYEAR: Converts to January 2023
+Result: Sum of sales for January 2023
+
+Example Timeline:
+Filter: March 2024
+Returns: March 2023
+Filter: Q2 2024
+Returns: Q2 2023
+
+Practical Example:
+This Year = SUM(Sales[Amount])  -- 2024
+Last Year = CALCULATE(SUM(Sales[Amount]), 
+                      SAMEPERIODLASTYEAR(Dates[Date]))  -- 2023
+
+YoY Growth = [This Year] - [Last Year]
+YoY Growth % = ([This Year] - [Last Year]) / [Last Year]
+
+Example Values:
+2024 Sales: $100,000
+2023 Sales: $80,000
+Growth: $20,000
+Growth %: 25%
+
+Use Cases:
+✓ Year-over-year comparison
+✓ Annual growth rates
+✓ Performance trends
+✓ Budget variance (actual vs prior year)
+```
+
+**DATEADD() - Add/Subtract Time Periods**
+
+```
+Theory:
+- Shifts dates forward or backward
+- Flexible: days, months, years
+- Used for: Previous month, next quarter, etc.
+
+Syntax:
+DATEADD(date_column, number, period)
+
+Periods: DAY, MONTH, QUARTER, YEAR
+
+Examples:
+Previous Month = DATEADD(Dates[Date], -1, MONTH)
+Next Quarter = DATEADD(Dates[Date], 1, QUARTER)
+Last Year = DATEADD(Dates[Date], -1, YEAR)
+Last 30 Days = DATEADD(Dates[Date], -30, DAY)
+
+Practical Use in Measures:
+Previous Month Sales = CALCULATE(
+    SUM(Sales[Amount]),
+    DATEADD(Dates[Date], -1, MONTH)
+)
+
+Timeline Example:
+Current Filter: March 2024
+DATEADD with -1 MONTH: February 2024
+Result: February sales shown
+
+Previous Quarter Sales = CALCULATE(
+    SUM(Sales[Amount]),
+    DATEADD(Dates[Date], -1, QUARTER)
+)
+
+Filter: Q2 2024
+DATEADD: Q1 2024
+Result: Q1 sales
+
+Month Ago = TODAY() - 30
+Quarter Ago = DATEADD(TODAY(), -1, QUARTER)
+Year Ago = DATEADD(TODAY(), -1, YEAR)
+
+Use Cases:
+✓ Sequential comparison
+✓ Moving averages
+✓ Trend analysis
+✓ Holiday comparisons
+```
+
+**DATESYTD() - Year-to-Date**
+
+```
+Theory:
+- Returns dates from start of year to current
+- Perfect for: Cumulative metrics
+- Resets each January
+
+Formula:
+YTD Sales = CALCULATE(
+    SUM(Sales[Amount]),
+    DATESYTD(Dates[Date])
+)
+
+How It Works:
+Current Filter: March 2024
+DATESYTD generates: Jan 1 to Mar 31, 2024
+Result: Sum of Jan + Feb + Mar sales
+
+Example Timeline:
+Filter date: March 15, 2024
+DATESYTD creates: Jan 1 - Mar 15, 2024
+Includes: All of Jan, Feb, and partial Mar
+Result: YTD through March 15
+
+Monthly Progression:
+January: YTD = January only
+February: YTD = Jan + Feb
+March: YTD = Jan + Feb + Mar
+April: YTD = Jan + Feb + Mar + Apr
+...
+December: YTD = Full year
+
+Use Cases:
+✓ Budget tracking (vs annual target)
+✓ Cumulative revenue
+✓ Year-to-date goals
+✓ Progress monitoring
+```
+
+**DATESBETWEEN() - Date Range**
+
+```
+Theory:
+- Returns dates within specific range
+- Manual start and end dates
+- Used for: Custom periods
+
+Formula:
+Specific Period = CALCULATE(
+    SUM(Sales[Amount]),
+    DATESBETWEEN(Dates[Date], DATE(2024,1,1), DATE(2024,3,31))
+)
+
+Result: Sum of Q1 2024 sales
+
+Use Cases:
+✓ Fixed date ranges
+✓ Fiscal calendars
+✓ Custom periods
+✓ Campaign dates
+```
+
+**Comparison: When to Use Each**
+
+```
+Scenario: Compare to Previous Period
+Use: DATEADD (previous month, quarter, year)
+
+Scenario: Compare to Same Period Last Year
+Use: SAMEPERIODLASTYEAR (always one year back)
+
+Scenario: Year-to-Date Accumulation
+Use: DATESYTD (Jan 1 to current date)
+
+Scenario: Fixed Custom Period
+Use: DATESBETWEEN (specific start/end)
+```
+
+**KEYPOINTS:**
+- SAMEPERIODLASTYEAR: Same dates, one year earlier
+- DATEADD: Flexible shifting (any period)
+- DATESYTD: Cumulative from January
+- All work with CALCULATE to change filter context
+
+### 8. Statistical Functions - Complete Theory
+
+**Why Statistical Functions Matter:**
+
+Statistical functions provide insights into data distribution:
+- Find outliers
+- Understand variation
+- Calculate percentiles
+- Compare performance against peers
+
+**STDEV() - Standard Deviation**
+
+```
+Theory:
+- Measures spread of values
+- High STDEV: Values spread out
+- Low STDEV: Values clustered
+- Used for: Quality control, variation analysis
+
+Formula:
+Sales StDev = STDEV(Sales[Amount])
+
+Example:
+Sales values: [100, 100, 100, 100, 100]
+STDEV: 0 (all same)
+
+Sales values: [1, 50, 100, 150, 200]
+STDEV: ~75 (spread out)
+
+Use Cases:
+✓ Product quality variation
+✓ Sales consistency
+✓ Performance outliers
+✓ Risk assessment
+```
+
+**VAR() - Variance**
+
+```
+Theory:
+- Square of standard deviation
+- Larger version of STDEV
+- Used for: Statistical analysis
+
+Formula:
+Sales Variance = VAR(Sales[Amount])
+
+Relationship:
+Variance = STDEV ^ 2
+
+Use Cases:
+✓ Mathematical analysis
+✓ Statistical testing
+✓ Financial risk
+```
+
+**PERCENTILE() - Percentile Rank**
+
+```
+Theory:
+- Returns value at specific percentile
+- 0 = lowest, 1 = highest
+- 0.25 = 25th percentile (bottom quarter)
+- 0.75 = 75th percentile (top quarter)
+
+Formula:
+Top 25% = PERCENTILE(Sales[Amount], 0.75)
+
+Example:
+Sales: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+PERCENTILE(..., 0.5) = 55 (median)
+PERCENTILE(..., 0.75) = 77.5 (top quarter threshold)
+PERCENTILE(..., 0.25) = 32.5 (bottom quarter threshold)
+
+Use Cases:
+✓ Performance rankings
+✓ Customer segmentation
+✓ Quality thresholds
+✓ Outlier detection
+```
+
+**RANK() - Ranking Values**
+
+```
+Theory:
+- Assigns rank based on value
+- 1 = highest, N = lowest
+- Handles ties
+
+Formula:
+Sales Rank = RANK([Total Sales], ALL(Employees), 0)
+
+Parameters:
+- Value to rank
+- Range to rank within
+- 0 = descending (higher value = lower rank number)
+- 1 = ascending
+
+Example:
+Employee Sales:
+Alice: $100,000 → Rank 1 (highest)
+Bob: $85,000 → Rank 2
+Charlie: $95,000 → Rank 2 (tied with Bob at 85k? No, Bob has 85k)
+Actually:
+Alice: $100,000 → Rank 1
+Charlie: $95,000 → Rank 2
+Bob: $85,000 → Rank 3
+
+Use Cases:
+✓ Leaderboards
+✓ Performance tiers
+✓ Segmentation
+✓ Top N filtering
+```
+
+**KEYPOINTS:**
+- STDEV: Measure of spread
+- PERCENTILE: Position in distribution
+- RANK: Position relative to others
+- All useful for comparative analysis
+
+### Common Measure Patterns
+
+**Pattern 1: Year-to-Date**
+```
+YTD Sales = CALCULATE(
+    SUM(Sales[Amount]),
+    DATESYTD(Dates[Date])
+)
+```
+
+**Pattern 2: Growth Comparison**
+```
+Sales Growth % = 
+    ([Sales This Period] - [Sales Last Period]) 
+    / [Sales Last Period]
+```
+
+**Pattern 3: Running Total**
+```
+Running Total = CALCULATE(
+    SUM(Sales[Amount]),
+    FILTER(
+        ALL(Dates),
+        Dates[Date] <= MAX(Dates[Date])
+    )
+)
+```
+
+**Pattern 4: Percentage of Total**
+```
+% of Total = 
+    SUM(Sales[Amount]) 
+    / CALCULATE(SUM(Sales[Amount]), ALL(Products))
+```
+
+### KEYPOINTS:
+- CALCULATE is the most important DAX function
+- Always understand filter context
+- Use RELATED() to get values from related tables
+- Test measures in a simple visual first
+- Use semi-additive measures for snapshots (like inventory)
+
+---
+
+## Visualizations
+
+### Chart Types and When to Use
+
+**1. Tables**
+```
+Use: Display detailed data with multiple columns
+Not good for: Seeing patterns or trends
+Example: Sales by product with rank
+```
+
+**2. Cards**
+```
+Use: Show single key metric (KPI)
+Best: Headlines, totals
+Example: "Total Revenue: $1.2M"
+```
+
+**3. Line Chart**
+```
+Use: Show trends over time
+Example: Sales trend by month
+Key: Always use for time series
+```
+
+**4. Bar Chart**
+```
+Use: Compare values across categories
+Horizontal: For category names
+Vertical: For values over time
+Example: Sales by region (horizontal bars)
+```
+
+**5. Pie Chart**
+```
+Use: Show composition (parts of whole)
+Limit: ≤5 slices (hard to compare)
+Better: Use clustered bar instead
+```
+
+**6. Stacked Bar/Column**
+```
+Use: Show composition AND comparison
+Example: Revenue by region AND by product type
+Caution: Hard to compare middle segments
+```
+
+**7. Scatter Plot**
+```
+Use: Show relationship between two numeric variables
+Example: Sales vs Marketing spend
+Can show: Correlation, outliers
+```
+
+**8. Map**
+```
+Use: Geographic data visualization
+Types: Bubble map, filled map, shape map
+Example: Sales by country
+```
+
+**9. Matrix**
+```
+Use: Multi-dimensional data
+Example: Sales by Region × Product × Quarter
+Interactive: Can drill-down
+```
+
+**10. Gauge**
+```
+Use: Show progress toward target
+Example: Actual sales vs quota
+Limit: One value only
+```
+
+**Visualization Decision Tree:**
+```
+Is it time series?
+├─ YES → Line chart (time on x-axis)
+└─ NO → Is it parts of whole?
+    ├─ YES → Pie or stacked bar
+    └─ NO → Is it comparison?
+        ├─ YES → Bar or column chart
+        └─ NO → Scatter, matrix, or table
+```
+
+### Formatting Best Practices
+
+**Colors:**
+```
+✓ Do:
+  - Use consistent color scheme (brand colors)
+  - Use diverging colors for positive/negative
+  - Limit palette to 3-5 colors
+  
+✗ Don't:
+  - Rainbow colors (hard to interpret)
+  - Red-green combinations (colorblind issues)
+  - Too many colors (confusing)
+```
+
+**Labels:**
+```
+✓ Do:
+  - Add descriptive axis labels
+  - Format numbers (1.2M not 1200000)
+  - Use data labels for clarity
+  
+✗ Don't:
+  - Overload with too many labels
+  - Use tiny fonts (unreadable)
+  - Forget units ($, %, etc.)
+```
+
+**Number Formatting:**
+```
+1,234,567.89
+
+Display as:
+1.2M (millions)        → Good for executives
+1,234,568 (thousands)  → Good for detail
+100% (percentages)     → For proportions
+$1.2M (currency)       → For money
+```
+
+---
+
+## Reports & Dashboards
+
+### What's the Difference?
+
+**Reports:**
+```
+✓ Detailed analysis
+✓ Multiple pages
+✓ Drill-down capabilities
+✓ Narrative flow
+✓ Used for deep dives
+Example: Monthly sales analysis report
+```
+
+**Dashboards:**
+```
+✓ One-page summary
+✓ Key metrics (KPIs)
+✓ Status at a glance
+✓ Real-time updates
+✓ Used for monitoring
+Example: Executive dashboard with top metrics
+```
+
+### Building a Report
+
+**Step 1: Plan**
+```
+1. Define audience (executives, analysts, users)
+2. Identify key questions
+3. Sketch layout
+4. List required measures
+```
+
+**Step 2: Structure Pages**
+```
+Page 1: Executive Summary (KPIs, highlights)
+Page 2: Detailed Analysis (trends, comparisons)
+Page 3: Geographic Analysis (maps)
+Page 4: Drill-down Details (full data)
+```
+
+**Step 3: Add Interactivity**
+```
+Slicers: Let users filter by date, region, product
+Buttons: Navigate between pages
+Bookmarks: Save filter states
+Drill-through: Navigate from summary to detail
+```
+
+**Page Layout:**
+```
+┌─────────────────────────────────────┐
+│ Report Title & Date                 │
+├─────────────────────────────────────┤
+│  KPI1    │    KPI2    │    KPI3    │
+├─────────────────────────────────────┤
+│  Slicer: Date │  Slicer: Region    │
+├─────────────────────────────────────┤
+│                                     │
+│   Chart 1 (40%)    │   Chart 2 (40%)│
+│                    │                │
+├────────────────────┼────────────────┤
+│                                     │
+│          Chart 3 (100%)             │
+│                                     │
+└─────────────────────────────────────┘
+```
+
+### Slicers & Filters
+
+**Slicers** are interactive filters:
+
+```
+Types:
+1. List Slicer
+   - Dropdown list of values
+   - Best for: Categories
+
+2. Dropdown Slicer
+   - Compact dropdown
+   - Best for: Long lists
+
+3. Slider Slicer
+   - Range selection
+   - Best for: Numeric ranges, dates
+
+4. Hierarchy Slicer
+   - Drill-down levels
+   - Best for: Geographic, time periods
+```
+
+**Example Setup:**
+```
+Reports needs to filter by:
+1. Date Range
+   → Use Slider Slicer on Date column
+   
+2. Region
+   → Use List Slicer on Location[Region]
+   
+3. Product Category
+   → Use Dropdown Slicer on Products[Category]
+
+Connect all slicers to relevant visuals
+```
+
+### Drill-through & Drill-down
+
+**Drill-down (Within Visual):**
+```
+Hierarchical navigation within one chart
+Example: Year → Quarter → Month → Day
+User can expand levels
+```
+
+**Drill-through (Between Pages):**
+```
+Navigate from summary to detail page
+Example: Click on region → go to regional detail page
+Pass context (selected values) to next page
+```
+
+**Implementation:**
+```
+1. Create summary page with region chart
+2. Create detail page with filtered data
+3. Right-click on chart → Drill-through
+4. Select the page to navigate to
+5. User can then click on data point to drill-through
+```
+
+### Bookmarks & Navigation
+
+**Bookmarks** save visual states:
+
+```
+Uses:
+1. Save filter combinations
+2. Create "views" of same data
+3. Enable button navigation
+
+Example:
+Create bookmarks:
+- "Sales Focus" (with sales filters)
+- "Marketing Focus" (with marketing filters)
+- "CEO View" (high-level summary)
+
+Add buttons linking to bookmarks for easy navigation
+```
+
+---
+
+## Advanced Topics
+
+### Row-Level Security (RLS)
+
+**What is RLS?**
+Row-level security restricts data visibility based on user identity.
+
+**Example:**
+```
+Regional managers see only their region's data
+Territory managers see only their territory
+Executives see all data
+```
+
+**Implementation:**
+
+```
+1. Create Security Table
+SecurityTable:
+├── Username (user@company.com)
+├── Region (North, South, East, West)
+
+2. Create DAX Rule
+[Region] = USERNAME()
+// or
+[Region] = LOOKUPVALUE(SecurityTable[Region], 
+                       SecurityTable[Username], 
+                       USERNAME())
+
+3. Apply to Tables
+Model → Manage Roles → Create role
+Add filters to tables
+
+4. Test
+File → Publish → Report Settings → Grant access
+Test with different user accounts
+```
+
+**Best Practices:**
+```
+✓ Use dynamic rules (based on user)
+✓ Test with multiple users
+✓ Document security model
+✓ Audit access regularly
+✓ Use Active Directory integration when possible
+```
+
+### Incremental Refresh
+
+**What is Incremental Refresh?**
+Only load new/changed data instead of entire dataset.
+
+**Benefits:**
+```
+✓ Faster refresh (less data to process)
+✓ Smaller dataset size (less storage)
+✓ Reduced bandwidth
+✓ More frequent refreshes possible
+
+Time saved: Can be 10-100x faster
+```
+
+**Setup:**
+
+```
+1. Create two parameters in Power Query
+   - RangeStart (start date)
+   - RangeEnd (end date)
+
+2. Filter data in query
+   WHERE Date >= @RangeStart AND Date <= @RangeEnd
+
+3. In Power BI:
+   Manage refresh → Incremental refresh
+   Set: Store last 1 year of data
+   Set: Refresh last 7 days daily
+   
+4. Configure refresh schedule
+   Daily auto-refresh at off-peak time
+```
+
+**Example Timeline:**
+```
+Year 1: 365 days of data (initial load)
+Day 366: Load only day 366 (incremental)
+Day 367: Load only days 366-367
+...
+365 days later: Load 365 days, archive oldest
+```
+
+### Aggregations
+
+**What are Aggregations?**
+Pre-summarized data for faster query performance.
+
+```
+Raw data (100M rows):
+Date | Product | Sales
+
+Aggregation (by Month & Product):
+├─ 12 months × 1000 products = 12K rows
+└─ Much faster queries!
+```
+
+**Implementing Aggregations:**
+
+```
+1. Create aggregation table in Power Query
+   AggregatedSales:
+   ├── YearMonth (201, 202)
+   ├── Product
+   ├── TotalSales (SUM)
+   ├── TotalQuantity (SUM)
+
+2. Set up relationship
+   Aggregation relates to Dimensions same as detail
+
+3. Power BI automatically uses aggregate
+   when appropriate (smart selection)
+```
+
+### Premium Capacity Features
+
+**Power BI Premium** provides enterprise features:
+
+```
+✓ Large datasets (100GB+)
+✓ Faster refreshes
+✓ Incremental refresh support
+✓ RLS at scale
+✓ Paginated reports
+✓ Shared capacity
+```
+
+**Cost:** $4,995/month (capacity-based)
+
+---
+
+## Performance Optimization
+
+### Query Folding
+
+**What is Query Folding?**
+Power Query pushes transformations to the source database instead of loading full data.
+
+**Benefits:**
+```
+✓ Only loads filtered data (smaller)
+✓ Database does heavy lifting
+✓ Faster import
+✓ Fewer resources needed
+```
+
+**Optimal Query:**
+```
+✓ Filter rows early
+✓ Remove unnecessary columns
+✓ Keep simple transformations
+
+✗ Non-foldable:
+  Custom functions
+  Complex calculations
+  Multiple appends
+```
+
+**Example:**
+```
+// Folds to source database
+let
+    Source = Sql.Database("server", "db"),
+    Table = Source{[Schema="dbo", Item="Sales"]}[Data],
+    FilteredRows = Table.SelectRows(Table, each [Date] >= #date(2024,1,1))
+in
+    FilteredRows
+
+// Doesn't fold (loaded to memory first)
+let
+    Source = Excel.Workbook("file.xlsx"),
+    Data = Source{[Item="Sheet1"]}[Data],
+    CustomFunc = Table.AddColumn(Data, "Complex", each MyComplexFunction([Value]))
+in
+    CustomFunc
+```
+
+### Dataset Size Optimization
+
+**Techniques:**
+
+```
+1. Remove unnecessary columns
+   Before: 50 columns
+   After: 15 necessary columns
+   Size reduction: 70%
+
+2. Filter historical data
+   Before: 10 years of data
+   After: 3 years (archive older)
+   Size reduction: 70%
+
+3. Archive dimension details
+   Before: Customer table with 100 columns
+   After: Keep 20 essential columns
+   Detail available through relationship
+
+4. Use integer encoding
+   Before: Category = "Electronics", "Clothing", etc.
+   After: CategoryID = 1, 2, 3 (relates to dimension)
+   Size reduction: 50%
+
+5. Aggregate detail tables
+   Before: 1 million transaction rows
+   After: Daily summaries (400 rows)
+   Size reduction: 99%
+```
+
+### Dashboard Performance Tips
+
+**Optimize Visuals:**
+```
+1. Use High-Performance Visuals
+   ✓ Tables, cards, KPIs (fast)
+   ✗ Complex custom visuals (slow)
+
+2. Limit data shown
+   ✓ Top 10 results
+   ✗ All 1,000,000 rows
+
+3. Simplify calculations
+   ✓ Pre-calculate in query
+   ✗ Complex DAX on large tables
+
+4. Use DirectQuery selectively
+   ✓ Only for current month
+   ✗ For all historical data
+
+5. Schedule refreshes off-peak
+   ✓ 2 AM when nobody using
+   ✗ 9 AM peak hours
+```
+
+### Refresh Strategy
+
+**Optimal Refresh Schedule:**
+
+```
+Import Mode:
+  Daily: Complete refresh at 6 AM
+  Size < 2GB
+  
+DirectQuery + Aggregation:
+  Real-time aggregation
+  Historical data daily at 2 AM
+  
+Large Premium Dataset:
+  Incremental: Latest 7 days daily
+  Monthly: Full refresh on Sunday
+  Aggregations for dashboard layer
+```
+
+---
+
+## Best Practices
+
+### 1. Data Modeling
+
+```
+✓ Do:
+  - Use star schema
+  - Normalize dimensions
+  - Create single date table
+  - Name tables/columns clearly
+  - Document relationships
+  - Hide unused fields from users
+
+✗ Don't:
+  - Create complex many-to-many relationships
+  - Mix fact and dimension data
+  - Create multiple date tables
+  - Use single-character names
+  - Hide used fields
+```
+
+### 2. DAX Writing
+
+```
+✓ Do:
+  - Write measures instead of calculated columns
+  - Use CALCULATE for context changes
+  - Test with simple visuals first
+  - Name measures clearly
+  - Use comments for complex logic
+  - Reuse measures in other measures
+
+✗ Don't:
+  - Write complex nested IFs
+  - Calculate at row level when measure works
+  - Use measures in calculated columns
+  - Name measures like "Sum1", "Count1"
+  - Calculate same thing multiple times
+```
+
+### 3. Reporting & Visualization
+
+```
+✓ Do:
+  - Start with wireframe/sketch
+  - Use consistent color scheme
+  - Include title, date, source
+  - Make it mobile-friendly
+  - Test with actual users
+  - Document for maintenance
+
+✗ Don't:
+  - Use too many colors
+  - Crowd too many visuals
+  - Forget context/labels
+  - Use red-green without pattern
+  - Assume users understand data
+  - Skip user feedback
+```
+
+### 4. Security & Governance
+
+```
+✓ Do:
+  - Implement RLS for sensitive data
+  - Document security model
+  - Audit who accesses what
+  - Use consistent naming conventions
+  - Version control reports
+  - Require approval for publishing
+
+✗ Don't:
+  - Share master data files
+  - Create multiple versions of same report
+  - Store sensitive data in Power BI
+  - Give everyone admin access
+  - Skip encryption
+```
+
+### 5. Performance
+
+```
+✓ Do:
+  - Start small, expand gradually
+  - Use Import mode by default
+  - Pre-aggregate when possible
+  - Monitor dataset size
+  - Schedule refreshes wisely
+  - Test DirectQuery performance
+
+✗ Don't:
+  - Import all historical data
+  - Use DirectQuery for large tables
+  - Create complex recursive calculations
+  - Refresh too frequently
+  - Ignore warnings about size
+```
+
+---
+
+## Common Pitfalls
+
+### 1. Circular Dependencies
+
+```
+✗ Problem:
+  Table A → Table B → Table A
+
+✓ Solution:
+  Redesign relationships
+  Use bridge table for many-to-many
+```
+
+### 2. Cardinality Mistakes
+
+```
+✗ Wrong:
+  One Product → Many Sales
+  Setup as Many-to-Many
+
+✓ Correct:
+  One Product ─1◄───Many─ Sales
+  (Product is unique, Sales has duplicates)
+```
+
+### 3. DAX Filter Not Working
+
+```
+✗ Problem:
+  Total = SUM(Sales[Amount])
+  Shows same value regardless of filter
+
+✓ Solution:
+  Use CALCULATE for filter changes:
+  Total = CALCULATE(SUM(Sales[Amount]), 
+                    Products[Category] = "Electronics")
+```
+
+### 4. Invisible Aggregations
+
+```
+✗ Problem:
+  Avg = SUM(Sales[Amount]) / COUNT(Sales[Amount])
+  Results don't match AVERAGE()
+
+✓ Solution:
+  Avg = AVERAGE(Sales[Amount])
+  Or ensure SUM is numerator, COUNT is denominator
+```
+
+### 5. Context Confusion
+
+```
+✗ Problem:
+  Doesn't understand row context vs filter context
+
+✓ Solution:
+  Row context: Used in calculated columns
+  Filter context: Used in measures
+  Mix = Mistakes!
+```
+
+### 6. Refresh Failures
+
+```
+✗ Problem:
+  Refresh fails with timeout error
+
+✓ Solutions:
+  - Reduce dataset size
+  - Use incremental refresh
+  - Switch to DirectQuery
+  - Increase timeout in settings
+  - Check data source availability
+```
+
+### 7. Slow Dashboard
+
+```
+✗ Problem:
+  Dashboard takes 30 seconds to load
+
+✓ Solutions:
+  - Reduce visuals (5-10 per page)
+  - Remove unnecessary columns
+  - Use aggregations
+  - Optimize DAX measures
+  - Consider DirectQuery with aggregations
+```
+
+---
+
+## Power BI vs Alternatives
+
+### Power BI vs Tableau
+
+| Feature | Power BI | Tableau |
+|---------|----------|---------|
+| **Pricing** | $10/mo (Pro) | $70/mo |
+| **Learning Curve** | Easy (Excel users) | Medium |
+| **Visualization** | Good | Excellent |
+| **Data Modeling** | Excellent | Good |
+| **Performance** | Fast | Very fast |
+| **Integration** | Microsoft stack | Any data |
+| **Best For** | Microsoft shops | Complex analysis |
+
+### Power BI vs Looker
+
+| Feature | Power BI | Looker |
+|---------|----------|--------|
+| **Pricing** | $10/mo | Custom |
+| **Ease** | Easy | Moderate |
+| **Community** | Large (Microsoft) | Growing |
+| **Enterprise** | Premium option | Default |
+| **Development** | Rapid | Structured |
+
+---
+
+## Quick Reference
+
+### Essential Measures
+
+```
+// Total Sales
+Total Sales = SUM(Sales[Amount])
+
+// Average Order Value
+AOV = AVERAGE(Sales[Amount])
+
+// Year-over-Year Growth
+YoY Growth = 
+    [Sales This Year] - [Sales Last Year]
+    / [Sales Last Year]
+
+// Rank
+Rank = RANK([Sales], ALL(Regions[Region]))
+
+// Running Total
+Running Total = CALCULATE(
+    SUM(Sales[Amount]),
+    FILTER(ALL(Dates), Dates[Date] <= MAX(Dates[Date]))
+)
+
+// Percentage of Total
+% of Total = [Total Sales] / CALCULATE([Total Sales], ALL(Regions))
+
+// Count Distinct
+Unique Customers = DISTINCTCOUNT(Orders[CustomerID])
+
+// Previous Period
+Previous Month Sales = CALCULATE(
+    [Total Sales],
+    DATEADD(Dates[Date], -1, MONTH)
+)
+```
+
+### Common Transformations in Power Query
+
+```
+// Remove duplicates
+Table.Distinct(Source)
+
+// Filter rows
+Table.SelectRows(Source, each [Amount] > 1000)
+
+// Add column
+Table.AddColumn(Source, "NewColumn", each [Col1] & [Col2])
+
+// Merge queries
+Table.NestedJoin(Table1, {"Key"}, Table2, {"Key"}, "NewTable")
+
+// Group by
+Table.Group(Source, {"Category"}, {{"Sum", each List.Sum([Amount]), type number}})
+
+// Pivot
+Table.Pivot(Source, List.Distinct(Source[Category]), "Category", "Amount")
+```
+
+---
+
+## COMPREHENSIVE THEORY & ADVANCED CONCEPTS GUIDE
+
+### The Power BI Journey: From Basic to Advanced
+
+**Level 1: Basic (First Month)**
+```
+Focus: Understanding fundamentals
+Learn:
+- What Power BI is
+- Data connection (Import mode)
+- Basic data modeling (star schema)
+- Simple visualizations (charts, tables)
+- Basic measures (SUM, AVERAGE)
+
+Skills:
+✓ Connect to data source
+✓ Load data to model
+✓ Create basic measure
+✓ Make simple report
+✓ Share report with team
+
+Time: 20-30 hours
+```
+
+**Level 2: Intermediate (Months 2-3)**
+```
+Focus: Building real dashboards
+Learn:
+- Data transformations (Power Query)
+- Relationships and hierarchies
+- Intermediate DAX (CALCULATE, RELATED)
+- Slicers and filtering
+- Conditional formatting
+
+Skills:
+✓ Clean dirty data
+✓ Build star schema correctly
+✓ Write complex measures
+✓ Create interactive reports
+✓ Handle edge cases
+
+Time: 50-100 hours
+```
+
+**Level 3: Advanced (Months 4-6)**
+```
+Focus: Enterprise solutions
+Learn:
+- Performance optimization
+- Row-level security (RLS)
+- Aggregations and hybrid models
+- Advanced DAX patterns
+- Deployment and governance
+
+Skills:
+✓ Optimize large models
+✓ Implement security
+✓ Handle real-time requirements
+✓ Build scalable solutions
+✓ Troubleshoot complex issues
+
+Time: 100+ hours
+```
+
+### Context: The Foundation of DAX
+
+**Understanding Filter Context (Most Important Concept)**
+
+```
+What is Filter Context?
+
+Everything visible in Power BI is determined by context:
+
+Example Scenario:
+Report with Date slicer (user selects March 2024)
+
+WITHOUT Filter Context:
+Visual shows: All data (all dates)
+Result: Numbers too high, confusing
+
+WITH Filter Context (How Power BI Actually Works):
+Visual shows: Only March 2024 data
+Result: Correct numbers for selected period
+
+Power BI automatically applies filter context to EVERY visual
+
+How Filter Context Spreads:
+1. User selects filter (e.g., Region = North)
+2. Filter propagates to all visuals on page
+3. Each visual only shows North data
+4. Measures calculate using only visible data
+```
+
+**Filter Context in Measures:**
+
+```
+Scenario: Regional Sales Dashboard
+
+Measure Definition:
+Total Sales = SUM(Sales[Amount])
+
+User Filter: Region = "North"
+Filter Context: Regional = North
+
+Execution:
+1. Filter activates (Region = North)
+2. Only North rows visible
+3. SUM calculates on North rows only
+4. Result: Sum of North sales
+
+Different User Filter: Region = "South"
+Filter Context: Region = South
+
+Same Measure Definition:
+Total Sales = SUM(Sales[Amount])
+
+Execution:
+1. Filter activates (Region = South)
+2. Only South rows visible
+3. SUM calculates on South rows only
+4. Result: Sum of South sales
+
+Same Formula, Different Results
+= This is filter context power!
+```
+
+**Row Context vs Filter Context**
+
+```
+ROW CONTEXT (Calculated Columns):
+- Evaluates for each row independently
+- "I'm processing row 1... now row 2... now row 3"
+- Each row gets its own value
+- Example: Revenue = Price × Quantity
+
+Timeline:
+Row 1: Revenue = 50 × 2 = 100
+Row 2: Revenue = 75 × 3 = 225
+Row 3: Revenue = 25 × 1 = 25
+Result: Three values (one per row)
+
+FILTER CONTEXT (Measures):
+- Evaluates on filtered set of rows
+- "Show me sales for March"
+- Result depends on active filters
+- Example: Total Sales = SUM(Sales[Amount])
+
+Timeline:
+User selects March
+Filter Context = March rows only
+SUM calculated on March rows
+Result: One value (March total)
+
+Key Difference:
+Row context: Row-by-row operations
+Filter context: Filtered aggregate operations
+```
+
+### Performance Philosophy
+
+**Query Optimization Mindset:**
+
+```
+Every query has cost:
+- Network latency (request time)
+- Processing time (calculation)
+- Memory usage (storage)
+- Power consumption
+- User wait time
+
+Optimization Principle:
+Reduce cost without sacrificing accuracy
+
+Cost Reduction Strategies:
+1. Reduce data (filter early)
+2. Reduce calculations (pre-aggregate)
+3. Reduce complexity (simplify formulas)
+4. Reduce frequency (cache results)
+```
+
+**When Performance Matters:**
+
+```
+Doesn't Matter Much:
+- Personal report (you alone using)
+- Occasional analysis
+- Small dataset (< 100MB)
+- Once-a-week report
+
+Matters Greatly:
+- Shared dashboard (100s of users)
+- Real-time requirements (constantly refreshed)
+- Large dataset (> 5GB)
+- Mission-critical report
+```
+
+### Security Philosophy
+
+**Row-Level Security (RLS) Fundamentals:**
+
+```
+Business Scenario:
+Retail company with store managers
+Each manager should see only their store
+
+Without RLS:
+All managers see ALL stores (data leak)
+Result: Trust issues, security violation
+
+With RLS:
+Each manager sees only their store
+Manager at Store 5 sees: Only Store 5 data
+Manager at Store 10 sees: Only Store 10 data
+Result: Secure, appropriate access
+
+How RLS Works:
+1. Power BI identifies user (USERNAME())
+2. Looks up allowed regions (lookup table)
+3. Filters data to those regions
+4. User sees only filtered view
+
+Implementation:
+Model View → Manage Roles → Create role → Add filter
+
+Filter Example:
+[StoreID] = LOOKUPVALUE(
+    SecurityTable[StoreID],
+    SecurityTable[UserEmail],
+    USERNAME()
+)
+
+Result: User only sees their store
+```
+
+### Advanced DAX Patterns
+
+**Pattern: Running Total**
+
+```
+Business Use:
+Cumulative sales over time
+"How much have we sold this year through March?"
+
+Formula:
+Running Total = CALCULATE(
+    SUM(Sales[Amount]),
+    FILTER(
+        ALL(Dates),
+        Dates[Date] <= MAX(Dates[Date])
+    )
+)
+
+Breakdown:
+FILTER: Get all dates
+Condition: Up to current date
+Result: Cumulative through current date
+
+Timeline Execution:
+January: Sum of January = $100
+February: Sum of Jan+Feb = $150
+March: Sum of Jan+Feb+Mar = $200
+April: Sum of Jan-Apr = $250
+```
+
+**Pattern: Ranking**
+
+```
+Business Use:
+Rank salespeople by total sales
+"Who's the top performer?"
+
+Formula:
+Rank = RANK.EQ(
+    [Total Sales],
+    CALCULATE([Total Sales], ALL(Employees))
+)
+
+Result:
+Alice (200K sales) → Rank 1
+Charlie (150K sales) → Rank 2
+Bob (100K sales) → Rank 3
+```
+
+**Pattern: Market Share**
+
+```
+Business Use:
+Each product's % of total market
+"Electronics is 45% of our business"
+
+Formula:
+Market Share = 
+    SUM(Sales[Amount]) 
+    / CALCULATE(SUM(Sales[Amount]), ALL(Products))
+
+Numerator: This product's sales
+Denominator: All products' sales
+Result: Product / Total = %
+
+With Filter:
+If user selects Region = North:
+Market Share uses only North data
+If user selects 2024:
+Market Share uses only 2024 data
+Flexible and responsive
+```
+
+### Data Quality Mindset
+
+**Prevention:**
+
+```
+Best Approach: Clean in Power Query (before model)
+- Fix typos
+- Standardize case
+- Remove blanks
+- Validate formats
+- Remove duplicates
+
+Result:
+- Model stays clean
+- Measures simpler
+- Performance better
+- Debugging easier
+```
+
+**Detection:**
+
+```
+Create Quality Checks:
+1. Nulls Check
+   Null Count = COUNTBLANK(Column)
+   Alert if > 0
+
+2. Outlier Check
+   Outlier = IF([Value] > PERCENTILE(..., 0.95), "Check", "OK")
+   Review outliers
+
+3. Duplicate Check
+   Duplicate Count = COUNTROWS() - DISTINCTCOUNT([ID])
+   Alert if > 0
+```
+
+**Correction:**
+
+```
+Handle Nulls:
+Null Revenue = 0  (or BLANK() to not count)
+
+Handle Typos:
+Clean via UPPER() + LOWER() + TRIM()
+
+Handle Outliers:
+Flag for review
+Investigate source
+Create business rule
+```
+
+### KEYPOINTS - COMPLETE DAX PHILOSOPHY:**
+- Every measure has filter context
+- Context changes based on active filters
+- CALCULATE overrides/modifies context
+- Simpler formulas are better
+- Test measures in simple visuals first
+- Document complex logic
+- Clean data before modeling
+- Optimize after it works
+- Security by default (RLS mindset)
+- Performance matters for shared reports
+
+---
+
+## IMPORTANT INTERVIEW Q&A
+
+### Q1: What's the difference between Power BI Desktop, Service, and Report Server?
+
+**A:**
+| Component | Location | Use Case | Access |
+|-----------|----------|----------|--------|
+| **Desktop** | Local machine (Windows) | Report creation & development | Single user |
+| **Service** | Cloud (Microsoft 365) | Sharing & collaboration | Web/Mobile |
+| **Report Server** | On-premises | Enterprise deployment | Controlled environment |
+
+**When to Use:**
+- **Desktop**: Development, testing, creating reports
+- **Service**: Sharing reports, dashboards, real-time collaboration
+- **Report Server**: Organizations with on-premises infrastructure requirements
+
+**Key Difference:**
+Desktop = Development tool (creates .pbix files)
+Service = Sharing platform (hosts .pbix, enables collaboration)
+Report Server = Enterprise on-prem option
+
+---
+
+### Q2: Explain Import Mode vs DirectQuery Mode. When would you use each?
+
+**A:**
+
+**Import Mode:**
+```
+✓ Data copied into Power BI
+✓ Compressed storage (~10% original size)
+✓ Instant query performance (milliseconds)
+✓ Offline capability
+✗ Requires refresh for updates
+✗ Limited by RAM (~10GB max)
+
+Use When:
+- Historical data analysis
+- Data doesn't change frequently (daily refresh OK)
+- Need offline access
+- < 2GB dataset
+- Most business scenarios
+```
+
+**DirectQuery Mode:**
+```
+✓ Queries source database directly
+✓ Real-time accuracy (no refresh needed)
+✓ Unlimited dataset size
+✗ Slower queries (depends on source)
+✗ No offline capability
+✗ Requires source optimization
+
+Use When:
+- Real-time requirements (stock prices, IoT data)
+- Dataset too large for import (100GB+)
+- Frequent data changes
+- Source database is optimized
+- Audit trail important
+```
+
+**Hybrid Approach (Composite Mode):**
+```
+Mix both modes:
+- Dimension tables: Import (rarely change)
+- Fact tables: Import (daily snapshot)
+- Real-time: DirectQuery (continuously updated)
+
+Result: Balance performance + freshness
+```
+
+**Interview Answer:**
+"Import Mode for most scenarios (better performance). DirectQuery when need real-time or dataset too large. Composite Mode for hybrid needs."
+
+---
+
+### Q3: What is a Star Schema? Why is it important for Power BI?
+
+**A:**
+
+**Star Schema Structure:**
+```
+Central Fact Table surrounded by Dimension Tables
+
+        Date Dim
+            |
+Prod Dim - Sales Fact - Customer Dim
+            |
+        Location Dim
+```
+
+**Why Star Schema Works:**
+
+```
+1. Performance
+   - Few joins needed
+   - Optimized for aggregations
+   - Works well with in-memory storage
+
+2. Clarity
+   - Easy to understand
+   - Business users grasp it instantly
+   - Single source of truth for metrics
+
+3. Flexibility
+   - New analysis = new fact table
+   - Dimensions stay stable
+   - Minimal changes needed
+
+4. Maintenance
+   - Facts grow predictably
+   - Dims change rarely
+   - Easy to troubleshoot
+```
+
+**Star Schema vs Snowflake:**
+```
+Star: Flat (one level of dimensions)
+└─ Faster, simpler
+
+Snowflake: Nested (dimensions relate to each other)
+└─ More normalized, uses less space
+
+Power BI Recommendation: Use Star Schema
+(Nearly all Power BI models should be star schema)
+```
+
+**Interview Answer:**
+"Star schema puts fact table in center with dimension tables around it. It's optimal for Power BI because it balances performance, clarity, and flexibility."
+
+---
+
+### Q4: Explain Filter Context in Power BI. Why is it critical to understand?
+
+**A:**
+
+**Filter Context Definition:**
+Filter context determines what data is visible at any moment.
+
+```
+Example:
+User selects Region = "North" in slicer
+Filter Context = "Show only North"
+
+Every visual on page receives this filter context
+Result: All visuals show only North data
+```
+
+**How Filter Context Affects Measures:**
+
+```
+Measure Definition:
+Total Sales = SUM(Sales[Amount])
+
+WITHOUT Filter Context:
+Shows: All sales, all regions, all time
+Result: $10M (company total)
+
+WITH Filter Context (User selects North):
+Shows: Only North sales
+Result: $2M (North region only)
+
+Same Formula, Different Results!
+This is filter context power.
+```
+
+**Filter Context Propagation:**
+
+```
+User Action: Selects "March 2024"
+↓
+Filter Context Activated: Month=March, Year=2024
+↓
+Propagates to all visuals on page
+↓
+Each visual respects the filter
+↓
+Results show only March 2024 data
+```
+
+**Why It's Critical:**
+
+```
+✓ Enables interactive filtering
+✓ Allows single formula (measure) to adapt
+✓ Makes dashboards dynamic and responsive
+✓ Eliminates need for separate measures per filter
+
+If you don't understand filter context:
+✗ Measures give wrong results
+✗ Dashboards don't work correctly
+✗ Can't build complex analytics
+✗ DAX becomes mystical
+```
+
+**Interview Answer:**
+"Filter context determines what data is visible. When user selects a filter, it activates filter context that affects all measures on page. Understanding it is foundation of Power BI."
+
+---
+
+### Q5: What is the difference between RELATED() and RELATEDTABLE()? When would you use each?
+
+**A:**
+
+**RELATED() - Single Value**
+```
+Returns ONE value from related table
+Following a single relationship
+Used in: Calculated columns, measures
+
+Formula:
+Product Name = RELATED(Products[ProductName])
+
+How It Works:
+Order has ProductID
+Follow relationship to Products
+Get ProductName for that ProductID
+Return: One text value
+
+Use When:
+✓ Adding dimension attributes to fact
+✓ Getting single descriptive value
+✓ Joining information together
+```
+
+**RELATEDTABLE() - Multiple Values**
+```
+Returns TABLE of related records
+All matching rows from related table
+Used with: Aggregations (COUNT, SUM, etc.)
+
+Formula:
+Customer Order Count = COUNTA(RELATEDTABLE(Orders))
+
+How It Works:
+Customer has many Orders
+Get all Orders for this customer
+COUNTA counts the orders
+Return: Number
+
+Use When:
+✓ Counting related records
+✓ Aggregating related data
+✓ Finding max/min in related table
+```
+
+**Side-by-Side Comparison:**
+
+```
+RELATED:
+- Returns single value
+- Simple lookup
+- Used frequently
+- Example: Get product price for order
+
+RELATEDTABLE:
+- Returns filtered table
+- Used with aggregations
+- Used less frequently
+- Example: Count customer's orders
+```
+
+**Interview Answer:**
+"RELATED gets single value from related table (like lookup). RELATEDTABLE gets all related records (used with COUNT, SUM, etc.). Use RELATED more often."
+
+---
+
+### Q6: Explain CALCULATE() and give three real-world examples of how to use it.
+
+**A:**
+
+**CALCULATE() Purpose:**
+Allows you to override or modify filter context.
+
+```
+Syntax:
+CALCULATE(expression, filter1, filter2, ...)
+
+Without CALCULATE:
+Measure respects all user filters
+Result: Shows what user filtered
+
+With CALCULATE:
+You override filters
+Result: Shows what you specify
+```
+
+**Example 1: Year-over-Year Comparison**
+
+```
+Business Need:
+Compare sales from this month to same month last year
+
+Formula:
+This Month = SUM(Sales[Amount])
+Last Year = CALCULATE(
+    SUM(Sales[Amount]),
+    SAMEPERIODLASTYEAR(Dates[Date])
+)
+
+Execution:
+User selects March 2024
+This Month = March 2024 sales
+Last Year = March 2023 sales
+Result: Compare two periods
+
+Use Case:
+Sales dashboard showing growth
+```
+
+**Example 2: Company Total (Ignore Filters)**
+
+```
+Business Need:
+Show individual region + company total for comparison
+
+Formula:
+Region Sales = SUM(Sales[Amount])
+Total Company = CALCULATE(
+    SUM(Sales[Amount]),
+    ALL(Regions)
+)
+
+Execution:
+User selects North region
+Region Sales = North only ($2M)
+Total Company = All regions ($10M)
+Result: North is 20% of company
+
+Use Case:
+Market share calculation
+Regional performance dashboard
+```
+
+**Example 3: Top Performers Only**
+
+```
+Business Need:
+Compare sales to only top-performing products
+
+Formula:
+High Value Product Sales = CALCULATE(
+    SUM(Sales[Amount]),
+    Products[Price] > 1000
+)
+
+Execution:
+User selects any filters (date, region, etc.)
+Adds condition: Price > 1000
+Result: Sales for expensive products only
+Respects user's other filters
+
+Use Case:
+Premium product analysis
+```
+
+**Interview Answer:**
+"CALCULATE lets you modify filter context. Use it for YoY comparisons, company totals, and conditional filtering. It's the key to advanced Power BI."
+
+---
+
+### Q7: What's the difference between Calculated Columns and Measures? When would you use each?
+
+**A:**
+
+**Calculated Columns:**
+```
+When: Load-time (once when data refreshes)
+Where: Stored in model (increases size)
+Context: Row context (per-row evaluation)
+Responsive: No (static values)
+Size Impact: Large
+
+Use When:
+✓ Row-specific calculations
+✓ Used in security (RLS)
+✓ Need per-row value
+✓ Used in many visuals
+
+Example:
+Revenue = Quantity × Price
+(Stored for each row)
+```
+
+**Measures:**
+```
+When: Query-time (when visual created)
+Where: Not stored (only formula)
+Context: Filter context (aggregate)
+Responsive: Yes (changes with filters)
+Size Impact: None
+
+Use When:
+✓ Aggregations (SUM, AVG, COUNT)
+✓ Time intelligence
+✓ Dynamic calculations
+✓ Respond to filters
+
+Example:
+Total Revenue = SUM(Revenue)
+(Calculated when needed)
+```
+
+**Decision Guide:**
+
+```
+Question 1: Do I need row-level value?
+├─ YES → Calculated Column
+└─ NO → Go to Q2
+
+Question 2: Is it an aggregation?
+├─ YES → Measure
+└─ NO → Calculated Column
+
+Question 3: Does it need to respond to filters?
+├─ YES → Measure
+└─ NO → Calculated Column
+```
+
+**Real Example - E-commerce:**
+
+```
+Product | Quantity | Price | Revenue
+A       | 5        | 100   | 500     ← Calculated Column
+B       | 3        | 200   | 600     ← Calculated Column
+
+Calculated Column Measures:
+✓ Revenue (Price × Quantity) - per row
+
+Measures:
+✓ Total Revenue = SUM(Revenue)
+✓ Avg Order Value = AVERAGE(Revenue)
+✓ YTD Revenue = DATESYTD(SUM(Revenue))
+```
+
+**Interview Answer:**
+"Calculated columns store values at load-time (row context). Measures calculate at query-time (filter context). Use calculated columns for row-specific logic, measures for aggregations."
+
+---
+
+### Q8: What is Row-Level Security (RLS)? How does it work?
+
+**A:**
+
+**RLS Definition:**
+Restricts data visibility based on user identity.
+
+```
+Scenario:
+Retail company with 50 store managers
+Each manager should see only their store
+```
+
+**Without RLS (Security Risk):**
+```
+All managers see ALL data
+Store 1 manager sees: All 50 stores
+Store 2 manager sees: All 50 stores
+Result: Data leak, security violation
+```
+
+**With RLS (Secure):**
+```
+Each manager sees only their store
+Store 1 manager sees: Store 1 only
+Store 2 manager sees: Store 2 only
+Result: Appropriate access control
+```
+
+**How RLS Works:**
+
+```
+Step 1: User logs in
+         Power BI identifies username
+
+Step 2: Check security table
+         Username → Allowed regions
+         john@company.com → [North, Central]
+
+Step 3: Apply DAX filter
+         [Region] IN VALUES(SecurityTable[AllowedRegions])
+
+Step 4: User sees filtered data
+         Only North and Central data visible
+
+Step 5: Same report, different views
+         Each user sees different data
+```
+
+**Implementation:**
+
+```
+1. Create security table
+   User | Region
+   john@company.com | North
+   jane@company.com | South
+
+2. Create role in Power BI
+   Model View → Manage Roles → New
+
+3. Add DAX filter
+   [StoreRegion] = VALUES(SecurityTable[UserRegion])
+
+4. Test with different users
+   john sees North
+   jane sees South
+```
+
+**Benefits:**
+```
+✓ Single report for entire company
+✓ Each user sees appropriate data
+✓ No duplicating reports
+✓ Maintains security
+✓ Reduces maintenance
+```
+
+**Interview Answer:**
+"RLS restricts data based on user identity. Create security table, define role with DAX filter, apply to table. Each user sees only their data."
+
+---
+
+### Q9: How would you optimize a Power BI model that's performing slowly?
+
+**A:**
+
+**Optimization Steps (In Order):**
+
+```
+Step 1: Diagnose (Where is slowness?)
+├─ Is it data refresh? (Slow import)
+├─ Is it query? (Slow when opening visual)
+└─ Is it model? (Large dataset)
+
+Step 2: Remove unnecessary columns
+Before: 100 columns
+After: 25 essential columns
+Result: 75% size reduction
+
+Step 3: Filter historical data
+Before: 10 years of data
+After: 3 years of data
+Result: 70% size reduction
+
+Step 4: Use DirectQuery selectively
+Before: All import (1GB)
+After: Current month DirectQuery + historical import
+Result: Balance freshness + performance
+
+Step 5: Optimize DAX measures
+Before: Complex nested formulas
+After: Simpler, more efficient formulas
+Result: Faster calculations
+
+Step 6: Use aggregations
+Before: Query 100M rows
+After: Query 10K aggregated rows
+Result: 100x faster queries
+
+Step 7: Archive old data
+Before: Full dataset (5GB)
+After: Moving data (1GB current + archive)
+Result: Model stays manageable
+```
+
+**Common Performance Issues:**
+
+```
+Issue: Slow refresh
+Solution: Use incremental refresh
+Result: Load only new data daily
+
+Issue: Slow visuals
+Solution: Reduce data in visual (Top 10)
+Result: Instant rendering
+
+Issue: Large model
+Solution: Remove unused columns
+Result: Smaller = faster
+
+Issue: Complex DAX
+Solution: Simplify formulas
+Result: Faster computation
+```
+
+**Monitoring Tools:**
+```
+DAX Studio: Analyze query performance
+Tabular Editor: Review model structure
+Power BI Performance Analyzer: Built-in tool
+```
+
+**Interview Answer:**
+"Remove unnecessary columns, filter historical data, use DirectQuery selectively, optimize DAX, implement aggregations, archive old data. Test each change."
+
+---
+
+### Q10: What's the difference between Power BI Pro and Premium? When would you recommend each?
+
+**A:**
+
+**Power BI Pro:**
+```
+Cost: $10/user/month
+Storage: 10GB per user
+Sharing: Within organization
+Refresh: 8 times daily
+Capacity: Shared (all users share)
+
+Best For:
+✓ Small teams
+✓ Internal reporting
+✓ Cost-conscious organizations
+✓ < 50 users
+
+Limitations:
+✗ Shared capacity (slower at peak)
+✗ Limited refresh frequency
+✗ No RLS at enterprise scale
+```
+
+**Power BI Premium:**
+```
+Cost: $4,995/month (capacity)
+Storage: Effectively unlimited
+Sharing: Internal + external (B2C)
+Refresh: Unlimited
+Capacity: Dedicated (your own)
+
+Best For:
+✓ Large organizations
+✓ Mission-critical reports
+✓ External sharing needed
+✓ 100+ concurrent users
+✓ Real-time requirements
+
+Features:
+✓ Dedicated capacity
+✓ Unlimited refresh
+✓ XMLA endpoints
+✓ Incremental refresh
+✓ Paginated reports
+```
+
+**Decision Matrix:**
+
+```
+< 50 users      → Power BI Pro
+50-200 users    → Hybrid (Pro + Premium)
+> 200 users     → Power BI Premium
+External users  → Power BI Premium
+Real-time need  → Power BI Premium
+Large dataset   → Power BI Premium
+Mission-critical→ Power BI Premium
+Limited budget  → Power BI Pro
+```
+
+**Interview Answer:**
+"Pro: $10/user, shared capacity, good for small teams. Premium: $5K/month, dedicated capacity, for enterprise. Choose based on user count, data size, and requirements."
+
+---
+
+### Q11: What are the key considerations when building a data model for Power BI?
+
+**A:**
+
+**Consideration 1: Star Schema**
+```
+✓ Do: One fact table + many dimension tables
+✗ Don't: Complex many-to-many relationships
+✓ Result: Clear, performant model
+```
+
+**Consideration 2: Relationship Cardinality**
+```
+Set correctly:
+One-to-Many: One product → Many sales
+Many-to-One: Many orders → One customer
+One-to-One: Rare (usually combine tables)
+Many-to-Many: Use bridge table
+
+Wrong cardinality = Wrong results
+```
+
+**Consideration 3: Grain (Level of Detail)**
+```
+Decide BEFORE building:
+Sales fact table grain:
+Transaction level? (Every item ordered)
+Order level? (Sum per order)
+Daily level? (Daily totals)
+
+Different grain = Different model
+```
+
+**Consideration 4: Handling Slowly Changing Dimensions**
+```
+Dimension changes over time (customer moves to new region)
+
+Type 1: Overwrite old value
+Type 2: Create new row with dates
+Type 3: Add "current" column
+
+Choose based on: Do you need history?
+```
+
+**Consideration 5: Surrogate Keys**
+```
+Use integer IDs (ProductID = 100)
+NOT natural keys (ProductName = "Laptop")
+
+Why?
+✓ Faster performance
+✓ Smaller storage
+✓ Handles name changes
+```
+
+**Consideration 6: Date Table**
+```
+✓ Do: Create single date dimension
+✗ Don't: Extract dates from transactions
+
+Date table has:
+- Date column
+- Year, Quarter, Month, Day
+- Fiscal year
+- Holidays
+- All time intelligence depends on this
+```
+
+**Consideration 7: Naming Conventions**
+```
+✓ Clear names: Product_Price
+✗ Cryptic: PPrc
+
+Benefits:
+✓ Easy to understand
+✓ Business users recognize them
+✓ Self-documenting
+```
+
+**Checklist Before Publishing:**
+
+```
+☐ Star schema structure
+☐ Correct cardinality
+☐ All relationships necessary
+☐ Grain defined
+☐ Surrogate keys used
+☐ Date dimension created
+☐ Naming conventions applied
+☐ No circular relationships
+☐ Model size reasonable (< 2GB)
+☐ Documentation completed
+```
+
+**Interview Answer:**
+"Use star schema, set cardinality correctly, define grain, use surrogate keys, create date dimension, follow naming conventions. Verify no circular relationships and model size is acceptable."
+
+---
+
+### Q12: How do you handle missing data (blanks) in Power BI?
+
+**A:**
+
+**Types of Missing Data:**
+
+```
+Blank: Empty cell
+NULL: Database null
+Error: Formula error
+Meaning: Unknown/Undefined
+```
+
+**Detection:**
+
+```
+Measure:
+Blank Count = COUNTBLANK(Column)
+
+If > 0: You have missing data
+Investigate: Why is data missing?
+```
+
+**Handling Options:**
+
+**Option 1: Replace with Default**
+```
+Formula:
+Revenue Clean = IF(ISBLANK([Revenue]), 0, [Revenue])
+
+Effect:
+Blank → 0
+Calculations work
+SUM includes zeros
+
+Use When:
+✓ Missing means zero
+✓ Measurements (optional items)
+```
+
+**Option 2: Remove Records**
+```
+Power Query:
+Remove rows where [Revenue] is blank
+
+Effect:
+Only complete records remain
+No calculations needed
+Data clean
+
+Use When:
+✓ Essential data
+✓ Blank means invalid
+```
+
+**Option 3: Leave Blank (Sometimes)**
+```
+Formula:
+Revenue = [Amount] × [Quantity]
+
+Effect:
+If either blank → Result blank
+Doesn't affect calculations
+
+Use When:
+✓ Want to see missing explicitly
+✓ Analysis of completeness
+```
+
+**Best Practices:**
+
+```
+✓ Fix at source (database)
+✓ Clean in Power Query (before model)
+✗ Don't use formulas to hide problems
+
+Priority:
+1. Prevent at source
+2. Clean in Power Query
+3. Handle with formulas (last resort)
+```
+
+**Interview Answer:**
+"Detect blanks with COUNTBLANK. Replace with default if missing means zero, remove rows if data essential, clean in Power Query before modeling. Handle systematically."
+
+---
+
+### Q13: What's the relationship between Power BI and Excel? When would you use each?
+
+**A:**
+
+**Power BI:**
+```
+✓ Interactive dashboards
+✓ Multiple data sources
+✓ Real-time refreshes
+✓ Scalable to enterprise
+✓ Sharing & collaboration
+✓ Complex analytics
+
+✗ Not spreadsheet
+✗ Can't edit data directly
+✗ Learning curve
+```
+
+**Excel:**
+```
+✓ Spreadsheet analysis
+✓ Direct editing
+✓ Familiar to all
+✓ Ad-hoc analysis
+✓ Simple calculations
+
+✗ Not scalable
+✗ Limited visualization
+✗ Difficult to share
+✗ No real-time
+```
+
+**When to Use Power BI:**
+```
+- Executive dashboards
+- Real-time monitoring
+- Multiple data sources
+- Sharing across company
+- Scheduled reports
+- Complex analytics
+- Large datasets
+```
+
+**When to Use Excel:**
+```
+- One-time analysis
+- Pivot tables
+- Budget forecasting
+- Financial models
+- Data entry
+- Small datasets
+- Quick calculations
+```
+
+**They Work Together:**
+```
+Excel → Power BI:
+Upload Excel file
+Build dashboard
+Share with team
+
+Power BI → Excel:
+Export Power BI data
+Further analysis in Excel
+Share results
+```
+
+**Interview Answer:**
+"Use Power BI for dashboards and sharing, Excel for analysis and editing. They complement each other. Power BI scales, Excel is flexible."
+
+---
+
+### Q14: Explain Composite Mode. Why and when would you use it?
+
+**A:**
+
+**Composite Mode Definition:**
+Mix Import and DirectQuery in same model.
+
+```
+Architecture:
+┌─ Import: Products (rarely change)
+├─ Import: Customers (daily update)
+└─ DirectQuery: Sales (real-time)
+
+Result: Performance + Freshness
+```
+
+**Why Use Composite Mode:**
+
+```
+Problem 1:
+- Need real-time data (DirectQuery)
+- But DirectQuery is slow
+- DirectQuery on huge dataset = very slow
+
+Problem 2:
+- Import is fast but stale
+- DirectQuery is fresh but slow
+
+Solution: Composite Mode
+- Import stable data (fast)
+- DirectQuery current data (fresh)
+- Best of both worlds
+```
+
+**Practical Example:**
+
+```
+E-commerce Company:
+
+Import Tables (Historical):
+- Product catalog (changes rarely)
+- Customer master (updated daily)
+- Store locations (static)
+→ Fast queries
+
+DirectQuery Tables (Real-time):
+- Sales happening now
+- Inventory levels (constantly updated)
+- Prices (change hourly)
+→ Real-time accuracy
+
+Result:
+Dashboard shows:
+- Historical trends (from Import)
+- Real-time metrics (from DirectQuery)
+- Single interface
+- Good performance
+```
+
+**Benefits:**
+```
+✓ Balances performance + real-time
+✓ Import for stable, DirectQuery for volatile
+✓ Flexible data freshness
+✓ Scales better than pure DirectQuery
+```
+
+**Drawbacks:**
+```
+✗ More complex
+✗ Requires careful design
+✗ Testing needed
+```
+
+**Interview Answer:**
+"Composite Mode mixes Import (stable data, fast) and DirectQuery (real-time data, fresh). Use when need both performance and real-time, like inventory + sales trends."
+
+---
+
+### Q15: What are the most important Power BI skills for a professional?
+
+**A:**
+
+**Ranked by Importance:**
+
+```
+1. DATA MODELING (Most Important)
+   - Star schema design
+   - Relationship setup
+   - Grain definition
+   - Handles 50% of problems
+
+2. DAX WRITING (Very Important)
+   - CALCULATE mastery
+   - Understanding context
+   - Time intelligence
+   - Handles 30% of problems
+
+3. POWER QUERY (Very Important)
+   - Data cleaning
+   - Transformations
+   - Performance optimization
+   - Handles 15% of problems
+
+4. VISUALIZATION (Important)
+   - Chart selection
+   - Design principles
+   - Interactivity
+   - Handles 3% of problems
+
+5. SOFT SKILLS (Important)
+   - Communication
+   - Understanding business
+   - Project management
+   - Handles 2% of problems
+```
+
+**Top 10 Techniques to Master:**
+
+```
+1. Build star schema correctly
+2. Write CALCULATE measures
+3. Implement date hierarchies
+4. Optimize model performance
+5. Clean data in Power Query
+6. Use RELATED for lookups
+7. Create time intelligence measures
+8. Implement RLS
+9. Design interactive dashboards
+10. Troubleshoot performance issues
+```
+
+**Learning Priority:**
+
+```
+Months 1-2: Data Modeling + Basic DAX
+Months 3-4: Advanced DAX + Power Query
+Months 5-6: Performance + Security
+Months 7+: Specific business domains
+```
+
+**Interview Answer:**
+"Data modeling is most important (50%), then DAX (30%), Power Query (15%). Master star schema, CALCULATE, and query optimization. Then learn advanced patterns."
+
+---
+
+## KEYPOINTS - INTERVIEW PREPARATION:
+
+**Most Important Concepts:**
+1. Filter Context (foundation of Power BI)
+2. Star Schema (data model design)
+3. CALCULATE (advanced DAX)
+4. Row vs Filter Context (DAX understanding)
+5. Data Modeling (before building)
+6. Performance (optimization mindset)
+
+**Most Asked Questions:**
+1. Explain data modeling approach
+2. How would you optimize slow model
+3. Describe your approach to DAX
+4. What's your model design process
+5. How do you handle security
+6. Tell me about time intelligence
+
+**Common Mistakes in Interviews:**
+✗ Not mentioning star schema
+✗ Saying SUMIF instead of CALCULATE
+✗ Ignoring performance
+✗ Not understanding context
+✗ No data quality mindset
+✗ Forgetting security
+
+**Strong Answers Include:**
+✓ Business context
+✓ Technical accuracy
+✓ Real examples
+✓ Performance considerations
+✓ Security mindset
+✓ Best practices
+
+---
+
+## Summary
+
+### Core Concepts
+- **Power BI = 3-layer architecture**: Data → Model → Visuals
+- **Star schema** is best practice for data modeling
+- **DAX** is the calculation language; CALCULATE is key
+- **Measures** are better than calculated columns for aggregations
+- **Performance matters**: Optimize before publishing
+
+### Common Workflow
+1. Connect to data source
+2. Transform in Power Query
+3. Load to model
+4. Create relationships
+5. Write measures
+6. Build visualizations
+7. Create reports/dashboards
+8. Publish to service
+9. Set refresh schedule
+10. Share with users
+
+### What Makes Power BI Powerful
+- **Integration**: Works seamlessly with Microsoft ecosystem
+- **Speed**: Excellent performance for reasonable data sizes
+- **Accessibility**: Easy for Excel users
+- **Scalability**: Grows from personal use to enterprise
+- **Cost**: Affordable pricing
+
+---
+
+**Learning Path:**
+1. **Basics**: Data sources → Transform → Model
+2. **Intermediate**: Relationships → Basic DAX → Visualizations
+3. **Advanced**: Complex DAX → RLS → Performance tuning
+4. **Expert**: Deployment → Governance → Architecture design
+
+**Resources:**
+- Microsoft Learn: learn.microsoft.com/power-bi
+- DAX Studio (optimization tool)
+- Tabular Editor (advanced modeling)
+- Power BI Community Forums
+- Microsoft documentation
+
+**Time Investment:**
+- Basics: 20-30 hours
+- Proficiency: 50-100 hours
+- Mastery: 200+ hours
+
+---
+
+*Power BI Version: Latest (Cloud)*
+*Last Updated: December 2025*
