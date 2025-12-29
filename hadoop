@@ -1,0 +1,3366 @@
+# Hadoop - Complete Notes & Theory
+
+## Table of Contents
+1. [Introduction](#introduction)
+2. [Hadoop Architecture](#hadoop-architecture)
+3. [HDFS (Hadoop Distributed File System)](#hdfs)
+4. [MapReduce Framework](#mapreduce-framework)
+5. [YARN (Yet Another Resource Negotiator)](#yarn)
+6. [Data Serialization](#data-serialization)
+7. [Performance Tuning](#performance-tuning)
+8. [Security](#security)
+9. [Real-World Use Cases](#real-world-use-cases)
+10. [Practical Setup & Execution](#practical-setup--execution)
+11. [Step-by-Step Job Development](#step-by-step-job-development)
+12. [Real-World Applications](#real-world-applications)
+13. [Troubleshooting & Debugging](#troubleshooting--debugging)
+14. [Complete Concepts Reference](#complete-concepts-reference)
+15. [Interview Questions](#interview-questions)
+
+---
+
+## Introduction
+
+### What is Hadoop?
+- **Hadoop** is an open-source framework for distributed storage and processing of large datasets
+- Processes data in parallel across a cluster of computers
+- Fault-tolerant and scalable
+- Written in Java
+- Part of the Apache ecosystem
+
+### Historical Evolution
+```
+MapReduce paper (2003) → Hadoop 0.1 (2005) → Hadoop 0.20 (2009)
+→ Hadoop 1.0 (2011) → Hadoop 2.0 (2013, introduces YARN)
+→ Hadoop 3.0 (2017, containerization support)
+→ Hadoop 3.3+ (2020+, improvements and security)
+```
+
+### Why Hadoop?
+- **Scalability:** Scale from single server to thousands
+- **Fault Tolerance:** Automatic replication and recovery
+- **Cost-Effective:** Runs on commodity hardware
+- **Flexibility:** Handles structured and unstructured data
+- **High Throughput:** Optimized for batch processing
+- **Data Locality:** Moves computation to data
+
+### When NOT to Use Hadoop
+- Real-time processing (use Spark Streaming, Kafka)
+- Complex transactions (use traditional databases)
+- Small datasets (< 100 GB, use standalone tools)
+- Low-latency requirements
+- Highly iterative algorithms (use Spark)
+
+### Hadoop vs Other Technologies
+
+| Feature | Hadoop | Spark | Kafka | Database |
+|---------|--------|-------|-------|----------|
+| Processing | Batch | Batch/Real-time | Real-time | Immediate |
+| Speed | Slower | Faster | Real-time | Immediate |
+| Cost | Cheap | Moderate | Moderate | Expensive |
+| Fault Tolerance | Excellent | Good | Excellent | Good |
+| Learning Curve | Steep | Moderate | Moderate | Easy |
+
+---
+
+## Hadoop Architecture
+
+### Three Main Components
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Hadoop Ecosystem                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌────────────┐ │
+│  │  HDFS            │  │  MapReduce/YARN  │  │ Hive/Pig   │ │
+│  │  Storage Layer   │  │  Processing      │  │ SQL Layer  │ │
+│  └──────────────────┘  └──────────────────┘  └────────────┘ │
+│                                                              │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌────────────┐ │
+│  │  HBase           │  │  Hive            │  │ Flume      │ │
+│  │  NoSQL DB        │  │  Data Warehouse  │  │ Ingestion  │ │
+│  └──────────────────┘  └──────────────────┘  └────────────┘ │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+                          ↓
+                   HDFS (Distributed Storage)
+```
+
+### Master-Slave Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│         Client/Master Node                       │
+│  ┌──────────────────┐  ┌──────────────────────┐ │
+│  │  NameNode        │  │  ResourceManager     │ │
+│  │  (HDFS Master)   │  │  (YARN Master)       │ │
+│  │  - Manages FS    │  │  - Allocates tasks   │ │
+│  │  - Maintains tree│  │  - Schedules jobs    │ │
+│  └──────────────────┘  └──────────────────────┘ │
+└─────────────────────────────────────────────────┘
+                      ↓
+        ┌─────────────┼─────────────┐
+        ↓             ↓             ↓
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│  Slave Node 1│ │  Slave Node 2│ │  Slave Node 3│
+│┌────────────┐│ │┌────────────┐│ │┌────────────┐│
+││ DataNode   ││ ││ DataNode   ││ ││ DataNode   ││
+││ TaskTracker││ ││ TaskTracker││ ││ TaskTracker││
+│└────────────┘│ │└────────────┘│ │└────────────┘│
+│  (Stores     │ │  (Stores     │ │  (Stores     │
+│   blocks,    │ │   blocks,    │ │   blocks,    │
+│   runs tasks)│ │   runs tasks)│ │   runs tasks)│
+└──────────────┘ └──────────────┘ └──────────────┘
+```
+
+### Core Daemons
+
+| Daemon | Location | Purpose |
+|--------|----------|---------|
+| **NameNode** | Master | Manages file system namespace |
+| **DataNode** | Slave | Stores actual data blocks |
+| **Secondary NameNode** | Master | Merges namespace image and logs |
+| **ResourceManager** | Master | Manages computational resources |
+| **NodeManager** | Slave | Container launch and monitoring |
+| **JobHistoryServer** | Any | Tracks historical jobs |
+
+---
+
+## HDFS (Hadoop Distributed File System)
+
+### HDFS Architecture
+
+#### Key Concepts
+
+1. **Block Storage**
+   - Files split into blocks (default 128 MB or 256 MB)
+   - Each block replicated across DataNodes
+   - Blocks stored independently
+   - Block sizes larger than typical file systems
+
+2. **Replication Strategy**
+   - Default replication factor: 3
+   - Rack-aware placement:
+     - 1st replica: Same node as writer
+     - 2nd replica: Different rack
+     - 3rd replica: Different node, same rack
+
+3. **NameNode**
+   - Maintains file system namespace
+   - Manages file system tree and metadata for all files
+   - Does NOT store actual data
+   - Keeps file system image in memory
+   - Data persisted to disk via fsimage and edit logs
+
+```
+NameNode Memory Structure:
+├── File System Tree
+├── Metadata for all files/directories
+│   ├── Permissions
+│   ├── Modification times
+│   ├── Namespace quotas
+│   └── ACLs
+├── Block-to-DataNode mapping
+└── Block-to-replica mapping
+```
+
+#### HDFS Read Process
+
+```
+Client → NameNode (get block locations)
+         ↓
+         (sorted by proximity)
+         ↓
+Client → DataNode 1 (closest) → read block
+         (if fails)
+         ↓
+Client → DataNode 2 → read block
+         (if fails)
+         ↓
+Client → DataNode 3 → read block
+```
+
+#### HDFS Write Process
+
+```
+Client → NameNode (create file)
+         ↓
+Client → DataNode 1 (pipeline write)
+         ↓ (forward to)
+Client → DataNode 2 (pipelined)
+         ↓ (forward to)
+Client → DataNode 3 (pipelined)
+         ↓
+All acknowledge ✓
+         ↓
+Client → NameNode (complete file)
+```
+
+### HDFS Commands
+
+```bash
+# File operations
+hadoop fs -ls /path
+hadoop fs -mkdir /path
+hadoop fs -put local_file /hdfs/path
+hadoop fs -get /hdfs/path local_path
+hadoop fs -cat /path/file
+hadoop fs -tail /path/file
+hadoop fs -rm /path/file
+hadoop fs -rmr /path/directory
+
+# Directory operations
+hadoop fs -df /path
+hadoop fs -du /path
+hadoop fs -count /path
+
+# Permissions
+hadoop fs -chmod 755 /path
+hadoop fs -chown user:group /path
+
+# File info
+hadoop fs -stat /path
+hadoop fs -test -e /path
+```
+
+### HDFS Configuration
+
+```xml
+<!-- hdfs-site.xml -->
+<configuration>
+    <!-- Block size (bytes) -->
+    <property>
+        <name>dfs.blocksize</name>
+        <value>268435456</value> <!-- 256MB -->
+    </property>
+    
+    <!-- Replication factor -->
+    <property>
+        <name>dfs.replication</name>
+        <value>3</value>
+    </property>
+    
+    <!-- NameNode storage -->
+    <property>
+        <name>dfs.namenode.name.dir</name>
+        <value>/hadoop/dfs/name</value>
+    </property>
+    
+    <!-- DataNode storage -->
+    <property>
+        <name>dfs.datanode.data.dir</name>
+        <value>/hadoop/dfs/data</value>
+    </property>
+    
+    <!-- DataNode heartbeat interval -->
+    <property>
+        <name>dfs.heartbeat.interval</name>
+        <value>3</value> <!-- 3 seconds -->
+    </property>
+    
+    <!-- Replication timeout -->
+    <property>
+        <name>dfs.namenode.heartbeat.recheck-interval</name>
+        <value>300000</value> <!-- 5 minutes -->
+    </property>
+</configuration>
+```
+
+---
+
+## MapReduce Framework
+
+### MapReduce Paradigm
+
+#### Core Concept
+- **Divide and Conquer** approach for distributed computing
+- Split data into independent chunks
+- Process in parallel
+- Aggregate results
+
+#### Simple Example: Word Count
+
+```
+Input: "Hello World Hello Hadoop"
+
+MAP Phase (parallel):
+  Mapper 1: Hello → (Hello, 1), World → (World, 1)
+  Mapper 2: Hello → (Hello, 1), Hadoop → (Hadoop, 1)
+
+SHUFFLE & SORT Phase:
+  Group by key: 
+    (Hadoop, [1])
+    (Hello, [1, 1])
+    (World, [1])
+
+REDUCE Phase (parallel):
+  Reducer 1: (Hadoop, [1]) → (Hadoop, 1)
+  Reducer 2: (Hello, [1, 1]) → (Hello, 2)
+  Reducer 3: (World, [1]) → (World, 1)
+
+Output:
+  Hadoop: 1
+  Hello: 2
+  World: 1
+```
+
+### MapReduce Job Flow
+
+```
+Submit Job
+    ↓
+Split Input Files
+    ↓
+Create Mapper Tasks
+    ↓
+[MAP PHASE] ────────────────────────────────┐
+  Input Split 1 → Mapper 1 → Output         │
+  Input Split 2 → Mapper 2 → Output         │
+  Input Split 3 → Mapper 3 → Output         │
+                                             │
+[SHUFFLE & SORT PHASE] ◄─────────────────────┘
+  Group key-values by key
+  Sort by key
+  ↓
+[REDUCE PHASE]
+  Key-group 1 → Reducer 1 → Final Output
+  Key-group 2 → Reducer 2 → Final Output
+  ↓
+Merge Outputs
+```
+
+### MapReduce Program Structure
+
+```java
+// Word Count Example
+import org.apache.hadoop.io.*;
+import org.apache.hadoop.mapreduce.*;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+
+public class WordCount {
+    
+    // Mapper: Transforms input to key-value pairs
+    public static class WordCountMapper 
+            extends Mapper<LongWritable, Text, Text, IntWritable> {
+        
+        private final static IntWritable one = new IntWritable(1);
+        private Text word = new Text();
+        
+        @Override
+        protected void map(LongWritable key, Text value, Context context)
+                throws IOException, InterruptedException {
+            
+            // value: entire line
+            String line = value.toString();
+            String[] words = line.split("\\s+");
+            
+            // Emit (word, 1) for each word
+            for (String w : words) {
+                word.set(w);
+                context.write(word, one);
+            }
+        }
+    }
+    
+    // Reducer: Aggregates values for same key
+    public static class WordCountReducer 
+            extends Reducer<Text, IntWritable, Text, IntWritable> {
+        
+        @Override
+        protected void reduce(Text key, Iterable<IntWritable> values, Context context)
+                throws IOException, InterruptedException {
+            
+            int sum = 0;
+            for (IntWritable count : values) {
+                sum += count.get();
+            }
+            
+            context.write(key, new IntWritable(sum));
+        }
+    }
+    
+    // Driver: Job configuration and execution
+    public static void main(String[] args) throws Exception {
+        
+        if (args.length != 2) {
+            System.err.println("Usage: WordCount <input> <output>");
+            System.exit(1);
+        }
+        
+        Configuration conf = new Configuration();
+        
+        // Set number of reducers
+        conf.setInt("mapreduce.job.reduces", 2);
+        
+        Job job = Job.getInstance(conf, "Word Count");
+        
+        // Set mapper and reducer classes
+        job.setMapperClass(WordCountMapper.class);
+        job.setReducerClass(WordCountReducer.class);
+        
+        // Set output types
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(IntWritable.class);
+        
+        // Set input and output paths
+        FileInputFormat.addInputPath(job, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+        
+        // Wait for job completion
+        boolean success = job.waitForCompletion(true);
+        
+        System.exit(success ? 0 : 1);
+    }
+}
+```
+
+### Hadoop Data Types (Writable)
+
+```java
+// All Hadoop types must implement Writable interface
+public class WritableExample {
+    
+    // Primitive Wrappers
+    IntWritable iw = new IntWritable(5);
+    LongWritable lw = new LongWritable(100L);
+    FloatWritable fw = new FloatWritable(3.14f);
+    DoubleWritable dw = new DoubleWritable(2.71);
+    BooleanWritable bw = new BooleanWritable(true);
+    Text text = new Text("Hello");
+    
+    // Array Wrapper
+    ArrayWritable aw = new ArrayWritable(IntWritable.class);
+    
+    // Map Wrapper
+    MapWritable mw = new MapWritable();
+    
+    // Custom Writable
+    public static class Person implements Writable {
+        
+        private String name;
+        private int age;
+        
+        @Override
+        public void write(DataOutput out) throws IOException {
+            out.writeUTF(name);
+            out.writeInt(age);
+        }
+        
+        @Override
+        public void readFields(DataInput in) throws IOException {
+            name = in.readUTF();
+            age = in.readInt();
+        }
+    }
+    
+    // Comparable Writable (for sorting)
+    public static class IntPair implements WritableComparable<IntPair> {
+        
+        private int first;
+        private int second;
+        
+        @Override
+        public void write(DataOutput out) throws IOException {
+            out.writeInt(first);
+            out.writeInt(second);
+        }
+        
+        @Override
+        public void readFields(DataInput in) throws IOException {
+            first = in.readInt();
+            second = in.readInt();
+        }
+        
+        @Override
+        public int compareTo(IntPair other) {
+            if (first != other.first) {
+                return Integer.compare(first, other.first);
+            }
+            return Integer.compare(second, other.second);
+        }
+    }
+}
+```
+
+### Advanced MapReduce Patterns
+
+#### 1. Combiner (Local Aggregation)
+
+```java
+// Combiner runs on mapper output before shuffle
+public class WordCountWithCombiner {
+    
+    public static class WordCountMapper 
+            extends Mapper<LongWritable, Text, Text, IntWritable> {
+        // Same as before
+    }
+    
+    public static class WordCountCombiner 
+            extends Reducer<Text, IntWritable, Text, IntWritable> {
+        // Run locally on mapper output to reduce data transfer
+        @Override
+        protected void reduce(Text key, Iterable<IntWritable> values, Context context)
+                throws IOException, InterruptedException {
+            
+            int sum = 0;
+            for (IntWritable count : values) {
+                sum += count.get();
+            }
+            context.write(key, new IntWritable(sum));
+        }
+    }
+    
+    public static void main(String[] args) throws Exception {
+        Job job = Job.getInstance(new Configuration(), "Word Count");
+        
+        job.setMapperClass(WordCountMapper.class);
+        job.setCombinerClass(WordCountCombiner.class); // Set combiner
+        job.setReducerClass(WordCountCombiner.class); // Same class can be reducer
+        
+        // Rest of job configuration...
+    }
+}
+```
+
+#### 2. Partitioner (Custom Partitioning)
+
+```java
+// Control which reducer gets which keys
+public class StringLengthPartitioner 
+        extends Partitioner<Text, IntWritable> {
+    
+    @Override
+    public int getPartition(Text key, IntWritable value, int numPartitions) {
+        // Partition by string length
+        int length = key.toString().length();
+        return length % numPartitions;
+    }
+}
+
+// Usage in job
+job.setPartitionerClass(StringLengthPartitioner.class);
+job.setNumReduceTasks(4);
+```
+
+#### 3. Secondary Sort
+
+```java
+// Sort within each reduce group
+public class SecondarySort {
+    
+    // Custom composite key
+    public static class IntPair implements WritableComparable<IntPair> {
+        private int first;
+        private int second;
+        
+        @Override
+        public int compareTo(IntPair other) {
+            int cmp = Integer.compare(first, other.first);
+            if (cmp != 0) return cmp;
+            return Integer.compare(second, other.second);
+        }
+        
+        // write/readFields...
+    }
+    
+    // Partitioner only uses first value
+    public static class IntPairPartitioner 
+            extends Partitioner<IntPair, Text> {
+        
+        @Override
+        public int getPartition(IntPair key, Text value, int numPartitions) {
+            return (key.first % numPartitions);
+        }
+    }
+    
+    // Grouping comparator only compares first value
+    public static class IntPairGroupingComparator 
+            implements RawComparator<IntPair> {
+        
+        @Override
+        public int compare(IntPair a, IntPair b) {
+            return Integer.compare(a.first, b.first);
+        }
+        
+        // Other methods...
+    }
+}
+```
+
+### MapReduce Job Optimization
+
+```java
+// Performance-tuned MapReduce job
+public class OptimizedJob {
+    
+    public static void configureJob(Job job, Configuration conf) {
+        
+        // Memory settings
+        conf.setInt("mapreduce.map.memory.mb", 1024);
+        conf.setInt("mapreduce.reduce.memory.mb", 2048);
+        conf.set("mapreduce.map.java.opts", "-Xmx800m");
+        conf.set("mapreduce.reduce.java.opts", "-Xmx1600m");
+        
+        // Mapper optimization
+        conf.setInt("mapreduce.task.io.sort.mb", 256); // Sort buffer
+        conf.setFloat("mapreduce.map.sort.spill.percent", 0.8);
+        
+        // Reducer optimization
+        conf.setInt("mapreduce.reduce.shuffle.parallelcopies", 8);
+        conf.setInt("mapreduce.reduce.shuffle.input.buffer.percent", 0.7);
+        conf.setInt("mapreduce.reduce.shuffle.merge.percent", 0.66);
+        
+        // Speculative execution
+        conf.setBoolean("mapreduce.map.speculative", false);
+        conf.setBoolean("mapreduce.reduce.speculative", false);
+        
+        // Compression
+        conf.set("mapreduce.map.output.compress", "true");
+        conf.set("mapreduce.map.output.compress.codec", 
+            "org.apache.hadoop.hive.ql.io.RCFile$RCFileOutputFormat");
+        
+        job.setConfiguration(conf);
+    }
+}
+```
+
+---
+
+## YARN (Yet Another Resource Negotiator)
+
+### YARN Architecture
+
+YARN separates resource management from job scheduling and monitoring.
+
+```
+┌─────────────────────────────────────────┐
+│        ResourceManager (RM)             │
+│  ┌─────────────────────────────────────┐│
+│  │ Scheduler  │  ApplicationsManager   ││
+│  │ - Allocate │  - Lifecycle mgmt      ││
+│  │   resources│  - Restart failed apps ││
+│  └─────────────────────────────────────┘│
+└─────────────────────────────────────────┘
+           ↓
+    ┌──────┴──────┬──────────────┐
+    ↓             ↓              ↓
+┌─────────┐ ┌─────────┐ ┌─────────────┐
+│NodeMgr 1│ │NodeMgr 2│ │  NodeMgr N  │
+│ ┌─────┐ │ │ ┌─────┐ │ │ ┌─────────┐ │
+│ │Cont1│ │ │ │Cont1│ │ │ │Cont1..N │ │
+│ └─────┘ │ │ └─────┘ │ │ └─────────┘ │
+└─────────┘ └─────────┘ └─────────────┘
+```
+
+### YARN Components
+
+| Component | Role | Responsibility |
+|-----------|------|-----------------|
+| **ResourceManager** | Global | Resource allocation, scheduler |
+| **ApplicationMaster** | Per-App | App lifecycle, negotiate resources |
+| **NodeManager** | Per-Node | Container launch, monitor |
+| **Container** | Task Unit | Isolated resource allocation |
+
+### YARN Configuration
+
+```xml
+<!-- yarn-site.xml -->
+<configuration>
+    <!-- ResourceManager settings -->
+    <property>
+        <name>yarn.resourcemanager.hostname</name>
+        <value>resourcemanager.example.com</value>
+    </property>
+    
+    <!-- Scheduler type -->
+    <property>
+        <name>yarn.resourcemanager.scheduler.class</name>
+        <value>org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FairScheduler</value>
+    </property>
+    
+    <!-- Memory allocation -->
+    <property>
+        <name>yarn.nodemanager.resource.memory-mb</name>
+        <value>8192</value> <!-- 8GB per node -->
+    </property>
+    
+    <!-- CPU cores allocation -->
+    <property>
+        <name>yarn.nodemanager.resource.cpu-vcores</name>
+        <value>4</value> <!-- 4 cores per node -->
+    </property>
+    
+    <!-- Container settings -->
+    <property>
+        <name>yarn.scheduler.minimum-allocation-mb</name>
+        <value>1024</value> <!-- 1GB minimum -->
+    </property>
+    
+    <property>
+        <name>yarn.scheduler.maximum-allocation-mb</name>
+        <value>4096</value> <!-- 4GB maximum -->
+    </property>
+</configuration>
+```
+
+### Job Submission to YARN
+
+```java
+public class YARNJobSubmission {
+    
+    public static void submitJob(Configuration conf) throws Exception {
+        
+        Job job = Job.getInstance(conf, "YARN Job");
+        
+        // Configure job
+        job.setJarByClass(WordCount.class);
+        job.setMapperClass(WordCountMapper.class);
+        job.setReducerClass(WordCountReducer.class);
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(IntWritable.class);
+        
+        // YARN-specific settings
+        conf.set("mapreduce.framework.name", "yarn");
+        
+        // Resource allocation
+        conf.setInt("mapreduce.map.memory.mb", 1024);
+        conf.setInt("mapreduce.reduce.memory.mb", 2048);
+        conf.setInt("mapreduce.map.cpu.vcores", 1);
+        conf.setInt("mapreduce.reduce.cpu.vcores", 1);
+        
+        // Input/Output
+        FileInputFormat.addInputPath(job, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+        
+        // Submit and wait
+        job.submit(); // Or waitForCompletion(true)
+    }
+}
+```
+
+---
+
+## Data Serialization
+
+### Why Serialization Matters
+- Network efficiency
+- Storage compactness
+- Type safety
+- Framework integration
+
+### Writable Interface
+
+```java
+public interface Writable {
+    void write(DataOutput out) throws IOException;
+    void readFields(DataInput in) throws IOException;
+}
+
+// Example: Custom User Type
+public class User implements Writable {
+    
+    private String name;
+    private int age;
+    private String email;
+    
+    public User() {} // Required for deserialization
+    
+    public User(String name, int age, String email) {
+        this.name = name;
+        this.age = age;
+        this.email = email;
+    }
+    
+    @Override
+    public void write(DataOutput out) throws IOException {
+        out.writeUTF(name);
+        out.writeInt(age);
+        out.writeUTF(email);
+    }
+    
+    @Override
+    public void readFields(DataInput in) throws IOException {
+        name = in.readUTF();
+        age = in.readInt();
+        email = in.readUTF();
+    }
+    
+    @Override
+    public String toString() {
+        return name + "," + age + "," + email;
+    }
+}
+```
+
+### WritableComparable for Sorting
+
+```java
+public class Temperature implements WritableComparable<Temperature> {
+    
+    private int year;
+    private int temperature;
+    
+    @Override
+    public void write(DataOutput out) throws IOException {
+        out.writeInt(year);
+        out.writeInt(temperature);
+    }
+    
+    @Override
+    public void readFields(DataInput in) throws IOException {
+        year = in.readInt();
+        temperature = in.readInt();
+    }
+    
+    @Override
+    public int compareTo(Temperature other) {
+        int cmp = Integer.compare(year, other.year);
+        if (cmp != 0) return cmp;
+        return Integer.compare(temperature, other.temperature);
+    }
+}
+```
+
+---
+
+## Performance Tuning
+
+### 1. Data Locality
+
+```
+┌──────────────────────────────────────────┐
+│          YARN Scheduler                  │
+├──────────────────────────────────────────┤
+│                                          │
+│  NODE-LOCAL: Task on same node as data   │ ← Best
+│  RACK-LOCAL: Task on same rack as data   │ ← Good
+│  OFF-RACK:   Task on different rack      │ ← Worst
+│                                          │
+└──────────────────────────────────────────┘
+
+Scheduling Policy:
+1. Try NODE-LOCAL first
+2. If not available, try RACK-LOCAL
+3. Last resort: OFF-RACK
+```
+
+### 2. Compression
+
+```java
+public class CompressionExample {
+    
+    // Map output compression
+    public static void configureMapOutputCompression(Configuration conf) {
+        conf.setBoolean("mapreduce.map.output.compress", true);
+        conf.setClass("mapreduce.map.output.compress.codec",
+                GzipCodec.class, CompressionCodec.class);
+    }
+    
+    // Final output compression
+    public static void configureFinalOutputCompression(Configuration conf) {
+        FileOutputFormat.setCompressOutput(job, true);
+        FileOutputFormat.setOutputCompressorClass(job, BZip2Codec.class);
+    }
+}
+
+// Compression Codecs Comparison
+/*
+Codec          | Compression | Speed | Splittable |
+Gzip           | High        | Slow  | No         |
+BZip2          | Very High   | Very Slow | Yes    |
+Snappy         | Medium      | Fast  | No         |
+LZO            | Medium      | Fast  | Yes        |
+LZ4            | Low         | Very Fast | No     |
+Zstandard      | High        | Fast  | Yes        |
+*/
+```
+
+### 3. Parallelism Tuning
+
+```java
+public class ParallelismTuning {
+    
+    public static void tuneParallelism(Job job, Configuration conf, 
+                                       long inputSize) {
+        
+        // Number of mappers = Number of input splits
+        // Each split processed by one mapper
+        long bytesPerMapper = 128 * 1024 * 1024; // 128 MB default
+        int numMappers = (int) Math.ceil((double) inputSize / bytesPerMapper);
+        
+        // Number of reducers - usually 0.95 * cluster capacity
+        int numReducers = conf.getInt("mapreduce.job.reduces", 1);
+        
+        // Ideal: 5-10 minutes per task
+        // 30 second to 1 minute tasks too many
+        // 5+ hour tasks too few
+        
+        // Configure
+        job.setNumReduceTasks(Math.max(1, numReducers));
+        
+        // Slow start
+        conf.setFloat("mapreduce.job.reduce.slowstart.completedmaps", 0.05f);
+    }
+}
+```
+
+### 4. Memory Configuration
+
+```xml
+<!-- mapred-site.xml -->
+<configuration>
+    <!-- Per-mapper memory -->
+    <property>
+        <name>mapreduce.map.memory.mb</name>
+        <value>1024</value> <!-- 1GB -->
+    </property>
+    
+    <!-- Per-reducer memory -->
+    <property>
+        <name>mapreduce.reduce.memory.mb</name>
+        <value>2048</value> <!-- 2GB -->
+    </property>
+    
+    <!-- JVM heap space for mapper -->
+    <property>
+        <name>mapreduce.map.java.opts</name>
+        <value>-Xmx800m -XX:+UseCompressedOops</value>
+    </property>
+    
+    <!-- JVM heap space for reducer -->
+    <property>
+        <name>mapreduce.reduce.java.opts</name>
+        <value>-Xmx1600m -XX:+UseCompressedOops</value>
+    </property>
+    
+    <!-- Task attempt timeout -->
+    <property>
+        <name>mapreduce.task.timeout</name>
+        <value>600000</value> <!-- 10 minutes -->
+    </property>
+</configuration>
+```
+
+---
+
+## Security
+
+### Hadoop Security Modes
+
+#### 1. No Authentication (Unsecure Mode)
+- Trust-based security
+- Not production-ready
+- Default mode
+
+#### 2. Kerberos Authentication
+- Industry standard
+- Requires KDC setup
+- Complex but secure
+
+```xml
+<!-- core-site.xml -->
+<configuration>
+    <!-- Enable security -->
+    <property>
+        <name>hadoop.security.authentication</name>
+        <value>kerberos</value>
+    </property>
+    
+    <!-- Authorization provider -->
+    <property>
+        <name>hadoop.security.authorization</name>
+        <value>true</value>
+    </property>
+</configuration>
+```
+
+### File Permissions
+
+```bash
+# HDFS permission model similar to Unix
+# rwx for owner, group, others
+
+# Example: drwxr-xr-x
+# d: directory
+# rwx: owner permissions (read, write, execute)
+# r-x: group permissions
+# r-x: other permissions
+
+hadoop fs -chmod 755 /path/directory
+hadoop fs -chmod 644 /path/file
+hadoop fs -chown user:group /path
+```
+
+### ACLs (Access Control Lists)
+
+```bash
+# Enable ACLs
+hadoop fs -setfacl -m user:alice:rw /path/file
+hadoop fs -getfacl /path/file
+
+# Output: user::rwx, user:alice:rw-, group::r--, other::r--
+```
+
+---
+
+## Real-World Use Cases
+
+### 1. Log Analysis
+
+```java
+public class LogAnalyzer {
+    
+    public static class LogMapper 
+            extends Mapper<LongWritable, Text, Text, IntWritable> {
+        
+        @Override
+        protected void map(LongWritable key, Text value, Context context)
+                throws IOException, InterruptedException {
+            
+            // Parse log line: timestamp, level, message
+            String[] fields = value.toString().split(" - ");
+            if (fields.length >= 2) {
+                String level = fields[1]; // ERROR, WARN, INFO
+                context.write(new Text(level), new IntWritable(1));
+            }
+        }
+    }
+    
+    public static class LogReducer 
+            extends Reducer<Text, IntWritable, Text, IntWritable> {
+        
+        @Override
+        protected void reduce(Text key, Iterable<IntWritable> values, Context context)
+                throws IOException, InterruptedException {
+            
+            int sum = 0;
+            for (IntWritable val : values) {
+                sum += val.get();
+            }
+            context.write(key, new IntWritable(sum));
+        }
+    }
+}
+```
+
+### 2. Data Deduplication
+
+```java
+public class Deduplicator {
+    
+    public static class DedupMapper 
+            extends Mapper<LongWritable, Text, Text, NullWritable> {
+        
+        @Override
+        protected void map(LongWritable key, Text value, Context context)
+                throws IOException, InterruptedException {
+            
+            // Emit each record as key
+            context.write(value, NullWritable.get());
+        }
+    }
+    
+    // No reducer needed - shuffling removes duplicates
+    // All identical keys go to same reducer, outputs once
+}
+```
+
+### 3. Inverted Index
+
+```java
+public class InvertedIndex {
+    
+    public static class IndexMapper 
+            extends Mapper<LongWritable, Text, Text, Text> {
+        
+        @Override
+        protected void map(LongWritable key, Text value, Context context)
+                throws IOException, InterruptedException {
+            
+            // Input: docId<tab>content
+            String[] fields = value.toString().split("\t");
+            String docId = fields[0];
+            String content = fields[1];
+            
+            String[] words = content.split("\\s+");
+            for (String word : words) {
+                context.write(new Text(word), new Text(docId));
+            }
+        }
+    }
+    
+    public static class IndexReducer 
+            extends Reducer<Text, Text, Text, Text> {
+        
+        @Override
+        protected void reduce(Text key, Iterable<Text> values, Context context)
+                throws IOException, InterruptedException {
+            
+            // key: word, values: [docId1, docId2, ...]
+            StringBuilder docList = new StringBuilder();
+            for (Text docId : values) {
+                if (docList.length() > 0) docList.append(",");
+                docList.append(docId);
+            }
+            
+            context.write(key, new Text(docList.toString()));
+        }
+    }
+}
+```
+
+---
+
+## Interview Questions
+
+### Fundamental Questions
+
+1. **What is Hadoop and what are its main components?**
+   - Open-source framework for distributed storage and processing
+   - Three main components:
+     - HDFS: Distributed file system (storage)
+     - MapReduce: Distributed processing framework
+     - YARN: Resource manager (scheduling)
+
+2. **Explain the difference between HDFS and traditional file systems.**
+   - HDFS designed for large files, not frequent updates
+   - Write-once, read-many access model
+   - Replicates data across nodes for fault tolerance
+   - High throughput vs random access
+   - Block-based storage
+
+3. **What is a block in HDFS and why is it important?**
+   - HDFS stores files in blocks (128 MB or 256 MB default)
+   - Each block independently replicated across nodes
+   - Enables parallel processing
+   - Fault tolerance through replication
+   - Minimizes metadata storage at NameNode
+
+4. **How does MapReduce work? Explain the flow.**
+   - Input splits into chunks
+   - Mappers process in parallel
+   - Shuffle and sort intermediate results
+   - Reducers aggregate by key
+   - Final output produced
+   - Benefits from data locality
+
+5. **What is the purpose of the Combiner in MapReduce?**
+   - Local aggregation on mapper output
+   - Reduces data transferred to reducers
+   - Can use same code as reducer
+   - Optional optimization
+   - Significant for network bandwidth reduction
+
+### Advanced Questions
+
+6. **Explain the NameNode and DataNode relationship.**
+   - NameNode: Master, manages file system namespace
+   - DataNode: Slave, stores actual data blocks
+   - NameNode maintains file system tree and metadata
+   - DataNode sends heartbeats and block reports
+   - Rack-aware replication strategy
+   - NameNode doesn't store data
+
+7. **What happens when a DataNode fails?**
+   - NameNode detects failure (no heartbeat for 10 minutes)
+   - Blocks on failed node become under-replicated
+   - Replication monitor schedules re-replication
+   - New replicas created from other DataNodes
+   - Data locality considered for new replicas
+
+8. **How does HDFS ensure fault tolerance?**
+   - Default replication factor of 3
+   - Distributed across different racks
+   - Replica placement policy for rack awareness
+   - Block reports from DataNodes
+   - Automatic re-replication of under-replicated blocks
+   - fsimage and edit logs for NameNode recovery
+
+9. **Explain the MapReduce job execution process.**
+   - Job submission → JobTracker
+   - Input split creation (one per mapper)
+   - Mapper tasks scheduled near data
+   - Map phase produces key-value pairs
+   - Shuffle and sort by key
+   - Reduce phase aggregates values per key
+   - Output written to file
+
+10. **What is speculative execution and when should it be disabled?**
+    - If task appears to be slow, start duplicate on another node
+    - First to finish wins
+    - Used to mitigate slow nodes (stragglers)
+    - Should disable for:
+      - Non-idempotent operations
+      - Operations with side effects
+      - Cost-sensitive environments
+    - Controlled by mapreduce.map.speculative and mapreduce.reduce.speculative
+
+11. **How does data locality work in Hadoop?**
+    - Scheduler tries to run task where data resides
+    - Reduces network traffic
+    - Priority: NODE-LOCAL → RACK-LOCAL → OFF-RACK
+    - Input splits align with block boundaries
+    - HDFS block replication supports data locality
+
+12. **Explain the difference between Hadoop 1 and Hadoop 2.**
+    - **Hadoop 1:**
+      - JobTracker and TaskTracker
+      - Tightly coupled storage and computing
+      - Single point of failure
+      - Limited scalability
+    - **Hadoop 2:**
+      - YARN separates resource management
+      - ResourceManager and NodeManager
+      - Multiple frameworks on same cluster
+      - Better scalability and fault tolerance
+
+13. **What is YARN and how does it improve Hadoop?**
+    - Separates resource management from job scheduling
+    - ResourceManager: Global resource allocation
+    - ApplicationMaster: Per-application resource negotiation
+    - NodeManager: Container launch and management
+    - Enables multiple computing frameworks (MapReduce, Spark, etc.)
+    - Better cluster utilization
+
+14. **How do you handle skewed data in MapReduce?**
+    - **Problem:** Some keys have many more values than others
+    - **Solutions:**
+      - Custom partitioner to distribute load
+      - Sampling to estimate distribution
+      - Use salting (add random prefix to key)
+      - Secondary sort for ordering
+      - Multiple reducers per partition
+
+    ```java
+    // Salting example
+    String saltedKey = (Math.random() * numReducers) + "_" + originalKey;
+    context.write(new Text(saltedKey), value);
+    
+    // Reducer groups by original key
+    ```
+
+15. **What is the purpose of the Shuffle and Sort phase?**
+    - Takes mapper output and groups by key
+    - Sorts keys within each partition
+    - Ensures all values for same key go to same reducer
+    - Memory-efficient streaming merge
+    - Can use custom comparator for ordering
+
+### Scenario-Based Questions
+
+16. **Design a solution to find top 10 most frequent words in massive text files.**
+    - Mapper: Emit (word, 1) for each word
+    - Combiner: Sum counts locally
+    - Reducer: Sum across all mappers
+    - Post-processing: Sort and take top 10
+    
+    OR (more efficient):
+    - First job: Count all words
+    - Second job: Find top K (use reducer with priority queue)
+
+17. **How would you process time-series data in Hadoop?**
+    - Use composite key: (timestamp, metric)
+    - Custom partitioner by timestamp range
+    - Secondary sort for ordering within time range
+    - Stateful reducer for aggregations
+    - Or use HBase for time-series storage
+
+18. **Design a job to compute daily unique user count.**
+    - Mapper: Extract date and userId
+    - Mapper output: (date, userId)
+    - Reducer: Collect unique users per date
+    - Use HashSet to track unique users
+    - Output: (date, uniqueCount)
+
+19. **How would you join two large datasets?**
+    - **Reduce-side join:**
+      ```
+      Mapper: Emit (joinKey, (table, value))
+      Reducer: Receive all rows for key, perform join
+      Works for any join size but slower
+      ```
+    
+    - **Map-side join (more efficient):**
+      ```
+      Load small dataset into distributed cache
+      Mapper: Looks up join key in cache
+      No reducer needed or simple passthrough
+      Requires small dataset to fit in memory
+      ```
+
+20. **How would you implement pagination over Hadoop data?**
+    - Output should be sorted
+    - Use TotalOrderPartitioner for sorted output
+    - Partitioner ensures partition i < partition i+1
+    - Allows efficient range queries
+    - Or use HBase for random access
+
+### Performance Questions
+
+21. **What are common performance bottlenecks in Hadoop and how to fix them?**
+    - **Slow mappers:**
+      - Profile code for inefficiencies
+      - Use combiner to reduce data
+      - Configure more mappers
+      - Optimize serialization
+    
+    - **Slow reducers:**
+      - Increase number of reducers
+      - Use combiner to reduce data
+      - Optimize reducer logic
+      - Address data skew
+    
+    - **Network bottleneck:**
+      - Enable compression for map output
+      - Increase combiner aggregation
+      - Use better data locality
+      - Upgrade network infrastructure
+    
+    - **Memory issues:**
+      - Increase container memory
+      - Optimize object creation
+      - Use object pooling
+      - Stream processing instead of buffering
+
+22. **How would you optimize a MapReduce job that processes 1TB of data?**
+    - Set appropriate parallelism
+    - Enable compression (map output and final)
+    - Implement combiner
+    - Optimize serialization
+    - Use appropriate data types
+    - Configure memory appropriately
+    - Monitor and profile
+    - Consider sampling first
+
+23. **What is the impact of block size on job performance?**
+    - **Larger blocks (256 MB+):**
+      - Fewer mappers (may be too few for parallelism)
+      - Less metadata storage
+      - Better for sequential access
+      - More network latency if off-rack
+    
+    - **Smaller blocks (64 MB):**
+      - More mappers (better parallelism)
+      - More metadata at NameNode
+      - Better data locality options
+      - Overhead from managing more blocks
+    
+    - **Optimal:** Balance based on cluster size and data characteristics
+
+24. **How would you handle small files problem in Hadoop?**
+    - **Problem:** Many small files create many mappers, slow down NameNode
+    - **Solutions:**
+      - Sequence files: Store multiple small files in one
+      - CombineFileInputFormat: Combine multiple files per mapper
+      - HAR (Hadoop Archive): Archive small files
+      - Pre-processing: Merge files before processing
+      - HBase: Better for random small data access
+
+    ```java
+    // Using CombineFileInputFormat
+    job.setInputFormatClass(CombineTextInputFormat.class);
+    
+    // Sets maximum split size (multiple files per split)
+    CombineFileInputFormat.setMaxInputSplitSize(job, 64 * 1024 * 1024);
+    ```
+
+25. **Explain how to choose between Hadoop and Spark for a project.**
+    - **Use Hadoop when:**
+      - Pure batch processing
+      - Want native HDFS integration
+      - Need proven stability
+      - Cost constraints (older clusters)
+    
+    - **Use Spark when:**
+      - Iterative algorithms (ML)
+      - Need real-time streaming
+      - Want multiple languages (Python, SQL)
+      - Need interactive queries
+      - In-memory processing beneficial
+    
+    - **Modern approach:** Use both - Spark for processing, HDFS for storage
+
+### Configuration and Deployment
+
+26. **How would you set up a Hadoop cluster?**
+    - Install Java on all nodes
+    - Configure SSH passwordless login
+    - Download and extract Hadoop
+    - Configure core-site.xml, hdfs-site.xml, mapred-site.xml, yarn-site.xml
+    - Format NameNode: `hdfs namenode -format`
+    - Start HDFS: `start-dfs.sh`
+    - Start YARN: `start-yarn.sh`
+    - Verify: Check web UIs (NameNode, ResourceManager)
+
+27. **What are important Hadoop configuration parameters?**
+    - **HDFS:**
+      - dfs.blocksize (default 128/256 MB)
+      - dfs.replication (default 3)
+      - dfs.namenode.heartbeat.recheck-interval
+      - dfs.heartbeat.interval
+    
+    - **MapReduce:**
+      - mapreduce.task.io.sort.mb
+      - mapreduce.job.reduces
+      - mapreduce.map.memory.mb
+      - mapreduce.reduce.memory.mb
+    
+    - **YARN:**
+      - yarn.nodemanager.resource.memory-mb
+      - yarn.nodemanager.resource.cpu-vcores
+      - yarn.scheduler.minimum-allocation-mb
+      - yarn.scheduler.maximum-allocation-mb
+
+28. **How do you monitor a Hadoop cluster?**
+    - Web UIs:
+      - NameNode: http://localhost:50070
+      - ResourceManager: http://localhost:8088
+    
+    - Command-line tools:
+      - `hdfs fsck`: File system check
+      - `hadoop dfsadmin`: HDFS admin
+      - `yarn node`: Node status
+    
+    - Logs:
+      - NameNode logs
+      - DataNode logs
+      - ResourceManager logs
+      - Job history
+
+29. **What is the difference between local and cluster mode?**
+    - **Local Mode:**
+      - Single JVM process
+      - Uses local file system
+      - Useful for development/testing
+      - No parallelism
+    
+    - **Cluster Mode:**
+      - Multiple nodes
+      - Uses HDFS
+      - True distributed processing
+      - Production environment
+      - Network overhead
+
+30. **How would you upgrade a Hadoop cluster?**
+    - **Rolling upgrade:**
+      - Upgrade DataNodes one at a time
+      - Keep NameNode running
+      - Maintain data availability
+      - Safer for production
+    
+    - **Full restart:**
+      - Stop all services
+      - Upgrade all nodes
+      - Restart cluster
+      - Faster but has downtime
+    
+    - **Best practices:**
+      - Test upgrade on staging cluster first
+      - Backup metadata (fsimage)
+      - Have rollback plan
+      - Monitor during upgrade
+
+---
+
+## Best Practices
+
+### Code Quality
+
+```java
+// GOOD: Proper error handling
+public static class SafeMapper extends Mapper<LongWritable, Text, Text, IntWritable> {
+    
+    private static final Logger LOG = LoggerFactory.getLogger(SafeMapper.class);
+    
+    @Override
+    protected void map(LongWritable key, Text value, Context context)
+            throws IOException, InterruptedException {
+        
+        try {
+            String line = value.toString();
+            if (line == null || line.isEmpty()) {
+                context.getCounter("INPUT", "EMPTY_LINES").increment(1);
+                return;
+            }
+            
+            String[] fields = line.split("\t");
+            if (fields.length < 2) {
+                context.getCounter("INPUT", "INVALID_FORMAT").increment(1);
+                LOG.warn("Invalid format at offset " + key);
+                return;
+            }
+            
+            String word = fields[0];
+            int count = Integer.parseInt(fields[1]);
+            
+            context.write(new Text(word), new IntWritable(count));
+            context.getCounter("INPUT", "VALID_RECORDS").increment(1);
+            
+        } catch (NumberFormatException e) {
+            context.getCounter("ERROR", "PARSE_ERROR").increment(1);
+            LOG.error("Parse error at key " + key, e);
+        } catch (Exception e) {
+            context.getCounter("ERROR", "UNEXPECTED_ERROR").increment(1);
+            LOG.error("Unexpected error", e);
+        }
+    }
+}
+```
+
+### Resource Management
+
+```java
+// Use try-finally for resource cleanup
+public void processLargeFile() throws IOException {
+    BufferedReader reader = null;
+    try {
+        reader = new BufferedReader(new InputStreamReader(
+            new FileInputStream("file.txt")));
+        String line;
+        while ((line = reader.readLine()) != null) {
+            // Process line
+        }
+    } finally {
+        if (reader != null) {
+            reader.close();
+        }
+    }
+}
+
+// Or better: Try-with-resources (Java 7+)
+public void processLargeFileModern() throws IOException {
+    try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+            new FileInputStream("file.txt")))) {
+        String line;
+        while ((line = reader.readLine()) != null) {
+            // Process line
+        }
+    } // Auto-closed
+}
+```
+
+### Counters for Monitoring
+
+```java
+// Use counters to track processing
+public static class CountingMapper extends Mapper<LongWritable, Text, Text, IntWritable> {
+    
+    enum InputRecord {
+        TOTAL, VALID, INVALID, MALFORMED
+    }
+    
+    @Override
+    protected void map(LongWritable key, Text value, Context context)
+            throws IOException, InterruptedException {
+        
+        context.getCounter(InputRecord.TOTAL).increment(1);
+        
+        String line = value.toString();
+        try {
+            if (isValid(line)) {
+                context.getCounter(InputRecord.VALID).increment(1);
+                // Process
+            } else {
+                context.getCounter(InputRecord.INVALID).increment(1);
+            }
+        } catch (Exception e) {
+            context.getCounter(InputRecord.MALFORMED).increment(1);
+        }
+    }
+}
+```
+
+---
+
+## Common Mistakes
+
+1. **Not considering data locality**
+   - Always align input splits with block boundaries
+   - Use CombineFileInputFormat for small files
+
+2. **Memory configuration errors**
+   - mapreduce.java.opts must be less than memory.mb
+   - Set appropriate heap sizes for workload
+
+3. **Unoptimized Reducers**
+   - Not using Combiner when beneficial
+   - Creating too many intermediate objects
+   - Accumulating too much data in memory
+
+4. **Poor error handling**
+   - Silently ignoring exceptions
+   - Not logging errors properly
+   - Not using counters for monitoring
+
+5. **Ignoring data skew**
+   - Some reducers get much more data
+   - Use custom partitioner or salting
+   - Monitor task progress
+
+---
+
+## Summary
+
+Hadoop is a powerful framework for distributed computing on large datasets. Key takeaways:
+
+✅ **Strengths:**
+- Fault tolerance through replication
+- Scalability to thousands of nodes
+- Cost-effective (commodity hardware)
+- Proven in production at scale
+- Rich ecosystem of tools
+
+⚠️ **Limitations:**
+- Batch processing only
+- High latency (not real-time)
+- Steep learning curve
+- Operational complexity
+- NameNode bottleneck for metadata
+
+📈 **Modern Trends:**
+- Spark replacing MapReduce for computation
+- HDFS remains popular for storage
+- Cloud versions (EMR, Dataproc)
+- Kubernetes for container orchestration
+- Integration with data lakes and warehouses
+
+🎯 **Best Practices:**
+- Monitor cluster health continuously
+- Optimize for data locality
+- Use compression appropriately
+- Implement proper error handling
+- Plan capacity carefully
+- Keep metadata in sync
+- Secure cluster with Kerberos
+- Regular backups and disaster recovery
+
+---
+
+## Practical Setup & Execution
+
+### Step 1: Install Hadoop Locally
+
+#### Download and Extract
+
+```bash
+# Download Hadoop 3.3.x (latest stable)
+cd /opt
+wget https://archive.apache.org/dist/hadoop/common/hadoop-3.3.4/hadoop-3.3.4.tar.gz
+tar -xzf hadoop-3.3.4.tar.gz
+mv hadoop-3.3.4 hadoop
+
+# Create symbolic link
+ln -s /opt/hadoop /usr/local/hadoop
+```
+
+#### Set Environment Variables
+
+```bash
+# Add to ~/.bashrc or ~/.profile
+export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+export HADOOP_HOME=/usr/local/hadoop
+export PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
+export HADOOP_MAPRED_HOME=$HADOOP_HOME
+export HADOOP_COMMON_HOME=$HADOOP_HOME
+export HADOOP_HDFS_HOME=$HADOOP_HOME
+export YARN_HOME=$HADOOP_HOME
+export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native
+export HADOOP_OPTS="-Djava.library.path=$HADOOP_HOME/lib/native"
+
+# Reload
+source ~/.bashrc
+```
+
+#### Verify Installation
+
+```bash
+hadoop version
+hdfs version
+yarn version
+```
+
+### Step 2: Configure Hadoop
+
+#### core-site.xml
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+    <!-- Default filesystem -->
+    <property>
+        <name>fs.defaultFS</name>
+        <value>hdfs://localhost:9000</value>
+    </property>
+    
+    <!-- Temporary directory -->
+    <property>
+        <name>hadoop.tmp.dir</name>
+        <value>/hadoop/tmp</value>
+    </property>
+    
+    <!-- I/O settings -->
+    <property>
+        <name>io.file.buffer.size</name>
+        <value>131072</value> <!-- 128 KB -->
+    </property>
+</configuration>
+```
+
+#### hdfs-site.xml
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Replication factor -->
+    <property>
+        <name>dfs.replication</name>
+        <value>1</value> <!-- For single node, use 1 -->
+    </property>
+    
+    <!-- NameNode data directory -->
+    <property>
+        <name>dfs.namenode.name.dir</name>
+        <value>/hadoop/hdfs/namenode</value>
+    </property>
+    
+    <!-- DataNode data directory -->
+    <property>
+        <name>dfs.datanode.data.dir</name>
+        <value>/hadoop/hdfs/datanode</value>
+    </property>
+    
+    <!-- Block size -->
+    <property>
+        <name>dfs.blocksize</name>
+        <value>268435456</value> <!-- 256 MB -->
+    </property>
+</configuration>
+```
+
+#### mapred-site.xml
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Use YARN -->
+    <property>
+        <name>mapreduce.framework.name</name>
+        <value>yarn</value>
+    </property>
+    
+    <!-- Mapper memory -->
+    <property>
+        <name>mapreduce.map.memory.mb</name>
+        <value>1024</value>
+    </property>
+    
+    <!-- Reducer memory -->
+    <property>
+        <name>mapreduce.reduce.memory.mb</name>
+        <value>1024</value>
+    </property>
+</configuration>
+```
+
+#### yarn-site.xml
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- ResourceManager address -->
+    <property>
+        <name>yarn.resourcemanager.hostname</name>
+        <value>localhost</value>
+    </property>
+    
+    <!-- Scheduler -->
+    <property>
+        <name>yarn.resourcemanager.scheduler.class</name>
+        <value>org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler</value>
+    </property>
+    
+    <!-- Node Manager resource -->
+    <property>
+        <name>yarn.nodemanager.resource.memory-mb</name>
+        <value>4096</value> <!-- 4GB -->
+    </property>
+    
+    <property>
+        <name>yarn.nodemanager.resource.cpu-vcores</name>
+        <value>4</value>
+    </property>
+    
+    <!-- Nodemanager aux-services -->
+    <property>
+        <name>yarn.nodemanager.aux-services</name>
+        <value>mapreduce_shuffle</value>
+    </property>
+</configuration>
+```
+
+### Step 3: Initialize HDFS
+
+```bash
+# Format NameNode (first time only - destructive!)
+hdfs namenode -format
+
+# Create necessary directories
+mkdir -p /hadoop/hdfs/namenode
+mkdir -p /hadoop/hdfs/datanode
+mkdir -p /hadoop/tmp
+
+# Set permissions
+chmod -R 755 /hadoop
+```
+
+### Step 4: Start Hadoop Services
+
+```bash
+# Start HDFS
+start-dfs.sh
+
+# Start YARN
+start-yarn.sh
+
+# Start JobHistoryServer (optional)
+mr-jobhistory-daemon.sh start historyserver
+
+# Check running processes
+jps
+# Output should show:
+# - NameNode
+# - DataNode
+# - ResourceManager
+# - NodeManager
+# - JobHistoryServer
+```
+
+### Step 5: Verify Installation
+
+```bash
+# Check HDFS
+hdfs dfsadmin -report
+
+# Create test directory
+hadoop fs -mkdir /user/test
+hadoop fs -ls /
+
+# Access web UIs
+# NameNode: http://localhost:50070
+# ResourceManager: http://localhost:8088
+# JobHistory: http://localhost:19888
+```
+
+---
+
+## Step-by-Step Job Development
+
+### Theory: MapReduce Job Lifecycle
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  1. WRITE SOURCE CODE                                   │
+│     └─ Mapper, Reducer, Driver classes                  │
+├─────────────────────────────────────────────────────────┤
+│  2. COMPILE CODE                                        │
+│     └─ javac with Hadoop jars in classpath              │
+├─────────────────────────────────────────────────────────┤
+│  3. CREATE JAR FILE                                     │
+│     └─ Package compiled classes                         │
+├─────────────────────────────────────────────────────────┤
+│  4. PREPARE INPUT DATA                                  │
+│     └─ Upload to HDFS                                   │
+├─────────────────────────────────────────────────────────┤
+│  5. SUBMIT JOB                                          │
+│     └─ Submit JAR to ResourceManager                    │
+├─────────────────────────────────────────────────────────┤
+│  6. YARN SCHEDULES TASKS                                │
+│     └─ ApplicationMaster created                        │
+├─────────────────────────────────────────────────────────┤
+│  7. MAP PHASE EXECUTES                                  │
+│     └─ Parallel on data blocks                          │
+├─────────────────────────────────────────────────────────┤
+│  8. SHUFFLE & SORT                                      │
+│     └─ Group and sort intermediate data                 │
+├─────────────────────────────────────────────────────────┤
+│  9. REDUCE PHASE EXECUTES                               │
+│     └─ Aggregate by key                                 │
+├─────────────────────────────────────────────────────────┤
+│  10. OUTPUT WRITTEN TO HDFS                             │
+│      └─ Final results stored                            │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Complete Example: Customer Purchase Analysis
+
+#### Scenario
+Process customer purchase data to find:
+1. Total purchase amount per customer
+2. Average purchase value
+3. Number of purchases per customer
+
+#### Input Data Format
+```
+customer_id,product_id,amount,date
+C001,P123,150.50,2025-01-15
+C002,P456,75.25,2025-01-15
+C001,P789,200.00,2025-01-16
+C003,P123,150.50,2025-01-16
+```
+
+#### Step 1: Write MapReduce Job
+
+```java
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.*;
+import org.apache.hadoop.mapreduce.*;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.util.GenericOptionsParser;
+
+public class CustomerPurchaseAnalysis {
+    
+    // Custom Writable to hold purchase statistics
+    public static class PurchaseStats implements Writable {
+        private long totalAmount;
+        private long count;
+        
+        public PurchaseStats() {
+            this.totalAmount = 0;
+            this.count = 0;
+        }
+        
+        public PurchaseStats(long totalAmount, long count) {
+            this.totalAmount = totalAmount;
+            this.count = count;
+        }
+        
+        @Override
+        public void write(DataOutput out) throws IOException {
+            out.writeLong(totalAmount);
+            out.writeLong(count);
+        }
+        
+        @Override
+        public void readFields(DataInput in) throws IOException {
+            totalAmount = in.readLong();
+            count = in.readLong();
+        }
+        
+        @Override
+        public String toString() {
+            return "TotalAmount=" + totalAmount + ",Count=" + count + 
+                   ",Average=" + (totalAmount / count);
+        }
+    }
+    
+    // Mapper: Extract customer and amount
+    public static class PurchaseMapper 
+            extends Mapper<LongWritable, Text, Text, PurchaseStats> {
+        
+        private static final int CUSTOMER_ID_INDEX = 0;
+        private static final int AMOUNT_INDEX = 2;
+        
+        @Override
+        protected void map(LongWritable key, Text value, Context context)
+                throws IOException, InterruptedException {
+            
+            String line = value.toString();
+            
+            // Skip header line
+            if (line.startsWith("customer_id")) {
+                return;
+            }
+            
+            try {
+                String[] fields = line.split(",");
+                
+                if (fields.length < 3) {
+                    context.getCounter("ERROR", "INVALID_FORMAT").increment(1);
+                    return;
+                }
+                
+                String customerId = fields[CUSTOMER_ID_INDEX];
+                long amount = (long) Double.parseDouble(fields[AMOUNT_INDEX]);
+                
+                // Emit (customerId, PurchaseStats(amount, 1))
+                PurchaseStats stats = new PurchaseStats(amount, 1);
+                context.write(new Text(customerId), stats);
+                context.getCounter("INPUT", "VALID_RECORDS").increment(1);
+                
+            } catch (NumberFormatException e) {
+                context.getCounter("ERROR", "PARSE_ERROR").increment(1);
+            } catch (Exception e) {
+                context.getCounter("ERROR", "UNEXPECTED").increment(1);
+            }
+        }
+    }
+    
+    // Combiner: Local aggregation on mapper output
+    public static class PurchaseCombiner 
+            extends Reducer<Text, PurchaseStats, Text, PurchaseStats> {
+        
+        @Override
+        protected void reduce(Text key, Iterable<PurchaseStats> values, Context context)
+                throws IOException, InterruptedException {
+            
+            long totalAmount = 0;
+            long count = 0;
+            
+            for (PurchaseStats stat : values) {
+                totalAmount += stat.totalAmount;
+                count += stat.count;
+            }
+            
+            context.write(key, new PurchaseStats(totalAmount, count));
+        }
+    }
+    
+    // Reducer: Final aggregation
+    public static class PurchaseReducer 
+            extends Reducer<Text, PurchaseStats, Text, PurchaseStats> {
+        
+        @Override
+        protected void reduce(Text key, Iterable<PurchaseStats> values, Context context)
+                throws IOException, InterruptedException {
+            
+            long totalAmount = 0;
+            long count = 0;
+            
+            for (PurchaseStats stat : values) {
+                totalAmount += stat.totalAmount;
+                count += stat.count;
+            }
+            
+            context.write(key, new PurchaseStats(totalAmount, count));
+        }
+    }
+    
+    // Driver: Job configuration and submission
+    public static void main(String[] args) throws Exception {
+        
+        if (args.length != 2) {
+            System.err.println("Usage: CustomerPurchaseAnalysis <input> <output>");
+            System.exit(1);
+        }
+        
+        Configuration conf = new Configuration();
+        
+        Job job = Job.getInstance(conf, "Customer Purchase Analysis");
+        
+        // Set JAR
+        job.setJarByClass(CustomerPurchaseAnalysis.class);
+        
+        // Set Mapper, Combiner, Reducer
+        job.setMapperClass(PurchaseMapper.class);
+        job.setCombinerClass(PurchaseCombiner.class);
+        job.setReducerClass(PurchaseReducer.class);
+        
+        // Set output types
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(PurchaseStats.class);
+        
+        // Set input and output paths
+        FileInputFormat.addInputPath(job, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+        
+        // Print job info
+        System.out.println("Job Name: " + job.getJobName());
+        System.out.println("Mapper: " + job.getMapperClass().getName());
+        System.out.println("Reducer: " + job.getReducerClass().getName());
+        
+        // Submit and wait for completion
+        boolean success = job.waitForCompletion(true);
+        
+        if (success) {
+            System.out.println("\n=== Job Completed Successfully ===");
+            System.out.println("Valid Records: " + 
+                job.getCounters().findCounter("INPUT", "VALID_RECORDS").getValue());
+            System.out.println("Parse Errors: " + 
+                job.getCounters().findCounter("ERROR", "PARSE_ERROR").getValue());
+        }
+        
+        System.exit(success ? 0 : 1);
+    }
+}
+```
+
+#### Step 2: Compile the Code
+
+```bash
+# Create project structure
+mkdir -p hadoop-project/{src,build,lib}
+cd hadoop-project
+
+# Copy source file
+cp CustomerPurchaseAnalysis.java src/
+
+# Compile with Hadoop libraries
+javac -cp /usr/local/hadoop/share/hadoop/common/*:/usr/local/hadoop/share/hadoop/mapreduce/* \
+    -d build src/CustomerPurchaseAnalysis.java
+
+# Verify compiled classes
+ls -la build/
+# Should show:
+# CustomerPurchaseAnalysis.class
+# CustomerPurchaseAnalysis$PurchaseMapper.class
+# CustomerPurchaseAnalysis$PurchaseCombiner.class
+# CustomerPurchaseAnalysis$PurchaseReducer.class
+# CustomerPurchaseAnalysis$PurchaseStats.class
+```
+
+#### Step 3: Create JAR File
+
+```bash
+# Create JAR with manifest
+cd hadoop-project
+jar cf CustomerPurchaseAnalysis.jar -C build .
+
+# Or with manifest specifying main class
+echo "Main-Class: CustomerPurchaseAnalysis" > Manifest.txt
+jar cfm CustomerPurchaseAnalysis.jar Manifest.txt -C build .
+
+# Verify JAR
+jar tf CustomerPurchaseAnalysis.jar
+```
+
+#### Step 4: Prepare Input Data
+
+```bash
+# Create sample data file
+cat > purchase_data.csv << 'EOF'
+customer_id,product_id,amount,date
+C001,P123,150.50,2025-01-15
+C002,P456,75.25,2025-01-15
+C001,P789,200.00,2025-01-16
+C003,P123,150.50,2025-01-16
+C002,P123,150.50,2025-01-17
+C001,P456,100.00,2025-01-17
+C003,P789,200.00,2025-01-18
+C004,P123,150.50,2025-01-18
+EOF
+
+# Upload to HDFS
+hadoop fs -mkdir -p /data/purchases
+hadoop fs -put purchase_data.csv /data/purchases/
+
+# Verify
+hadoop fs -ls /data/purchases/
+hadoop fs -cat /data/purchases/purchase_data.csv
+```
+
+#### Step 5: Run the Job
+
+```bash
+# Submit job
+hadoop jar CustomerPurchaseAnalysis.jar \
+    /data/purchases/purchase_data.csv \
+    /output/purchase-analysis
+
+# Monitor job
+# Check ResourceManager UI: http://localhost:8088
+
+# Wait for completion (or use -wait flag in command)
+```
+
+#### Step 6: Examine Output
+
+```bash
+# List output files
+hadoop fs -ls /output/purchase-analysis/
+
+# View results (part-r-00000 is reducer output)
+hadoop fs -cat /output/purchase-analysis/part-r-00000
+
+# Expected output:
+# C001     TotalAmount=450,Count=3,Average=150
+# C002     TotalAmount=225,Count=2,Average=112
+# C003     TotalAmount=350,Count=2,Average=175
+# C004     TotalAmount=150,Count=1,Average=150
+
+# View full output locally
+hadoop fs -getmerge /output/purchase-analysis /tmp/results.txt
+cat /tmp/results.txt
+```
+
+### Theory: Job Execution Flow
+
+```
+                        JOB SUBMISSION
+                             ↓
+                    ┌─────────────────────┐
+                    │  ResourceManager    │
+                    │  receives job JAR   │
+                    └──────────┬──────────┘
+                               ↓
+                    ┌─────────────────────┐
+                    │ ApplicationMaster   │
+                    │ created per app     │
+                    └──────────┬──────────┘
+                               ↓
+                    ┌─────────────────────┐
+        ┌───────────┤  YARN Scheduler     │
+        │           │ allocates containers│
+        │           └────────────────────┘
+        │
+     (for each input split)
+        │
+        ↓                    ↓
+    ┌─────────┐          ┌─────────┐
+    │ Mapper  │          │ Mapper  │
+    │ Task 1  │ ──────→  │ Task 2  │
+    └────┬────┘          └────┬────┘
+         │                    │
+         └────────┬───────────┘
+                  ↓
+          ┌──────────────────┐
+          │  Shuffle & Sort  │  ← Group by key
+          │                  │  ← Sort within group
+          └────────┬─────────┘
+                   ↓
+        (one per unique key)
+                   │
+        ┌──────────┴──────────┐
+        ↓                     ↓
+    ┌─────────┐          ┌─────────┐
+    │ Reducer │          │ Reducer │
+    │ Task 1  │          │ Task 2  │
+    └────┬────┘          └────┬────┘
+         │                    │
+         └────────┬───────────┘
+                  ↓
+          ┌──────────────────┐
+          │  Final Output    │  ← Written to HDFS
+          │  part-r-00000    │
+          └──────────────────┘
+```
+
+---
+
+## Real-World Applications
+
+### Application 1: Web Log Analysis
+
+**Use Case:** Process millions of web server logs to extract traffic patterns
+
+```java
+public class WebLogAnalyzer {
+    
+    // Log format: timestamp, ip, url, status_code, bytes, referrer
+    // 2025-01-15 10:15:30 192.168.1.1 /api/users 200 1024 mozilla
+    
+    public static class LogParser {
+        private String timestamp;
+        private String ip;
+        private String url;
+        private int statusCode;
+        private long bytes;
+        
+        public static LogParser parse(String line) {
+            String[] fields = line.split(" ");
+            LogParser parser = new LogParser();
+            try {
+                parser.timestamp = fields[0];
+                parser.ip = fields[2];
+                parser.url = fields[3];
+                parser.statusCode = Integer.parseInt(fields[4]);
+                parser.bytes = Long.parseLong(fields[5]);
+                return parser;
+            } catch (Exception e) {
+                return null;
+            }
+        }
+    }
+    
+    public static class StatusCodeMapper 
+            extends Mapper<LongWritable, Text, Text, IntWritable> {
+        
+        private final static IntWritable one = new IntWritable(1);
+        
+        @Override
+        protected void map(LongWritable key, Text value, Context context)
+                throws IOException, InterruptedException {
+            
+            LogParser log = LogParser.parse(value.toString());
+            if (log != null) {
+                String statusKey = log.statusCode + " " + 
+                    getStatusMessage(log.statusCode);
+                context.write(new Text(statusKey), one);
+            }
+        }
+        
+        private String getStatusMessage(int code) {
+            switch (code / 100) {
+                case 2: return "SUCCESS";
+                case 3: return "REDIRECT";
+                case 4: return "CLIENT_ERROR";
+                case 5: return "SERVER_ERROR";
+                default: return "OTHER";
+            }
+        }
+    }
+    
+    public static class CountReducer 
+            extends Reducer<Text, IntWritable, Text, IntWritable> {
+        
+        @Override
+        protected void reduce(Text key, Iterable<IntWritable> values, Context context)
+                throws IOException, InterruptedException {
+            
+            int sum = 0;
+            for (IntWritable val : values) {
+                sum += val.get();
+            }
+            context.write(key, new IntWritable(sum));
+        }
+    }
+}
+```
+
+**Process:**
+1. Parse web logs from multiple servers
+2. Extract HTTP status codes
+3. Count occurrences of each status
+4. Identify error rates and traffic patterns
+
+**Output Example:**
+```
+200 SUCCESS    1,234,567
+404 CLIENT_ERROR    45,678
+500 SERVER_ERROR    1,234
+```
+
+### Application 2: Fraud Detection in Financial Transactions
+
+**Use Case:** Analyze transaction patterns to identify suspicious behavior
+
+```java
+public class FraudDetection {
+    
+    public static class Transaction {
+        private String accountId;
+        private long amount;
+        private String country;
+        private long timestamp;
+    }
+    
+    public static class TransactionMapper 
+            extends Mapper<LongWritable, Text, Text, Text> {
+        
+        private static final long LARGE_AMOUNT = 100000; // $100,000
+        private static final long SHORT_TIMESPAN = 300000; // 5 minutes
+        
+        @Override
+        protected void map(LongWritable key, Text value, Context context)
+                throws IOException, InterruptedException {
+            
+            // accountId,amount,country,timestamp
+            String[] fields = value.toString().split(",");
+            String accountId = fields[0];
+            long amount = Long.parseLong(fields[1]);
+            String country = fields[2];
+            long timestamp = Long.parseLong(fields[3]);
+            
+            // Flag suspicious transactions
+            if (amount > LARGE_AMOUNT) {
+                context.write(
+                    new Text(accountId), 
+                    new Text("LARGE_AMOUNT," + amount + "," + country)
+                );
+            }
+            
+            // Emit all transactions for pattern analysis
+            context.write(
+                new Text(accountId),
+                new Text("TRANSACTION," + amount + "," + country + "," + timestamp)
+            );
+        }
+    }
+    
+    public static class FraudReducer 
+            extends Reducer<Text, Text, Text, Text> {
+        
+        @Override
+        protected void reduce(Text key, Iterable<Text> values, Context context)
+                throws IOException, InterruptedException {
+            
+            java.util.List<String> transactions = new java.util.ArrayList<>();
+            int largeTransactions = 0;
+            java.util.Set<String> countries = new java.util.HashSet<>();
+            
+            for (Text val : values) {
+                String line = val.toString();
+                transactions.add(line);
+                
+                if (line.startsWith("LARGE_AMOUNT")) {
+                    largeTransactions++;
+                } else if (line.startsWith("TRANSACTION")) {
+                    String[] parts = line.split(",");
+                    if (parts.length > 2) {
+                        countries.add(parts[2]);
+                    }
+                }
+            }
+            
+            // Flag if multiple countries in short timespan
+            boolean isSuspicious = false;
+            if (largeTransactions > 2) {
+                isSuspicious = true;
+            }
+            if (countries.size() > 3) {
+                isSuspicious = true;
+            }
+            
+            if (isSuspicious) {
+                context.write(
+                    key,
+                    new Text("SUSPICIOUS: " + largeTransactions + 
+                            " large trans, " + countries.size() + " countries")
+                );
+            }
+        }
+    }
+}
+```
+
+**Process:**
+1. Analyze transaction patterns per account
+2. Identify large transactions
+3. Detect multiple countries in short timeframe
+4. Flag suspicious accounts for review
+
+### Application 3: E-commerce Product Recommendations
+
+**Use Case:** Process purchase history to generate recommendations
+
+```java
+public class ProductRecommendation {
+    
+    // Data: customerId, productId, category, rating, purchaseDate
+    
+    public static class CategoryMapper 
+            extends Mapper<LongWritable, Text, Text, Text> {
+        
+        @Override
+        protected void map(LongWritable key, Text value, Context context)
+                throws IOException, InterruptedException {
+            
+            String[] fields = value.toString().split(",");
+            String customerId = fields[0];
+            String category = fields[2];
+            double rating = Double.parseDouble(fields[3]);
+            
+            // Emit (category, customerId) for customers interested in category
+            if (rating >= 4.0) { // Only positive ratings
+                context.write(new Text(category), new Text(customerId));
+            }
+        }
+    }
+    
+    public static class CoOccurrenceMapper 
+            extends Mapper<LongWritable, Text, Text, IntWritable> {
+        
+        @Override
+        protected void map(LongWritable key, Text value, Context context)
+                throws IOException, InterruptedException {
+            
+            // Input from previous job: category, customer list
+            String[] parts = value.toString().split("\t");
+            if (parts.length == 2) {
+                String category = parts[0];
+                String[] customers = parts[1].split(",");
+                
+                // Emit all pairs of customers in same category
+                for (int i = 0; i < customers.length; i++) {
+                    for (int j = i + 1; j < customers.length; j++) {
+                        String pair = customers[i] + "-" + customers[j];
+                        context.write(new Text(pair), new IntWritable(1));
+                    }
+                }
+            }
+        }
+    }
+    
+    public static class CoOccurrenceReducer 
+            extends Reducer<Text, IntWritable, Text, IntWritable> {
+        
+        @Override
+        protected void reduce(Text key, Iterable<IntWritable> values, Context context)
+                throws IOException, InterruptedException {
+            
+            int count = 0;
+            for (IntWritable val : values) {
+                count += val.get();
+            }
+            
+            // Only output if customers have multiple shared interests
+            if (count >= 2) {
+                context.write(key, new IntWritable(count));
+            }
+        }
+    }
+}
+```
+
+**Process:**
+1. Identify customers with similar purchase history
+2. Calculate product co-occurrence
+3. Generate recommendations based on similar customer preferences
+4. Increase sales through personalized suggestions
+
+---
+
+## Troubleshooting & Debugging
+
+### Common Issues and Solutions
+
+#### Issue 1: NameNode doesn't start
+
+**Symptoms:**
+```
+WARN namenode.FSNamesystem: Encountered exception
+ERROR namenode.NameNode: Exception in secureMain
+```
+
+**Debugging:**
+```bash
+# Check logs
+tail -f $HADOOP_HOME/logs/hadoop-*-namenode-*.log
+
+# Check port availability
+netstat -tulpn | grep 9000
+
+# Check disk space
+df -h /hadoop/hdfs/namenode
+
+# Solutions:
+# 1. Format NameNode (WARNING: destructive)
+hdfs namenode -format
+
+# 2. Clear stuck locks
+rm -rf /hadoop/tmp/*
+
+# 3. Free disk space
+rm -rf /old/data/*
+```
+
+#### Issue 2: Job fails with "Out of Memory"
+
+**Symptoms:**
+```
+java.lang.OutOfMemoryError: Java heap space
+```
+
+**Debugging & Fix:**
+```bash
+# Check memory settings
+grep "mapreduce.map.memory.mb" $HADOOP_HOME/etc/hadoop/mapred-site.xml
+
+# Increase memory (in mapred-site.xml)
+<property>
+    <name>mapreduce.map.memory.mb</name>
+    <value>2048</value>  <!-- Increase from 1024 -->
+</property>
+
+# Increase JVM heap
+<property>
+    <name>mapreduce.map.java.opts</name>
+    <value>-Xmx1600m</value>  <!-- Increase from -Xmx800m -->
+</property>
+
+# Verify DataNode has enough memory
+free -h
+```
+
+#### Issue 3: Slow MapReduce Job
+
+**Symptoms:**
+- Job takes hours for small dataset
+- High CPU/network usage
+
+**Debugging:**
+```bash
+# Check job logs
+hadoop logs -applicationId application_1234567890123_0001
+
+# Analyze job statistics
+# Check ResourceManager UI for task progress
+# Look for stragglers (slow tasks)
+
+# Solutions:
+# 1. Enable compression
+conf.setBoolean("mapreduce.map.output.compress", true);
+conf.setClass("mapreduce.map.output.compress.codec", 
+    GzipCodec.class, CompressionCodec.class);
+
+# 2. Increase number of reducers
+job.setNumReduceTasks(10);
+
+# 3. Use Combiner
+job.setCombinerClass(YourCombiner.class);
+
+# 4. Optimize code for efficiency
+# - Avoid unnecessary object creation
+# - Use StringBuilder instead of String concatenation
+# - Cache expensive computations
+```
+
+#### Issue 4: Data Skew (uneven distribution)
+
+**Symptoms:**
+- Some reducers finish instantly
+- One reducer takes very long
+- Uneven output file sizes
+
+**Debugging:**
+```bash
+# Check file sizes
+hadoop fs -du -s /output/part-r-*
+
+# Example output showing skew:
+# 1.5G  /output/part-r-00000
+# 50M   /output/part-r-00001
+# 45M   /output/part-r-00002
+
+# Solutions:
+# 1. Custom Partitioner (distribute more evenly)
+public class CustomPartitioner extends Partitioner<Text, IntWritable> {
+    @Override
+    public int getPartition(Text key, IntWritable value, int numPartitions) {
+        // Distribute based on key length instead of simple hash
+        return (key.toString().length() % numPartitions);
+    }
+}
+
+# 2. Salting (add random prefix)
+String saltedKey = (Math.random() * numReducers) + "_" + originalKey;
+context.write(new Text(saltedKey), value);
+
+# 3. Sample data first
+// Use TotalOrderPartitioner with sample
+```
+
+#### Issue 5: TaskTracker/NodeManager not registering
+
+**Symptoms:**
+```
+ERROR nodemanager.NodeManager: Container exited with a non-zero exit code
+```
+
+**Debugging:**
+```bash
+# Check NodeManager status
+curl http://localhost:8042
+
+# Check logs
+tail -f $HADOOP_HOME/logs/hadoop-*-nodemanager-*.log
+
+# Verify YARN configuration
+grep -A 5 "yarn.nodemanager.resource" $HADOOP_HOME/etc/hadoop/yarn-site.xml
+
+# Solutions:
+# 1. Restart YARN services
+stop-yarn.sh
+start-yarn.sh
+
+# 2. Check network connectivity
+ping resourcemanager_host
+
+# 3. Verify firewall
+iptables -L | grep 8030
+# Open port 8030 for ResourceManager communication
+```
+
+### Monitoring and Performance Analysis
+
+```bash
+# 1. Monitor real-time job progress
+yarn application -list
+yarn logs -applicationId <app_id>
+
+# 2. Check cluster capacity
+yarn node -list -all
+
+# 3. Check queue status
+yarn queue -status <queue_name>
+
+# 4. Monitor HDFS health
+hdfs fsck / -files -blocks -locations
+
+# 5. Check DataNode health
+hdfs dfsadmin -report
+
+# 6. Monitor file system usage
+hadoop fs -du -h /user
+
+# 7. Profiling MapReduce job
+# Set in code:
+conf.setBoolean("mapreduce.task.profile", true);
+conf.set("mapreduce.task.profile.params", "-agentlib:jdwp=transport=dt_socket");
+
+# 8. JVM metrics
+jstat -gc <pid> 1000
+# Shows garbage collection statistics
+```
+
+### Logs Analysis
+
+```bash
+# Location of Hadoop logs
+cd $HADOOP_HOME/logs
+
+# Check NameNode logs
+tail -f hadoop-*-namenode-*.log
+
+# Check DataNode logs
+tail -f hadoop-*-datanode-*.log
+
+# Check ResourceManager logs
+tail -f hadoop-*-resourcemanager-*.log
+
+# Grep for errors
+grep ERROR *.log | head -20
+
+# Search for specific job
+grep "application_1234567890123_0001" *.log
+
+# View job history (more user-friendly)
+hadoop logs -applicationId application_1234567890123_0001
+```
+
+# Hadoop - Complete Concepts Reference with Theory & Examples
+
+## 1. HDFS Block Storage - Complete Concept
+
+### **Theory**
+
+HDFS divides files into blocks and distributes them across DataNodes for parallel processing and fault tolerance.
+
+```
+File: data.txt (350 MB)
+│
+├─ Block 1 (128 MB) ────→ DataNode 1, DataNode 3, DataNode 5
+├─ Block 2 (128 MB) ────→ DataNode 2, DataNode 4, DataNode 1
+└─ Block 3 (94 MB)  ────→ DataNode 3, DataNode 5, DataNode 2
+```
+
+### **Key Theory Points**
+
+| Concept | Explanation | Why It Matters |
+|---------|-------------|----------------|
+| **Block Size** | Default 128 MB or 256 MB | Larger blocks = fewer mappers, larger blocks = less metadata |
+| **Replication** | 3 copies by default | Survives up to 2 node failures |
+| **Rack Awareness** | 2 replicas in one rack, 1 in another | Balances fault tolerance and network efficiency |
+| **Block Report** | DataNode sends every hour | NameNode knows block locations |
+| **Heartbeat** | Every 3 seconds | NameNode detects dead nodes |
+
+### **Example: File Placement Strategy**
+
+```
+File: transaction.log (512 MB)
+3 blocks, replication factor 3
+
+Block 1 (128 MB):
+  Primary:   Node_A (Rack_1) ← Writer location
+  Replica 1: Node_B (Rack_2) ← Different rack
+  Replica 2: Node_C (Rack_1) ← Same rack, different node
+
+Block 2 (128 MB):
+  Primary:   Node_D (Rack_2)
+  Replica 1: Node_E (Rack_1)
+  Replica 2: Node_F (Rack_2)
+
+Block 3 (256 MB):
+  Primary:   Node_A (Rack_1)
+  Replica 1: Node_C (Rack_1)
+  Replica 2: Node_E (Rack_2)
+```
+
+### **Keypoints to Remember**
+
+✓ **Block-level fault tolerance** - Individual block corruption doesn't affect entire file
+✓ **Write-once model** - Blocks finalized after write completes
+✓ **Block rebalancing** - Automatic if rack awareness violated
+✓ **NameNode memory** - Each block = ~200 bytes in memory (1M blocks = 200 MB)
+✓ **Under-replicated blocks** - Replication monitor schedules re-replication
+
+### **Common Misconceptions**
+
+❌ "Larger block size = better performance" → Only true if reduces mapper overhead
+❌ "All 3 replicas on different racks" → No, wastes network bandwidth
+❌ "NameNode stores blocks" → No, only metadata; DataNodes store actual blocks
+
+---
+
+## 2. MapReduce Execution - Complete Concept
+
+### **Theory: Job Execution Pipeline**
+
+```
+INPUT PHASE
+├─ Read input file from HDFS
+├─ Split into chunks based on InputFormat
+└─ Create input split for each mapper
+
+MAP PHASE (Parallel)
+├─ Each mapper receives one split
+├─ Process line-by-line (or custom record)
+├─ Emit intermediate (key, value) pairs
+└─ Spill to disk when buffer full
+
+SHUFFLE & SORT PHASE (Automatic)
+├─ Shuffle: Send all values for same key to one reducer
+├─ Sort: Within reducer, sort by key
+└─ Merge: Combine multiple mapper outputs
+
+REDUCE PHASE (Parallel)
+├─ Receive sorted groups of (key, values)
+├─ Aggregate/process values for each key
+├─ Emit final (key, value) pairs
+└─ Write to HDFS
+
+OUTPUT PHASE
+└─ Store results in output directory
+```
+
+### **Memory Management During Execution**
+
+```
+MAPPER MEMORY ALLOCATION (e.g., 1024 MB)
+├─ JVM Heap: 800 MB (from mapreduce.map.java.opts)
+│   ├─ Code execution
+│   ├─ User objects
+│   └─ Collections (TreeMap for spill)
+└─ System: 224 MB (overhead)
+
+SORT BUFFER (spill-related)
+├─ io.sort.mb: 100 MB (circular buffer)
+├─ io.sort.spill.percent: 80% (spill at 80% full)
+└─ io.sort.factor: 10 (merge 10 files at once)
+```
+
+### **Example: Word Count Flow**
+
+```
+Input File: "The quick brown fox jumps over the lazy dog"
+
+SPLIT PHASE:
+Split 1: "The quick brown"
+Split 2: "fox jumps over"
+Split 3: "the lazy dog"
+
+MAP PHASE:
+Mapper 1:
+  The → (The, 1)
+  quick → (quick, 1)
+  brown → (brown, 1)
+
+Mapper 2:
+  fox → (fox, 1)
+  jumps → (jumps, 1)
+  over → (over, 1)
+
+Mapper 3:
+  the → (the, 1)
+  lazy → (lazy, 1)
+  dog → (dog, 1)
+
+SHUFFLE & SORT:
+Group by key (case-insensitive):
+brown: [1]
+dog: [1]
+fox: [1]
+jumps: [1]
+lazy: [1]
+over: [1]
+quick: [1]
+the: [1, 1]
+The: [1]
+
+REDUCE PHASE:
+brown: 1
+dog: 1
+fox: 1
+jumps: 1
+lazy: 1
+over: 1
+quick: 1
+the: 2
+The: 1
+```
+
+### **Keypoints to Remember**
+
+✓ **Combiner = Local Reducer** - Runs on mapper, reduces data transfer
+✓ **Shuffle is automatic** - No code needed, always happens
+✓ **Sorted within partition** - All keys sorted within reducer input
+✓ **Partitioner determines reducer** - Default uses hash(key) % numReducers
+✓ **Spill = disk write** - When sort buffer gets full, spilled to disk
+
+---
+
+## 3. YARN Resource Allocation - Complete Concept
+
+### **Theory: Container-Based Resource Management**
+
+```
+PHYSICAL NODE (16 GB RAM, 4 cores)
+│
+├─ NodeManager (200 MB)
+│
+└─ Allocatable Resources: 15.8 GB, 3.8 cores
+    │
+    ├─ Container 1: 2 GB, 1 core ──┬─ MapTask
+    │                               └─ JVM
+    │
+    ├─ Container 2: 4 GB, 2 cores ──┬─ ReduceTask
+    │                               └─ JVM
+    │
+    └─ Container 3: 2 GB, 1 core ──┬─ ApplicationMaster
+                                    └─ JVM
+```
+
+### **Resource Request Flow**
+
+```
+ApplicationMaster
+│
+├─ Request 5 mappers: 1024 MB each, 1 core each
+├─ Request 2 reducers: 2048 MB each, 1 core each
+│
+ResourceManager (Scheduler)
+│
+├─ Check available nodes
+├─ Respect locality constraints
+├─ Allocate on suitable nodes
+└─ Notify ApplicationMaster
+
+NodeManager
+│
+├─ Launch Container (isolated process)
+├─ Monitor resource usage
+├─ Kill if exceeds limits
+└─ Report back to RM
+```
+
+### **Example: Resource Allocation Scenario**
+
+```
+Cluster Capacity:
+├─ Node A: 16 GB, 4 cores
+├─ Node B: 16 GB, 4 cores
+├─ Node C: 16 GB, 4 cores
+└─ Total: 48 GB, 12 cores
+
+Minimum container: 1 GB, 1 core
+Maximum container: 8 GB, 2 cores
+
+Job Requirements:
+├─ Mapper: 1024 MB, 1 core
+├─ Reducer: 2048 MB, 1 core
+└─ Total mappers needed: 10
+
+Scheduler Decision:
+Node A: 10 × 1024 MB = 10 GB (2 GB free, 4 cores available) → 8 mappers
+Node B: 10 × 1024 MB = 10 GB (2 GB free, 4 cores available) → 8 mappers
+Node C: 10 × 1024 MB = 10 GB (2 GB free, 4 cores available) → 6 mappers
+
+Waiting for capacity or data locality improves with time
+```
+
+### **Keypoints to Remember**
+
+✓ **Container = Isolated execution unit** - Own JVM, memory limit
+✓ **NodeManager enforces limits** - Kills if exceeds allocated memory
+✓ **Scheduler respects resource requests** - Must fit within container
+✓ **Data locality matters** - Scheduler prioritizes NODE-LOCAL
+✓ **CPU cores are soft limit** - Helps with scheduling but not enforced
+
+---
+
+## 4. Data Locality Optimization - Complete Concept
+
+### **Theory: Why Data Locality Matters**
+
+```
+NETWORK BANDWIDTH HIERARCHY:
+├─ Same node (local read): 400 MB/s
+├─ Same rack: 100 MB/s
+├─ Different rack: 20 MB/s
+│
+Processing 1 GB of data:
+├─ Local: 2.5 seconds
+├─ Same rack: 10 seconds
+└─ Different rack: 50 seconds  ← 20x slower!
+```
+
+### **Locality Scheduling Algorithm**
+
+```
+For each mapper task:
+│
+1. Check if INPUT BLOCK exists on this node?
+   ├─ YES → Schedule on this node (NODE-LOCAL) ✓ Best
+   └─ NO → Go to step 2
+
+2. Check if INPUT BLOCK exists on same rack?
+   ├─ YES → Schedule on any node in same rack (RACK-LOCAL) ✓ Good
+   └─ NO → Go to step 3
+
+3. Schedule on any available node (OFF-RACK) → Worst
+
+Statistics:
+├─ Ideal scenario: 100% NODE-LOCAL
+├─ Production typical: 95% NODE-LOCAL, 5% RACK-LOCAL
+└─ If Off-rack > 10%: Network bottleneck or data imbalance
+```
+
+### **Example: Data Locality in Action**
+
+```
+File: sales-data (512 MB, 4 blocks)
+
+Block 1 (128 MB) on nodes: A, B, C
+Block 2 (128 MB) on nodes: B, C, D
+Block 3 (128 MB) on nodes: C, D, E
+Block 4 (128 MB) on nodes: D, E, A
+
+Task Scheduling:
+Mapper for Block 1 → Node A (has block locally) → NODE-LOCAL
+Mapper for Block 2 → Node B (has block locally) → NODE-LOCAL
+Mapper for Block 3 → Node C (has block locally) → NODE-LOCAL
+Mapper for Block 4 → Node D (has block locally) → NODE-LOCAL
+
+Result: 4/4 = 100% NODE-LOCAL (optimal)
+```
+
+### **Keypoints to Remember**
+
+✓ **InputSplit = Block boundary** - Mapper gets ~1 split per block
+✓ **Block location API** - Used by scheduler to find where blocks are
+✓ **Rack awareness critical** - Replication strategy assumes racks
+✓ **Network > CPU > Disk** - Network is biggest bottleneck
+✓ **Off-rack penalty** - 1 GB off-rack = process same data locally twice
+
+---
+
+## 5. Fault Tolerance Mechanisms - Complete Concept
+
+### **Theory: Failure Scenarios and Recovery**
+
+```
+SCENARIO 1: DATANODE FAILURE
+├─ DataNode stops sending heartbeats
+├─ NameNode detects after 10 minutes
+├─ Blocks on failed node marked under-replicated
+├─ ReplicationMonitor schedules re-replication
+└─ Replication factor restored to 3
+
+SCENARIO 2: MAPPER TASK FAILURE
+├─ Task process crashes or times out
+├─ NodeManager reports to ApplicationMaster
+├─ Task rescheduled on different node
+└─ If fails 4 times (default), job fails
+
+SCENARIO 3: NAMENODE FAILURE
+├─ Metadata loss = entire file system lost
+├─ Solution: High Availability (HA)
+├─ Active + Standby NameNode
+└─ Automatic failover via Zookeeper
+```
+
+### **Example: Block Re-replication Process**
+
+```
+Initial State (Replication=3):
+File: users.data (3 blocks)
+├─ Block A: nodes [1, 3, 5] ✓
+├─ Block B: nodes [2, 4, 1] ✓
+└─ Block C: nodes [3, 5, 2] ✓
+
+Node 3 Fails:
+├─ Block A: nodes [1, -, 5] ✗ (under-replicated)
+└─ Block C: nodes [-, 5, 2] ✗ (under-replicated)
+
+Final State (After Re-replication):
+├─ Block A: nodes [1, 4, 5] ✓
+├─ Block B: nodes [2, 4, 1] ✓
+└─ Block C: nodes [4, 5, 2] ✓
+```
+
+### **Keypoints to Remember**
+
+✓ **Heartbeat = Life signal** - Miss 10 heartbeats = node dead
+✓ **Re-replication automatic** - No manual intervention needed
+✓ **Task failures transparent** - ApplicationMaster handles retries
+✓ **NameNode = SPOF** - Most critical component
+✓ **Data loss prevention** - Replication provides redundancy
+
+---
+
+## 6. Combiner vs Reducer - Complete Concept
+
+### **Theory: Why Combiner Exists**
+
+```
+WITHOUT COMBINER:
+Mapper Output (10 MB) → SHUFFLE (10 MB over network) → Reducer
+
+WITH COMBINER:
+Mapper Output (10 MB) → LOCAL AGGREGATION → Combiner Output (100 KB)
+                        → SHUFFLE (100 KB over network) → Reducer
+
+Benefit: 100x reduction in network traffic!
+```
+
+### **Example: When to Use Combiner**
+
+```
+✓ CAN USE COMBINER (Associative & Commutative):
+  ├─ Sum: 1 + 2 + 3 = 6 ✓
+  ├─ Count: 1 + 1 + 1 = 3 ✓
+  ├─ Max/Min: max(1,2,3) = 3 ✓
+  └─ String concat: "A" + "B" ≠ "B" + "A" ✗
+
+✗ CANNOT USE COMBINER (Non-associative):
+  ├─ Average (need sum and count)
+  ├─ Variance (depends on all values)
+  └─ Median (order matters)
+```
+
+### **Real Example: Revenue Analysis**
+
+```
+WITHOUT COMBINER (Wrong for Average):
+Mapper output: 1000 transactions
+Reducer receives: All 1000 records
+Time: Process all 1000
+
+WITH COMBINER (Right Approach):
+Mapper output → Combiner (local sum and count)
+Reducer receives: Single aggregated record
+Time: Much faster calculation
+```
+
+### **Keypoints to Remember**
+
+✓ **Combiner runs locally** - No network transfer before it
+✓ **Output format = Reducer input** - Must match exactly
+✓ **Significant bandwidth savings** - Can reduce network 10-100x
+✓ **Can be same class as Reducer** - If operation is associative
+✓ **Optional optimization** - Performance gain varies by use case
+
+---
+
+## 7. Partitioner and Custom Partitioning - Complete Concept
+
+### **Theory: Why Partitioners Matter**
+
+```
+DEFAULT PARTITIONER: hash(key) % numReducers
+Result: Can cause 90% of data in one reducer (skew)
+
+CUSTOM PARTITIONER: Domain-specific logic
+Result: Balanced load across reducers
+```
+
+### **Example: Date-Based Partitioning**
+
+```
+SCENARIO: 1 year of sales data, 12 reducers (one per month)
+
+DEFAULT HASH PARTITIONER:
+Result: Jan=1%, Feb=15%, Mar=2%, ... (Unbalanced!)
+
+CUSTOM RANGE PARTITIONER:
+Extract month from date → Send to month reducer
+Result: Perfect balance!
+
+Implementation:
+public class DatePartitioner extends Partitioner<Text, Text> {
+    public int getPartition(Text key, Text value, int numPartitions) {
+        String month = key.toString().substring(5, 7);
+        int monthNum = Integer.parseInt(month) - 1;
+        return monthNum % numPartitions;
+    }
+}
+```
+
+### **Keypoints to Remember**
+
+✓ **Partitioner called per mapper output** - Performance matters
+✓ **Return value < numPartitions** - Or IndexOutOfBounds
+✓ **Return value >= 0** - Negative causes errors
+✓ **Prevents reducer skew** - Ensures balanced load
+✓ **All keys for partition → same reducer** - Ensures grouping
+
+---
+
+## 8. Shuffle and Sort - Complete Concept
+
+### **Theory: The Hidden Phase**
+
+```
+Shuffle & Sort Pipeline:
+1. Partition (which reducer?)
+2. Sort (in-memory TreeMap)
+3. Spill (write to disk if full)
+4. Copy (transfer over network)
+5. Merge (on reducer side)
+6. Group (present to reducer)
+```
+
+### **Example: Shuffle Process**
+
+```
+Mappers produce:
+apple→1, banana→1, apple→2, cherry→1, banana→3, apple→4
+
+PARTITION:
+apple[1,2,4] → P0, banana[1,3] → P1, cherry[1] → P2
+
+SORT:
+P0: apple[1,2,4], P1: banana[1,3], P2: cherry[1]
+
+SHUFFLE:
+Send partitions across network
+
+MERGE & GROUP:
+Reducer receives sorted, grouped data ready to process
+```
+
+### **Keypoints to Remember**
+
+✓ **Automatic process** - Always happens, can't disable
+✓ **Memory critical** - Spill impacts performance
+✓ **Network bandwidth** - Usually the bottleneck
+✓ **Sort is free** - Comes with partitioning
+✓ **Must manage memory** - io.sort.mb is critical
+
+---
+
+## 9. Job Configuration Tuning - Complete Concept
+
+### **Theory: Configuration Impact**
+
+```
+Config Setting → Resource Allocation → Task Scheduling → Performance
+
+Example:
+mapreduce.map.memory.mb = 512 MB
+│
+├─ JVM Heap: 512 - 224 = 288 MB
+├─ Sort Buffer: 288 * 0.1 = 28.8 MB
+├─ Frequent spilling to disk
+└─ Result: SLOW
+```
+
+### **Configuration Tuning Recipe**
+
+```
+STEP 1: Cluster Resources
+├─ RAM per node: 16 GB
+├─ Cores per node: 4
+└─ Reserve for system: 2 GB
+
+STEP 2: Calculate Container Size
+Available: 16 - 2 = 14 GB
+Containers: 7
+Container size: 14/7 = 2 GB
+
+STEP 3: Set Configuration
+mapreduce.map.memory.mb = 2048
+mapreduce.map.java.opts = -Xmx1600m
+
+STEP 4: Monitor
+Check: memory usage, job time, utilization
+Adjust: iterate for optimal performance
+```
+
+### **Common Mistakes**
+
+```
+❌ java.opts (2GB) > memory.mb (1GB)
+   Result: Out of memory
+
+✓ java.opts (800MB) < memory.mb (1GB)
+   Result: Works correctly
+
+❌ Container size too small (256 MB)
+   Result: Thousands of mappers, scheduling overhead
+
+✓ Container size balanced (1-2 GB)
+   Result: Reasonable parallelism
+```
+
+### **Keypoints to Remember**
+
+✓ **224 MB overhead per container** - Account for it
+✓ **Network >> CPU >> Disk** - Optimize in this order
+✓ **Monitor actual usage** - Theory ≠ practice
+✓ **No one-size-fits-all** - Iterate for your workload
+✓ **Sort buffer critical** - Impacts spill frequency
+
+---
+
+## Summary Table: Concepts at a Glance
+
+| Concept | Purpose | Key Setting | Impact |
+|---------|---------|-------------|--------|
+| **Block Size** | Data distribution | `dfs.blocksize` | Fewer mappers with larger blocks |
+| **Replication** | Fault tolerance | `dfs.replication=3` | Survives 2 node failures |
+| **Data Locality** | Network optimization | Scheduler auto | 20x speed difference |
+| **Combiner** | Local aggregation | `setCombinerClass()` | 10-100x less network data |
+| **Partitioner** | Load balancing | `setPartitionerClass()` | Prevents reducer skew |
+| **Sort Buffer** | Memory management | `io.sort.mb` | More buffer = fewer spills |
+| **Container Size** | Resource allocation | `mapreduce.map.memory.mb` | Affects task count |
+| **Compression** | Size reduction | `mapreduce.map.output.compress` | 50-90% size reduction |
+| **Number of Reducers** | Parallelism | `setNumReduceTasks()` | Balanced load |
+| **InputFormat** | Record definition | `setInputFormatClass()` | Controls split boundaries |
+
+---
+
+## Keypoints Summary - Quick Reference
+
+### HDFS
+✓ Blocks = Fault tolerance unit
+✓ Rack-aware replication = Network efficiency
+✓ NameNode = Metadata only (no data storage)
+✓ Heartbeat = 3 seconds (failure detection)
+✓ Replication = 3 by default
+
+### MapReduce
+✓ Shuffle = Automatic, can't disable
+✓ Sort = Free with shuffling
+✓ Combiner = Local aggregation (optional)
+✓ Spill = When sort buffer full
+✓ Data locality = Critical for performance
+
+### YARN
+✓ Container = Isolated execution unit
+✓ ResourceManager = Global scheduler
+✓ ApplicationMaster = Per-job coordinator
+✓ NodeManager = Local container manager
+✓ Memory enforced, CPU cores soft limit
+
+### Configuration
+✓ 224 MB overhead per container
+✓ java.opts < memory.mb always
+✓ Container size: 1-2 GB typical
+✓ Sort buffer: 100-200 MB recommended
+✓ Always monitor actual usage
+
+### Performance
+✓ Data Locality > Compression > Parallelism
+✓ Network is biggest bottleneck
+✓ Combine data early (mapper output)
+✓ Balance load with custom partitioner
+✓ Monitor: locality, task times, GC logs
+
+---
+
