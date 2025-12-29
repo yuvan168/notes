@@ -1,0 +1,6207 @@
+# J2EE (Java 2 Enterprise Edition) - Complete Notes & Theory
+
+## Table of Contents
+1. [Introduction](#introduction)
+2. [J2EE Architecture](#j2ee-architecture)
+3. [Core Components](#core-components)
+4. [Web Technologies](#web-technologies)
+5. [Database Connectivity (JDBC)](#database-connectivity)
+6. [Enterprise JavaBeans (EJB)](#enterprise-javabeans)
+7. [Transaction Management](#transaction-management)
+8. [Messaging Services (JMS)](#messaging-services)
+9. [Security](#security)
+10. [Design Patterns](#design-patterns)
+11. [Best Practices](#best-practices)
+12. [Interview Questions](#interview-questions)
+
+---
+
+## Introduction
+
+### What is J2EE?
+- **J2EE** (Java 2 Enterprise Edition) is a platform for building enterprise-level applications
+- Now called **Jakarta EE** (post Java EE 8 transition)
+- Provides a set of specifications, APIs, and services for enterprise application development
+- Built on top of Java SE (Standard Edition)
+- Supports multi-tier architecture and distributed computing
+
+### Historical Evolution
+```
+Java 1.0 (1995) → Java 2 (1998)
+→ J2EE 1.2 (1999) → J2EE 1.3 (2001) → J2EE 1.4 (2003)
+→ Java EE 5 (2006) → Java EE 6 (2009) → Java EE 7 (2013)
+→ Java EE 8 (2017) → Jakarta EE 8 (2019) → Jakarta EE 9+ (2021+)
+```
+
+### Key Goals of J2EE
+- Scalability and performance
+- Security and reliability
+- Portability across platforms
+- Reusability of components
+- Simplified application development
+- Support for distributed systems
+
+---
+
+## J2EE Architecture
+
+### Multi-Tier Architecture
+
+```
+┌─────────────────────────────────────────┐
+│      Client Tier (Presentation)         │
+│  (Web Browser, Desktop, Mobile Apps)    │
+└─────────────────────────────────────────┘
+                    ↓ HTTP/HTTPS
+┌─────────────────────────────────────────┐
+│   Web/Application Tier (Business Logic) │
+│  (Servlets, JSP, JSF, Web Services)     │
+└─────────────────────────────────────────┘
+                    ↓ JDBC/RMI
+┌─────────────────────────────────────────┐
+│  Enterprise Tier (Data Management)      │
+│  (EJB, JPA, JTA, Message Service)       │
+└─────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────┐
+│      Data Tier (Database)               │
+│  (RDBMS, NoSQL, File Systems)           │
+└─────────────────────────────────────────┘
+```
+
+### Container Architecture
+
+#### Web Container
+- Manages servlets and JSP pages
+- Handles HTTP requests/responses
+- Manages servlet lifecycle
+- Thread pooling and request routing
+
+#### EJB Container
+- Manages EJB instances
+- Provides transaction management
+- Security enforcement
+- Resource pooling and management
+
+### Component Model
+
+```
+J2EE Application
+├── Presentation Layer (Web Tier)
+│   ├── HTTP Servlets
+│   ├── JSP Pages
+│   ├── Web Forms
+│   └── Web Components
+├── Business Logic Layer (Business Tier)
+│   ├── Session EJBs
+│   ├── Message-Driven EJBs
+│   └── Business Objects
+└── Data Access Layer (Data Tier)
+    ├── Entity EJBs / JPA
+    ├── JDBC
+    └── Data Objects
+```
+
+---
+
+## Core Components
+
+### 1. Servlets
+
+#### What are Servlets?
+- Server-side Java programs that handle HTTP requests
+- Extend `HttpServlet` class
+- Run inside a servlet container (Tomcat, JBoss, etc.)
+- Thread-safe and handle concurrent requests
+- Platform and server-independent
+
+#### Theory of Servlets
+
+Servlets form the foundation of J2EE web applications. They are Java objects that handle HTTP requests and responses in a web-based environment. The servlet container (also called application server) manages the servlet lifecycle and provides services like:
+
+1. **Request Handling**: Server receives HTTP request and routes to appropriate servlet
+2. **Thread Management**: Each request gets its own thread (not its own servlet instance)
+3. **Resource Management**: Container manages pooling and lifecycle
+4. **Session Management**: Maintains user sessions across requests
+5. **Security**: Container enforces security constraints
+
+#### Servlet Lifecycle
+
+```
+1. Loading & Instantiation
+   └─> JVM loads servlet class
+   
+2. Initialization (init() method)
+   └─> Called once when servlet first loaded
+   └─> Initialize resources
+   
+3. Request Handling (service() method)
+   └─> Called for each request
+   └─> doGet(), doPost(), doPut(), doDelete()
+   
+4. Destruction (destroy() method)
+   └─> Called before unloading
+   └─> Cleanup resources
+```
+
+#### Basic Servlet Example
+
+```java
+import javax.servlet.*;
+import javax.servlet.http.*;
+import java.io.*;
+
+public class HelloServlet extends HttpServlet {
+    
+    private static final long serialVersionUID = 1L;
+    
+    @Override
+    public void init(ServletConfig config) throws ServletException {
+        super.init(config);
+        System.out.println("HelloServlet initialized");
+    }
+    
+    @Override
+    protected void doGet(HttpServletRequest request, 
+                        HttpServletResponse response) 
+            throws ServletException, IOException {
+        
+        response.setContentType("text/html; charset=UTF-8");
+        PrintWriter out = response.getWriter();
+        
+        String name = request.getParameter("name");
+        if (name == null) name = "World";
+        
+        out.println("<!DOCTYPE html>");
+        out.println("<html>");
+        out.println("<body>");
+        out.println("<h1>Hello, " + name + "!</h1>");
+        out.println("</body>");
+        out.println("</html>");
+    }
+    
+    @Override
+    protected void doPost(HttpServletRequest request, 
+                         HttpServletResponse response) 
+            throws ServletException, IOException {
+        String name = request.getParameter("name");
+        String email = request.getParameter("email");
+        
+        response.setContentType("application/json");
+        response.getWriter().println(
+            "{\"message\":\"User " + name + " received\"}"
+        );
+    }
+    
+    @Override
+    public void destroy() {
+        System.out.println("HelloServlet destroyed");
+    }
+}
+```
+
+#### Servlet Configuration (web.xml)
+
+```xml
+<servlet>
+    <servlet-name>HelloServlet</servlet-name>
+    <servlet-class>com.example.HelloServlet</servlet-class>
+    <init-param>
+        <param-name>appName</param-name>
+        <param-value>MyApp</param-value>
+    </init-param>
+    <load-on-startup>1</load-on-startup>
+</servlet>
+
+<servlet-mapping>
+    <servlet-name>HelloServlet</servlet-name>
+    <url-pattern>/hello</url-pattern>
+    <url-pattern>/hi</url-pattern>
+</servlet-mapping>
+```
+
+#### Annotation-based Configuration (Modern)
+
+```java
+@WebServlet(
+    name = "HelloServlet",
+    urlPatterns = {"/hello", "/hi"},
+    initParams = {
+        @WebInitParam(name = "appName", value = "MyApp")
+    },
+    loadOnStartup = 1
+)
+public class HelloServlet extends HttpServlet {
+    
+    @Override
+    protected void doGet(HttpServletRequest request, 
+                        HttpServletResponse response) 
+            throws ServletException, IOException {
+        // Implementation
+    }
+}
+```
+
+#### Advanced Servlet Concepts
+
+```java
+// Accessing servlet context
+public class ContextAwareServlet extends HttpServlet {
+    
+    @Override
+    protected void doGet(HttpServletRequest request, 
+                        HttpServletResponse response) {
+        ServletContext context = getServletContext();
+        
+        // Get application-wide parameters
+        String appName = context.getInitParameter("appName");
+        
+        // Get/set attributes
+        Integer userCount = (Integer) context.getAttribute("userCount");
+        context.setAttribute("userCount", userCount + 1);
+        
+        // Get real path (for file operations)
+        String filePath = context.getRealPath("/uploads/");
+        
+        // Log messages
+        context.log("Processing request");
+    }
+}
+
+// Async servlet processing
+@WebServlet(urlPatterns = "/async", asyncSupported = true)
+public class AsyncServlet extends HttpServlet {
+    
+    @Override
+    protected void doGet(HttpServletRequest request, 
+                        HttpServletResponse response) {
+        
+        AsyncContext asyncContext = request.startAsync();
+        asyncContext.setTimeout(30000); // 30 seconds
+        
+        asyncContext.start(() -> {
+            try {
+                // Long-running operation
+                doHeavyProcessing();
+                
+                response.setContentType("text/plain");
+                response.getWriter().println("Processing complete");
+            } catch (Exception e) {
+                asyncContext.complete();
+            }
+            asyncContext.complete();
+        });
+    }
+}
+```
+
+**Keypoints for Servlets:**
+- Foundation of J2EE web layer
+- Lifecycle: init() → service(doGet/doPost) → destroy()
+- One servlet instance handles multiple requests in different threads
+- Container manages pooling and resource lifecycle
+- Use @WebServlet annotation for modern configuration
+- Async servlets for long-running operations
+- ServletContext provides application-wide access
+- Always set proper content type before sending response
+
+### 2. JSP (JavaServer Pages)
+
+#### What is JSP?
+
+JSP is a server-side technology that allows developers to embed Java code within HTML markup. It simplifies the development of dynamic web pages by:
+
+1. **Separation of Presentation and Logic**: HTML for presentation, Java for logic
+2. **Code Reuse**: Share Java objects and methods across pages
+3. **Implicit Objects**: Built-in variables for request, response, session, etc.
+4. **Custom Tags**: Extend HTML with custom functionality
+5. **Expression Language (EL)**: Simplify variable access without scriptlets
+
+#### JSP Compilation Process
+
+```
+JSP File (.jsp)
+    ↓
+JSP Engine translates to Java code
+    ↓
+Servlet Class (.java)
+    ↓
+Java Compiler
+    ↓
+Servlet Class (.class)
+    ↓
+Servlet loads in container
+    ↓
+service() method called for requests
+```
+
+#### JSP Syntax Elements
+
+```jsp
+<!-- 1. Directives (processed at translation time) -->
+<%@ page language="java" contentType="text/html" pageEncoding="UTF-8" %>
+<%@ page import="java.util.*, java.io.*" %>
+<%@ taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>
+
+<!-- 2. Declarations (define class-level variables/methods) -->
+<%! 
+    private String appName = "MyApp";
+    private int counter = 0;
+    
+    public String getGreeting() {
+        return "Hello from JSP";
+    }
+%>
+
+<!-- 3. Scriptlets (Java code executed for each request) -->
+<%
+    String username = request.getParameter("username");
+    Date currentDate = new Date();
+    
+    if (username != null && !username.isEmpty()) {
+        out.println("Welcome, " + username);
+    }
+%>
+
+<!-- 4. Expressions (evaluate and output value) -->
+<p>Current time: <%= new java.util.Date() %></p>
+<p>App Name: <%= appName %></p>
+
+<!-- 5. Comments -->
+<!-- This is HTML comment, visible in page source -->
+<%-- This is JSP comment, not visible in page source --%>
+
+<!-- 6. JSTL Tags (avoid scriptlets for better code) -->
+<c:if test="${username != null}">
+    <p>Hello, ${username}!</p>
+</c:if>
+
+<c:forEach var="item" items="${list}">
+    <p>${item.name} - ${item.price}</p>
+</c:forEach>
+
+<c:choose>
+    <c:when test="${score >= 80}">Grade: A</c:when>
+    <c:when test="${score >= 70}">Grade: B</c:when>
+    <c:otherwise>Grade: C</c:otherwise>
+</c:choose>
+```
+
+#### JSP Page Directive
+
+```jsp
+<%@ page 
+    language="java"
+    extends="com.example.CustomHttpJspPage"
+    import="java.util.*,java.io.*,java.sql.*"
+    session="true"
+    buffer="8kb"
+    autoFlush="true"
+    isThreadSafe="true"
+    info="Login page"
+    errorPage="/error.jsp"
+    isErrorPage="false"
+    contentType="text/html; charset=UTF-8"
+%>
+```
+
+#### JSP Lifecycle
+
+```
+1. Translation Phase
+   └─> JSP converted to Java servlet code
+   └─> Filename: PageName_jsp.java
+   
+2. Compilation Phase
+   └─> Java source compiled to bytecode (.class)
+   └─> Filename: PageName_jsp.class
+   
+3. Instantiation Phase
+   └─> Servlet instance created
+   └─> Thread pool ready for requests
+   
+4. Initialization Phase
+   └─> jspInit() method called once
+   └─> Initialize resources
+   
+5. Request Processing Phase
+   └─> _jspService() called for each request
+   └─> Contains page logic and output
+   
+6. Destruction Phase
+   └─> jspDestroy() called before unloading
+   └─> Cleanup resources
+```
+
+#### Built-in JSP Objects (Implicit Objects)
+
+| Object | Type | Scope | Description |
+|--------|------|-------|-------------|
+| request | HttpServletRequest | Page | Current HTTP request |
+| response | HttpServletResponse | Page | HTTP response to send |
+| session | HttpSession | Application | User session data |
+| application | ServletContext | Application | Application-wide data |
+| out | JspWriter | Page | Output stream to page |
+| pageContext | PageContext | Page | Page context information |
+| config | ServletConfig | Page | Servlet configuration |
+| page | Object | Page | Current page instance (this) |
+| exception | Throwable | Page | Uncaught exception (error page) |
+
+#### Using Built-in Objects
+
+```jsp
+<!-- Accessing request data -->
+<p>Method: <%= request.getMethod() %></p>
+<p>URI: <%= request.getRequestURI() %></p>
+<p>Remote IP: <%= request.getRemoteAddr() %></p>
+
+<!-- Session management -->
+<%
+    String userId = (String) session.getAttribute("userId");
+    if (userId == null) {
+        response.sendRedirect("/login.jsp");
+    }
+%>
+
+<!-- Application-wide attributes -->
+<%
+    Integer visitCount = (Integer) application.getAttribute("visitCount");
+    if (visitCount == null) {
+        visitCount = 1;
+    } else {
+        visitCount++;
+    }
+    application.setAttribute("visitCount", visitCount);
+%>
+<p>Total visits: <%= visitCount %></p>
+
+<!-- Error page handling -->
+<%@ page isErrorPage="true" %>
+<h1>An error occurred!</h1>
+<p>Error message: <%= exception.getMessage() %></p>
+```
+
+#### Expression Language (EL)
+
+```jsp
+<!-- Simple variable access (preferred over scriptlets) -->
+<p>Welcome, ${sessionScope.username}</p>
+
+<!-- Object properties -->
+<p>Product: ${product.name} - ${product.price}</p>
+
+<!-- List/Array access -->
+<p>First item: ${items[0]}</p>
+
+<!-- Operators -->
+<p>${price > 100 ? 'Expensive' : 'Affordable'}</p>
+<p>${empty username ? 'Guest' : username}</p>
+
+<!-- Functions -->
+<p>Name length: ${fn:length(name)}</p>
+<p>Uppercase: ${fn:toUpperCase(name)}</p>
+
+<!-- EL Implicit Objects -->
+<p>Parameter: ${param.id}</p>
+<p>Cookie: ${cookie.sessionId.value}</p>
+<p>Header: ${header['User-Agent']}</p>
+```
+
+#### JSP Best Practices
+
+```jsp
+<!-- BAD: Too much logic in JSP -->
+<%
+    List<User> users = userDAO.findAll();
+    for (int i = 0; i < users.size(); i++) {
+        User user = users.get(i);
+        if (user.isActive()) {
+            out.println("<tr><td>" + user.getName() + "</td></tr>");
+        }
+    }
+%>
+
+<!-- GOOD: Use JSTL with EL -->
+<c:forEach var="user" items="${users}">
+    <c:if test="${user.active}">
+        <tr><td>${user.name}</td></tr>
+    </c:if>
+</c:forEach>
+
+<!-- BAD: Direct database access in JSP -->
+<%
+    Connection conn = DriverManager.getConnection("jdbc:...");
+    Statement stmt = conn.createStatement();
+    ResultSet rs = stmt.executeQuery("SELECT * FROM users");
+%>
+
+<!-- GOOD: Use service layer -->
+<%
+    List<User> users = userService.getAllUsers();
+    request.setAttribute("users", users);
+%>
+```
+
+**Keypoints for JSP:**
+- Combination of HTML and Java code
+- Compiled to servlet at runtime
+- Implicit objects available (request, response, session, etc.)
+- JSP directives configure page behavior
+- JSTL tags reduce scriptlet usage
+- Expression Language (EL) simplifies variable access
+- Lifecycle: translate → compile → instantiate → init → service → destroy
+- Keep JSP focused on presentation, use services for logic
+- Error pages for exception handling
+- Caching directives improve performance
+
+### 3. Filters
+
+#### What are Filters?
+
+Filters are components that intercept requests and responses in the servlet pipeline. They perform pre-processing before the request reaches the servlet and post-processing after the servlet generates a response.
+
+#### Filter Architecture
+
+```
+Client Request
+    ↓
+Filter 1 (pre-processing)
+    ↓
+Filter 2 (pre-processing)
+    ↓
+Servlet
+    ↓
+Filter 2 (post-processing)
+    ↓
+Filter 1 (post-processing)
+    ↓
+Response to Client
+```
+
+#### Common Filter Use Cases
+
+1. **Logging**: Log all HTTP requests and response times
+2. **Authentication**: Verify user identity before accessing resources
+3. **Authorization**: Check user permissions
+4. **Compression**: Compress response for bandwidth optimization
+5. **Caching**: Add cache control headers
+6. **Character Encoding**: Ensure proper character encoding
+7. **Error Handling**: Catch and handle exceptions
+8. **Input Validation**: Validate request parameters
+9. **CORS**: Handle cross-origin requests
+10. **Request/Response Wrapper**: Modify request/response
+
+#### Filter Interface
+
+```java
+public interface Filter {
+    // Called once during initialization
+    void init(FilterConfig filterConfig) throws ServletException;
+    
+    // Called for each request/response pair
+    void doFilter(ServletRequest request, 
+                 ServletResponse response, 
+                 FilterChain chain) throws IOException, ServletException;
+    
+    // Called before container removes filter instance
+    void destroy();
+}
+```
+
+#### Filter Example
+
+```java
+@WebFilter(
+    urlPatterns = {"/*"},
+    filterName = "AuthenticationFilter",
+    dispatcherTypes = {DispatcherType.REQUEST, DispatcherType.FORWARD}
+)
+public class AuthenticationFilter implements Filter {
+    
+    private static final Logger logger = 
+        LoggerFactory.getLogger(AuthenticationFilter.class);
+    
+    @Override
+    public void init(FilterConfig filterConfig) 
+            throws ServletException {
+        String excludePaths = filterConfig.getInitParameter("excludePaths");
+        logger.info("AuthenticationFilter initialized. Exclude: " + excludePaths);
+    }
+    
+    @Override
+    public void doFilter(ServletRequest request, 
+                        ServletResponse response, 
+                        FilterChain chain) 
+            throws IOException, ServletException {
+        
+        HttpServletRequest httpRequest = 
+            (HttpServletRequest) request;
+        HttpServletResponse httpResponse = 
+            (HttpServletResponse) response;
+        
+        String uri = httpRequest.getRequestURI();
+        logger.debug("Processing request: {}", uri);
+        
+        // Pre-processing
+        String token = httpRequest.getHeader("Authorization");
+        
+        if (isPublicPath(uri)) {
+            // Public paths don't need authentication
+            chain.doFilter(request, response);
+        } else if (token != null && isValidToken(token)) {
+            // Token valid, proceed
+            String username = extractUsername(token);
+            httpRequest.setAttribute("authenticatedUser", username);
+            chain.doFilter(request, response);
+        } else {
+            // Unauthorized
+            logger.warn("Unauthorized access attempt to: {}", uri);
+            httpResponse.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            httpResponse.getWriter().println("Unauthorized");
+        }
+        
+        // Post-processing (response already generated)
+        long contentLength = httpResponse.getContentLength();
+        logger.debug("Response content length: {}", contentLength);
+    }
+    
+    @Override
+    public void destroy() {
+        logger.info("AuthenticationFilter destroyed");
+    }
+    
+    private boolean isPublicPath(String uri) {
+        return uri.startsWith("/login") || uri.startsWith("/register");
+    }
+    
+    private boolean isValidToken(String token) {
+        return token != null && token.startsWith("Bearer ");
+    }
+    
+    private String extractUsername(String token) {
+        // Extract and verify JWT or session token
+        return "user";
+    }
+}
+```
+
+#### Logging Filter
+
+```java
+@WebFilter(urlPatterns = "/*")
+public class LoggingFilter implements Filter {
+    
+    private static final Logger logger = 
+        LoggerFactory.getLogger(LoggingFilter.class);
+    
+    @Override
+    public void doFilter(ServletRequest request, 
+                        ServletResponse response, 
+                        FilterChain chain) 
+            throws IOException, ServletException {
+        
+        HttpServletRequest httpRequest = 
+            (HttpServletRequest) request;
+        long startTime = System.currentTimeMillis();
+        
+        try {
+            logger.info("{} {} - IP: {}", 
+                httpRequest.getMethod(),
+                httpRequest.getRequestURI(),
+                httpRequest.getRemoteAddr()
+            );
+            
+            chain.doFilter(request, response);
+            
+        } finally {
+            long duration = System.currentTimeMillis() - startTime;
+            HttpServletResponse httpResponse = 
+                (HttpServletResponse) response;
+            
+            logger.info("Response: {} - Duration: {}ms",
+                httpResponse.getStatus(),
+                duration
+            );
+        }
+    }
+}
+```
+
+#### Filter Configuration (web.xml)
+
+```xml
+<filter>
+    <filter-name>AuthenticationFilter</filter-name>
+    <filter-class>com.example.AuthenticationFilter</filter-class>
+    <init-param>
+        <param-name>excludePaths</param-name>
+        <param-value>/login,/register,/css/*</param-value>
+    </init-param>
+</filter>
+
+<filter-mapping>
+    <filter-name>AuthenticationFilter</filter-name>
+    <url-pattern>/*</url-pattern>
+    <dispatcher>REQUEST</dispatcher>
+    <dispatcher>FORWARD</dispatcher>
+</filter-mapping>
+```
+
+#### Request/Response Wrapper
+
+```java
+public class RequestWrapper extends HttpServletRequestWrapper {
+    
+    private String body;
+    
+    public RequestWrapper(HttpServletRequest request) 
+            throws IOException {
+        super(request);
+        // Buffer the request body for reuse
+        body = request.getReader().lines()
+            .collect(Collectors.joining(System.lineSeparator()));
+    }
+    
+    @Override
+    public BufferedReader getReader() throws IOException {
+        return new BufferedReader(new StringReader(body));
+    }
+    
+    @Override
+    public ServletInputStream getInputStream() throws IOException {
+        return new ServletInputStream() {
+            private int index = 0;
+            
+            @Override
+            public int read() throws IOException {
+                return index < body.length() 
+                    ? body.charAt(index++) 
+                    : -1;
+            }
+            
+            @Override
+            public boolean isFinished() {
+                return index >= body.length();
+            }
+            
+            @Override
+            public boolean isReady() {
+                return true;
+            }
+            
+            @Override
+            public void setReadListener(ReadListener readListener) {
+            }
+        };
+    }
+}
+
+@WebFilter(urlPatterns = "/api/*")
+public class BodyLoggingFilter implements Filter {
+    
+    @Override
+    public void doFilter(ServletRequest request, 
+                        ServletResponse response, 
+                        FilterChain chain) 
+            throws IOException, ServletException {
+        
+        HttpServletRequest httpRequest = 
+            (HttpServletRequest) request;
+        
+        RequestWrapper wrapper = new RequestWrapper(httpRequest);
+        logger.info("Request body: {}", wrapper.getBody());
+        
+        chain.doFilter(wrapper, response);
+    }
+}
+```
+
+**Keypoints for Filters:**
+- Intercept request/response lifecycle
+- Filter chain architecture for multiple filters
+- Pre-processing and post-processing capability
+- Common uses: logging, authentication, compression, validation
+- Can modify request/response or short-circuit chain
+- Configure via web.xml or @WebFilter annotation
+- Request/Response wrappers allow modification
+- Dispatcher types control when filter applies
+
+### 4. Listeners
+
+#### What are Listeners?
+
+Listeners respond to lifecycle events in J2EE applications. They monitor state changes in:
+1. Servlet context (application lifecycle)
+2. HTTP sessions (user sessions)
+3. Servlet requests (individual requests)
+4. Session and request attributes
+
+#### Event Listeners Hierarchy
+
+```
+EventListener (marker interface)
+    ├── ServletContextListener
+    ├── HttpSessionListener
+    ├── ServletRequestListener
+    ├── ServletContextAttributeListener
+    ├── HttpSessionAttributeListener
+    ├── ServletRequestAttributeListener
+    └── HttpSessionActivationListener
+```
+
+#### Listener Types and Implementation
+
+```java
+// 1. ServletContextListener - Application startup/shutdown
+@WebListener
+public class AppInitListener implements ServletContextListener {
+    
+    private static final Logger logger = 
+        LoggerFactory.getLogger(AppInitListener.class);
+    
+    @Override
+    public void contextInitialized(ServletContextEvent sce) {
+        ServletContext context = sce.getServletContext();
+        
+        logger.info("Application starting");
+        
+        // Load application configuration
+        String appName = "MyApp";
+        context.setAttribute("appName", appName);
+        
+        // Initialize database connection pool
+        DataSource dataSource = initializeDataSource();
+        context.setAttribute("dataSource", dataSource);
+        
+        // Load cache
+        Cache cache = new Cache();
+        cache.loadFromDatabase();
+        context.setAttribute("cache", cache);
+        
+        logger.info("Application initialized successfully");
+    }
+    
+    @Override
+    public void contextDestroyed(ServletContextEvent sce) {
+        ServletContext context = sce.getServletContext();
+        
+        logger.info("Application shutting down");
+        
+        // Cleanup resources
+        Cache cache = (Cache) context.getAttribute("cache");
+        if (cache != null) {
+            cache.close();
+        }
+        
+        DataSource dataSource = (DataSource) context.getAttribute("dataSource");
+        if (dataSource != null) {
+            try {
+                dataSource.close();
+            } catch (Exception e) {
+                logger.error("Error closing datasource", e);
+            }
+        }
+        
+        logger.info("Application shutdown complete");
+    }
+}
+
+// 2. HttpSessionListener - Session creation/destruction
+@WebListener
+public class SessionListener implements HttpSessionListener {
+    
+    private static final Logger logger = 
+        LoggerFactory.getLogger(SessionListener.class);
+    
+    private AtomicInteger activeSessions = new AtomicInteger(0);
+    
+    @Override
+    public void sessionCreated(HttpSessionEvent se) {
+        HttpSession session = se.getSession();
+        String sessionId = session.getId();
+        
+        activeSessions.incrementAndGet();
+        logger.info("Session created: {} (Total: {})", 
+            sessionId, 
+            activeSessions.get()
+        );
+        
+        // Initialize session attributes
+        session.setAttribute("createdAt", new Date());
+        session.setAttribute("lastActivity", new Date());
+    }
+    
+    @Override
+    public void sessionDestroyed(HttpSessionEvent se) {
+        HttpSession session = se.getSession();
+        
+        activeSessions.decrementAndGet();
+        logger.info("Session destroyed: {} (Total: {})", 
+            session.getId(), 
+            activeSessions.get()
+        );
+        
+        // Cleanup session resources
+        String username = (String) session.getAttribute("username");
+        if (username != null) {
+            logger.info("User {} logged out", username);
+        }
+    }
+}
+
+// 3. ServletRequestListener - Request lifecycle
+@WebListener
+public class RequestListener implements ServletRequestListener {
+    
+    private static final Logger logger = 
+        LoggerFactory.getLogger(RequestListener.class);
+    
+    @Override
+    public void requestInitialized(ServletRequestEvent sre) {
+        HttpServletRequest request = 
+            (HttpServletRequest) sre.getServletRequest();
+        
+        String uri = request.getRequestURI();
+        String method = request.getMethod();
+        
+        logger.debug("Request initialized: {} {}", method, uri);
+        
+        // Store request start time for tracking duration
+        request.setAttribute("requestStartTime", System.currentTimeMillis());
+    }
+    
+    @Override
+    public void requestDestroyed(ServletRequestEvent sre) {
+        HttpServletRequest request = 
+            (HttpServletRequest) sre.getServletRequest();
+        
+        Long startTime = (Long) request.getAttribute("requestStartTime");
+        if (startTime != null) {
+            long duration = System.currentTimeMillis() - startTime;
+            String uri = request.getRequestURI();
+            logger.debug("Request destroyed: {} (duration: {}ms)", uri, duration);
+        }
+    }
+}
+
+// 4. Attribute Listeners - Monitor attribute changes
+@WebListener
+public class SessionAttributeListener implements HttpSessionAttributeListener {
+    
+    private static final Logger logger = 
+        LoggerFactory.getLogger(SessionAttributeListener.class);
+    
+    @Override
+    public void attributeAdded(HttpSessionBindingEvent event) {
+        logger.debug("Session attribute added: {} = {}", 
+            event.getName(), 
+            event.getValue()
+        );
+    }
+    
+    @Override
+    public void attributeRemoved(HttpSessionBindingEvent event) {
+        logger.debug("Session attribute removed: {}", event.getName());
+    }
+    
+    @Override
+    public void attributeReplaced(HttpSessionBindingEvent event) {
+        logger.debug("Session attribute replaced: {}", event.getName());
+    }
+}
+
+// 5. Session Activation Listener - Passivation/Activation
+@WebListener
+public class SessionActivationListener implements HttpSessionActivationListener {
+    
+    private static final Logger logger = 
+        LoggerFactory.getLogger(SessionActivationListener.class);
+    
+    @Override
+    public void sessionWillPassivate(HttpSessionEvent se) {
+        logger.info("Session passivating: {}", se.getSession().getId());
+        // Prepare for serialization
+    }
+    
+    @Override
+    public void sessionDidActivate(HttpSessionEvent se) {
+        logger.info("Session activated: {}", se.getSession().getId());
+        // Restore from serialization
+    }
+}
+```
+
+#### Listener Configuration (web.xml)
+
+```xml
+<!-- Listeners execute in order defined -->
+<listener>
+    <listener-class>com.example.AppInitListener</listener-class>
+</listener>
+
+<listener>
+    <listener-class>com.example.SessionListener</listener-class>
+</listener>
+
+<listener>
+    <listener-class>com.example.RequestListener</listener-class>
+</listener>
+```
+
+#### Practical Listener Example: User Activity Tracker
+
+```java
+@WebListener
+public class UserActivityListener implements HttpSessionAttributeListener {
+    
+    private static final Logger logger = 
+        LoggerFactory.getLogger(UserActivityListener.class);
+    
+    @Inject
+    private UserActivityService activityService;
+    
+    @Override
+    public void attributeAdded(HttpSessionBindingEvent event) {
+        if ("username".equals(event.getName())) {
+            String username = (String) event.getValue();
+            HttpSession session = event.getSession();
+            
+            UserActivity activity = new UserActivity();
+            activity.setUsername(username);
+            activity.setAction("LOGIN");
+            activity.setTimestamp(new Date());
+            activity.setSessionId(session.getId());
+            
+            activityService.recordActivity(activity);
+            logger.info("User {} logged in", username);
+        }
+    }
+    
+    @Override
+    public void attributeRemoved(HttpSessionBindingEvent event) {
+        if ("username".equals(event.getName())) {
+            String username = (String) event.getValue();
+            
+            UserActivity activity = new UserActivity();
+            activity.setUsername(username);
+            activity.setAction("LOGOUT");
+            activity.setTimestamp(new Date());
+            
+            activityService.recordActivity(activity);
+            logger.info("User {} logged out", username);
+        }
+    }
+}
+```
+
+**Keypoints for Listeners:**
+- Monitor application, session, and request lifecycle events
+- ServletContextListener for app initialization/shutdown
+- HttpSessionListener for user session management
+- ServletRequestListener for request tracking
+- Attribute listeners for state change monitoring
+- Declare in web.xml or use @WebListener
+- Listeners execute in declaration order
+- Used for resource initialization, cleanup, and monitoring
+- Can track metrics like active sessions and user activity
+
+---
+
+## Web Technologies
+
+### HTTP Sessions and Cookies
+
+#### HTTP Session Management
+
+```java
+// Create/get session
+HttpSession session = request.getSession();
+
+// Store data
+session.setAttribute("userId", 123);
+session.setAttribute("userName", "john");
+
+// Retrieve data
+Integer userId = (Integer) session.getAttribute("userId");
+
+// Session configuration
+session.setMaxInactiveInterval(1800); // 30 minutes
+
+// Invalidate session
+session.invalidate();
+```
+
+#### Session Configuration (web.xml)
+
+```xml
+<session-config>
+    <cookie-config>
+        <secure>true</secure>
+        <http-only>true</http-only>
+        <domain>.example.com</domain>
+    </cookie-config>
+    <tracking-mode>COOKIE</tracking-mode>
+    <timeout>30</timeout>
+</session-config>
+```
+
+#### Cookie Management
+
+```java
+// Create cookie
+Cookie cookie = new Cookie("username", "john");
+cookie.setMaxAge(7 * 24 * 60 * 60); // 7 days
+cookie.setPath("/");
+cookie.setSecure(true);
+cookie.setHttpOnly(true);
+response.addCookie(cookie);
+
+// Read cookies
+Cookie[] cookies = request.getCookies();
+if (cookies != null) {
+    for (Cookie c : cookies) {
+        if ("username".equals(c.getName())) {
+            String value = c.getValue();
+        }
+    }
+}
+```
+
+### Request and Response
+
+#### HttpServletRequest
+
+```java
+// Headers
+String userAgent = request.getHeader("User-Agent");
+Enumeration<String> headerNames = request.getHeaderNames();
+
+// Parameters
+String name = request.getParameter("name");
+String[] hobbies = request.getParameterValues("hobby");
+Map<String, String[]> allParams = request.getParameterMap();
+
+// URL and URI information
+String url = request.getRequestURL().toString();
+String uri = request.getRequestURI();
+String queryString = request.getQueryString();
+
+// Method and protocol
+String method = request.getMethod(); // GET, POST, etc.
+String protocol = request.getProtocol();
+
+// Client information
+String remoteAddr = request.getRemoteAddr();
+String remoteHost = request.getRemoteHost();
+
+// Request body
+BufferedReader reader = request.getReader();
+String body = reader.lines()
+    .collect(Collectors.joining("\n"));
+```
+
+#### HttpServletResponse
+
+```java
+// Content type
+response.setContentType("application/json");
+response.setCharacterEncoding("UTF-8");
+
+// Headers
+response.setHeader("X-Custom-Header", "value");
+response.addHeader("Set-Cookie", "sessionid=123456");
+
+// Status codes
+response.setStatus(HttpServletResponse.SC_OK); // 200
+response.sendError(HttpServletResponse.SC_NOT_FOUND); // 404
+response.sendRedirect("/newpage"); // 302
+
+// Get output stream
+PrintWriter out = response.getWriter();
+ServletOutputStream outputStream = response.getOutputStream();
+```
+
+### Redirect vs Forward
+
+```java
+// Redirect (client-side, new request, URL changes)
+response.sendRedirect("/new-page");
+// OR
+response.setStatus(302);
+response.setHeader("Location", "/new-page");
+
+// Forward (server-side, same request, URL unchanged)
+RequestDispatcher dispatcher = request.getRequestDispatcher("/new-page");
+dispatcher.forward(request, response);
+
+// Include (include another resource in current response)
+RequestDispatcher dispatcher = request.getRequestDispatcher("/header.jsp");
+dispatcher.include(request, response);
+```
+
+---
+
+### JDBC Basics
+
+#### Theory of Database Connectivity
+
+JDBC (Java Database Connectivity) provides a standardized interface for Java applications to interact with relational databases. The JDBC architecture follows a driver-based model that abstracts database-specific details:
+
+```
+Application
+    ↓
+JDBC API (java.sql.*)
+    ↓
+JDBC Driver Manager
+    ↓
+Database Specific Driver (MySQL, PostgreSQL, Oracle)
+    ↓
+Database
+```
+
+#### JDBC Driver Types
+
+| Type | How it works | Use Case |
+|------|-------------|----------|
+| Type 1 | JDBC-ODBC Bridge | Legacy applications |
+| Type 2 | Native Driver | System-level access |
+| Type 3 | Network Protocol | Application/Database separation |
+| Type 4 | Direct Protocol (Pure Java) | Most common, no native libs needed |
+
+#### Basic JDBC Operations
+
+```java
+import java.sql.*;
+
+public class UserDAOJDBC {
+    
+    private String jdbcUrl = "jdbc:mysql://localhost:3306/mydb";
+    private String username = "root";
+    private String password = "password";
+    private String driverClassName = "com.mysql.cj.jdbc.Driver";
+    
+    // 1. Load Driver (optional in modern JDBC)
+    public void loadDriver() {
+        try {
+            Class.forName(driverClassName);
+            System.out.println("Driver loaded successfully");
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException("Driver not found", e);
+        }
+    }
+    
+    // 2. Create Connection
+    public Connection getConnection() throws SQLException {
+        return DriverManager.getConnection(jdbcUrl, username, password);
+    }
+    
+    // 3. Query Execution
+    public User getUserById(int id) throws SQLException {
+        String sql = "SELECT * FROM users WHERE id = ?";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setInt(1, id);
+            
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    User user = new User();
+                    user.setId(rs.getInt("id"));
+                    user.setName(rs.getString("name"));
+                    user.setEmail(rs.getString("email"));
+                    user.setAge(rs.getInt("age"));
+                    user.setCreatedAt(rs.getTimestamp("created_at"));
+                    return user;
+                }
+            }
+        }
+        return null;
+    }
+    
+    // 4. Insert Operation
+    public int insertUser(User user) throws SQLException {
+        String sql = "INSERT INTO users (name, email, age) VALUES (?, ?, ?)";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = 
+                conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            
+            pstmt.setString(1, user.getName());
+            pstmt.setString(2, user.getEmail());
+            pstmt.setInt(3, user.getAge());
+            
+            int affectedRows = pstmt.executeUpdate();
+            
+            // Get auto-generated ID
+            try (ResultSet rs = pstmt.getGeneratedKeys()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+            
+            return affectedRows;
+        }
+    }
+    
+    // 5. Update Operation
+    public boolean updateUser(User user) throws SQLException {
+        String sql = "UPDATE users SET name = ?, email = ?, age = ? " +
+                     "WHERE id = ?";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setString(1, user.getName());
+            pstmt.setString(2, user.getEmail());
+            pstmt.setInt(3, user.getAge());
+            pstmt.setInt(4, user.getId());
+            
+            int affectedRows = pstmt.executeUpdate();
+            return affectedRows > 0;
+        }
+    }
+    
+    // 6. Delete Operation
+    public boolean deleteUser(int id) throws SQLException {
+        String sql = "DELETE FROM users WHERE id = ?";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setInt(1, id);
+            int affectedRows = pstmt.executeUpdate();
+            return affectedRows > 0;
+        }
+    }
+    
+    // 7. Batch Operations
+    public void insertBatchUsers(List<User> users) throws SQLException {
+        String sql = "INSERT INTO users (name, email, age) VALUES (?, ?, ?)";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            for (User user : users) {
+                pstmt.setString(1, user.getName());
+                pstmt.setString(2, user.getEmail());
+                pstmt.setInt(3, user.getAge());
+                pstmt.addBatch();
+            }
+            
+            int[] results = pstmt.executeBatch();
+            System.out.println("Inserted: " + results.length + " rows");
+        }
+    }
+    
+    // 8. CallableStatement (Stored Procedures)
+    public int getUserCount() throws SQLException {
+        String sql = "{call get_user_count(?)}";
+        
+        try (Connection conn = getConnection();
+             CallableStatement cstmt = conn.prepareCall(sql)) {
+            
+            cstmt.registerOutParameter(1, Types.INTEGER);
+            cstmt.execute();
+            
+            return cstmt.getInt(1);
+        }
+    }
+}
+```
+
+#### ResultSet Scrolling and Concurrency
+
+```java
+public class AdvancedJDBC {
+    
+    // Scrollable ResultSet
+    public List<User> getScrollableUsers() throws SQLException {
+        String sql = "SELECT * FROM users";
+        
+        Connection conn = getConnection();
+        PreparedStatement pstmt = conn.prepareStatement(
+            sql,
+            ResultSet.TYPE_SCROLL_INSENSITIVE, // Can scroll
+            ResultSet.CONCUR_READ_ONLY          // Read-only
+        );
+        
+        ResultSet rs = pstmt.executeQuery();
+        List<User> users = new ArrayList<>();
+        
+        // Scroll to end
+        rs.last();
+        System.out.println("Total rows: " + rs.getRow());
+        
+        // Go back to beginning
+        rs.beforeFirst();
+        
+        while (rs.next()) {
+            User user = mapUser(rs);
+            users.add(user);
+        }
+        
+        rs.close();
+        pstmt.close();
+        conn.close();
+        
+        return users;
+    }
+    
+    // Updatable ResultSet
+    public void updateViaResultSet(int userId, String newName) 
+            throws SQLException {
+        
+        String sql = "SELECT * FROM users WHERE id = ?";
+        
+        Connection conn = getConnection();
+        PreparedStatement pstmt = conn.prepareStatement(
+            sql,
+            ResultSet.TYPE_SCROLL_SENSITIVE,  // Sensitive to changes
+            ResultSet.CONCUR_UPDATABLE        // Can update
+        );
+        
+        pstmt.setInt(1, userId);
+        ResultSet rs = pstmt.executeQuery();
+        
+        if (rs.next()) {
+            rs.updateString("name", newName);
+            rs.updateRow(); // Write changes to database
+        }
+        
+        rs.close();
+        pstmt.close();
+        conn.close();
+    }
+}
+```
+
+#### Connection Pooling
+
+```java
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+
+public class DataSourceManager {
+    
+    private static HikariDataSource dataSource;
+    
+    static {
+        HikariConfig config = new HikariConfig();
+        config.setJdbcUrl("jdbc:mysql://localhost:3306/mydb");
+        config.setUsername("root");
+        config.setPassword("password");
+        config.setMaximumPoolSize(20);      // Maximum connections
+        config.setMinimumIdle(5);           // Minimum idle connections
+        config.setConnectionTimeout(30000); // 30 seconds
+        config.setIdleTimeout(600000);      // 10 minutes
+        config.setMaxLifetime(1800000);     // 30 minutes
+        config.setAutoCommit(true);
+        config.setConnectionTestQuery("SELECT 1");
+        
+        dataSource = new HikariDataSource(config);
+    }
+    
+    public static Connection getConnection() throws SQLException {
+        return dataSource.getConnection();
+    }
+    
+    public static void closeDataSource() {
+        if (dataSource != null && !dataSource.isClosed()) {
+            dataSource.close();
+        }
+    }
+}
+
+// Usage
+public class PooledJDBCExample {
+    
+    public User getUserById(int id) throws SQLException {
+        try (Connection conn = DataSourceManager.getConnection();
+             PreparedStatement pstmt = 
+                conn.prepareStatement("SELECT * FROM users WHERE id = ?")) {
+            
+            pstmt.setInt(1, id);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return mapUser(rs);
+                }
+            }
+        }
+        return null;
+    }
+}
+```
+
+#### Transaction Management
+
+```java
+public class TransactionExample {
+    
+    // Automatic Commit (default)
+    public void simpleTransaction() throws SQLException {
+        try (Connection conn = DataSourceManager.getConnection()) {
+            // By default, autoCommit = true
+            // Each statement is committed immediately
+            
+            String insertSQL = "INSERT INTO users (name, email) VALUES (?, ?)";
+            PreparedStatement pstmt = conn.prepareStatement(insertSQL);
+            
+            pstmt.setString(1, "John");
+            pstmt.setString(2, "john@example.com");
+            pstmt.executeUpdate(); // Committed immediately
+            
+            pstmt.close();
+        }
+    }
+    
+    // Manual Transaction Control
+    public void transferMoney(int fromAccount, int toAccount, 
+                             double amount) throws SQLException {
+        Connection conn = null;
+        try {
+            conn = DataSourceManager.getConnection();
+            conn.setAutoCommit(false); // Disable auto-commit
+            
+            // Debit from source
+            String debitSQL = "UPDATE accounts SET balance = balance - ? " +
+                             "WHERE id = ?";
+            PreparedStatement debitStmt = conn.prepareStatement(debitSQL);
+            debitStmt.setDouble(1, amount);
+            debitStmt.setInt(2, fromAccount);
+            debitStmt.executeUpdate();
+            debitStmt.close();
+            
+            // Credit to destination
+            String creditSQL = "UPDATE accounts SET balance = balance + ? " +
+                              "WHERE id = ?";
+            PreparedStatement creditStmt = conn.prepareStatement(creditSQL);
+            creditStmt.setDouble(1, amount);
+            creditStmt.setInt(2, toAccount);
+            creditStmt.executeUpdate();
+            creditStmt.close();
+            
+            // Log transaction
+            String logSQL = "INSERT INTO transactions (from_account, " +
+                           "to_account, amount) VALUES (?, ?, ?)";
+            PreparedStatement logStmt = conn.prepareStatement(logSQL);
+            logStmt.setInt(1, fromAccount);
+            logStmt.setInt(2, toAccount);
+            logStmt.setDouble(3, amount);
+            logStmt.executeUpdate();
+            logStmt.close();
+            
+            // Commit if all successful
+            conn.commit();
+            System.out.println("Transaction committed successfully");
+            
+        } catch (SQLException e) {
+            if (conn != null) {
+                try {
+                    conn.rollback(); // Undo all changes
+                    System.out.println("Transaction rolled back");
+                } catch (SQLException ex) {
+                    ex.printStackTrace();
+                }
+            }
+            throw e;
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.setAutoCommit(true); // Reset
+                    conn.close();
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+    
+    // Savepoints (nested transactions)
+    public void complexTransaction() throws SQLException {
+        try (Connection conn = DataSourceManager.getConnection()) {
+            conn.setAutoCommit(false);
+            
+            // Insert user
+            String insertUser = "INSERT INTO users (name) VALUES (?)";
+            PreparedStatement pstmt1 = conn.prepareStatement(insertUser);
+            pstmt1.setString(1, "Jane");
+            pstmt1.executeUpdate();
+            
+            // Create savepoint
+            Savepoint savepoint1 = conn.setSavepoint("sp1");
+            
+            try {
+                // Update user (might fail)
+                String updateUser = "UPDATE users SET age = ? WHERE name = ?";
+                PreparedStatement pstmt2 = conn.prepareStatement(updateUser);
+                pstmt2.setInt(1, 25);
+                pstmt2.setString(2, "Jane");
+                pstmt2.executeUpdate();
+                
+                // Another savepoint
+                Savepoint savepoint2 = conn.setSavepoint("sp2");
+                
+                // Risky operation
+                riskyDatabaseOperation(conn);
+                
+            } catch (Exception e) {
+                // Rollback to savepoint, not entire transaction
+                conn.rollback(savepoint1);
+                System.out.println("Rolled back to savepoint1");
+            }
+            
+            conn.commit();
+        }
+    }
+}
+```
+
+**Keypoints for JDBC:**
+- Standard API for database access in Java
+- Four driver types: JDBC-ODBC, Native, Network Protocol, Pure Java (Type 4 preferred)
+- Three main interfaces: Connection, Statement, ResultSet
+- PreparedStatement prevents SQL injection
+- Connection pooling improves performance
+- Try-with-resources for automatic resource cleanup
+- Transaction control: autoCommit, commit, rollback
+- Batch operations for bulk insert/update
+- CallableStatement for stored procedures
+- ResultSet types: FORWARD_ONLY, SCROLL_INSENSITIVE, SCROLL_SENSITIVE
+- Concurrency: READ_ONLY, UPDATABLE
+- Savepoints for nested transactions
+
+---
+
+## Enterprise JavaBeans (EJB)
+
+### What are EJBs?
+- Reusable server-side components
+- Encapsulate business logic
+- Managed by EJB container (transactions, security, pooling)
+- Remote and local access support
+- Available since EJB 3.0 with annotation-based configuration
+
+### EJB Types
+
+#### 1. Session Beans
+
+**Theory:**
+Session beans represent conversational interactions with clients. They encapsulate business logic and are the primary component for handling business operations. Three types exist based on state management and lifecycle:
+
+**Stateless Session Beans**
+- No conversation state with client
+- Shared across multiple clients (pooled)
+- High performance and scalability
+- Ideal for service-oriented operations
+- All instances are interchangeable
+
+```java
+@Stateless
+@Local(CalculatorService.class)
+@Remote(CalculatorServiceRemote.class)
+public class CalculatorService implements CalculatorServiceLocal {
+    
+    @PostConstruct
+    public void init() {
+        System.out.println("Stateless bean initialized");
+    }
+    
+    public int add(int a, int b) {
+        return a + b;
+    }
+    
+    public int multiply(int a, int b) {
+        return a * b;
+    }
+    
+    @PreDestroy
+    public void cleanup() {
+        System.out.println("Stateless bean destroyed");
+    }
+}
+
+// Usage
+@Stateless
+public class ClientService {
+    
+    @Inject
+    private CalculatorService calculator;
+    
+    public void doCalculation() {
+        int result = calculator.add(10, 20); // Returns 30
+    }
+}
+```
+
+**Stateful Session Beans**
+- Maintains conversational state per client
+- Each client gets unique instance
+- State persists across method calls within same session
+- Passivation/activation when memory limited
+- Used for shopping carts, wizards, form flows
+
+```java
+@Stateful
+public class ShoppingCartBean {
+    
+    private List<CartItem> items = new ArrayList<>();
+    private String customerId;
+    private Date createdAt;
+    
+    @PostConstruct
+    public void init() {
+        createdAt = new Date();
+    }
+    
+    public void setCustomer(String customerId) {
+        this.customerId = customerId;
+    }
+    
+    public void addItem(CartItem item) {
+        items.add(item);
+        System.out.println("Added: " + item.getProductId() + 
+            " (Total: " + items.size() + ")");
+    }
+    
+    public void removeItem(String productId) {
+        items.removeIf(item -> 
+            item.getProductId().equals(productId)
+        );
+    }
+    
+    public List<CartItem> getItems() {
+        return new ArrayList<>(items);
+    }
+    
+    public double getTotal() {
+        return items.stream()
+            .mapToDouble(CartItem::getPrice)
+            .sum();
+    }
+    
+    public int getItemCount() {
+        return items.size();
+    }
+    
+    @PrePassivate
+    public void beforePassivate() {
+        System.out.println("Passivating cart for: " + customerId);
+    }
+    
+    @PostActivate
+    public void afterActivate() {
+        System.out.println("Activated cart for: " + customerId);
+    }
+    
+    @Remove
+    @TransactionAttribute(TransactionAttributeType.REQUIRED)
+    public void checkout() {
+        System.out.println("Processing payment for: " + customerId);
+        System.out.println("Total amount: " + getTotal());
+        // Process payment
+        items.clear();
+    }
+}
+
+// Usage
+@Stateless
+public class OrderService {
+    
+    @Inject
+    private ShoppingCartBean cart;
+    
+    public void createOrder(String customerId, List<Product> products) {
+        cart.setCustomer(customerId);
+        
+        for (Product product : products) {
+            CartItem item = new CartItem();
+            item.setProductId(product.getId());
+            item.setPrice(product.getPrice());
+            cart.addItem(item);
+        }
+        
+        double total = cart.getTotal();
+        System.out.println("Order total: " + total);
+        
+        cart.checkout();
+    }
+}
+```
+
+**Singleton Session Beans**
+- Single instance per application
+- Shared across all clients
+- Thread-safe access with proper synchronization
+- Eager or lazy initialization
+- Used for application-wide resources and caches
+
+```java
+@Singleton
+@Startup // Initialize on application startup
+@ConcurrencyManagement(ConcurrencyManagementType.CONTAINER)
+public class ConfigurationService {
+    
+    private Properties config;
+    private volatile long lastReload;
+    
+    @PostConstruct
+    public void init() {
+        loadConfiguration();
+        lastReload = System.currentTimeMillis();
+        System.out.println("Configuration service initialized");
+    }
+    
+    @Lock(LockType.READ) // Multiple readers, no writers
+    public String getProperty(String key) {
+        return config.getProperty(key);
+    }
+    
+    @Lock(LockType.WRITE) // Exclusive access
+    public void setProperty(String key, String value) {
+        config.setProperty(key, value);
+    }
+    
+    @Lock(LockType.WRITE)
+    public void reloadConfiguration() {
+        loadConfiguration();
+        lastReload = System.currentTimeMillis();
+        System.out.println("Configuration reloaded");
+    }
+    
+    private void loadConfiguration() {
+        config = new Properties();
+        // Load from file or database
+    }
+}
+```
+
+**Keypoints for Session Beans:**
+- Encapsulate business logic and operations
+- Stateless: pooled, scalable, lightweight (preferred for performance)
+- Stateful: maintains state, one instance per client (use when needed)
+- Singleton: application-wide resource, shared instance
+- @PostConstruct, @PreDestroy lifecycle callbacks
+- @TransactionAttribute controls transaction behavior
+- Can be accessed locally or remotely
+- Container manages pooling and lifecycle
+- Lifecycle methods: init() → use → destroy()
+
+#### 2. Message-Driven Beans (MDB)
+
+**Theory:**
+Message-Driven Beans (MDBs) are asynchronous components that consume messages from JMS queues or topics. They decouple message producers from consumers, enabling event-driven architectures.
+
+```java
+@MessageDriven(
+    activationConfig = {
+        @ActivationConfigProperty(
+            propertyName = "destinationType",
+            propertyValue = "javax.jms.Queue"
+        ),
+        @ActivationConfigProperty(
+            propertyName = "destination",
+            propertyValue = "java:/jms/queue/OrderQueue"
+        ),
+        @ActivationConfigProperty(
+            propertyName = "messageSelector",
+            propertyValue = "priority > 5"
+        ),
+        @ActivationConfigProperty(
+            propertyName = "maxSession",
+            propertyValue = "10"
+        )
+    }
+)
+public class OrderProcessorMDB implements MessageListener {
+    
+    private static final Logger logger = 
+        LoggerFactory.getLogger(OrderProcessorMDB.class);
+    
+    @Inject
+    private OrderService orderService;
+    
+    @Inject
+    private EmailService emailService;
+    
+    @Override
+    @TransactionAttribute(TransactionAttributeType.REQUIRED)
+    public void onMessage(Message message) {
+        try {
+            if (message instanceof TextMessage) {
+                TextMessage textMessage = (TextMessage) message;
+                String orderJson = textMessage.getText();
+                
+                logger.info("Processing order: {}", orderJson);
+                
+                Order order = parseOrder(orderJson);
+                orderService.processOrder(order);
+                
+                emailService.sendOrderConfirmation(order);
+                
+                logger.info("Order processed successfully");
+                
+            } else if (message instanceof MapMessage) {
+                MapMessage mapMessage = (MapMessage) message;
+                String orderId = mapMessage.getString("orderId");
+                // Handle map message
+            }
+        } catch (JMSException e) {
+            logger.error("Error processing message", e);
+            // Message will be redelivered based on redelivery policy
+        } catch (Exception e) {
+            logger.error("Unexpected error", e);
+        }
+    }
+    
+    private Order parseOrder(String json) {
+        // Parse JSON to Order object
+        return new Order();
+    }
+}
+```
+
+**Keypoints for MDBs:**
+- Asynchronous message consumption
+- Implement MessageListener interface
+- Activation configuration defines queue/topic
+- Thread-safe (container manages threads)
+- Transaction support (automatic or bean-managed)
+- Error handling and redelivery policies
+- Message filtering with messageSelector
+- Enables event-driven architecture
+- Decouples producer from consumer
+
+### EJB Dependency Injection
+
+```java
+@Stateless
+public class OrderService {
+    
+    @Inject
+    private UserService userService;
+    
+    @Inject
+    private PaymentService paymentService;
+    
+    @Resource(name = "java:/jms/queue/OrderQueue")
+    private Queue orderQueue;
+    
+    @PersistenceContext
+    private EntityManager entityManager;
+    
+    public void createOrder(Order order) {
+        // Use injected services
+        User user = userService.getUserById(order.getUserId());
+        paymentService.processPayment(order.getAmount());
+    }
+}
+```
+
+### EJB Lifecycle Callbacks
+
+```java
+@Stateful
+public class UserCartBean {
+    
+    @PostConstruct
+    public void initialize() {
+        System.out.println("Bean created");
+    }
+    
+    @PrePassivate // Before passivation (serialization)
+    public void beforePassivate() {
+        System.out.println("Passivating bean");
+    }
+    
+    @PostActivate // After activation (deserialization)
+    public void afterActivate() {
+        System.out.println("Activated bean");
+    }
+    
+    @PreDestroy
+    public void cleanup() {
+        System.out.println("Bean destroyed");
+    }
+}
+```
+
+---
+
+## Transaction Management
+
+### JTA (Java Transaction API) - Comprehensive Guide
+
+#### Theory of Transactions
+
+A transaction is a logical unit of work that must either complete entirely or not at all. Transactions ensure ACID properties:
+
+- **Atomicity**: All or nothing (entire transaction succeeds or fails)
+- **Consistency**: Database moves from valid state to valid state
+- **Isolation**: Transactions don't interfere with each other
+- **Durability**: Committed changes persist even after failure
+
+#### Transaction Attributes in Detail
+
+**1. REQUIRED (Default)**
+```java
+@Transactional
+@TransactionAttribute(TransactionAttributeType.REQUIRED)
+public void requiredTransaction() {
+    // Uses existing transaction or creates new one
+    // If calling method has transaction, this uses it
+    // If calling method has no transaction, creates one
+}
+
+// Scenario:
+// Caller has transaction → Uses caller's transaction
+// Caller has no transaction → Creates new transaction
+// Exception → Rollback
+```
+
+**2. REQUIRES_NEW**
+```java
+@TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
+public void auditLog() {
+    // Always creates new transaction
+    // Current transaction suspended
+    // Executes independently
+    // Commits regardless of outer transaction status
+}
+
+// Scenario:
+// Outer transaction → Suspended, new transaction created
+// Even if outer fails → Audit log committed
+// Useful for logging that must always persist
+```
+
+**3. MANDATORY**
+```java
+@TransactionAttribute(TransactionAttributeType.MANDATORY)
+public void criticalOperation() {
+    // Must be called from transactional context
+    // Throws exception if no transaction
+}
+
+// Scenario:
+// Called with transaction → Proceeds
+// Called without transaction → TransactionRequiredException
+```
+
+**4. NOT_SUPPORTED**
+```java
+@TransactionAttribute(TransactionAttributeType.NOT_SUPPORTED)
+public void reportQuery() {
+    // Executes without transaction
+    // Current transaction suspended
+    // Useful for read-only queries needing no transactional overhead
+}
+
+// Scenario:
+// Reads data without transaction locking
+// Cannot make database modifications
+```
+
+**5. NEVER**
+```java
+@TransactionAttribute(TransactionAttributeType.NEVER)
+public void nonTransactionalOnly() {
+    // Must NOT have active transaction
+    // Throws exception if transaction active
+}
+
+// Scenario:
+// Called with transaction → InvalidTransactionException
+// Called without transaction → Proceeds
+```
+
+**6. SUPPORTS**
+```java
+@TransactionAttribute(TransactionAttributeType.SUPPORTS)
+public void flexibleOperation() {
+    // Flexible behavior
+    // If transaction exists → Joins it
+    // If no transaction → Executes without one
+}
+
+// Scenario:
+// Called with transaction → Uses it
+// Called without transaction → Proceeds without one
+```
+
+#### Declarative Transaction Management
+
+```java
+@Stateless
+public class BankService {
+    
+    @PersistenceContext
+    private EntityManager entityManager;
+    
+    @Transactional
+    public void transferMoney(int fromAccountId, int toAccountId, 
+                             double amount) {
+        // Entire method in one transaction
+        
+        Account fromAccount = entityManager.find(Account.class, fromAccountId);
+        Account toAccount = entityManager.find(Account.class, toAccountId);
+        
+        fromAccount.withdraw(amount);
+        toAccount.deposit(amount);
+        
+        entityManager.merge(fromAccount);
+        entityManager.merge(toAccount);
+        
+        // Auto-commit at end
+        // Exception → Auto-rollback
+    }
+    
+    @Transactional(rollbackOn = {InsufficientFundsException.class})
+    public void withdrawWithValidation(int accountId, double amount) 
+            throws InsufficientFundsException {
+        
+        Account account = entityManager.find(Account.class, accountId);
+        
+        if (account.getBalance() < amount) {
+            throw new InsufficientFundsException("Insufficient funds");
+            // Rollback on this exception
+        }
+        
+        account.withdraw(amount);
+        entityManager.merge(account);
+    }
+}
+```
+
+#### Programmatic Transaction Management
+
+```java
+@Stateless
+public class UserService {
+    
+    @Resource
+    private UserTransaction userTransaction;
+    
+    @Inject
+    private UserDAO userDAO;
+    
+    public void createMultipleUsers(List<User> users) {
+        try {
+            // Start transaction manually
+            userTransaction.begin();
+            
+            for (User user : users) {
+                userDAO.create(user);
+                
+                // Verify constraints
+                if (!validateUser(user)) {
+                    throw new ValidationException("Invalid user data");
+                }
+            }
+            
+            // Commit if all successful
+            userTransaction.commit();
+            System.out.println("All users created successfully");
+            
+        } catch (ValidationException e) {
+            try {
+                // Rollback on error
+                userTransaction.rollback();
+                System.out.println("Transaction rolled back");
+            } catch (SystemException ex) {
+                ex.printStackTrace();
+            }
+        } catch (SystemException e) {
+            e.printStackTrace();
+        } finally {
+            // Check transaction status
+            try {
+                if (userTransaction.getStatus() != Status.STATUS_NO_TRANSACTION) {
+                    userTransaction.rollback();
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
+```
+
+#### Transaction Propagation Scenarios
+
+```java
+@Stateless
+public class OrderService {
+    
+    @Inject
+    private PaymentService paymentService;
+    
+    @Inject
+    private NotificationService notificationService;
+    
+    @Inject
+    private InventoryService inventoryService;
+    
+    // Scenario 1: All in same transaction
+    @Transactional
+    public void createOrder(Order order) {
+        // order persistence
+        // All called methods use SAME transaction
+        processPayment(order); // Uses parent transaction
+        updateInventory(order); // Uses parent transaction
+        // Exception → All rollback
+    }
+    
+    @Transactional
+    private void processPayment(Order order) {
+        // Inherited parent transaction
+    }
+    
+    @Transactional
+    private void updateInventory(Order order) {
+        // Inherited parent transaction
+    }
+    
+    // Scenario 2: Independent logging transaction
+    @Transactional
+    public void createOrderWithLogging(Order order) {
+        try {
+            createOrder(order);
+        } catch (Exception e) {
+            logError(e); // Succeeds even if createOrder fails
+        }
+    }
+    
+    @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
+    private void logError(Exception e) {
+        // New transaction, independent from parent
+        // Commits even if parent rolls back
+    }
+}
+```
+
+**Keypoints for JTA:**
+- Declarative transactions via @Transactional annotations
+- Transaction attributes control transaction propagation
+- REQUIRED: use existing or create new (default)
+- REQUIRES_NEW: always create new, suspend current
+- MANDATORY: must have transaction, throw exception if not
+- NOT_SUPPORTED: no transaction, suspend current
+- NEVER: must not have transaction
+- SUPPORTS: flexible, join if exists
+- Programmatic control via UserTransaction interface
+- Transaction context flows to called methods
+- Exception causes automatic rollback
+- Savepoints for partial rollback in complex transactions
+
+---
+
+## Messaging Services (JMS) - Complete Guide
+
+### What is JMS?
+
+Java Messaging Service (JMS) is an API for creating, sending, and receiving messages asynchronously. It enables:
+- Loose coupling between components
+- Asynchronous communication
+- Reliable message delivery
+- Scalability through message brokers
+
+### Messaging Models
+
+#### 1. Point-to-Point (Queue Model)
+
+```
+Producer → Queue (Temporary Storage) → Consumer
+- One message, one consumer
+- Message persisted until consumed
+- Consumer can process at its own pace
+- No message lost if consumer temporarily unavailable
+```
+
+#### 2. Publish-Subscribe (Topic Model)
+
+```
+Publisher → Topic (Broadcast)
+              ├→ Subscriber 1
+              ├→ Subscriber 2
+              └→ Subscriber 3
+- One message, multiple subscribers
+- Each subscriber gets copy
+- Subscribers must be active to receive
+- Dead subscribers miss messages (unless durable)
+```
+
+### Point-to-Point Example
+
+```java
+// Producer - Sends message to queue
+@Stateless
+public class OrderProducer {
+    
+    @Inject
+    private JMSContext context;
+    
+    @Resource(lookup = "java:/jms/queue/OrderQueue")
+    private Queue queue;
+    
+    public void sendOrder(Order order) {
+        try {
+            String orderJson = convertToJson(order);
+            
+            context.createProducer()
+                .setProperty("priority", Message.DEFAULT_PRIORITY)
+                .setTimeToLive(86400000) // 24 hours
+                .send(queue, orderJson);
+            
+            System.out.println("Order sent: " + order.getId());
+            
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to send order", e);
+        }
+    }
+    
+    private String convertToJson(Order order) {
+        // Convert to JSON
+        return "";
+    }
+}
+
+// Consumer - Receives and processes message
+@MessageDriven(
+    activationConfig = {
+        @ActivationConfigProperty(
+            propertyName = "destinationType",
+            propertyValue = "javax.jms.Queue"
+        ),
+        @ActivationConfigProperty(
+            propertyName = "destination",
+            propertyValue = "java:/jms/queue/OrderQueue"
+        ),
+        @ActivationConfigProperty(
+            propertyName = "acknowledgeMode",
+            propertyValue = "AUTO_ACKNOWLEDGE"
+        ),
+        @ActivationConfigProperty(
+            propertyName = "maxSession",
+            propertyValue = "10" // Parallel consumers
+        ),
+        @ActivationConfigProperty(
+            propertyName = "messageSelector",
+            propertyValue = "JMSPriority > 5" // Filter high priority
+        )
+    }
+)
+public class OrderConsumer implements MessageListener {
+    
+    private static final Logger logger = 
+        LoggerFactory.getLogger(OrderConsumer.class);
+    
+    @Inject
+    private OrderService orderService;
+    
+    @Override
+    @TransactionAttribute(TransactionAttributeType.REQUIRED)
+    public void onMessage(Message message) {
+        try {
+            if (message instanceof TextMessage) {
+                TextMessage textMsg = (TextMessage) message;
+                String orderJson = textMsg.getText();
+                
+                Order order = parseOrder(orderJson);
+                
+                logger.info("Processing order: {}", order.getId());
+                
+                orderService.processOrder(order);
+                
+                // Auto-acknowledge (message removed from queue)
+                message.acknowledge();
+                
+                logger.info("Order processed successfully");
+                
+            } else if (message instanceof ObjectMessage) {
+                ObjectMessage objMsg = (ObjectMessage) message;
+                Order order = (Order) objMsg.getObject();
+                orderService.processOrder(order);
+            }
+            
+        } catch (JMSException e) {
+            logger.error("JMS Error processing message", e);
+            // Message redelivered based on redelivery policy
+        } catch (Exception e) {
+            logger.error("Error processing order", e);
+        }
+    }
+    
+    private Order parseOrder(String json) {
+        // Parse JSON to Order
+        return new Order();
+    }
+}
+```
+
+### Publish-Subscribe Example
+
+```java
+// Publisher - Publishes events to topic
+@Stateless
+public class EventPublisher {
+    
+    @Inject
+    private JMSContext context;
+    
+    @Resource(lookup = "java:/jms/topic/UserEvents")
+    private Topic topic;
+    
+    public void publishUserCreated(User user) {
+        String event = "USER_CREATED:" + user.getId();
+        
+        context.createProducer()
+            .setProperty("eventType", "USER_CREATION")
+            .setProperty("userId", user.getId())
+            .send(topic, event);
+        
+        System.out.println("Event published: User created");
+    }
+    
+    public void publishUserUpdated(User user) {
+        String event = "USER_UPDATED:" + user.getId();
+        context.createProducer().send(topic, event);
+    }
+    
+    public void publishUserDeleted(int userId) {
+        String event = "USER_DELETED:" + userId;
+        context.createProducer().send(topic, event);
+    }
+}
+
+// Subscriber 1 - Email notification service
+@MessageDriven(
+    activationConfig = {
+        @ActivationConfigProperty(
+            propertyName = "destinationType",
+            propertyValue = "javax.jms.Topic"
+        ),
+        @ActivationConfigProperty(
+            propertyName = "destination",
+            propertyValue = "java:/jms/topic/UserEvents"
+        ),
+        @ActivationConfigProperty(
+            propertyName = "subscriptionDurability",
+            propertyValue = "Durable"
+        ),
+        @ActivationConfigProperty(
+            propertyName = "clientId",
+            propertyValue = "EmailNotificationService"
+        )
+    }
+)
+public class EmailNotificationMDB implements MessageListener {
+    
+    @Inject
+    private EmailService emailService;
+    
+    @Override
+    public void onMessage(Message message) {
+        try {
+            String event = message.getBody(String.class);
+            
+            if (event.startsWith("USER_CREATED")) {
+                int userId = message.getIntProperty("userId");
+                emailService.sendWelcomeEmail(userId);
+            } else if (event.startsWith("USER_UPDATED")) {
+                emailService.sendUpdateNotification();
+            }
+        } catch (JMSException e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+// Subscriber 2 - SMS notification service
+@MessageDriven(
+    activationConfig = {
+        @ActivationConfigProperty(
+            propertyName = "destinationType",
+            propertyValue = "javax.jms.Topic"
+        ),
+        @ActivationConfigProperty(
+            propertyName = "destination",
+            propertyValue = "java:/jms/topic/UserEvents"
+        )
+    }
+)
+public class SMSNotificationMDB implements MessageListener {
+    
+    @Inject
+    private SMSService smsService;
+    
+    @Override
+    public void onMessage(Message message) {
+        try {
+            String event = message.getBody(String.class);
+            
+            if (event.startsWith("USER_CREATED")) {
+                smsService.sendWelcomeSMS();
+            }
+        } catch (JMSException e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+// Subscriber 3 - Analytics service
+@MessageDriven(
+    activationConfig = {
+        @ActivationConfigProperty(
+            propertyName = "destinationType",
+            propertyValue = "javax.jms.Topic"
+        ),
+        @ActivationConfigProperty(
+            propertyName = "destination",
+            propertyValue = "java:/jms/topic/UserEvents"
+        )
+    }
+)
+public class AnalyticsMDB implements MessageListener {
+    
+    @Inject
+    private AnalyticsService analyticsService;
+    
+    @Override
+    public void onMessage(Message message) {
+        try {
+            String event = message.getBody(String.class);
+            analyticsService.trackEvent(event);
+        } catch (JMSException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+### Request-Reply Pattern
+
+```java
+// Client sends request and waits for reply
+@Stateless
+public class RequestReplyClient {
+    
+    @Inject
+    private JMSContext context;
+    
+    @Resource(lookup = "java:/jms/queue/RequestQueue")
+    private Queue requestQueue;
+    
+    public String sendRequestAndWaitForReply(String request) 
+            throws JMSException {
+        
+        // Create temporary queue for replies
+        TemporaryQueue replyQueue = context.createTemporaryQueue();
+        
+        // Send request with reply address
+        TextMessage message = context.createTextMessage(request);
+        message.setJMSReplyTo(replyQueue);
+        message.setJMSCorrelationID(UUID.randomUUID().toString());
+        
+        context.createProducer().send(requestQueue, message);
+        
+        System.out.println("Request sent, waiting for reply...");
+        
+        // Wait for reply (timeout 30 seconds)
+        String reply = context.createConsumer(replyQueue)
+            .receiveBody(String.class, 30000);
+        
+        return reply;
+    }
+}
+
+// Server receives request and sends reply
+@MessageDriven(
+    activationConfig = {
+        @ActivationConfigProperty(
+            propertyName = "destinationType",
+            propertyValue = "javax.jms.Queue"
+        ),
+        @ActivationConfigProperty(
+            propertyName = "destination",
+            propertyValue = "java:/jms/queue/RequestQueue"
+        )
+    }
+)
+public class RequestReplyServer implements MessageListener {
+    
+    @Override
+    public void onMessage(Message message) {
+        try {
+            if (message instanceof TextMessage) {
+                TextMessage request = (TextMessage) message;
+                String requestData = request.getText();
+                
+                System.out.println("Request received: " + requestData);
+                
+                // Process request
+                String response = processRequest(requestData);
+                
+                // Send reply
+                Queue replyTo = (Queue) message.getJMSReplyTo();
+                
+                TextMessage reply = context.createTextMessage(response);
+                reply.setJMSCorrelationID(message.getJMSCorrelationID());
+                
+                context.createProducer().send(replyTo, reply);
+                
+                System.out.println("Reply sent");
+            }
+        } catch (JMSException e) {
+            e.printStackTrace();
+        }
+    }
+    
+    private String processRequest(String request) {
+        return "Processed: " + request;
+    }
+}
+```
+
+### Message Types
+
+```java
+public class MessageTypesExample {
+    
+    @Inject
+    private JMSContext context;
+    
+    @Resource(lookup = "java:/jms/queue/MyQueue")
+    private Queue queue;
+    
+    // Text Message
+    public void sendTextMessage(String text) {
+        TextMessage message = context.createTextMessage(text);
+        context.createProducer().send(queue, message);
+    }
+    
+    // Object Message
+    public void sendObjectMessage(Serializable obj) {
+        ObjectMessage message = context.createObjectMessage(obj);
+        context.createProducer().send(queue, message);
+    }
+    
+    // Map Message (key-value pairs)
+    public void sendMapMessage(Map<String, Object> data) {
+        MapMessage message = context.createMapMessage();
+        data.forEach((key, value) -> {
+            try {
+                message.setObject(key, value);
+            } catch (JMSException e) {
+                e.printStackTrace();
+            }
+        });
+        context.createProducer().send(queue, message);
+    }
+    
+    // Bytes Message (binary data)
+    public void sendBytesMessage(byte[] data) {
+        BytesMessage message = context.createBytesMessage();
+        try {
+            message.writeBytes(data);
+        } catch (JMSException e) {
+            e.printStackTrace();
+        }
+        context.createProducer().send(queue, message);
+    }
+}
+```
+
+**Keypoints for JMS:**
+- Asynchronous messaging between components
+- Two models: Point-to-Point (Queue), Publish-Subscribe (Topic)
+- Queue: one producer → one consumer
+- Topic: one publisher → multiple subscribers
+- MessageDriven beans for asynchronous processing
+- Request-Reply pattern for synchronous messaging
+- Message properties for filtering and routing
+- Acknowledgment modes: AUTO, CLIENT, DUPS_OK
+- Durable subscriptions for offline subscribers
+- Message selector for filtering
+- Transaction support for reliability
+- Connection pooling and resource management
+
+---
+
+## Security - Comprehensive Guide
+
+### Authentication and Authorization
+
+#### Theory of Security
+
+Security in J2EE involves two main concepts:
+1. **Authentication**: Verifying user identity (Who are you?)
+2. **Authorization**: Determining user permissions (What can you do?)
+
+#### Declarative Security
+
+```java
+// Protect servlet with annotations
+@WebServlet("/admin/dashboard")
+@ServletSecurity(
+    @HttpConstraint(
+        rolesAllowed = {"ADMIN", "SUPERVISOR"},
+        transportGuarantee = TransportGuarantee.CONFIDENTIAL, // HTTPS required
+        httpMethodConstraints = {
+            @HttpMethodConstraint(
+                value = "GET",
+                rolesAllowed = {"ADMIN"}
+            ),
+            @HttpMethodConstraint(
+                value = "DELETE",
+                rolesAllowed = {"ADMIN"},
+                transportGuarantee = TransportGuarantee.CONFIDENTIAL
+            )
+        }
+    )
+)
+public class AdminDashboard extends HttpServlet {
+    // Only ADMIN can GET
+    // Only ADMIN can DELETE via HTTPS
+}
+
+// Protect EJB with annotations
+@Stateless
+public class AdminService {
+    
+    @RolesAllowed({"ADMIN"})
+    public void deleteUser(int userId) {
+        // Only users in ADMIN role can call
+    }
+    
+    @PermitAll
+    public List<User> listUsers() {
+        // Anyone (authenticated or not) can call
+    }
+    
+    @DenyAll
+    public void dangerousOperation() {
+        // Nobody can call this method
+    }
+}
+```
+
+#### Role-Based Access Control (RBAC)
+
+```java
+@Stateless
+public class ContentService {
+    
+    @Inject
+    private SecurityContext securityContext;
+    
+    public Document getDocument(int docId) {
+        // Check if user is authenticated
+        if (securityContext.getUserPrincipal() == null) {
+            throw new SecurityException("User not authenticated");
+        }
+        
+        // Check roles
+        if (securityContext.isUserInRole("VIEWER") || 
+            securityContext.isUserInRole("EDITOR") ||
+            securityContext.isUserInRole("ADMIN")) {
+            return documentDAO.findById(docId);
+        } else {
+            throw new SecurityException("User lacks required role");
+        }
+    }
+    
+    public void editDocument(int docId, String content) {
+        if (!securityContext.isUserInRole("EDITOR") && 
+            !securityContext.isUserInRole("ADMIN")) {
+            throw new SecurityException("Edit permission denied");
+        }
+        
+        Document doc = documentDAO.findById(docId);
+        doc.setContent(content);
+        documentDAO.update(doc);
+    }
+}
+```
+
+#### Programmatic Security
+
+```java
+@WebServlet("/login")
+public class LoginServlet extends HttpServlet {
+    
+    @Override
+    protected void doPost(HttpServletRequest request, 
+                         HttpServletResponse response) 
+            throws ServletException, IOException {
+        
+        String username = request.getParameter("username");
+        String password = request.getParameter("password");
+        
+        try {
+            // Authenticate user
+            request.login(username, password);
+            
+            // Get authenticated principal
+            Principal principal = request.getUserPrincipal();
+            System.out.println("Logged in as: " + principal.getName());
+            
+            // Check roles
+            if (request.isUserInRole("ADMIN")) {
+                response.sendRedirect("/admin/dashboard");
+            } else {
+                response.sendRedirect("/user/dashboard");
+            }
+            
+        } catch (ServletException e) {
+            // Authentication failed
+            request.getSession().setAttribute("error", "Invalid credentials");
+            response.sendRedirect("/login.jsp?error=invalid");
+        }
+    }
+    
+    @Override
+    protected void doGet(HttpServletRequest request, 
+                        HttpServletResponse response) 
+            throws ServletException, IOException {
+        
+        // Check if user already logged in
+        if (request.getUserPrincipal() != null) {
+            response.sendRedirect("/dashboard");
+            return;
+        }
+        
+        request.getRequestDispatcher("/login.jsp").forward(request, response);
+    }
+}
+
+@WebServlet("/logout")
+public class LogoutServlet extends HttpServlet {
+    
+    @Override
+    protected void doGet(HttpServletRequest request, 
+                        HttpServletResponse response) 
+            throws ServletException, IOException {
+        
+        // Logout user
+        request.logout();
+        
+        // Invalidate session
+        request.getSession().invalidate();
+        
+        response.sendRedirect("/login.jsp?message=Logged out successfully");
+    }
+}
+```
+
+#### Web.xml Security Configuration
+
+```xml
+<!-- 1. Define login configuration -->
+<login-config>
+    <auth-method>FORM</auth-method>
+    <form-login-config>
+        <form-login-page>/login.jsp</form-login-page>
+        <form-error-page>/login-error.jsp</form-error-page>
+    </form-login-config>
+</login-config>
+
+<!-- 2. Define security constraints for URLs -->
+<security-constraint>
+    <display-name>Admin Pages</display-name>
+    <web-resource-collection>
+        <web-resource-name>AdminResources</web-resource-name>
+        <description>Admin only resources</description>
+        <url-pattern>/admin/*</url-pattern>
+        <http-method>GET</http-method>
+        <http-method>POST</http-method>
+        <http-method>PUT</http-method>
+        <http-method>DELETE</http-method>
+    </web-resource-collection>
+    <auth-constraint>
+        <role-name>ADMIN</role-name>
+    </auth-constraint>
+    <user-data-constraint>
+        <transport-guarantee>CONFIDENTIAL</transport-guarantee>
+    </user-data-constraint>
+</security-constraint>
+
+<security-constraint>
+    <display-name>User Pages</display-name>
+    <web-resource-collection>
+        <web-resource-name>UserResources</web-resource-name>
+        <url-pattern>/user/*</url-pattern>
+        <http-method>GET</http-method>
+    </web-resource-collection>
+    <auth-constraint>
+        <role-name>USER</role-name>
+    </auth-constraint>
+</security-constraint>
+
+<!-- 3. Declare security roles -->
+<security-role>
+    <role-name>ADMIN</role-name>
+</security-role>
+<security-role>
+    <role-name>USER</role-name>
+</security-role>
+<security-role>
+    <role-name>GUEST</role-name>
+</security-role>
+```
+
+#### JAAS (Java Authentication and Authorization Service)
+
+```java
+public class CustomLoginModule implements javax.security.auth.spi.LoginModule {
+    
+    private Subject subject;
+    private CallbackHandler callbackHandler;
+    private Map<String, ?> sharedState;
+    private UserDatabase userDatabase;
+    
+    @Override
+    public void initialize(Subject subject, 
+                          CallbackHandler callbackHandler, 
+                          Map<String, ?> sharedState, 
+                          Map<String, ?> options) {
+        this.subject = subject;
+        this.callbackHandler = callbackHandler;
+        this.sharedState = sharedState;
+    }
+    
+    @Override
+    public boolean login() throws LoginException {
+        // Get username and password from CallbackHandler
+        NameCallback nameCallback = new NameCallback("Username: ");
+        PasswordCallback passwordCallback = 
+            new PasswordCallback("Password: ", false);
+        
+        try {
+            callbackHandler.handle(new Callback[] {
+                nameCallback, 
+                passwordCallback
+            });
+        } catch (IOException | UnsupportedCallbackException e) {
+            throw new LoginException(e.getMessage());
+        }
+        
+        String username = nameCallback.getName();
+        char[] passwordChars = passwordCallback.getPassword();
+        String password = new String(passwordChars);
+        
+        // Verify credentials
+        User user = userDatabase.authenticate(username, password);
+        if (user == null) {
+            throw new FailedLoginException("Invalid credentials");
+        }
+        
+        // Add principals to subject
+        UserPrincipal userPrincipal = new UserPrincipal(username);
+        subject.getPrincipals().add(userPrincipal);
+        
+        // Add roles
+        for (String role : user.getRoles()) {
+            RolePrincipal rolePrincipal = new RolePrincipal(role);
+            subject.getPrincipals().add(rolePrincipal);
+        }
+        
+        return true;
+    }
+    
+    @Override
+    public boolean commit() throws LoginException {
+        return true;
+    }
+    
+    @Override
+    public boolean abort() throws LoginException {
+        return true;
+    }
+    
+    @Override
+    public boolean logout() throws LoginException {
+        subject.getPrincipals().clear();
+        return true;
+    }
+}
+
+public class UserPrincipal implements Principal {
+    private String name;
+    
+    public UserPrincipal(String name) {
+        this.name = name;
+    }
+    
+    @Override
+    public String getName() {
+        return name;
+    }
+}
+
+public class RolePrincipal implements Principal {
+    private String role;
+    
+    public RolePrincipal(String role) {
+        this.role = role;
+    }
+    
+    @Override
+    public String getName() {
+        return role;
+    }
+}
+```
+
+#### SSL/TLS Configuration
+
+```xml
+<!-- Configure HTTPS in application server -->
+<!-- Usually in application server configuration, not web.xml -->
+
+<!-- In web.xml, enforce HTTPS for sensitive operations -->
+<security-constraint>
+    <web-resource-collection>
+        <web-resource-name>Secure Pages</web-resource-name>
+        <url-pattern>/secure/*</url-pattern>
+    </web-resource-collection>
+    <user-data-constraint>
+        <transport-guarantee>CONFIDENTIAL</transport-guarantee>
+    </user-data-constraint>
+</security-constraint>
+```
+
+#### Password Security
+
+```java
+@Stateless
+public class UserSecurityService {
+    
+    @Inject
+    private UserDAO userDAO;
+    
+    // Hash passwords using bcrypt
+    public void createUser(String username, String plainPassword) {
+        String hashedPassword = BCrypt.hashpw(plainPassword, BCrypt.gensalt());
+        
+        User user = new User();
+        user.setUsername(username);
+        user.setPasswordHash(hashedPassword);
+        
+        userDAO.create(user);
+    }
+    
+    // Verify password
+    public boolean verifyPassword(String username, String plainPassword) {
+        User user = userDAO.findByUsername(username);
+        
+        if (user == null) {
+            return false;
+        }
+        
+        return BCrypt.checkpw(plainPassword, user.getPasswordHash());
+    }
+    
+    // Force password change
+    public void changePassword(String username, String oldPassword, 
+                              String newPassword) {
+        if (!verifyPassword(username, oldPassword)) {
+            throw new SecurityException("Current password incorrect");
+        }
+        
+        User user = userDAO.findByUsername(username);
+        user.setPasswordHash(BCrypt.hashpw(newPassword, BCrypt.gensalt()));
+        user.setLastPasswordChange(new Date());
+        
+        userDAO.update(user);
+    }
+}
+```
+
+**Keypoints for Security:**
+- Authentication verifies identity, authorization verifies permissions
+- Declarative security via @ServletSecurity, @RolesAllowed annotations
+- Programmatic security via request.login(), isUserInRole(), getUserPrincipal()
+- Web.xml defines security constraints, login config, and roles
+- JAAS for custom authentication mechanisms
+- Principal and Role principals in Subject
+- HTTPS (CONFIDENTIAL transport guarantee) for sensitive data
+- Hash passwords with bcrypt or similar (never plain text)
+- Session timeout for automatic logout
+- Role-based access control (RBAC) for authorization
+- Security checks at servlet, EJB, and method levels
+
+---
+
+## Design Patterns
+
+### 1. DAO (Data Access Object) Pattern
+
+```java
+// Entity
+public class User {
+    private int id;
+    private String name;
+    private String email;
+    // Getters and setters
+}
+
+// DAO Interface
+public interface UserDAO {
+    User findById(int id);
+    List<User> findAll();
+    void save(User user);
+    void update(User user);
+    void delete(int id);
+}
+
+// DAO Implementation
+@Repository
+public class UserDAOImpl implements UserDAO {
+    
+    @PersistenceContext
+    private EntityManager entityManager;
+    
+    @Override
+    public User findById(int id) {
+        return entityManager.find(User.class, id);
+    }
+    
+    @Override
+    public List<User> findAll() {
+        return entityManager.createQuery("SELECT u FROM User u", User.class)
+            .getResultList();
+    }
+    
+    @Override
+    public void save(User user) {
+        entityManager.persist(user);
+    }
+    
+    @Override
+    public void update(User user) {
+        entityManager.merge(user);
+    }
+    
+    @Override
+    public void delete(int id) {
+        User user = findById(id);
+        if (user != null) {
+            entityManager.remove(user);
+        }
+    }
+}
+
+// Service Layer
+@Stateless
+public class UserService {
+    
+    @Inject
+    private UserDAO userDAO;
+    
+    @Transactional
+    public User getUserById(int id) {
+        return userDAO.findById(id);
+    }
+    
+    @Transactional
+    public void createUser(User user) {
+        userDAO.save(user);
+    }
+}
+```
+
+### 2. MVC (Model-View-Controller) Pattern
+
+```java
+// Model
+public class Product {
+    private int id;
+    private String name;
+    private double price;
+    // Getters and setters
+}
+
+// Controller
+@WebServlet("/products")
+public class ProductController extends HttpServlet {
+    
+    @Inject
+    private ProductService productService;
+    
+    @Override
+    protected void doGet(HttpServletRequest request, 
+                        HttpServletResponse response) 
+            throws ServletException, IOException {
+        
+        List<Product> products = productService.getAllProducts();
+        request.setAttribute("products", products);
+        
+        RequestDispatcher dispatcher = 
+            request.getRequestDispatcher("/products.jsp");
+        dispatcher.forward(request, response);
+    }
+    
+    @Override
+    protected void doPost(HttpServletRequest request, 
+                         HttpServletResponse response) 
+            throws ServletException, IOException {
+        
+        String name = request.getParameter("name");
+        double price = Double.parseDouble(
+            request.getParameter("price"));
+        
+        Product product = new Product();
+        product.setName(name);
+        product.setPrice(price);
+        
+        productService.createProduct(product);
+        response.sendRedirect("/products");
+    }
+}
+
+// View (JSP)
+<%@ page import="java.util.List" %>
+<%@ page import="model.Product" %>
+
+<h1>Products</h1>
+<table>
+    <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>Price</th>
+    </tr>
+    <%
+        List<Product> products = 
+            (List<Product>) request.getAttribute("products");
+        for (Product p : products) {
+    %>
+    <tr>
+        <td><%= p.getId() %></td>
+        <td><%= p.getName() %></td>
+        <td><%= p.getPrice() %></td>
+    </tr>
+    <% } %>
+</table>
+```
+
+### 3. Factory Pattern
+
+```java
+public interface DatabaseConnection {
+    void connect();
+}
+
+public class MySQLConnection implements DatabaseConnection {
+    @Override
+    public void connect() {
+        System.out.println("Connected to MySQL");
+    }
+}
+
+public class PostgreSQLConnection implements DatabaseConnection {
+    @Override
+    public void connect() {
+        System.out.println("Connected to PostgreSQL");
+    }
+}
+
+public class ConnectionFactory {
+    public static DatabaseConnection createConnection(String dbType) {
+        if ("mysql".equalsIgnoreCase(dbType)) {
+            return new MySQLConnection();
+        } else if ("postgresql".equalsIgnoreCase(dbType)) {
+            return new PostgreSQLConnection();
+        }
+        throw new IllegalArgumentException("Unknown DB type: " + dbType);
+    }
+}
+```
+
+### 4. Singleton Pattern
+
+```java
+public class DatabaseManager {
+    private static DatabaseManager instance;
+    
+    private DatabaseManager() {
+    }
+    
+    public static synchronized DatabaseManager getInstance() {
+        if (instance == null) {
+            instance = new DatabaseManager();
+        }
+        return instance;
+    }
+}
+
+// Or using eager initialization
+public class DatabaseManager {
+    private static final DatabaseManager instance = 
+        new DatabaseManager();
+    
+    private DatabaseManager() {
+    }
+    
+    public static DatabaseManager getInstance() {
+        return instance;
+    }
+}
+```
+
+### 5. Observer Pattern
+
+```java
+public interface Observer {
+    void update(String message);
+}
+
+public class EmailNotifier implements Observer {
+    @Override
+    public void update(String message) {
+        sendEmail(message);
+    }
+    
+    private void sendEmail(String message) {
+        System.out.println("Sending email: " + message);
+    }
+}
+
+public class SMSNotifier implements Observer {
+    @Override
+    public void update(String message) {
+        sendSMS(message);
+    }
+    
+    private void sendSMS(String message) {
+        System.out.println("Sending SMS: " + message);
+    }
+}
+
+public class OrderEvent {
+    private List<Observer> observers = new ArrayList<>();
+    
+    public void attach(Observer observer) {
+        observers.add(observer);
+    }
+    
+    public void detach(Observer observer) {
+        observers.remove(observer);
+    }
+    
+    public void notifyAll(String message) {
+        for (Observer observer : observers) {
+            observer.update(message);
+        }
+    }
+    
+    public void orderPlaced(String orderId) {
+        notifyAll("Order placed: " + orderId);
+    }
+}
+```
+
+---
+
+## Best Practices
+
+### 1. Error Handling
+
+```java
+@WebServlet("/users")
+public class UserServlet extends HttpServlet {
+    
+    @Override
+    protected void doGet(HttpServletRequest request, 
+                        HttpServletResponse response) 
+            throws ServletException, IOException {
+        
+        try {
+            int userId = Integer.parseInt(
+                request.getParameter("id"));
+            User user = userService.getUserById(userId);
+            
+            if (user == null) {
+                response.sendError(
+                    HttpServletResponse.SC_NOT_FOUND,
+                    "User not found"
+                );
+                return;
+            }
+            
+            response.setContentType("application/json");
+            response.getWriter().println(
+                new ObjectMapper().writeValueAsString(user)
+            );
+            
+        } catch (NumberFormatException e) {
+            response.sendError(
+                HttpServletResponse.SC_BAD_REQUEST,
+                "Invalid user ID"
+            );
+        } catch (Exception e) {
+            response.sendError(
+                HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+                "Internal server error"
+            );
+        }
+    }
+}
+```
+
+### 2. Logging
+
+```java
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+@Stateless
+public class UserService {
+    
+    private static final Logger logger = 
+        LoggerFactory.getLogger(UserService.class);
+    
+    public User createUser(User user) {
+        logger.debug("Creating user with name: {}", user.getName());
+        
+        try {
+            // Save user
+            entityManager.persist(user);
+            logger.info("User created successfully: {}", user.getId());
+            return user;
+        } catch (Exception e) {
+            logger.error("Error creating user", e);
+            throw e;
+        }
+    }
+}
+```
+
+### 3. Input Validation
+
+```java
+public class User {
+    
+    @NotNull(message = "Name cannot be null")
+    @Size(min = 2, max = 100, message = "Name must be 2-100 characters")
+    private String name;
+    
+    @NotNull(message = "Email cannot be null")
+    @Email(message = "Invalid email format")
+    private String email;
+    
+    @Min(value = 18, message = "Age must be at least 18")
+    @Max(value = 100, message = "Age cannot exceed 100")
+    private int age;
+}
+
+@Stateless
+public class UserService {
+    
+    @Inject
+    private Validator validator;
+    
+    public User createUser(User user) {
+        Set<ConstraintViolation<User>> violations = 
+            validator.validate(user);
+        
+        if (!violations.isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            for (ConstraintViolation<User> violation : violations) {
+                sb.append(violation.getMessage()).append("; ");
+            }
+            throw new ValidationException(sb.toString());
+        }
+        
+        entityManager.persist(user);
+        return user;
+    }
+}
+```
+
+### 4. Thread Safety
+
+```java
+@Stateful
+public class ShoppingCart {
+    // Stateful beans are thread-safe by default
+    // One instance per client
+    
+    private List<Item> items = new ArrayList<>();
+    
+    public synchronized void addItem(Item item) {
+        items.add(item);
+    }
+}
+
+@Stateless
+public class CalculationService {
+    // Stateless beans handle concurrent requests
+    // Container manages thread pooling
+    
+    public int calculate(int a, int b) {
+        return a + b;
+    }
+}
+```
+
+### 5. Resource Management
+
+```java
+@Stateless
+public class FileService {
+    
+    @Resource(name = "java:/datasource/MyDB")
+    private DataSource dataSource;
+    
+    public void processFile(String filePath) {
+        // Use try-with-resources for automatic cleanup
+        try (Connection conn = dataSource.getConnection();
+             FileReader fileReader = new FileReader(filePath);
+             BufferedReader reader = new BufferedReader(fileReader)) {
+            
+            String line;
+            while ((line = reader.readLine()) != null) {
+                processLine(line, conn);
+            }
+            
+        } catch (IOException | SQLException e) {
+            e.printStackTrace();
+        }
+        // Resources automatically closed
+    }
+}
+```
+
+### 6. Caching
+
+```java
+@Stateless
+public class CachedUserService {
+    
+    @Inject
+    private UserDAO userDAO;
+    
+    private Map<Integer, User> cache = new ConcurrentHashMap<>();
+    
+    public User getUserById(int id) {
+        return cache.computeIfAbsent(id, key -> 
+            userDAO.findById(key)
+        );
+    }
+    
+    public void invalidateCache(int id) {
+        cache.remove(id);
+    }
+    
+    public void clearCache() {
+        cache.clear();
+    }
+}
+```
+
+---
+
+## Interview Questions
+
+### Fundamental Questions
+
+1. **What is J2EE and how does it differ from Java SE?**
+   - J2EE is for enterprise applications with multi-tier architecture
+   - SE is single-tier with limited features
+   - J2EE provides APIs for web, database, messaging, transactions
+
+2. **Explain the multi-tier architecture of J2EE**
+   - Presentation tier (Servlets, JSP)
+   - Business logic tier (EJB)
+   - Data tier (JDBC, JPA)
+   - Each tier can be scaled independently
+
+3. **What is a servlet and its lifecycle?**
+   - Server-side Java component
+   - Lifecycle: load → init → service → destroy
+   - Handles HTTP requests/responses
+
+4. **Difference between Servlet and JSP**
+   - Servlet: pure Java, no HTML
+   - JSP: HTML with embedded Java
+   - JSP compiled to servlet at runtime
+
+5. **What is the difference between get() and post() methods?**
+   - GET: limited data, URL visible, cached
+   - POST: large data, secure, not cached
+
+### Advanced Questions
+
+6. **Explain EJB types and use cases**
+   - Stateless: scalable, no state
+   - Stateful: maintains conversation state
+   - Message-Driven: asynchronous messaging
+   - Singleton: shared resource
+
+7. **What is transaction management in J2EE?**
+   - ACID properties (Atomicity, Consistency, Isolation, Durability)
+   - JTA for distributed transactions
+   - Container-managed and bean-managed transactions
+
+8. **How does connection pooling improve performance?**
+   - Reuses connections instead of creating new ones
+   - Reduces overhead and latency
+   - Manages limited resources efficiently
+
+9. **Explain filter and listener in web applications**
+   - Filter: intercepts requests/responses
+   - Listener: responds to lifecycle events
+   - Filter chain for multiple filters
+
+10. **What is JNDI and its purpose?**
+    - Java Naming and Directory Interface
+    - Lookup resources by name
+    - Decouples application from resource location
+
+### Scenario-Based Questions
+
+11. **You need to process large number of orders asynchronously. What would you use?**
+    - Message-Driven Beans with JMS
+    - Async processing without blocking
+    - Queue-based architecture for reliability
+
+12. **Design a user authentication system**
+    - Use security-constraint in web.xml
+    - Implement login form authentication
+    - Use @RolesAllowed for authorization
+    - Hash passwords and validate tokens
+
+13. **How would you handle database transaction failures?**
+    - Use try-catch-finally
+    - Rollback on exceptions
+    - Retry logic for transient failures
+    - Comprehensive logging
+
+14. **Optimize a slow web application**
+    - Add caching layer
+    - Use connection pooling
+    - Optimize database queries
+    - Implement pagination
+    - Use CDN for static content
+    - Monitor performance metrics
+
+15. **Design a microservices architecture using J2EE**
+    - RESTful web services
+    - Independent deployable units
+    - Async communication with JMS
+    - API gateway for routing
+    - Service discovery mechanism
+
+### Advanced Technical Interview Questions
+
+16. **What is the difference between Container-Managed Transactions (CMT) and Bean-Managed Transactions (BMT)?**
+    - **CMT (Container-Managed):**
+      - Container handles transaction boundaries
+      - Declarative via @TransactionAttribute
+      - Simpler to implement
+      - Better performance (less manual management)
+      - Uses transaction attributes (REQUIRED, REQUIRES_NEW, etc.)
+      - Recommended approach
+    - **BMT (Bean-Managed):**
+      - Application manages transaction explicitly
+      - Manual begin/commit/rollback
+      - More control but error-prone
+      - Programmatic using UserTransaction
+      - Can be less efficient due to manual overhead
+
+    ```java
+    // CMT Example
+    @Stateless
+    public class OrderService {
+        @TransactionAttribute(TransactionAttributeType.REQUIRED)
+        public void createOrder(Order order) {
+            // Container manages transaction
+        }
+    }
+    
+    // BMT Example
+    @Stateless
+    @TransactionManagement(TransactionManagementType.BEAN)
+    public class ManualOrderService {
+        @Inject
+        private UserTransaction userTransaction;
+        
+        public void createOrder(Order order) {
+            try {
+                userTransaction.begin();
+                // business logic
+                userTransaction.commit();
+            } catch (Exception e) {
+                try {
+                    userTransaction.rollback();
+                } catch (Exception ex) {
+                    // handle rollback error
+                }
+            }
+        }
+    }
+    ```
+
+17. **Explain the difference between Stateless and Stateful Session Beans with real-world examples.**
+    - **Stateless:**
+      - No conversational state maintained
+      - One instance serves multiple clients
+      - Pooled for scalability
+      - Better performance
+      - Examples: UserService, OrderService, CalculationService
+    - **Stateful:**
+      - Maintains state between method calls
+      - One instance per client
+      - More memory intensive
+      - Used for conversations
+      - Examples: Shopping cart, Wizard forms, Configuration builder
+
+    ```java
+    // Stateless - multiple clients can use same instance
+    @Stateless
+    public class EmailService {
+        public void sendEmail(String to, String subject, String body) {
+            // No state maintained - any instance can handle this
+        }
+    }
+    
+    // Stateful - maintains user's shopping cart
+    @Stateful
+    @StatefulTimeout(unit=ChronoUnit.MINUTES, value=30)
+    public class ShoppingCart {
+        private List<Item> items = new ArrayList<>();
+        
+        public void addItem(Item item) {
+            items.add(item);
+        }
+        
+        public void checkout() {
+            // Uses accumulated items
+            processOrder(items);
+        }
+        
+        @Remove
+        public void clear() {
+            items.clear();
+        }
+    }
+    ```
+
+18. **What is JNDI and how is it used in J2EE applications?**
+    - **JNDI (Java Naming and Directory Interface):**
+      - Provides naming and directory services
+      - Decouples resources from their location
+      - Allows lookup of databases, EJBs, queues, topics
+      - Centralized resource management
+      - Reduces hard-coded configuration
+
+    ```java
+    // Looking up database through JNDI
+    @Stateless
+    public class UserDAO {
+        
+        @Resource(name = "java:jboss/datasources/PostgresDS")
+        private DataSource dataSource;
+        
+        // OR manual lookup (older style)
+        public DataSource getDataSource() throws NamingException {
+            InitialContext ic = new InitialContext();
+            return (DataSource) ic.lookup("java:jboss/datasources/PostgresDS");
+        }
+    }
+    
+    // Looking up EJB through JNDI
+    @Remote
+    public interface UserServiceRemote {
+        User findUser(int id);
+    }
+    
+    // Client lookup
+    InitialContext ic = new InitialContext();
+    UserServiceRemote service = 
+        (UserServiceRemote) ic.lookup("java:global/myapp/UserService");
+    ```
+
+19. **Explain the concept of EJB Pooling and why it's important.**
+    - **What is Pooling:**
+      - Reuses EJB instances instead of creating new ones
+      - Instances moved between clients as needed
+      - Reduces memory overhead and creation cost
+      - Container manages the pool
+    - **Benefits:**
+      - Better resource utilization
+      - Improved performance for high-load scenarios
+      - Controlled maximum number of instances
+      - Automatic cleanup and maintenance
+    - **Pool States:**
+      ```
+      Ready Pool → In Service → Ready Pool
+      ```
+
+    ```java
+    // Pool configuration (application server specific)
+    // JBoss/Wildfly example
+    @Stateless
+    @Pool(name = "StrictMaxPool")
+    @PoolDefaults(
+        maxSize = 20,
+        timeout = 300000, // milliseconds
+        timeoutUnit = TimeUnit.MILLISECONDS
+    )
+    public class PooledService {
+        public void doSomething() {
+            // This instance comes from pool
+        }
+    }
+    ```
+
+20. **What is the N+1 query problem and how do you prevent it?**
+    - **Problem:** When fetching parent entities, loading children one-by-one creates N additional queries
+    ```java
+    // BAD: N+1 queries
+    List<Orders> orders = em.createQuery(
+        "SELECT o FROM Order o"
+    ).getResultList(); // 1 query
+    
+    for (Order order : orders) {
+        List<items> = order.getItems(); // N additional queries!
+    }
+    ```
+    - **Solutions:**
+      1. Join Fetch
+      2. Entity graphs
+      3. Batch size configuration
+      4. Explicit projections
+
+    ```java
+    // GOOD: Join Fetch - single query with join
+    List<Order> orders = em.createQuery(
+        "SELECT DISTINCT o FROM Order o " +
+        "JOIN FETCH o.items",
+        Order.class
+    ).getResultList(); // Single query with join
+    
+    // Using Entity Graph
+    @Entity
+    @NamedEntityGraph(
+        name = "Order.withItems",
+        attributeNodes = {
+            @NamedAttributeNode("items")
+        }
+    )
+    public class Order {
+        // ...
+    }
+    
+    // Query with entity graph
+    EntityGraph graph = em.getEntityGraph("Order.withItems");
+    List<Order> orders = em.createQuery(
+        "SELECT o FROM Order o",
+        Order.class
+    ).setHint("javax.persistence.fetchgraph", graph)
+     .getResultList();
+    
+    // Batch size configuration (Hibernate)
+    @OneToMany(fetch = FetchType.LAZY)
+    @BatchSize(size = 20)
+    private List<Item> items;
+    ```
+
+21. **Explain different transaction isolation levels and when to use each.**
+    - **READ_UNCOMMITTED:** Lowest isolation, dirty reads allowed
+    - **READ_COMMITTED:** Prevents dirty reads
+    - **REPEATABLE_READ:** Prevents dirty and non-repeatable reads
+    - **SERIALIZABLE:** Highest isolation, complete isolation
+    
+    ```java
+    // Setting isolation level
+    @Stateless
+    public class OrderService {
+        
+        // Default isolation (database dependent)
+        @Transactional
+        public void processOrder(Order order) {
+            // ...
+        }
+        
+        // High isolation for financial operations
+        @Transactional(isolation = Isolation.SERIALIZABLE)
+        public void transferMoney(Account from, Account to, BigDecimal amount) {
+            // Critical operation - highest isolation
+        }
+        
+        // Lower isolation for read-heavy operations
+        @Transactional(isolation = Isolation.READ_COMMITTED)
+        public List<Order> getPendingOrders() {
+            // Faster reads with acceptable isolation
+        }
+    }
+    ```
+
+22. **What is the MVC pattern in J2EE and give a practical implementation?**
+    - **Model:** Business logic and data (Service, DAO, Entity)
+    - **View:** Presentation layer (JSP, HTML)
+    - **Controller:** Request handler (Servlet, REST endpoint)
+
+    ```java
+    // MODEL - Entity and Service
+    @Entity
+    public class Product {
+        @Id
+        private int id;
+        private String name;
+        private BigDecimal price;
+        // getters/setters
+    }
+    
+    @Stateless
+    public class ProductService {
+        @Inject
+        private ProductDAO productDAO;
+        
+        public List<Product> getAllProducts() {
+            return productDAO.findAll();
+        }
+        
+        public Product getProductById(int id) {
+            return productDAO.findById(id);
+        }
+        
+        @Transactional
+        public void createProduct(Product product) {
+            productDAO.create(product);
+        }
+    }
+    
+    // CONTROLLER - Servlet
+    @WebServlet("/products")
+    public class ProductController extends HttpServlet {
+        
+        @Inject
+        private ProductService productService;
+        
+        @Override
+        protected void doGet(HttpServletRequest req, HttpServletResponse resp) 
+                throws ServletException, IOException {
+            
+            String action = req.getParameter("action");
+            
+            if (action == null || "list".equals(action)) {
+                listProducts(req, resp);
+            } else if ("view".equals(action)) {
+                viewProduct(req, resp);
+            }
+        }
+        
+        private void listProducts(HttpServletRequest req, HttpServletResponse resp) 
+                throws ServletException, IOException {
+            List<Product> products = productService.getAllProducts();
+            req.setAttribute("products", products);
+            req.getRequestDispatcher("/products.jsp").forward(req, resp);
+        }
+        
+        private void viewProduct(HttpServletRequest req, HttpServletResponse resp) 
+                throws ServletException, IOException {
+            int id = Integer.parseInt(req.getParameter("id"));
+            Product product = productService.getProductById(id);
+            req.setAttribute("product", product);
+            req.getRequestDispatcher("/product-detail.jsp").forward(req, resp);
+        }
+    }
+    
+    // VIEW - JSP
+    <%@ page contentType="text/html;charset=UTF-8" %>
+    <%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+    
+    <h1>Products</h1>
+    <table>
+        <c:forEach var="product" items="${products}">
+            <tr>
+                <td>${product.name}</td>
+                <td>${product.price}</td>
+                <td>
+                    <a href="products?action=view&id=${product.id}">View</a>
+                </td>
+            </tr>
+        </c:forEach>
+    </table>
+    ```
+
+23. **How do you implement pagination efficiently in J2EE?**
+    - **Pagination:** Retrieving subset of data
+    - **Benefits:** Reduced memory, faster response, better UX
+
+    ```java
+    @Stateless
+    public class ProductService {
+        
+        @Inject
+        private EntityManager em;
+        
+        public PagedResult<Product> getProductsPaged(int pageNumber, int pageSize) {
+            int offset = (pageNumber - 1) * pageSize;
+            
+            // Count total records
+            long totalCount = (Long) em.createQuery(
+                "SELECT COUNT(p) FROM Product p"
+            ).getSingleResult();
+            
+            // Fetch page
+            List<Product> products = em.createQuery(
+                "SELECT p FROM Product p ORDER BY p.id",
+                Product.class
+            )
+            .setFirstResult(offset)
+            .setMaxResults(pageSize)
+            .getResultList();
+            
+            return new PagedResult<>(products, totalCount, pageNumber, pageSize);
+        }
+    }
+    
+    // Result wrapper
+    public class PagedResult<T> {
+        private List<T> items;
+        private long totalCount;
+        private int pageNumber;
+        private int pageSize;
+        
+        public int getTotalPages() {
+            return (int) Math.ceil((double) totalCount / pageSize);
+        }
+        
+        public boolean hasNextPage() {
+            return pageNumber < getTotalPages();
+        }
+        
+        // getters
+    }
+    
+    // Servlet usage
+    @WebServlet("/products-paged")
+    public class ProductPaginationServlet extends HttpServlet {
+        
+        @Inject
+        private ProductService productService;
+        
+        @Override
+        protected void doGet(HttpServletRequest req, HttpServletResponse resp) 
+                throws ServletException, IOException {
+            
+            int pageNumber = 1;
+            String page = req.getParameter("page");
+            if (page != null && !page.isEmpty()) {
+                pageNumber = Integer.parseInt(page);
+            }
+            
+            PagedResult<Product> result = 
+                productService.getProductsPaged(pageNumber, 10);
+            
+            req.setAttribute("products", result.getItems());
+            req.setAttribute("totalPages", result.getTotalPages());
+            req.setAttribute("currentPage", pageNumber);
+            req.setAttribute("hasNext", result.hasNextPage());
+            
+            req.getRequestDispatcher("/products-paged.jsp").forward(req, resp);
+        }
+    }
+    ```
+
+24. **Explain the purpose and implementation of Interceptors in J2EE.**
+    - **Purpose:** Cross-cutting concerns (logging, timing, security checks)
+    - **Types:** Lifecycle, method interceptors
+    - **Benefits:** Separation of concerns, reusability, AOP-style
+
+    ```java
+    // Custom annotation
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    public @interface Timed {
+    }
+    
+    // Interceptor class
+    @Interceptor
+    @Timed
+    public class TimingInterceptor {
+        
+        @AroundInvoke
+        public Object measureTime(InvocationContext context) throws Exception {
+            long startTime = System.currentTimeMillis();
+            
+            try {
+                return context.proceed();
+            } finally {
+                long duration = System.currentTimeMillis() - startTime;
+                System.out.println(context.getMethod().getName() + 
+                    " took " + duration + "ms");
+            }
+        }
+    }
+    
+    // Interceptor for authentication
+    @Interceptor
+    public class AuthenticationInterceptor {
+        
+        @Inject
+        private SecurityContext securityContext;
+        
+        @AroundInvoke
+        public Object checkAuthentication(InvocationContext context) 
+                throws Exception {
+            
+            if (securityContext.getUserPrincipal() == null) {
+                throw new SecurityException("User not authenticated");
+            }
+            
+            return context.proceed();
+        }
+    }
+    
+    // Usage
+    @Stateless
+    @Interceptors({TimingInterceptor.class, AuthenticationInterceptor.class})
+    public class SecureService {
+        
+        @Timed
+        public String secureOperation() {
+            // Both interceptors will be applied
+            return "result";
+        }
+    }
+    ```
+
+25. **What is Dependency Injection in J2EE and how does it improve code?**
+    - **Definition:** Container provides dependencies to beans
+    - **Benefits:** Loose coupling, easy testing, centralized resource management
+
+    ```java
+    // Before: Hard-coded dependencies (BAD)
+    @Stateless
+    public class OrderServiceBad {
+        
+        public void createOrder(Order order) {
+            UserDAO userDAO = new UserDAO(); // Hard-coded
+            ProductDAO productDAO = new ProductDAO(); // Hard-coded
+            EmailService emailService = new EmailService(); // Hard-coded
+            
+            validateOrder(order);
+            userDAO.save(order);
+            emailService.sendConfirmation(order);
+        }
+    }
+    
+    // After: Dependency Injection (GOOD)
+    @Stateless
+    public class OrderServiceGood {
+        
+        @Inject
+        private UserDAO userDAO;
+        
+        @Inject
+        private ProductDAO productDAO;
+        
+        @Inject
+        private EmailService emailService;
+        
+        @Transactional
+        public void createOrder(Order order) {
+            validateOrder(order);
+            userDAO.save(order);
+            emailService.sendConfirmation(order);
+        }
+    }
+    
+    // Easy to test with mock implementations
+    public class OrderServiceTest {
+        
+        private OrderService orderService;
+        
+        @Before
+        public void setup() {
+            orderService = new OrderService();
+            orderService.userDAO = mock(UserDAO.class);
+            orderService.emailService = mock(EmailService.class);
+        }
+        
+        @Test
+        public void testCreateOrder() {
+            Order order = new Order();
+            orderService.createOrder(order);
+            verify(userDAO).save(order);
+            verify(emailService).sendConfirmation(order);
+        }
+    }
+    ```
+
+26. **How do you handle and log exceptions properly in J2EE?**
+    - **Exception hierarchy:**
+      - Checked exceptions: Must be caught/declared
+      - Unchecked exceptions: Optional handling
+      - Custom exceptions: Business-specific errors
+
+    ```java
+    // Custom Exception Hierarchy
+    public abstract class ApplicationException extends Exception {
+        private String errorCode;
+        
+        public ApplicationException(String message, String errorCode) {
+            super(message);
+            this.errorCode = errorCode;
+        }
+        
+        public String getErrorCode() {
+            return errorCode;
+        }
+    }
+    
+    public class OrderException extends ApplicationException {
+        public OrderException(String message, String code) {
+            super(message, code);
+        }
+    }
+    
+    public class PaymentException extends ApplicationException {
+        public PaymentException(String message, String code) {
+            super(message, code);
+        }
+    }
+    
+    // Proper exception handling
+    @Stateless
+    public class OrderService {
+        
+        private static final Logger logger = 
+            LoggerFactory.getLogger(OrderService.class);
+        
+        @Transactional
+        public Order createOrder(Order order) throws OrderException {
+            
+            try {
+                validateOrder(order);
+                
+                try {
+                    processPayment(order);
+                } catch (PaymentException e) {
+                    logger.error("Payment processing failed for order: {}", 
+                        order.getId(), e);
+                    throw new OrderException(
+                        "Payment failed: " + e.getMessage(),
+                        "PAYMENT_FAILED"
+                    );
+                }
+                
+                Order created = persistOrder(order);
+                logger.info("Order created successfully: {}", created.getId());
+                return created;
+                
+            } catch (ValidationException e) {
+                logger.warn("Order validation failed: {}", e.getMessage());
+                throw new OrderException(e.getMessage(), "VALIDATION_ERROR");
+            } catch (Exception e) {
+                logger.error("Unexpected error creating order", e);
+                throw new OrderException(
+                    "Failed to create order",
+                    "INTERNAL_ERROR"
+                );
+            }
+        }
+        
+        private void validateOrder(Order order) throws ValidationException {
+            if (order.getAmount() <= 0) {
+                throw new ValidationException("Order amount must be positive");
+            }
+        }
+        
+        private void processPayment(Order order) throws PaymentException {
+            // Payment logic
+        }
+        
+        private Order persistOrder(Order order) {
+            // Persist logic
+            return order;
+        }
+    }
+    
+    // Global Exception Handler (JAX-RS)
+    @Provider
+    public class GlobalExceptionHandler implements ExceptionMapper<Exception> {
+        
+        private static final Logger logger = 
+            LoggerFactory.getLogger(GlobalExceptionHandler.class);
+        
+        @Override
+        public Response toResponse(Exception exception) {
+            
+            if (exception instanceof OrderException) {
+                OrderException oe = (OrderException) exception;
+                logger.warn("Order error: {} - {}", oe.getErrorCode(), 
+                    oe.getMessage());
+                
+                return Response
+                    .status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorResponse(oe.getErrorCode(), 
+                        oe.getMessage()))
+                    .build();
+            }
+            
+            logger.error("Unexpected error", exception);
+            return Response
+                .status(Response.Status.INTERNAL_SERVER_ERROR)
+                .entity(new ErrorResponse("INTERNAL_ERROR", 
+                    "An unexpected error occurred"))
+                .build();
+        }
+    }
+    
+    // Error response DTO
+    public class ErrorResponse {
+        private String code;
+        private String message;
+        
+        public ErrorResponse(String code, String message) {
+            this.code = code;
+            this.message = message;
+        }
+        
+        // getters
+    }
+    ```
+
+27. **Explain JMS Queues vs Topics and provide implementation examples.**
+    - **Queue:** Point-to-point, one producer to one consumer
+    - **Topic:** Pub-sub, one publisher to multiple subscribers
+    - **Differences:** Queue guarantees delivery to one, Topic broadcasts
+
+    ```java
+    // Queue Example - Order Processing
+    @Stateless
+    public class OrderProducer {
+        
+        @Inject
+        private JMSContext context;
+        
+        @Resource(lookup = "jms/OrderQueue")
+        private Queue orderQueue;
+        
+        @Transactional
+        public void sendOrderForProcessing(Order order) {
+            String orderJson = convertToJson(order);
+            context.createProducer()
+                .send(orderQueue, orderJson);
+            System.out.println("Order queued: " + order.getId());
+        }
+    }
+    
+    @MessageDriven(activationConfig = {
+        @ActivationConfigProperty(
+            propertyName = "destinationLookup",
+            propertyValue = "jms/OrderQueue"
+        ),
+        @ActivationConfigProperty(
+            propertyName = "destinationType",
+            propertyValue = "javax.jms.Queue"
+        )
+    })
+    public class OrderProcessor implements MessageListener {
+        
+        @Inject
+        private OrderService orderService;
+        
+        @Override
+        public void onMessage(Message message) {
+            try {
+                String orderJson = message.getBody(String.class);
+                Order order = convertFromJson(orderJson);
+                orderService.processOrder(order);
+                System.out.println("Order processed: " + order.getId());
+            } catch (JMSException e) {
+                e.printStackTrace();
+                // Container will retry based on configuration
+            }
+        }
+    }
+    
+    // Topic Example - Notifications
+    @Stateless
+    public class NotificationPublisher {
+        
+        @Inject
+        private JMSContext context;
+        
+        @Resource(lookup = "jms/NotificationTopic")
+        private Topic notificationTopic;
+        
+        public void publishOrderStatus(Order order, String status) {
+            String message = order.getId() + ":" + status;
+            context.createProducer()
+                .send(notificationTopic, message);
+            System.out.println("Status published: " + message);
+        }
+    }
+    
+    @MessageDriven(activationConfig = {
+        @ActivationConfigProperty(
+            propertyName = "destinationLookup",
+            propertyValue = "jms/NotificationTopic"
+        ),
+        @ActivationConfigProperty(
+            propertyName = "destinationType",
+            propertyValue = "javax.jms.Topic"
+        ),
+        @ActivationConfigProperty(
+            propertyName = "subscriptionDurability",
+            propertyValue = "NonDurable"
+        )
+    })
+    public class EmailNotificationHandler implements MessageListener {
+        
+        @Inject
+        private EmailService emailService;
+        
+        @Override
+        public void onMessage(Message message) {
+            try {
+                String notification = message.getBody(String.class);
+                emailService.sendNotification(notification);
+                System.out.println("Email sent for: " + notification);
+            } catch (JMSException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+    
+    @MessageDriven(activationConfig = {
+        @ActivationConfigProperty(
+            propertyName = "destinationLookup",
+            propertyValue = "jms/NotificationTopic"
+        ),
+        @ActivationConfigProperty(
+            propertyName = "destinationType",
+            propertyValue = "javax.jms.Topic"
+        )
+    })
+    public class SMSNotificationHandler implements MessageListener {
+        
+        @Inject
+        private SMSService smsService;
+        
+        @Override
+        public void onMessage(Message message) {
+            try {
+                String notification = message.getBody(String.class);
+                smsService.sendNotification(notification);
+                System.out.println("SMS sent for: " + notification);
+            } catch (JMSException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+    ```
+
+28. **How do you optimize database queries in J2EE applications?**
+    - **Best practices:** Indexing, caching, connection pooling, lazy loading
+
+    ```java
+    // Good query practices
+    @Stateless
+    public class OptimizedUserService {
+        
+        @Inject
+        private EntityManager em;
+        
+        // 1. Use named queries for reusability
+        @Entity
+        @NamedQuery(
+            name = "User.findByEmail",
+            query = "SELECT u FROM User u WHERE u.email = :email"
+        )
+        public class User {
+            // ...
+        }
+        
+        // 2. Use database indexes
+        @Entity
+        @Table(indexes = {
+            @Index(name = "idx_email", columnList = "email", unique = true),
+            @Index(name = "idx_status", columnList = "status")
+        })
+        public class UserIndexed {
+            @Column(unique = true)
+            private String email;
+            
+            private String status;
+        }
+        
+        // 3. Select only needed columns
+        public List<UserDTO> getUsersWithProjection() {
+            return em.createQuery(
+                "SELECT NEW com.example.UserDTO(u.id, u.name, u.email) " +
+                "FROM User u",
+                UserDTO.class
+            ).getResultList();
+        }
+        
+        // 4. Use pagination
+        public List<User> getUsersPaginated(int page, int size) {
+            return em.createQuery(
+                "SELECT u FROM User u ORDER BY u.id",
+                User.class
+            )
+            .setFirstResult((page - 1) * size)
+            .setMaxResults(size)
+            .getResultList();
+        }
+        
+        // 5. Lazy load relationships
+        @OneToMany(fetch = FetchType.LAZY)
+        private List<Order> orders;
+        
+        // 6. Use batch size for better performance
+        @OneToMany(fetch = FetchType.LAZY)
+        @BatchSize(size = 20)
+        private List<Address> addresses;
+        
+        // 7. Use prepared statements (parameterized queries)
+        public User findUserSafe(String email) {
+            return em.createQuery(
+                "SELECT u FROM User u WHERE u.email = :email",
+                User.class
+            )
+            .setParameter("email", email)
+            .getSingleResult();
+        }
+    }
+    
+    // DTO for projection
+    public class UserDTO {
+        private int id;
+        private String name;
+        private String email;
+        
+        public UserDTO(int id, String name, String email) {
+            this.id = id;
+            this.name = name;
+            this.email = email;
+        }
+    }
+    ```
+
+29. **What is caching in J2EE and different caching strategies?**
+    - **L1 Cache:** Persistence context (EntityManager)
+    - **L2 Cache:** Application/provider cache
+    - **Query Cache:** Results cache
+    - **HTTP Cache:** Client-side caching
+
+    ```java
+    // L2 Caching configuration
+    @Entity
+    @Cacheable
+    @org.hibernate.annotations.Cache(
+        usage = CacheConcurrencyStrategy.READ_WRITE
+    )
+    public class User {
+        @Id
+        private int id;
+        
+        @Cache(usage = CacheConcurrencyStrategy.READ_ONLY)
+        @OneToMany
+        private List<Role> roles;
+    }
+    
+    // Query result caching
+    @Stateless
+    public class CachedUserService {
+        
+        @Inject
+        private EntityManager em;
+        
+        // Cache query results
+        public List<User> getActiveUsers() {
+            return em.createQuery(
+                "SELECT u FROM User u WHERE u.active = true",
+                User.class
+            )
+            .setHint("org.hibernate.cacheable", true)
+            .getResultList();
+        }
+        
+        // Manual caching
+        @Inject
+        private Cache cache;
+        
+        public User getUserWithCache(int id) {
+            String cacheKey = "user:" + id;
+            
+            User user = (User) cache.get(cacheKey);
+            if (user == null) {
+                user = em.find(User.class, id);
+                if (user != null) {
+                    cache.put(cacheKey, user);
+                }
+            }
+            
+            return user;
+        }
+        
+        // Invalidate cache on update
+        @Transactional
+        public User updateUser(User user) {
+            User updated = em.merge(user);
+            cache.evict("user:" + user.getId());
+            return updated;
+        }
+    }
+    
+    // HTTP caching headers
+    @Path("/users")
+    public class UserResource {
+        
+        @GET
+        @Path("/{id}")
+        public Response getUser(@PathParam("id") int id) {
+            User user = userService.getUser(id);
+            
+            return Response.ok(user)
+                .header("Cache-Control", "public, max-age=3600") // 1 hour
+                .header("ETag", generateETag(user))
+                .build();
+        }
+        
+        @GET
+        public Response getUsers() {
+            List<User> users = userService.getAllUsers();
+            
+            return Response.ok(users)
+                .header("Cache-Control", "private, max-age=300") // 5 minutes
+                .build();
+        }
+    }
+    ```
+
+30. **How do you design a secure REST API in J2EE?**
+    - **Authentication:** Verify user identity
+    - **Authorization:** Check permissions
+    - **Encryption:** Protect data in transit
+    - **Validation:** Prevent injection attacks
+
+    ```java
+    // Secure REST API Implementation
+    @Path("/api/orders")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Consumes(MediaType.APPLICATION_JSON)
+    public class SecureOrderResource {
+        
+        @Inject
+        private OrderService orderService;
+        
+        @Inject
+        private SecurityContext securityContext;
+        
+        // Require authentication and ADMIN role
+        @GET
+        @RolesAllowed("ADMIN")
+        public Response getAllOrders() {
+            logAccess("getAllOrders");
+            List<Order> orders = orderService.getAllOrders();
+            return Response.ok(orders).build();
+        }
+        
+        // User can only see their own orders
+        @GET
+        @Path("/{id}")
+        @RolesAllowed({"USER", "ADMIN"})
+        public Response getOrder(@PathParam("id") int id) {
+            
+            Principal principal = securityContext.getUserPrincipal();
+            if (principal == null) {
+                return Response.status(Response.Status.UNAUTHORIZED).build();
+            }
+            
+            Order order = orderService.getOrder(id);
+            
+            // Check ownership
+            if (!order.getUserId().equals(principal.getName()) && 
+                !securityContext.isUserInRole("ADMIN")) {
+                return Response.status(Response.Status.FORBIDDEN).build();
+            }
+            
+            logAccess("getOrder:" + id);
+            return Response.ok(order).build();
+        }
+        
+        // Create with HTTPS only
+        @POST
+        @RolesAllowed("USER")
+        public Response createOrder(Order order, @Context HttpServletRequest req) {
+            
+            // Ensure HTTPS
+            if (!req.isSecure()) {
+                return Response
+                    .status(Response.Status.BAD_REQUEST)
+                    .entity("HTTPS required")
+                    .build();
+            }
+            
+            // Get authenticated user
+            String userId = securityContext.getUserPrincipal().getName();
+            order.setUserId(userId);
+            order.setCreatedAt(new Date());
+            
+            // Validate input
+            try {
+                validateOrder(order);
+            } catch (ValidationException e) {
+                return Response
+                    .status(Response.Status.BAD_REQUEST)
+                    .entity(e.getMessage())
+                    .build();
+            }
+            
+            Order created = orderService.createOrder(order);
+            logAccess("createOrder:" + created.getId());
+            
+            return Response
+                .status(Response.Status.CREATED)
+                .entity(created)
+                .build();
+        }
+        
+        private void validateOrder(Order order) throws ValidationException {
+            if (order.getAmount() == null || order.getAmount() <= 0) {
+                throw new ValidationException("Invalid amount");
+            }
+            if (order.getItemId() <= 0) {
+                throw new ValidationException("Invalid item");
+            }
+        }
+        
+        private void logAccess(String action) {
+            String username = securityContext.getUserPrincipal().getName();
+            // Log to audit trail
+        }
+    }
+    
+    // Input sanitization
+    public class InputValidator {
+        
+        public String sanitize(String input) {
+            if (input == null) {
+                return null;
+            }
+            return input.replaceAll("[^a-zA-Z0-9\\s]", "");
+        }
+        
+        public boolean isValidEmail(String email) {
+            return email.matches("^[A-Za-z0-9+_.-]+@(.+)$");
+        }
+    }
+    
+    // Security filter
+    @WebFilter(urlPatterns = "/api/*")
+    public class SecurityFilter implements Filter {
+        
+        @Override
+        public void doFilter(ServletRequest request, ServletResponse response, 
+                            FilterChain chain) throws IOException, ServletException {
+            
+            HttpServletRequest httpRequest = (HttpServletRequest) request;
+            HttpServletResponse httpResponse = (HttpServletResponse) response;
+            
+            // Check HTTPS
+            if (!httpRequest.isSecure() && 
+                !httpRequest.getServerName().equals("localhost")) {
+                httpResponse.sendError(HttpServletResponse.SC_FORBIDDEN, 
+                    "HTTPS required");
+                return;
+            }
+            
+            // Check authentication token
+            String token = getToken(httpRequest);
+            if (!isValidToken(token)) {
+                httpResponse.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+                return;
+            }
+            
+            // Add security headers
+            httpResponse.setHeader("X-Content-Type-Options", "nosniff");
+            httpResponse.setHeader("X-Frame-Options", "DENY");
+            httpResponse.setHeader("X-XSS-Protection", "1; mode=block");
+            httpResponse.setHeader("Strict-Transport-Security", 
+                "max-age=31536000; includeSubDomains");
+            
+            chain.doFilter(request, response);
+        }
+        
+        private String getToken(HttpServletRequest request) {
+            String header = request.getHeader("Authorization");
+            return header != null && header.startsWith("Bearer ") 
+                ? header.substring(7) 
+                : null;
+        }
+        
+        private boolean isValidToken(String token) {
+            // Validate JWT or session token
+            return token != null && !token.isEmpty();
+        }
+    }
+    ```
+
+---
+
+## Performance and Optimization Tips
+
+### 1. Connection Pooling Configuration
+
+```java
+// Configure optimal pool size
+int poolSize = (number_of_cores * 2) + 1;
+// For 8 cores: (8 * 2) + 1 = 17 connections
+```
+
+### 2. Query Optimization
+
+```java
+// Use pagination
+Query query = entityManager.createQuery("SELECT u FROM User u")
+    .setFirstResult(0)
+    .setMaxResults(10);
+
+// Use projections to avoid loading unnecessary data
+Query query = entityManager.createQuery(
+    "SELECT NEW map(u.id as id, u.name as name) FROM User u"
+);
+```
+
+### 3. Lazy vs Eager Loading
+
+```java
+// Lazy loading (default) - fetch when accessed
+@OneToMany(fetch = FetchType.LAZY)
+private List<Order> orders;
+
+// Eager loading - fetch immediately
+@OneToMany(fetch = FetchType.EAGER)
+private List<Address> addresses;
+```
+
+### 4. Caching Strategies
+
+- **L1 Cache**: Persistence context (entity manager)
+- **L2 Cache**: Application-level cache
+- **Query Cache**: Cache query results
+- **HTTP Cache**: Browser caching with headers
+
+---
+
+## Deployment
+
+### WAR (Web Archive) Structure
+
+```
+myapp.war
+├── WEB-INF/
+│   ├── web.xml
+│   ├── classes/
+│   │   └── com/example/
+│   │       ├── HelloServlet.class
+│   │       └── UserService.class
+│   └── lib/
+│       ├── mysql-connector.jar
+│       └── javax.servlet-api.jar
+├── index.html
+├── css/
+│   └── style.css
+└── jsp/
+    └── home.jsp
+```
+
+### EAR (Enterprise Archive) Structure
+
+```
+myapp.ear
+├── META-INF/
+│   ├── application.xml
+│   └── MANIFEST.MF
+├── myapp-web.war
+├── myapp-ejb.jar
+└── lib/
+    └── shared-libraries.jar
+```
+
+### Deployment Descriptor (web.xml)
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app xmlns="http://java.sun.com/xml/ns/javaee"
+         version="3.0">
+    
+    <display-name>My J2EE Application</display-name>
+    <description>Sample J2EE Application</description>
+    
+    <servlet>
+        <servlet-name>DispatcherServlet</servlet-name>
+        <servlet-class>org.springframework.web.servlet.DispatcherServlet</servlet-class>
+        <load-on-startup>1</load-on-startup>
+    </servlet>
+    
+    <servlet-mapping>
+        <servlet-name>DispatcherServlet</servlet-name>
+        <url-pattern>/</url-pattern>
+    </servlet-mapping>
+    
+    <session-config>
+        <timeout>30</timeout>
+    </session-config>
+    
+    <error-page>
+        <error-code>404</error-code>
+        <location>/error/404.jsp</location>
+    </error-page>
+</web-app>
+```
+
+---
+
+## Summary of Key Concepts
+
+| Concept | Purpose | Scope |
+|---------|---------|-------|
+| Servlet | Handle HTTP requests | Web Container |
+| JSP | Create dynamic HTML | Web Container |
+| EJB | Encapsulate business logic | EJB Container |
+| JDBC | Database access | Data Tier |
+| JMS | Asynchronous messaging | Enterprise |
+| JTA | Transaction management | Enterprise |
+| JNDI | Resource lookup | Enterprise |
+| JPA | Object-relational mapping | Data Tier |
+| Security | Authentication & authorization | Web Container |
+
+---
+
+## Common Interview Scenarios
+
+### Scenario 1: Building an E-commerce Platform
+- Product catalog: Stateless EJBs with caching
+- Shopping cart: Stateful Session Beans
+- Orders: Message-Driven Beans for async processing
+- Payments: Transactional operations
+- User authentication: Form-based security
+
+### Scenario 2: Real-time Notification System
+- JMS topics for pub-sub pattern
+- Message-Driven Beans for consuming
+- WebSockets for pushing to clients
+- Database for persistence
+
+### Scenario 3: High-Traffic Web Application
+- Connection pooling for database
+- Distributed caching (Redis/Memcached)
+- Load balancing across app servers
+- Database replication and sharding
+- Monitoring and alerting
+
+---
+
+## Advanced Topics
+
+### JPA (Java Persistence API)
+
+#### What is JPA?
+- Object-Relational Mapping (ORM) framework
+- Maps Java objects to database tables
+- Query language (JPQL) independent of SQL dialect
+- Caching and lazy loading support
+- Transaction management integration
+
+#### Entity Mapping
+
+```java
+@Entity
+@Table(name = "users")
+public class User {
+    
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private int id;
+    
+    @Column(name = "username", nullable = false, unique = true, length = 50)
+    private String username;
+    
+    @Column(name = "email")
+    private String email;
+    
+    @Transient // Not persisted
+    private String tempField;
+    
+    @Version // Optimistic locking
+    private long version;
+    
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<Order> orders;
+    
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "department_id")
+    private Department department;
+    
+    @ManyToMany
+    @JoinTable(
+        name = "user_roles",
+        joinColumns = @JoinColumn(name = "user_id"),
+        inverseJoinColumns = @JoinColumn(name = "role_id")
+    )
+    private Set<Role> roles;
+}
+```
+
+#### JPQL Queries
+
+```java
+// Simple query
+Query query = entityManager.createQuery("SELECT u FROM User u");
+List<User> users = query.getResultList();
+
+// With parameters (prevent SQL injection)
+Query query = entityManager.createQuery(
+    "SELECT u FROM User u WHERE u.username = :username"
+);
+query.setParameter("username", "john");
+User user = (User) query.getSingleResult();
+
+// Aggregation
+Query query = entityManager.createQuery(
+    "SELECT COUNT(u) FROM User u WHERE u.active = true"
+);
+Long count = (Long) query.getSingleResult();
+
+// Joins
+Query query = entityManager.createQuery(
+    "SELECT u FROM User u JOIN u.orders o " +
+    "WHERE o.amount > :amount"
+);
+query.setParameter("amount", 1000.0);
+List<User> richUsers = query.getResultList();
+```
+
+#### Named Queries
+
+```java
+@Entity
+@NamedQueries({
+    @NamedQuery(
+        name = "User.findByUsername",
+        query = "SELECT u FROM User u WHERE u.username = :username"
+    ),
+    @NamedQuery(
+        name = "User.findAll",
+        query = "SELECT u FROM User u ORDER BY u.username"
+    )
+})
+public class User {
+    // ...
+}
+
+// Usage
+TypedQuery<User> query = 
+    entityManager.createNamedQuery("User.findByUsername", User.class);
+query.setParameter("username", "john");
+User user = query.getSingleResult();
+```
+
+**Keypoints for JPA:**
+- Entity classes represent database tables
+- Annotations drive ORM mapping
+- JPQL provides database-independent querying
+- Relationships managed through @OneToMany, @ManyToOne, @ManyToMany
+- Cascading operations propagate to related entities
+- Lazy loading defers loading of related data
+- Named queries improve performance and code reuse
+
+### RESTful Web Services
+
+#### JAX-RS (Java API for RESTful Web Services)
+
+```java
+@Path("/users")
+@Produces(MediaType.APPLICATION_JSON)
+@Consumes(MediaType.APPLICATION_JSON)
+public class UserResource {
+    
+    @Inject
+    private UserService userService;
+    
+    // GET /users
+    @GET
+    public Response getAllUsers() {
+        List<User> users = userService.getAllUsers();
+        return Response.ok(users).build();
+    }
+    
+    // GET /users/123
+    @GET
+    @Path("/{id}")
+    public Response getUserById(@PathParam("id") int id) {
+        User user = userService.getUserById(id);
+        if (user == null) {
+            return Response.status(Response.Status.NOT_FOUND).build();
+        }
+        return Response.ok(user).build();
+    }
+    
+    // POST /users
+    @POST
+    public Response createUser(User user) {
+        User created = userService.createUser(user);
+        return Response
+            .status(Response.Status.CREATED)
+            .entity(created)
+            .build();
+    }
+    
+    // PUT /users/123
+    @PUT
+    @Path("/{id}")
+    public Response updateUser(@PathParam("id") int id, User user) {
+        user.setId(id);
+        User updated = userService.updateUser(user);
+        return Response.ok(updated).build();
+    }
+    
+    // DELETE /users/123
+    @DELETE
+    @Path("/{id}")
+    public Response deleteUser(@PathParam("id") int id) {
+        userService.deleteUser(id);
+        return Response.noContent().build();
+    }
+}
+```
+
+#### Content Negotiation and CORS
+
+```java
+@Path("/data")
+public class DataResource {
+    
+    // Same method, different formats based on Accept header
+    @GET
+    @Produces({MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML})
+    public Response getData() {
+        Data data = getDataFromDatabase();
+        return Response.ok(data).build();
+    }
+    
+    // CORS support
+    @OPTIONS
+    @Path("/{path : .*}")
+    public Response options() {
+        return Response
+            .ok()
+            .header("Access-Control-Allow-Origin", "*")
+            .header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
+            .header("Access-Control-Allow-Headers", "Content-Type")
+            .build();
+    }
+}
+```
+
+**Keypoints for RESTful Services:**
+- @Path defines resource URIs
+- @GET, @POST, @PUT, @DELETE map HTTP methods
+- @Produces/@Consumes define content types
+- @PathParam, @QueryParam extract values from URI/query string
+- HTTP status codes convey operation results
+- HATEOAS enables discoverability
+- CORS allows cross-origin requests
+
+### Web Services (SOAP/JAX-WS)
+
+#### SOAP Web Service
+
+```java
+@WebService(
+    serviceName = "OrderService",
+    portName = "OrderServicePort",
+    targetNamespace = "http://example.com/order"
+)
+public class OrderService {
+    
+    @WebMethod
+    @WebResult(name = "order")
+    public Order getOrder(@WebParam(name = "orderId") int orderId) {
+        return findOrderById(orderId);
+    }
+    
+    @WebMethod
+    public void createOrder(@WebParam(name = "order") Order order) {
+        persistOrder(order);
+    }
+}
+
+// Generated WSDL includes service definition
+// Client can generate stubs from WSDL
+```
+
+**Keypoints for Web Services:**
+- SOAP provides structured messaging format
+- WSDL describes service interface
+- JAX-WS standardizes web service development
+- More heavyweight than REST
+- Used for enterprise integration
+
+### Interceptors
+
+#### Method Interceptors (AOP-style)
+
+```java
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME)
+public @interface Logged {
+}
+
+@Interceptor
+@Logged
+public class LoggingInterceptor {
+    
+    @AroundInvoke
+    public Object logMethodCall(InvocationContext context) 
+            throws Exception {
+        
+        long startTime = System.currentTimeMillis();
+        String methodName = context.getMethod().getName();
+        
+        System.out.println("Entering: " + methodName);
+        
+        try {
+            Object result = context.proceed();
+            return result;
+        } catch (Exception e) {
+            System.out.println("Exception in " + methodName + ": " + e);
+            throw e;
+        } finally {
+            long duration = System.currentTimeMillis() - startTime;
+            System.out.println("Exiting " + methodName + 
+                " (duration: " + duration + "ms)");
+        }
+    }
+}
+
+// Usage
+@Stateless
+@Interceptors(LoggingInterceptor.class)
+public class UserService {
+    
+    @Logged
+    public User createUser(User user) {
+        return user;
+    }
+}
+```
+
+**Keypoints for Interceptors:**
+- Cross-cutting concerns (logging, security, timing)
+- @AroundInvoke intercepts method calls
+- Method-level or class-level application
+- Performance monitoring and auditing
+
+### Batch Processing with JBatch
+
+```java
+@Named
+public class DataProcessorBatchlet extends AbstractBatchlet {
+    
+    @Override
+    public String process() throws Exception {
+        System.out.println("Processing batch data");
+        
+        List<Record> records = fetchRecordsFromDatabase();
+        for (Record record : records) {
+            processRecord(record);
+        }
+        
+        return "COMPLETED";
+    }
+}
+
+@Named
+public class ItemProcessor implements ItemProcessor {
+    
+    @Override
+    public Object processItem(Object item) throws Exception {
+        Record record = (Record) item;
+        record.setProcessedAt(new Date());
+        return record;
+    }
+}
+
+// job-config.xml
+<job id="batchJob">
+    <step id="step1">
+        <batchlet ref="dataProcessorBatchlet" />
+    </step>
+</job>
+
+// Submitting batch job
+@Stateless
+public class BatchController {
+    
+    @Inject
+    private JobOperator jobOperator;
+    
+    public long submitBatchJob() {
+        return jobOperator.start("batchJob", new Properties());
+    }
+}
+```
+
+**Keypoints for Batch Processing:**
+- Process large datasets offline
+- @Batchlet for simple one-step operations
+- ItemReader/ItemProcessor/ItemWriter for chunk processing
+- Job scheduling and monitoring
+- Restart capabilities
+
+### Web Socket Support
+
+```java
+@ServerEndpoint("/chat")
+public class ChatWebSocket {
+    
+    private static Set<Session> clients = 
+        Collections.synchronizedSet(new HashSet<>());
+    
+    @OnOpen
+    public void onOpen(Session session) {
+        System.out.println("Client connected: " + session.getId());
+        clients.add(session);
+        broadcast("User joined");
+    }
+    
+    @OnMessage
+    public void onMessage(String message, Session session) {
+        System.out.println("Message from " + session.getId() + ": " + message);
+        broadcast("User: " + message);
+    }
+    
+    @OnError
+    public void onError(Session session, Throwable error) {
+        System.out.println("Error for " + session.getId());
+        error.printStackTrace();
+    }
+    
+    @OnClose
+    public void onClose(Session session) {
+        System.out.println("Client disconnected: " + session.getId());
+        clients.remove(session);
+        broadcast("User left");
+    }
+    
+    private void broadcast(String message) {
+        for (Session client : clients) {
+            try {
+                client.getBasicRemote().sendText(message);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
+
+// Client-side JavaScript
+var ws = new WebSocket("ws://localhost:8080/app/chat");
+
+ws.onopen = function() {
+    console.log("Connected");
+};
+
+ws.onmessage = function(event) {
+    console.log("Message: " + event.data);
+};
+
+ws.send("Hello from client");
+```
+
+**Keypoints for WebSockets:**
+- Bidirectional communication
+- Real-time updates without polling
+- Lower latency than HTTP
+- Persistent connection management
+- Broadcasting to multiple clients
+
+---
+
+## Comprehensive Examples
+
+### Complete CRUD Application
+
+```java
+// Model
+@Entity
+@Table(name = "products")
+public class Product {
+    
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private int id;
+    
+    @Column(nullable = false)
+    private String name;
+    
+    private String description;
+    
+    @DecimalMin("0.0")
+    private BigDecimal price;
+    
+    @Temporal(TemporalType.TIMESTAMP)
+    private Date createdAt;
+    
+    @PrePersist
+    protected void onCreate() {
+        createdAt = new Date();
+    }
+    
+    // Getters and setters
+}
+
+// DAO
+@Stateless
+public class ProductDAO {
+    
+    @PersistenceContext
+    private EntityManager entityManager;
+    
+    public Product create(Product product) {
+        entityManager.persist(product);
+        return product;
+    }
+    
+    public Product read(int id) {
+        return entityManager.find(Product.class, id);
+    }
+    
+    public List<Product> readAll() {
+        return entityManager
+            .createQuery("SELECT p FROM Product p", Product.class)
+            .getResultList();
+    }
+    
+    public Product update(Product product) {
+        return entityManager.merge(product);
+    }
+    
+    public void delete(int id) {
+        Product product = read(id);
+        if (product != null) {
+            entityManager.remove(product);
+        }
+    }
+}
+
+// Service
+@Stateless
+public class ProductService {
+    
+    @Inject
+    private ProductDAO productDAO;
+    
+    @Transactional
+    public Product createProduct(Product product) {
+        return productDAO.create(product);
+    }
+    
+    public Product getProduct(int id) {
+        return productDAO.read(id);
+    }
+    
+    public List<Product> getAllProducts() {
+        return productDAO.readAll();
+    }
+    
+    @Transactional
+    public Product updateProduct(Product product) {
+        return productDAO.update(product);
+    }
+    
+    @Transactional
+    public void deleteProduct(int id) {
+        productDAO.delete(id);
+    }
+}
+
+// REST Controller
+@Path("/products")
+@Produces(MediaType.APPLICATION_JSON)
+@Consumes(MediaType.APPLICATION_JSON)
+public class ProductController {
+    
+    @Inject
+    private ProductService productService;
+    
+    @POST
+    public Response create(Product product) {
+        Product created = productService.createProduct(product);
+        return Response
+            .status(Response.Status.CREATED)
+            .entity(created)
+            .build();
+    }
+    
+    @GET
+    @Path("/{id}")
+    public Response read(@PathParam("id") int id) {
+        Product product = productService.getProduct(id);
+        return product != null 
+            ? Response.ok(product).build()
+            : Response.status(Response.Status.NOT_FOUND).build();
+    }
+    
+    @GET
+    public Response readAll() {
+        List<Product> products = productService.getAllProducts();
+        return Response.ok(products).build();
+    }
+    
+    @PUT
+    @Path("/{id}")
+    public Response update(@PathParam("id") int id, Product product) {
+        product.setId(id);
+        Product updated = productService.updateProduct(product);
+        return Response.ok(updated).build();
+    }
+    
+    @DELETE
+    @Path("/{id}")
+    public Response delete(@PathParam("id") int id) {
+        productService.deleteProduct(id);
+        return Response.noContent().build();
+    }
+}
+```
+
+### Authentication and Authorization Example
+
+```java
+// Custom Principal
+public class UserPrincipal implements Principal {
+    private String name;
+    private Set<String> roles;
+    
+    public UserPrincipal(String name, Set<String> roles) {
+        this.name = name;
+        this.roles = roles;
+    }
+    
+    @Override
+    public String getName() {
+        return name;
+    }
+    
+    public boolean hasRole(String role) {
+        return roles.contains(role);
+    }
+}
+
+// Authentication Filter
+@WebFilter(urlPatterns = "/*")
+public class AuthenticationFilter implements Filter {
+    
+    @Inject
+    private UserService userService;
+    
+    @Override
+    public void doFilter(ServletRequest request, 
+                        ServletResponse response, 
+                        FilterChain chain) 
+            throws IOException, ServletException {
+        
+        HttpServletRequest httpRequest = 
+            (HttpServletRequest) request;
+        HttpServletResponse httpResponse = 
+            (HttpServletResponse) response;
+        
+        String token = getTokenFromHeader(httpRequest);
+        
+        if (token != null && isValidToken(token)) {
+            String username = extractUsernameFromToken(token);
+            Set<String> roles = userService.getUserRoles(username);
+            
+            httpRequest = new AuthenticationHttpServletRequestWrapper(
+                httpRequest, 
+                new UserPrincipal(username, roles)
+            );
+        }
+        
+        chain.doFilter(httpRequest, httpResponse);
+    }
+    
+    private String getTokenFromHeader(HttpServletRequest request) {
+        String header = request.getHeader("Authorization");
+        return header != null && header.startsWith("Bearer ") 
+            ? header.substring(7)
+            : null;
+    }
+    
+    private boolean isValidToken(String token) {
+        // Validate token (JWT, session, etc.)
+        return true;
+    }
+    
+    private String extractUsernameFromToken(String token) {
+        // Extract username from token
+        return "user";
+    }
+}
+
+// Authorization via annotations
+@Stateless
+public class AdminService {
+    
+    @Inject
+    private SecurityContext securityContext;
+    
+    public void adminOnlyOperation() {
+        if (!securityContext.isUserInRole("ADMIN")) {
+            throw new SecurityException("Only admins can perform this operation");
+        }
+        // Perform operation
+    }
+}
+
+// Programmatic authorization
+@WebServlet("/secure")
+public class SecureServlet extends HttpServlet {
+    
+    @Override
+    protected void doGet(HttpServletRequest request, 
+                        HttpServletResponse response) 
+            throws ServletException, IOException {
+        
+        if (request.getUserPrincipal() == null) {
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+            return;
+        }
+        
+        if (request.isUserInRole("ADMIN")) {
+            response.getWriter().println("Welcome Admin!");
+        } else {
+            response.getWriter().println("Welcome User!");
+        }
+    }
+}
+```
+
+---
+
+## Common Patterns and Anti-patterns
+
+### Good Patterns
+
+```java
+// 1. Dependency Injection
+@Stateless
+public class UserService {
+    @Inject
+    private UserDAO userDAO;
+    
+    @Inject
+    private EmailService emailService;
+    
+    // Dependencies provided by container
+}
+
+// 2. Interface Segregation
+public interface UserRepository {
+    User findById(int id);
+}
+
+public interface UserPersistence {
+    void save(User user);
+}
+
+// 3. Resource Management
+try (Connection conn = dataSource.getConnection();
+     Statement stmt = conn.createStatement()) {
+    // Auto-closed
+}
+
+// 4. Separation of Concerns
+// DAO handles persistence
+// Service handles business logic
+// Controller handles HTTP
+```
+
+### Anti-patterns to Avoid
+
+```java
+// BAD: Hard-coded dependencies
+public class BadService {
+    private UserDAO userDAO = new UserDAO(); // Hard-coded
+}
+
+// GOOD: Injected dependencies
+@Stateless
+public class GoodService {
+    @Inject
+    private UserDAO userDAO;
+}
+
+// BAD: Resource leaks
+Connection conn = getConnection();
+Statement stmt = conn.createStatement();
+ResultSet rs = stmt.executeQuery("SELECT * FROM users");
+// What if exception occurs before close()?
+
+// GOOD: Try-with-resources
+try (Connection conn = getConnection();
+     Statement stmt = conn.createStatement();
+     ResultSet rs = stmt.executeQuery("SELECT * FROM users")) {
+    // Auto-closed even on exception
+}
+
+// BAD: Long-running operations in servlet
+@WebServlet("/process")
+public class BadServlet extends HttpServlet {
+    @Override
+    protected void doGet(HttpServletRequest req, 
+                        HttpServletResponse resp) {
+        // Heavy processing that blocks user
+        heavyProcessing(); // Blocks HTTP request
+    }
+}
+
+// GOOD: Async processing
+@Stateless
+public class GoodService {
+    @Inject
+    private JMSContext context;
+    
+    public void queueWork() {
+        // Send to message queue
+        context.createProducer().send(queue, "work");
+    }
+}
+```
+
+---
+
+## Performance Considerations
+
+### Database Performance
+
+```java
+// Bad: N+1 query problem
+List<orders> = entityManager.createQuery(
+    "SELECT o FROM Order o"
+).getResultList();
+
+for (Order order : orders) {
+    // This causes 1 query per order!
+    List<items> = order.getItems();
+}
+
+// Good: Join fetch
+List<orders> = entityManager.createQuery(
+    "SELECT DISTINCT o FROM Order o " +
+    "JOIN FETCH o.items " +
+    "WHERE o.status = :status",
+    Order.class
+).setParameter("status", "PENDING").getResultList();
+
+// Bad: Loading all data
+List<users> = entityManager.createQuery(
+    "SELECT u FROM User u"
+).getResultList(); // Loads potentially 1 million users
+
+// Good: Pagination
+List<users> = entityManager.createQuery(
+    "SELECT u FROM User u",
+    User.class
+)
+.setFirstResult(0)
+.setMaxResults(10)
+.getResultList(); // Loads only 10 users
+```
+
+### Caching Strategy
+
+```java
+@Stateless
+@CacheResult
+public class CachedService {
+    
+    // Result cached based on parameters
+    @Cacheable(cacheName = "userCache")
+    public User getUserById(int id) {
+        return userDAO.findById(id);
+    }
+    
+    // Invalidate cache on update
+    @CacheInvalidate(cacheName = "userCache")
+    public void updateUser(User user) {
+        userDAO.update(user);
+    }
+    
+    // Programmatic caching
+    @Inject
+    private Cache cache;
+    
+    public User getUserWithCache(int id) {
+        String key = "user:" + id;
+        User user = (User) cache.get(key);
+        
+        if (user == null) {
+            user = userDAO.findById(id);
+            cache.put(key, user);
+        }
+        
+        return user;
+    }
+}
+```
+
+---
+
+## Debugging and Monitoring
+
+### Logging Best Practices
+
+```java
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+@Stateless
+public class OrderService {
+    
+    private static final Logger logger = 
+        LoggerFactory.getLogger(OrderService.class);
+    
+    public Order createOrder(Order order) {
+        logger.debug("Creating order: {}", order.getId());
+        
+        try {
+            validateOrder(order);
+            Order created = orderDAO.create(order);
+            
+            logger.info("Order created successfully: {}", created.getId());
+            return created;
+            
+        } catch (ValidationException e) {
+            logger.warn("Order validation failed: {}", e.getMessage());
+            throw e;
+            
+        } catch (Exception e) {
+            logger.error("Unexpected error creating order", e);
+            throw new RuntimeException(e);
+        }
+    }
+}
+```
+
+### Exception Handling
+
+```java
+// Custom exceptions
+public class OrderException extends Exception {
+    private String code;
+    
+    public OrderException(String message, String code) {
+        super(message);
+        this.code = code;
+    }
+}
+
+// Exception handling
+@ControllerAdvice
+public class GlobalExceptionHandler {
+    
+    @ExceptionHandler(OrderException.class)
+    public Response handleOrderException(OrderException e) {
+        return Response
+            .status(Response.Status.BAD_REQUEST)
+            .entity(new ErrorResponse(e.getCode(), e.getMessage()))
+            .build();
+    }
+}
+```
+
+---
+
+---
+
+## Complete J2EE Concepts Summary Table
+
+| Layer | Component | Purpose | Scope | Key Features |
+|-------|-----------|---------|-------|--------------|
+| **Presentation** | Servlet | HTTP request handling | Web Container | Thread pooling, lifecycle management |
+| | JSP | Dynamic HTML generation | Web Container | Compilation to servlet, implicit objects |
+| | Filter | Request/response interception | Web Container | Pre/post processing, chain architecture |
+| | Listener | Event monitoring | Web Container | Lifecycle events, attribute changes |
+| **Business Logic** | Session EJB (Stateless) | Service operations | EJB Container | Pooling, high scalability, @Stateless |
+| | Session EJB (Stateful) | Conversational state | EJB Container | One instance per client, @Stateful |
+| | Session EJB (Singleton) | Application resource | EJB Container | Single instance, shared access, @Singleton |
+| | Message-Driven EJB | Async message processing | EJB Container | JMS consumer, @MessageDriven |
+| **Data Access** | JDBC | Database connectivity | Application | Direct SQL, connection pooling |
+| | JPA/ORM | Object mapping | Persistence Layer | Entity mapping, JPQL queries |
+| | DAO Pattern | Data abstraction | Application | Repository pattern, reusable |
+| **Enterprise Services** | JMS Queue | Point-to-point messaging | Message Broker | One producer to one consumer |
+| | JMS Topic | Pub-Sub messaging | Message Broker | One publisher to multiple subscribers |
+| | JTA | Transaction management | App Server | ACID properties, distributed transactions |
+| | JNDI | Resource lookup | App Server | Database, queues, EJB references |
+| **Web Services** | JAX-RS | RESTful services | Web Container | @Path, @GET/@POST/@PUT/@DELETE |
+| | JAX-WS | SOAP services | Web Container | @WebService, WSDL generation |
+| **Security** | Authentication | User identity | Web/EJB Containers | Form-based, JAAS, programmatic |
+| | Authorization | User permissions | Web/EJB Containers | @RolesAllowed, @PermitAll, @DenyAll |
+
+---
+
+## Key Concepts Quick Reference
+
+### Servlet Lifecycle
+```
+Class Loading → Instantiation → init() → service() [per request] → destroy()
+```
+
+### JSP Lifecycle
+```
+Translation → Compilation → Instantiation → Init → Service [per request] → Destroy
+```
+
+### EJB Types
+- **Stateless**: No state, pooled, scalable, @Stateless
+- **Stateful**: Maintains state, one per client, @Stateful
+- **Singleton**: Single instance, shared, @Singleton
+- **Message-Driven**: Async JMS consumer, @MessageDriven
+
+### Transaction Attributes
+- **REQUIRED** (default): Use existing or create
+- **REQUIRES_NEW**: Always create new
+- **MANDATORY**: Must have transaction
+- **NOT_SUPPORTED**: No transaction
+- **NEVER**: Must not have transaction
+- **SUPPORTS**: Flexible
+
+### Messaging Models
+- **Queue (P2P)**: One producer → Queue → One consumer
+- **Topic (Pub-Sub)**: One publisher → Topic → Multiple subscribers
+
+### Security Layers
+- **Servlet**: @ServletSecurity, @WebServlet
+- **EJB**: @RolesAllowed, @Stateless
+- **Method**: @RolesAllowed, @PermitAll, @DenyAll
+- **Programmatic**: request.isUserInRole(), request.getUserPrincipal()
+
+---
+
+## Common Design Patterns in J2EE
+
+### 1. DAO (Data Access Object)
+Separates persistence logic from business logic. Provides database-independent interface.
+
+### 2. Service Locator
+Centralizes lookup of services through JNDI (though dependency injection preferred now).
+
+### 3. Session Facade
+Session EJB provides simplified interface to complex entity relationships.
+
+### 4. Model-View-Controller (MVC)
+Servlet (Controller) → Service (Model) → JSP (View)
+
+### 5. Observer
+Event-driven architecture with JMS publishers and subscribers.
+
+### 6. Factory
+Factory methods for creating objects (e.g., JMSContext.createProducer()).
+
+### 7. Interceptor
+Aspect-oriented programming for cross-cutting concerns.
+
+### 8. Dependency Injection
+Container injects dependencies via @Inject annotation (preferred over lookup).
+
+---
+
+## Performance Optimization Tips
+
+### Database
+- Use connection pooling (HikariCP recommended)
+- Implement pagination for large result sets
+- Use prepared statements to prevent SQL injection
+- Lazy load related entities to avoid N+1 queries
+- Use caching for frequently accessed data
+
+### Application
+- Stateless beans for horizontal scalability
+- Appropriate transaction isolation levels
+- Batch operations for bulk inserts/updates
+- Message queues for asynchronous processing
+- HTTP caching headers for static content
+
+### Web Tier
+- Compress responses (gzip)
+- Minify CSS/JavaScript
+- Use CDN for static assets
+- Implement session timeout
+- Use connection pooling for database
+
+---
+
+## Testing Strategies
+
+### Unit Testing
+- Test business logic in isolation
+- Mock dependencies (@Mock, @InjectMocks)
+- Test edge cases and exceptions
+
+### Integration Testing
+- Test components working together
+- Use test containers (Testcontainers)
+- Test with real database
+
+### End-to-End Testing
+- Test complete user workflows
+- Test REST APIs with HTTP clients
+- Verify database state changes
+
+### Best Practices
+- Separate test data setup/teardown
+- Use meaningful test names
+- Test both success and failure scenarios
+- Keep tests independent
+
+---
+
+## Common Mistakes and How to Avoid Them
+
+### 1. Resource Leaks
+❌ Bad:
+```java
+Connection conn = getConnection();
+ResultSet rs = conn.getConnection().executeQuery(sql);
+// No cleanup if exception occurs
+```
+
+✅ Good:
+```java
+try (Connection conn = getConnection();
+     Statement stmt = conn.createStatement();
+     ResultSet rs = stmt.executeQuery(sql)) {
+    // Auto-closed
+}
+```
+
+### 2. N+1 Queries
+❌ Bad:
+```java
+List<orders> = getOrders();
+for (Order o : orders) {
+    List<items> = o.getItems(); // One query per order!
+}
+```
+
+✅ Good:
+```java
+List<orders> = em.createQuery(
+    "SELECT o FROM Order o JOIN FETCH o.items"
+).getResultList();
+```
+
+### 3. Missing Transaction Boundaries
+❌ Bad: No transaction management
+✅ Good: Use @Transactional or @TransactionAttribute
+
+### 4. Hardcoded Dependencies
+❌ Bad: `new UserDAO()`
+✅ Good: `@Inject private UserDAO userDAO;`
+
+### 5. Synchronous Processing of Heavy Operations
+❌ Bad: Block servlet with long computation
+✅ Good: Queue to JMS and process async
+
+### 6. Ignoring Error Handling
+❌ Bad: Ignore exceptions
+✅ Good: Log, handle, or rethrow appropriately
+
+---
+
+## Tools and Technologies
+
+### Application Servers
+- **JBoss/Wildfly** - Open-source
+- **Apache Tomcat** - Lightweight (servlet/JSP only)
+- **GlassFish** - Reference implementation
+- **IBM WebSphere** - Enterprise
+- **Oracle WebLogic** - Enterprise
+
+### Database Drivers
+- MySQL: `com.mysql.cj.jdbc.Driver`
+- PostgreSQL: `org.postgresql.Driver`
+- Oracle: `oracle.jdbc.driver.OracleDriver`
+- SQL Server: `com.microsoft.sqlserver.jdbc.SQLServerDriver`
+
+### Build Tools
+- **Maven** - Dependency management and build
+- **Gradle** - Alternative build system
+
+### Testing Frameworks
+- **JUnit** - Unit testing
+- **Mockito** - Mocking
+- **Testcontainers** - Container-based integration testing
+- **Arquillian** - JEE container testing
+
+### Monitoring Tools
+- **Java Mission Control** - JVM monitoring
+- **JProfiler** - Performance profiling
+- **New Relic** - Application monitoring
+- **DataDog** - Infrastructure monitoring
+
+---
+
+## Migration Path: J2EE to Jakarta EE
+
+### Key Changes
+- Package name change: `javax.*` → `jakarta.*`
+- New EE specifications
+- Better Spring integration
+- Cloud-native features
+- Microservices support
+
+### Migration Steps
+1. Upgrade to latest J2EE/Java EE version first
+2. Update dependencies to Jakarta packages
+3. Update imports: `javax` → `jakarta`
+4. Test thoroughly
+5. Deploy to Jakarta EE server
+
+---
+
+## Conclusion & Key Takeaways
+
+J2EE provides a comprehensive platform for building enterprise Java applications with:
+
+✅ **Strengths:**
+- Proven architecture and patterns
+- Container-managed services (transactions, security, pooling)
+- Loose coupling through messaging
+- Standardized APIs across vendors
+- Scalability and reliability
+- Wide industry adoption
+
+⚠️ **Modern Considerations:**
+- Consider Spring Framework for lighter weight
+- Microservices and containerization (Docker/Kubernetes)
+- Serverless functions for specific use cases
+- API-first (REST/GraphQL) over traditional MVC
+
+📚 **Learning Path:**
+1. Master Servlets and JSP fundamentals
+2. Learn JDBC and JPA for data access
+3. Understand EJB and transactions
+4. Explore messaging with JMS
+5. Implement security properly
+6. Design with patterns in mind
+7. Optimize for performance
+8. Test thoroughly
+9. Monitor in production
+10. Keep learning (Jakarta EE, Spring, Microservices)
+
+The concepts learned in J2EE remain fundamental for enterprise Java development, even as the platform evolves toward Jakarta EE and cloud-native architectures.
