@@ -1,0 +1,7510 @@
+# Vue.js Complete Notes: Theory and Usage
+
+## Table of Contents
+1. [Vue.js Fundamentals](#vuejs-fundamentals)
+2. [Vue 2 vs Vue 3](#vue-2-vs-vue-3)
+3. [Core Concepts](#core-concepts)
+4. [Components](#components)
+5. [Directives](#directives)
+6. [Lifecycle Hooks](#lifecycle-hooks)
+7. [State Management](#state-management)
+8. [Routing](#routing)
+9. [Composition API](#composition-api)
+10. [Advanced Topics](#advanced-topics)
+11. [Best Practices](#best-practices)
+12. [Project Setup](#project-setup)
+13. [Vue Developer Skills](#vue-developer-skills)
+14. [Practical Applications](#practical-applications)
+15. [Detailed Concepts with Examples](#detailed-concepts-with-examples)
+
+---
+
+## Vue.js Fundamentals
+
+### What is Vue.js?
+Vue.js is a progressive JavaScript framework for building user interfaces. It enables reactive data binding and component-based development, making it easy to build scalable applications.
+
+**Key Characteristics:**
+- **Progressive:** Use as much or as little as needed
+- **Reactive:** Data changes automatically update the DOM
+- **Component-Based:** Reusable UI building blocks
+- **Easy to Learn:** Gentle learning curve compared to React/Angular
+
+### Vue Instance (App)
+```javascript
+// Vue 2
+const app = new Vue({
+  el: '#app',
+  data: {
+    message: 'Hello Vue'
+  }
+});
+
+// Vue 3
+import { createApp } from 'vue'
+
+const app = createApp({
+  data() {
+    return {
+      message: 'Hello Vue'
+    }
+  }
+})
+
+app.mount('#app')
+```
+
+### Declarative Rendering
+```html
+<div id="app">
+  <h1>{{ message }}</h1>
+  <p>{{ count + 1 }}</p>
+</div>
+```
+
+---
+
+## Vue 2 vs Vue 3
+
+| Feature | Vue 2 | Vue 3 |
+|---------|-------|-------|
+| **API** | Options API | Options API + Composition API |
+| **Size** | ~33KB | ~33KB (but tree-shakeable) |
+| **Performance** | Reactive | Reactive + Proxy-based |
+| **TypeScript** | Partial | Full Support |
+| **Bundle** | Single file | Modular |
+| **Virtual DOM** | Slower diffing | Faster diffing algorithm |
+| **Fragments** | No | Yes |
+
+### Vue 2 Setup
+```bash
+npm install vue@2
+npm install -g @vue/cli
+vue create my-project
+```
+
+### Vue 3 Setup
+```bash
+npm create vite@latest my-project -- --template vue
+cd my-project
+npm install
+npm run dev
+```
+
+---
+
+## Core Concepts
+
+### Theory Foundation: How Vue Works
+
+**Vue's Three Core Principles:**
+1. **Declarative Rendering** - Describe what the UI should look like, Vue handles the DOM
+2. **Reactivity** - Data changes automatically update the DOM
+3. **Component Composition** - Build complex UIs from reusable pieces
+
+**Why These Matter:**
+- Declarative: You focus on what, not how (easier to understand and maintain)
+- Reactivity: No manual DOM manipulation (fewer bugs, cleaner code)
+- Components: Code reuse and organization (scalable architecture)
+
+### 1. Reactive Data
+
+#### Theory Explained
+Reactive data is the heart of Vue. It means Vue automatically detects when data changes and updates the DOM without you having to write manual update code.
+
+**The Reactivity Problem:**
+In vanilla JavaScript, changing data doesn't update the UI. You must manually sync data with DOM:
+```javascript
+// Vanilla JS - Manual sync
+const user = { name: 'John' }
+document.querySelector('p').textContent = user.name  // Manual update
+
+user.name = 'Jane'  // Data changed
+// ❌ DOM still shows "John" - not updated!
+document.querySelector('p').textContent = user.name  // Must manually update again
+```
+
+**Vue's Reactivity Solution:**
+Vue automatically tracks data changes and updates the DOM:
+```javascript
+// Vue - Automatic sync
+const user = reactive({ name: 'John' })
+// <p>{{ user.name }}</p> renders "John"
+
+user.name = 'Jane'
+// ✅ DOM automatically shows "Jane" - no manual code needed!
+```
+
+**How It Works:**
+1. Vue wraps data in Proxy (Vue 3) or Object.defineProperty (Vue 2)
+2. When data changes, Proxy intercepts it
+3. Proxy notifies Vue of the change
+4. Vue updates all dependent components and DOM
+
+```javascript
+// Vue 2
+new Vue({
+  el: '#app',
+  data() {
+    return {
+      count: 0,
+      user: {
+        name: 'John',
+        age: 30
+      }
+    }
+  },
+  methods: {
+    increment() {
+      this.count++  // Change detected → DOM updates
+    }
+  }
+})
+
+// Vue 3
+import { reactive, ref } from 'vue'
+
+export default {
+  setup() {
+    const count = ref(0)
+    const user = reactive({
+      name: 'John',
+      age: 30
+    })
+    
+    const increment = () => count.value++
+    
+    return { count, user, increment }
+  }
+}
+```
+
+**Key Understanding:**
+- `ref()` wraps primitives (numbers, strings) to make them reactive
+- `reactive()` wraps objects to make them reactive
+- Regular variables are NOT reactive and won't trigger updates
+
+**Practical Example:**
+```javascript
+// ❌ NOT reactive
+const message = 'Hello'
+message = 'Hi'  // DOM won't update
+
+// ✅ Reactive
+const message = ref('Hello')
+message.value = 'Hi'  // DOM updates automatically
+
+// Template access (auto-unwraps):
+// <p>{{ message }}</p>  <!-- shows "Hi" after change -->
+```
+
+### 2. Computed Properties
+
+#### Theory Explained
+Computed properties create derived data that automatically updates when dependencies change. They cache results for performance.
+
+**Why Computed Instead of Methods?**
+
+The Problem:
+```javascript
+// Bad: Using method
+export default {
+  data() {
+    return { firstName: 'John', lastName: 'Doe' }
+  },
+  methods: {
+    getFullName() {
+      console.log('Computing...')  // Runs EVERY time called
+      return this.firstName + ' ' + this.lastName
+    }
+  }
+}
+
+// Template: 
+// <p>{{ getFullName() }}</p>  <!-- "Computing..." logged -->
+// <p>{{ getFullName() }}</p>  <!-- "Computing..." logged again -->
+// <p>{{ getFullName() }}</p>  <!-- "Computing..." logged again -->
+
+// Problem: getFullName() runs 3 times! Inefficient!
+```
+
+Better: Using computed
+```javascript
+export default {
+  data() {
+    return { firstName: 'John', lastName: 'Doe' }
+  },
+  computed: {
+    fullName() {
+      console.log('Computing...')  // Runs only once and caches
+      return this.firstName + ' ' + this.lastName
+    }
+  }
+}
+
+// Template:
+// <p>{{ fullName }}</p>  <!-- "Computing..." logged once -->
+// <p>{{ fullName }}</p>  <!-- Uses cached value, not logged -->
+// <p>{{ fullName }}</p>  <!-- Uses cached value, not logged -->
+
+// Benefit: Computed only recalculates when dependencies change!
+```
+
+**How Caching Works:**
+```
+firstName or lastName change
+    ↓
+Vue detects dependency changed
+    ↓
+Computed invalidates cache
+    ↓
+Next access: fullName recalculates
+    ↓
+Result cached until next dependency change
+```
+
+```javascript
+// Vue 2
+new Vue({
+  data() {
+    return {
+      firstName: 'John',
+      lastName: 'Doe'
+    }
+  },
+  computed: {
+    // Read-only computed
+    fullName() {
+      return this.firstName + ' ' + this.lastName
+    },
+    
+    // Computed with getter and setter
+    fullNameEditable: {
+      get() {
+        return this.firstName + ' ' + this.lastName
+      },
+      set(newValue) {
+        const parts = newValue.split(' ')
+        this.firstName = parts[0]
+        this.lastName = parts[1]
+      }
+    }
+  }
+})
+
+// Vue 3
+import { ref, computed } from 'vue'
+
+export default {
+  setup() {
+    const firstName = ref('John')
+    const lastName = ref('Doe')
+    
+    // Read-only
+    const fullName = computed(() => 
+      firstName.value + ' ' + lastName.value
+    )
+    
+    // With setter
+    const fullNameEditable = computed({
+      get: () => firstName.value + ' ' + lastName.value,
+      set: (newValue) => {
+        const parts = newValue.split(' ')
+        firstName.value = parts[0]
+        lastName.value = parts[1]
+      }
+    })
+    
+    return { firstName, lastName, fullName, fullNameEditable }
+  }
+}
+```
+
+**When to Use Computed:**
+- Derived data (depends on other data)
+- Read-only transformations
+- Data that's accessed multiple times
+- Performance-critical calculations
+
+### 3. Watchers
+
+#### Theory Explained
+Watchers listen to data changes and run callback functions. They're perfect for side effects: API calls, database saves, analytics tracking, etc.
+
+**Difference: Computed vs Watch**
+
+Computed:
+```javascript
+// For deriving new data from existing data
+const firstName = ref('John')
+const lastName = ref('Doe')
+
+const fullName = computed(() => 
+  firstName.value + ' ' + lastName.value  // Just returns a value
+)
+// No side effects - pure transformation
+```
+
+Watch:
+```javascript
+// For performing actions when data changes
+const firstName = ref('John')
+
+watch(firstName, (newValue, oldValue) => {
+  console.log(`Name changed from ${oldValue} to ${newValue}`)
+  saveToDatabase(newValue)  // Side effect: save data
+  trackAnalytics('name_changed', newValue)  // Side effect: track event
+})
+// Runs code in response to change - can have side effects
+```
+
+**Watch Execution Phases:**
+```
+Phase 1: Data Changes
+    ↓
+Phase 2: Component Updates (re-renders)
+    ↓
+Phase 3: Watch Handler Runs (default)
+    OR
+Watch Handler Runs Immediately (with immediate: true)
+```
+
+**Watch Practical Examples:**
+
+```javascript
+// Vue 2
+new Vue({
+  data() {
+    return {
+      searchQuery: '',
+      results: [],
+      userId: null,
+      user: { name: 'John', age: 30 }
+    }
+  },
+  watch: {
+    // Simple watch - runs when searchQuery changes
+    searchQuery(newVal, oldVal) {
+      console.log(`Search changed from ${oldVal} to ${newVal}`)
+    },
+    
+    // Immediate watch - runs right away and on changes
+    userId: {
+      handler(newId) {
+        this.fetchUser(newId)
+      },
+      immediate: true  // Runs immediately on mount
+    },
+    
+    // Deep watch - tracks nested property changes
+    user: {
+      handler(newUser) {
+        console.log('User object changed')
+      },
+      deep: true  // Watches all nested properties
+    }
+  }
+})
+
+// Vue 3
+import { ref, watch } from 'vue'
+
+export default {
+  setup() {
+    const searchQuery = ref('')
+    const userId = ref(null)
+    const user = ref({ name: 'John', age: 30 })
+    
+    // Basic watch
+    watch(searchQuery, (newVal, oldVal) => {
+      console.log(`Search changed from ${oldVal} to ${newVal}`)
+    })
+    
+    // With immediate
+    watch(userId, (newId) => {
+      if (newId) fetchUser(newId)
+    }, { immediate: true })
+    
+    // With deep
+    watch(user, (newUser) => {
+      console.log('User changed')
+    }, { deep: true })
+    
+    // Watch multiple sources
+    const firstName = ref('John')
+    const lastName = ref('Doe')
+    
+    watch([firstName, lastName], ([newFirst, newLast]) => {
+      console.log(`Full name: ${newFirst} ${newLast}`)
+    })
+    
+    // Stop watching
+    const stop = watch(searchQuery, (newVal) => {
+      console.log('Searching...')
+    })
+    
+    // Later, stop watching
+    stop()
+    
+    return { searchQuery, userId, user, firstName, lastName }
+  }
+}
+```
+
+**Why Watch is Essential:**
+
+Without watch (manual approach):
+```javascript
+// Bad: Manual side effect handling
+export default {
+  methods: {
+    onSearchChange(newValue) {
+      // Must manually call this everywhere search changes
+      this.performSearch(newValue)
+    }
+  }
+}
+// Problem: Easy to forget, scattered code
+```
+
+With watch (automatic approach):
+```javascript
+// Good: Watch automatically handles it
+watch(searchQuery, async (newValue) => {
+  const results = await performSearch(newValue)
+  this.results = results
+})
+// Benefit: Centralized, automatic, clean
+
+// When search changes anywhere, watch fires automatically!
+```
+
+**Common Watch Patterns:**
+1. API calls when ID changes
+2. Auto-save when form changes
+3. Update analytics when events happen
+4. Validate data when input changes
+5. Trigger animations when state changes
+
+---
+
+## Components
+
+### Theory: What are Components?
+
+**Components are Reusable UI Blocks:**
+- Self-contained: Has its own template, script, and style
+- Reusable: Use same component in multiple places
+- Composable: Build complex UIs from simple components
+- Isolated: Component logic doesn't affect others
+
+**Component Hierarchy Example:**
+```
+App
+├── Header
+│   ├── Logo
+│   └── Navigation
+├── MainContent
+│   ├── Sidebar
+│   └── ArticleList
+│       └── ArticleCard (repeated)
+└── Footer
+```
+
+Each box is a component. ArticleCard component is reused for each article.
+
+### Single File Component (SFC) - Theory
+
+**Why SFC?**
+Before SFCs, you'd have separate files for template, script, and style:
+```
+MyComponent.html  (template)
+MyComponent.js    (logic)
+MyComponent.css   (styling)
+```
+
+Problem: Hard to manage, easy to lose sync, messy file structure.
+
+SFC Solution: Everything in one .vue file:
+```
+MyComponent.vue
+  <template>    (HTML)
+  <script>      (JavaScript)
+  <style>       (CSS)
+</template>
+```
+
+Benefit: Component is self-contained, easier to manage, clear structure.
+
+```vue
+<!-- MyComponent.vue - Complete component -->
+<template>
+  <div class="my-component">
+    <h1>{{ title }}</h1>
+    <button @click="increment">Count: {{ count }}</button>
+    <slot></slot>  <!-- Child content goes here -->
+  </div>
+</template>
+
+<script>
+// Vue 2
+export default {
+  name: 'MyComponent',  // Component name
+  props: {
+    title: {
+      type: String,
+      required: true
+    },
+    count: {
+      type: Number,
+      default: 0
+    }
+  },
+  data() {
+    return {
+      count: this.count
+    }
+  },
+  methods: {
+    increment() {
+      this.count++
+      this.$emit('update:count', this.count)
+    }
+  }
+}
+</script>
+
+<script setup>
+// Vue 3 - Modern Script Setup (recommended)
+import { ref } from 'vue'
+
+// Props automatically available
+defineProps({
+  title: {
+    type: String,
+    required: true
+  },
+  count: {
+    type: Number,
+    default: 0
+  }
+})
+
+// Data
+const localCount = ref(0)
+
+// Event emit
+const emit = defineEmits(['update:count'])
+
+// Methods
+const increment = () => {
+  localCount.value++
+  emit('update:count', localCount.value)
+}
+</script>
+
+<style scoped>  <!-- scoped = styles only apply to this component -->
+.my-component {
+  padding: 20px;
+  border: 1px solid #ddd;
+}
+
+h1 {
+  color: #333;
+  font-size: 1.5rem;
+}
+
+button {
+  padding: 10px 20px;
+  cursor: pointer;
+}
+</style>
+```
+
+**Key Concept: Scoped Styles**
+
+Without scoped:
+```html
+<style>
+h1 { color: red }  <!-- Affects ALL h1s in entire app! -->
+</style>
+```
+
+With scoped:
+```html
+<style scoped>
+h1 { color: red }  <!-- Affects only THIS component's h1s -->
+</style>
+```
+
+Scoped styles prevent CSS conflicts between components.
+
+### Props - Theory: Parent to Child Communication
+
+#### Why Props Exist
+Props are how parents pass data to children. They establish the contract between components.
+
+**Props Flow:**
+```
+Parent (data owner) → passes via prop → Child (receives data)
+                                           ↓
+                            Cannot modify, must emit event if change needed
+```
+
+**One-Way Data Flow:**
+- Parent is the source of truth
+- Child displays data, doesn't own it
+- Child must emit event if it wants data to change
+- Parent handles the update
+
+```vue
+<script setup>
+// Vue 3 - Props Definition
+defineProps({
+  // Type validation
+  name: String,                    // Must be string
+  age: [String, Number],          // Multiple types OK
+  
+  // Required - must be provided
+  id: {
+    type: String,
+    required: true
+  },
+  
+  // Default value - if not provided
+  status: {
+    type: String,
+    default: 'pending'
+  },
+  
+  // Custom validator
+  priority: {
+    type: Number,
+    validator(value) {
+      return value >= 1 && value <= 5
+    }
+  },
+  
+  // Object/Array - factory function
+  config: {
+    type: Object,
+    default: () => ({ theme: 'light' })
+  }
+})
+</script>
+```
+
+**Validation Benefits:**
+- Catches errors early
+- Documents requirements
+- Prevents accidental bugs
+- Makes testing easier
+
+### Emitting Events - Theory: Child to Parent Communication
+
+#### Why Events Exist
+Events are how children communicate back to parents. Maintains one-way data flow.
+
+**Problem Without Events:**
+```javascript
+// ❌ WRONG - mutating prop
+export default {
+  props: ['count'],
+  methods: {
+    increment() {
+      this.count++  // Modifying prop!
+      // Parent doesn't know → data out of sync
+      // Two sources of truth = bugs
+    }
+  }
+}
+```
+
+**Solution With Events:**
+```javascript
+// ✅ RIGHT - emit event
+export default {
+  props: ['count'],
+  emits: ['update:count'],
+  methods: {
+    increment() {
+      // Tell parent to update
+      this.$emit('update:count', this.count + 1)
+    }
+  }
+}
+```
+
+**Event Flow:**
+```
+Child emits event
+    ↓
+Parent receives event
+    ↓
+Parent updates data
+    ↓
+Parent re-renders
+    ↓
+Child gets new prop
+```
+
+```vue
+<script setup>
+// Vue 3 - Emitting Events
+const emit = defineEmits({
+  // Simple event
+  'close': null,
+  
+  // Event with validation
+  'submit': (payload) => {
+    return typeof payload === 'object' &&
+           'email' in payload
+  },
+  
+  // Event with value
+  'update:count': (value) => typeof value === 'number'
+})
+
+// Emit without data
+const close = () => emit('close')
+
+// Emit with data
+const submit = (data) => emit('submit', data)
+
+// Emit update
+const increment = (newCount) => emit('update:count', newCount)
+</script>
+
+<template>
+  <div>
+    <button @click="close">Close</button>
+    <button @click="submit(formData)">Submit</button>
+    <button @click="increment(count + 1)">+</button>
+  </div>
+</template>
+```
+
+**v-model Shorthand:**
+```html
+<!-- Without v-model - verbose -->
+<Child 
+  :modelValue="count" 
+  @update:modelValue="(val) => count = val" 
+/>
+
+<!-- With v-model - clean -->
+<Child v-model="count" />
+```
+
+### Slots - Theory: Content Distribution
+
+#### Why Slots Exist
+Slots let parents pass content to children. Child controls structure, parent controls content.
+
+**Problem Without Slots:**
+```vue
+<!-- Hard-coded content -->
+<Card>
+  <h1>Title</h1>
+  <p>Content</p>
+  <button>Button</button>
+</Card>
+
+<!-- If you need different content, must create new component! -->
+<Card>
+  <h2>Different Title</h2>
+  <p>Different Content</p>
+  <button>Different Button</button>
+</Card>
+
+<!-- Code duplication, not reusable -->
+```
+
+**Solution With Slots:**
+```vue
+<!-- Card.vue - defines slot -->
+<template>
+  <div class="card">
+    <slot></slot>  <!-- Content goes here -->
+  </div>
+</template>
+
+<!-- Parent - provides content -->
+<Card>
+  <h1>Title</h1>  <!-- Goes into slot -->
+  <p>Content</p>
+</Card>
+
+<!-- Same Card, different content - perfect reuse! -->
+<Card>
+  <h2>Different Title</h2>
+  <p>Different Content</p>
+</Card>
+```
+
+**Slot Theory:**
+- Child defines WHERE content goes
+- Parent defines WHAT content is
+- Perfect separation of concerns
+
+```vue
+<!-- Card.vue - Multiple named slots -->
+<template>
+  <div class="card">
+    <!-- Named slot for header -->
+    <div class="header">
+      <slot name="header">Default header</slot>
+    </div>
+    
+    <!-- Default slot (unnamed) -->
+    <div class="body">
+      <slot>Default body</slot>
+    </div>
+    
+    <!-- Named slot for footer -->
+    <div class="footer">
+      <slot name="footer">Default footer</slot>
+    </div>
+  </div>
+</template>
+
+<!-- Usage - provide content for each slot -->
+<Card>
+  <!-- Provide header slot -->
+  <template v-slot:header>
+    <h1>My Header</h1>
+  </template>
+  
+  <!-- Default slot (no name) -->
+  <p>My content</p>
+  
+  <!-- Provide footer slot -->
+  <template v-slot:footer>
+    <button>OK</button>
+  </template>
+</Card>
+
+<!-- Scoped Slots - pass data from child to parent -->
+<!-- UserList.vue -->
+<template>
+  <div v-for="(user, index) in users" :key="user.id">
+    <!-- Pass data back to parent -->
+    <slot :user="user" :index="index">
+      <span>{{ user.name }}</span>
+    </slot>
+  </div>
+</template>
+
+<!-- Parent - receives data -->
+<UserList>
+  <template v-slot="{ user, index }">
+    <div>#{{ index }}: {{ user.name }}</div>
+  </template>
+</UserList>
+```
+
+**Slot Benefits:**
+- Maximum reusability
+- Parent controls presentation
+- Child controls structure
+- Flexible UI composition
+
+---
+
+## Directives - Theory: Extending HTML
+
+### Why Directives Exist
+Directives extend HTML to do things vanilla HTML can't. They're instructions to Vue on how to handle an element.
+
+**Directive Syntax:**
+```
+v-directiveName:argument.modifier="expression"
+```
+
+**Three Types of Directives:**
+
+1. **Conditional Rendering** (v-if, v-show)
+   - Problem: HTML doesn't understand application state
+   - Solution: Tell Vue how to show/hide based on data
+   - Key Decision: v-if (remove from DOM) vs v-show (hide with CSS)
+
+2. **List Rendering** (v-for)
+   - Problem: HTML doesn't iterate
+   - Solution: Vue repeats element for each item
+   - Critical: Need :key for proper tracking
+
+3. **Event Binding** (v-on, @)
+   - Problem: HTML onclick is just a string
+   - Solution: Vue binds to actual methods and modifies behavior
+   - Key: Event modifiers (@click.prevent, @click.stop)
+
+4. **Data Binding** (v-bind, :)
+   - Problem: HTML attributes are static
+   - Solution: Vue makes them dynamic based on data
+
+5. **Two-Way Binding** (v-model)
+   - Problem: Synchronizing input value both directions is tedious
+   - Solution: v-model handles it automatically
+
+### Common Directives
+
+#### v-if / v-else-if / v-else - Theory: Conditional Rendering
+
+**v-if Behavior:**
+- Completely removes element from DOM when false
+- Re-creates element when true
+- Costs: More DOM manipulation, better performance when rarely shown
+
+**When to Use v-if:**
+- When condition rarely changes
+- When hiding expensive components
+- When you need the element completely gone
+
+```html
+<div v-if="type === 'A'">A</div>
+<div v-else-if="type === 'B'">B</div>
+<div v-else>C</div>
+
+<!-- Conditional rendering group -->
+<template v-if="ok">
+  <h1>Title</h1>
+  <p>Paragraph 1</p>
+  <p>Paragraph 2</p>
+</template>
+```
+
+#### v-show - Theory: CSS-Based Conditional Display
+
+**v-show Behavior:**
+- Always keeps element in DOM
+- Only toggles display CSS (display: none)
+- Costs: Always mounted (more memory), faster toggling (better for frequent changes)
+
+**v-if vs v-show Comparison:**
+```html
+<!-- v-if: Remove from DOM -->
+<div v-if="isVisible">
+  Only exists when true
+  <!-- When false, this entire div + its children removed from DOM -->
+</div>
+
+<!-- v-show: Hide with CSS -->
+<div v-show="isVisible">
+  Always exists, just hidden
+  <!-- When false: style="display: none" applied -->
+</div>
+```
+
+**Decision Tree:**
+```
+Does condition change frequently?
+  → YES: Use v-show (faster toggling, always in DOM)
+  → NO: Use v-if (cleaner DOM, fewer resources)
+
+Is component expensive to create?
+  → YES: Use v-show (render once, hide/show)
+  → NO: Use v-if (create/destroy is cheap)
+
+Examples:
+- Tab panel: v-if (rarely shown)
+- Modal: v-show (frequent toggle)
+- Loading spinner: v-show (toggles often)
+- Error message: v-if (rarely shown)
+```
+
+```html
+<!-- v-if removes from DOM -->
+<div v-if="ok">Shown</div>
+<!-- When false: Element not in DOM at all -->
+
+<!-- v-show hides with CSS -->
+<div v-show="ok">Shown</div>
+<!-- When false: <div style="display: none">Shown</div> -->
+```
+
+#### v-for - Theory: List Rendering
+
+**v-for Purpose:**
+- Renders element once for each item in array/object
+- Automatically updates when array changes
+
+**Critical Concept: The :key Attribute**
+
+```javascript
+// Why :key matters
+const users = [
+  { id: 1, name: 'Alice' },
+  { id: 2, name: 'Bob' },
+  { id: 3, name: 'Charlie' }
+]
+
+// ❌ WITHOUT :key (using array index)
+// Vue can't track which physical DOM element corresponds to which user
+// If array changes, Vue might reuse wrong DOM elements
+// Results in: lost focus, form inputs mixed up, wrong CSS states
+
+// ✅ WITH :key="user.id"
+// Vue knows: "This DOM element always belongs to user.id=1"
+// If array reorders, Vue moves DOM element to correct position
+// Results in: correct state, correct focus, correct behavior
+```
+
+**:key Must Be Unique and Stable:**
+```javascript
+// ❌ DON'T use array index as key
+<div v-for="item in items" :key="index">{{ item }}</div>
+// Problem: If you reorder array, index changes → Vue confused
+
+// ✅ DO use unique identifier
+<div v-for="item in items" :key="item.id">{{ item }}</div>
+// Good: ID never changes, Vue can track correctly
+```
+
+```html
+<!-- Array iteration -->
+<ul>
+  <li v-for="item in items" :key="item.id">{{ item }}</li>
+</ul>
+
+<!-- Object iteration -->
+<div v-for="(value, key, index) in object" :key="key">
+  {{ index }}. {{ key }}: {{ value }}
+</div>
+
+<!-- Range (repeat n times) -->
+<span v-for="n in 10" :key="n">{{ n }}</span>
+
+<!-- Key binding for groups -->
+<template v-for="user in users" :key="user.id">
+  <h3>{{ user.name }}</h3>
+</template>
+```
+
+#### v-on / @ - Theory: Event Handling
+
+**Event Flow:**
+```
+User does something (click, type, etc.)
+    ↓
+Browser fires event
+    ↓
+Vue catches it
+    ↓
+Calls handler method with event object
+    ↓
+Handler updates data
+    ↓
+Component re-renders
+```
+
+**Event Modifiers - Change Event Behavior:**
+```javascript
+// Modifiers change HOW Vue handles the event
+
+@submit.prevent
+  // Calls e.preventDefault()
+  // Prevents form from submitting (page reload)
+  
+@click.stop
+  // Calls e.stopPropagation()
+  // Prevents event from bubbling up to parent
+
+@click.self
+  // Only triggers if event target is this element
+  // Ignores bubbled events from children
+
+@click.once
+  // Handler only fires once
+
+@click.capture
+  // Uses capture phase instead of bubbling
+```
+
+**Key Modifiers - Listen for Specific Keys:**
+```javascript
+// Keyboard keys
+@keyup.enter      // Enter key only
+@keydown.escape   // Escape key only
+@keyup.space      // Space key only
+
+// Modifier combinations
+@keyup.ctrl.a     // Ctrl+A together
+@keydown.shift.enter
+
+// Mouse buttons
+@click.left       // Left click only
+@click.right      // Right click only
+@click.middle     // Middle click only
+```
+
+```html
+<!-- Event handling -->
+<button @click="count++">{{ count }}</button>
+<button @click="greet('Hi')">Greet</button>
+
+<!-- Multiple events -->
+<input @keyup.enter="submit" @blur="onBlur" />
+
+<!-- Event modifiers -->
+<form @submit.prevent="onSubmit"></form>
+<a @click.stop="doSomething"></a>
+<div @click.self="doSomething"></div>
+
+<!-- Key modifiers -->
+<input @keyup.enter="submit" />
+<input @keydown.ctrl.a="selectAll" />
+<input @keyup.space="onSpace" />
+
+<!-- Mouse modifiers -->
+<div @click.left="doThis"></div>
+<div @click.right="doThat"></div>
+```
+
+#### v-bind / : - Theory: Attribute Data Binding
+
+**Why v-bind Exists:**
+```html
+<!-- ❌ Without v-bind (static) -->
+<img src="image.jpg">
+<div class="active">Content</div>
+
+<!-- Problem: Can't change based on component data -->
+<!-- Must dynamically generate attribute value -->
+
+<!-- ✅ With v-bind (dynamic) -->
+<img :src="imageUrl">
+<div :class="{ active: isActive }">Content</div>
+<!-- Attribute value bound to data, updates when data changes -->
+```
+
+**Binding Different Attribute Types:**
+```javascript
+// String attributes
+:src="url"                    // Updates src to value of url variable
+:alt="description"            // Updates alt text
+
+// Boolean attributes - true removes/keeps attribute
+:disabled="isLoading"         // disabled="" when true, removed when false
+:readonly="isReadOnly"
+
+// Array/Object attributes
+:class="{ active: true }"     // Conditional classes
+:style="{ color: 'red' }"     // Inline styles
+
+// Dynamic attributes
+:[attributeName]="value"      // Attribute name itself is dynamic
+```
+
+```html
+<!-- Attribute binding -->
+<img :src="imageSrc" />
+<div :id="`item-${itemId}`"></div>
+
+<!-- Boolean attributes -->
+<button :disabled="isLoading">Click</button>
+
+<!-- Class binding -->
+<div :class="{ active: isActive, 'text-danger': hasError }"></div>
+<div :class="[activeClass, errorClass]"></div>
+
+<!-- Style binding -->
+<div :style="{ color: activeColor, fontSize: fontSize + 'px' }"></div>
+<div :style="[baseStyles, overridingStyles]"></div>
+```
+
+#### v-model - Theory: Two-Way Data Binding
+
+**The Problem v-model Solves:**
+```javascript
+// Without v-model - manual binding
+<input 
+  :value="message"
+  @input="(e) => message = e.target.value"
+/>
+// Problem: Verbose! Must bind :value and listen to @input
+
+// With v-model - automatic
+<input v-model="message" />
+// Solution: Vue handles both directions automatically
+```
+
+**What v-model Does:**
+```
+Incoming direction:
+  Data → Element value (bind)
+  
+Outgoing direction:
+  User input → Data updates (listen & update)
+
+Two-way synchronization = v-model
+```
+
+**v-model Modifiers - Change Behavior:**
+```javascript
+v-model.lazy
+  // Default: Updates on input event (every keystroke)
+  // With .lazy: Only updates on change event (when user leaves field)
+  
+v-model.number
+  // Default: Keeps as string "123"
+  // With .number: Converts to number 123
+  
+v-model.trim
+  // Default: Keeps whitespace
+  // With .trim: Removes leading/trailing spaces
+```
+
+```html
+<!-- Text input -->
+<input v-model="message" />
+
+<!-- Textarea -->
+<textarea v-model="message"></textarea>
+
+<!-- Checkbox -->
+<input type="checkbox" v-model="isChecked" />
+<input type="checkbox" v-model="selected" value="A" />
+
+<!-- Radio -->
+<input type="radio" v-model="selected" value="One" />
+
+<!-- Select -->
+<select v-model="selected">
+  <option value="">Choose</option>
+  <option value="A">Option A</option>
+  <option value="B">Option B</option>
+</select>
+
+<!-- Modifiers -->
+<input v-model.lazy="message" />  <!-- sync on change -->
+<input v-model.number="age" />     <!-- auto convert to number -->
+<input v-model.trim="message" />   <!-- trim whitespace -->
+```
+
+#### v-html - Theory: Raw HTML Rendering
+
+**When to Use v-html:**
+- Only when HTML comes from trusted source
+- Never with user-generated content (XSS vulnerability)
+
+```html
+<!-- Renders HTML content (use carefully!) -->
+<div v-html="htmlString"></div>
+<!-- If htmlString = "<strong>Bold</strong>", renders as bold -->
+```
+
+#### v-text - Theory: Text Content
+
+**v-text Purpose:**
+- Sets element's text content
+- Equivalent to {{ message }} but older/simpler
+
+```html
+<!-- Sets text content -->
+<div v-text="message"></div>
+<!-- Equivalent to {{ message }} -->
+```
+
+#### v-cloak - Theory: Loading Flash Prevention
+
+**Problem Solved:**
+```html
+<!-- Without v-cloak - user sees this briefly while loading -->
+{{ message }}
+<!-- Shows "{{ message }}" instead of content for 1-2 seconds -->
+
+<!-- With v-cloak - hidden until ready -->
+<div v-cloak>{{ message }}</div>
+<!-- Stays hidden until Vue renders, then shows correct content -->
+```
+
+```html
+<!-- Add CSS rule: -->
+<style>
+  [v-cloak] {
+    display: none;  /* Hide until Vue compiles -->
+  }
+</style>
+
+<!-- Use in template: -->
+<div v-cloak>
+  {{ message }}
+</div>
+
+<style>
+[v-cloak] {
+  display: none;
+}
+</style>
+```
+
+### Custom Directives
+```javascript
+// Vue 2
+Vue.directive('focus', {
+  inserted(el) {
+    el.focus()
+  }
+})
+
+// Usage
+<input v-focus />
+
+// Vue 3
+const app = createApp({})
+
+app.directive('focus', {
+  mounted(el) {
+    el.focus()
+  }
+})
+
+// Local directive
+<script setup>
+const vFocus = {
+  mounted: (el) => el.focus()
+}
+</script>
+
+<input v-focus />
+
+// Custom directive with value
+app.directive('highlight', {
+  mounted(el, binding) {
+    el.style.backgroundColor = binding.value
+  }
+})
+
+<div v-highlight="'yellow'"></div>
+```
+
+---
+
+## Lifecycle Hooks - Theory: Component Execution Phases
+
+### Why Lifecycle Hooks Exist
+
+A component has a lifecycle - it's created, mounted, updated, and destroyed. Lifecycle hooks let you run code at specific moments.
+
+**Component Lifecycle Timeline:**
+```
+1. Creation Phase
+   └─ Instance created, no DOM yet
+   └─ Data is reactive, watchers set up
+   └─ Can't access template or refs
+
+2. Mounting Phase
+   └─ Template compiled to Virtual DOM
+   └─ Virtual DOM converted to real DOM
+   └─ Component now visible, refs available
+   └─ Perfect time to fetch initial data
+
+3. Update Phase
+   └─ Data changes → reactivity detects
+   └─ Virtual DOM re-renders
+   └─ Diff algorithm compares old vs new
+   └─ Only changed DOM updated
+   └─ Can prevent updates, modify before/after
+
+4. Unmounting Phase
+   └─ Component removed from DOM
+   └─ Perfect time to cleanup (remove listeners, cancel requests)
+```
+
+### Vue 2 Lifecycle - Theory: When Each Hook Fires
+
+```javascript
+new Vue({
+  // ============ CREATION PHASE ============
+  
+  beforeCreate() {
+    // Called: Before data and methods are set up
+    // Useful: Almost never (too early)
+    // Can access: window, nothing Vue-related yet
+    // Cannot access: data, methods, computed
+  },
+  
+  created() {
+    // Called: Instance created, reactivity ready
+    // Useful: Fetch API data, set up subscriptions
+    // Can access: data, methods, computed
+    // Cannot access: DOM, refs
+    // BEST FOR: Initial data loading, event listeners
+    
+    this.fetchUser()  // ✓ Good - data ready
+  },
+  
+  // ============ MOUNTING PHASE ============
+  
+  beforeMount() {
+    // Called: Before template renders to DOM
+    // Useful: Almost never
+    // Virtual DOM created, real DOM not yet
+  },
+  
+  mounted() {
+    // Called: Component mounted, DOM ready
+    // Useful: Access DOM elements, set focus, integrate libraries
+    // Can access: DOM, refs
+    // Perfect for: jQuery plugins, 3rd party libs, DOM manipulation
+    
+    this.$refs.input.focus()  // ✓ Good - DOM ready
+    new Chart(this.$refs.chart)  // ✓ Good
+  },
+  
+  // ============ UPDATE PHASE ============
+  
+  beforeUpdate() {
+    // Called: Before data update, before re-render
+    // Useful: Save scroll position, capture current state
+    // Can still access: old DOM
+  },
+  
+  updated() {
+    // Called: After data update, after DOM updated
+    // Useful: Respond to data changes, DOM updates complete
+    // Can access: new DOM
+    // WARNING: Can cause infinite loop if you modify data here
+    
+    this.scrollToBottom()  // ✓ Good - respond to updates
+    // ❌ DON'T: this.count++ (triggers another update!)
+  },
+  
+  // ============ UNMOUNTING PHASE ============
+  
+  beforeDestroy() {
+    // Called: Before component destroyed
+    // Useful: Prepare for cleanup
+  },
+  
+  destroyed() {
+    // Called: Component removed from DOM
+    // Useful: Cleanup - remove listeners, cancel requests
+    // Perfect for: Preventing memory leaks
+    
+    this.socket.close()  // ✓ Good - cleanup
+    clearTimeout(this.timer)  // ✓ Good
+    this.eventBus.$off()  // ✓ Good
+  }
+})
+```
+
+**Common Lifecycle Patterns:**
+
+```javascript
+// Pattern 1: Initial Setup
+export default {
+  created() {
+    // Set default data from props
+    this.initialized = true
+  },
+  mounted() {
+    // Fetch data
+    this.fetchData()
+  }
+}
+
+// Pattern 2: Watch External Changes
+export default {
+  mounted() {
+    window.addEventListener('resize', this.onResize)
+  },
+  destroyed() {
+    window.removeEventListener('resize', this.onResize)  // Cleanup!
+  }
+}
+
+// Pattern 3: Respond to Data Changes
+export default {
+  updated() {
+    this.$nextTick(() => {
+      // DOM is definitely updated here
+      console.log('DOM updated')
+    })
+  }
+}
+```
+
+### Vue 3 Lifecycle - Theory: Composition API Hooks
+
+**Key Differences from Vue 2:**
+- Hooks are functions (imported)
+- Multiple hooks possible per component
+- Cleaner code organization (related logic together)
+
+```javascript
+import {
+  onBeforeMount,
+  onMounted,
+  onBeforeUpdate,
+  onUpdated,
+  onBeforeUnmount,
+  onUnmounted
+} from 'vue'
+
+export default {
+  setup() {
+    // ============ CREATION PHASE ============
+    // (setup() itself IS the creation phase)
+    
+    // ============ MOUNTING PHASE ============
+    
+    onBeforeMount(() => {
+      // Before DOM mount
+    })
+    
+    onMounted(() => {
+      // DOM ready, refs available
+      // Perfect for: data fetching, DOM manipulation
+      
+      const { data } = await fetch('/api/users')
+      users.value = data
+    })
+    
+    // ============ UPDATE PHASE ============
+    
+    onBeforeUpdate(() => {
+      // Before re-render
+    })
+    
+    onUpdated(() => {
+      // After re-render, DOM updated
+      // Be careful: Can cause infinite loop if you modify state
+    })
+    
+    // ============ UNMOUNTING PHASE ============
+    
+    onBeforeUnmount(() => {
+      // Before destruction
+    })
+    
+    onUnmounted(() => {
+      // Cleanup time
+      // Perfect for: removing listeners, canceling requests
+    })
+  }
+}
+```
+
+### Vue 2 Lifecycle
+```javascript
+new Vue({
+  beforeCreate() {
+    console.log('Before instance created')
+  },
+  created() {
+    console.log('Instance created, data available')
+  },
+  beforeMount() {
+    console.log('Before DOM mount')
+  },
+  mounted() {
+    console.log('Mounted to DOM, refs available')
+  },
+  beforeUpdate() {
+    console.log('Before data update')
+  },
+  updated() {
+    console.log('After data update')
+  },
+  beforeDestroy() {
+    console.log('Before destruction')
+  },
+  destroyed() {
+    console.log('Destroyed')
+  }
+})
+```
+
+### Vue 3 Lifecycle
+```javascript
+import {
+  onBeforeMount,
+  onMounted,
+  onBeforeUpdate,
+  onUpdated,
+  onBeforeUnmount,
+  onUnmounted
+} from 'vue'
+
+export default {
+  setup() {
+    onBeforeMount(() => {
+      console.log('Before mount')
+    })
+    
+    onMounted(() => {
+      console.log('Mounted')
+    })
+    
+    onBeforeUpdate(() => {
+      console.log('Before update')
+    })
+    
+    onUpdated(() => {
+      console.log('Updated')
+    })
+    
+    onBeforeUnmount(() => {
+      console.log('Before unmount')
+    })
+    
+    onUnmounted(() => {
+      console.log('Unmounted')
+    })
+  }
+}
+```
+
+### Lifecycle Diagram (Vue 3)
+```
+create → beforeMount → mount → beforeUpdate → update → beforeUnmount → unmount
+   ↓
+ setup()
+   ↓
+beforeCreate()
+   ↓
+created()
+   ↓
+beforeMount()
+   ↓
+onMounted()
+   ↓
+[User interactions]
+   ↓
+beforeUpdate()
+   ↓
+onUpdated()
+   ↓
+beforeUnmount()
+   ↓
+onUnmounted()
+```
+
+---
+
+## State Management - Theory: Sharing Data Across Components
+
+### The Problem: Prop Drilling
+
+As your app grows, you need to share data across many nested components.
+
+```vue
+<!-- GrandParent has data, but Child needs it -->
+<GrandParent :user="user" />
+  <Parent :user="user" />      <!-- Parent doesn't use it, just passes through -->
+    <Child :user="user" />     <!-- Child finally uses it -->
+```
+
+**Problems:**
+- Intermediate components receive props they don't use
+- Hard to track where data comes from
+- Changing prop names breaks everything
+- Difficult to maintain as app grows
+
+### Three Solutions to Prop Drilling
+
+#### 1. Provide/Inject - Theory: Simple Cross-Component Data
+
+**When to Use:** Small app, only a few shared values
+
+**How it Works:**
+```
+Ancestor provides value
+    ↓
+Descendant anywhere can inject it
+    ↓
+No intermediate props needed
+```
+
+```vue
+<!-- GrandParent.vue - Provide -->
+<script setup>
+import { provide } from 'vue'
+
+const user = { name: 'John', role: 'admin' }
+provide('currentUser', user)  // Any descendant can access
+</script>
+
+<!-- Child.vue - Inject (anywhere in tree) -->
+<script setup>
+import { inject } from 'vue'
+
+const user = inject('currentUser')  // Gets from nearest ancestor
+// No props, no drilling, just request what you need
+</script>
+```
+
+**Benefits:**
+- ✓ No prop drilling
+- ✓ Clean component tree
+
+**Limitations:**
+- ✗ Not reactive if parent changes provided value
+- ✗ Hard to track where data comes from
+- ✗ No centralized state management
+- ✗ Each component pair needs setup
+
+#### 2. Event Bus - Theory: Component Communication
+
+**When to Use:** Small app, occasional cross-component events
+
+**Problem Solved:**
+```javascript
+// Without event bus - tight coupling
+// Parent needs to know about all child events
+// Hard to coordinate between siblings
+
+// With event bus - loose coupling
+// Any component can emit, any can listen
+// Like a radio station - broadcast and subscribe
+```
+
+```javascript
+// eventBus.js
+import { createApp } from 'vue'
+const app = createApp({})
+
+export const eventBus = {
+  events: {},
+  
+  on(event, callback) {
+    if (!this.events[event]) this.events[event] = []
+    this.events[event].push(callback)
+  },
+  
+  emit(event, data) {
+    if (this.events[event]) {
+      this.events[event].forEach(callback => callback(data))
+    }
+  },
+  
+  off(event, callback) {
+    if (this.events[event]) {
+      this.events[event] = this.events[event].filter(cb => cb !== callback)
+    }
+  }
+}
+```
+
+**Limitations:**
+- ✗ No centralized state - hard to see all data flow
+- ✗ Hard to debug - events fire across app
+- ✗ Memory leaks if not cleaned up
+- ✗ Spaghetti dependencies
+
+#### 3. Centralized Store (Pinia) - Theory: Single Source of Truth
+
+**When to Use:** Medium to large app, many components need shared state
+
+**Problem Solved:**
+```
+Multiple components need same data
+    ↓
+Without store: Each component copies data (out of sync)
+With store: One source, all read from it (always in sync)
+```
+
+**Store Concept:**
+```
+User updates form
+    ↓
+Calls store action (mutation)
+    ↓
+Store updates its state
+    ↓
+All components reading that state automatically update
+    ↓
+No manual prop passing needed
+```
+
+### Solution 1: Provide/Inject
+```vue
+<!-- Passing props through many levels -->
+<GrandParent :user="user" />
+<Parent :user="user" />
+<Child :user="user" />
+<!-- Becomes unmaintainable -->
+```
+
+### Solution 1: Provide/Inject
+```vue
+<!-- GrandParent.vue -->
+<script setup>
+import { provide } from 'vue'
+
+const user = { name: 'John' }
+provide('user', user)
+</script>
+
+<!-- Child.vue (anywhere in tree) -->
+<script setup>
+import { inject } from 'vue'
+
+const user = inject('user')
+</script>
+```
+
+### Solution 2: Pinia Store - Theory: Centralized State Management
+
+**Why Pinia Exists:**
+- Single source of truth for app state
+- Predictable state updates (all mutations go through actions)
+- Easy debugging (see all state changes)
+- Automatic reactivity (all components update when state changes)
+
+**Pinia Concepts:**
+
+1. **State** - The data
+2. **Getters** - Computed values (cached)
+3. **Actions** - Methods that modify state
+
+```bash
+npm install pinia
+```
+
+```javascript
+// main.js - Setup Pinia
+import { createPinia } from 'pinia'
+import { createApp } from 'vue'
+import App from './App.vue'
+
+const app = createApp(App)
+app.use(createPinia())  // Add Pinia to app
+app.mount('#app')
+```
+
+```javascript
+// stores/userStore.js - Define store
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+
+export const useUserStore = defineStore('user', () => {
+  // ========== STATE ==========
+  // The actual data
+  const users = ref([])
+  const currentUser = ref(null)
+  const loading = ref(false)
+  
+  // ========== GETTERS ==========
+  // Computed values (cached, recalculated only when dependencies change)
+  const userCount = computed(() => users.value.length)
+  
+  const isLoggedIn = computed(() => currentUser.value !== null)
+  
+  const currentUsername = computed(() => currentUser.value?.name ?? 'Guest')
+  
+  // ========== ACTIONS ==========
+  // Methods that update state
+  
+  const fetchUsers = async () => {
+    loading.value = true
+    try {
+      const response = await fetch('/api/users')
+      users.value = await response.json()
+    } finally {
+      loading.value = false
+    }
+  }
+  
+  const login = (user) => {
+    currentUser.value = user  // Just update state
+    // That's it! All components automatically get the new data
+  }
+  
+  const logout = () => {
+    currentUser.value = null
+  }
+  
+  const updateUser = (updates) => {
+    if (currentUser.value) {
+      currentUser.value = { ...currentUser.value, ...updates }
+    }
+  }
+  
+  return {
+    // State
+    users,
+    currentUser,
+    loading,
+    
+    // Getters
+    userCount,
+    isLoggedIn,
+    currentUsername,
+    
+    // Actions
+    fetchUsers,
+    login,
+    logout,
+    updateUser
+  }
+})
+```
+
+**Using Pinia Store in Components:**
+
+```vue
+<!-- Component.vue -->
+<script setup>
+import { useUserStore } from '@/stores/userStore'
+
+// Get store instance
+const userStore = useUserStore()
+
+// When you update store state, component automatically re-renders
+const handleLogin = async (credentials) => {
+  const response = await fetch('/api/login', {
+    method: 'POST',
+    body: JSON.stringify(credentials)
+  })
+  const user = await response.json()
+  userStore.login(user)  // Update store → component updates
+}
+
+const handleLogout = () => {
+  userStore.logout()  // Update store → component updates
+}
+</script>
+
+<template>
+  <div>
+    <!-- Access state directly -->
+    <p v-if="userStore.isLoggedIn">
+      Welcome, {{ userStore.currentUsername }}!
+    </p>
+    
+    <!-- Access computed values -->
+    <p>Total users: {{ userStore.userCount }}</p>
+    
+    <!-- Show loading state -->
+    <p v-if="userStore.loading">Loading...</p>
+    
+    <!-- Call actions -->
+    <button @click="userStore.fetchUsers">Fetch Users</button>
+    <button @click="handleLogout">Logout</button>
+  </div>
+</template>
+```
+
+**Why Pinia is Better Than Prop Drilling:**
+
+```
+Prop Drilling:
+  Component A has data
+  Passes to Component B (doesn't use it)
+  B passes to Component C (doesn't use it)
+  C passes to Component D (finally uses it!)
+  ❌ Hard to maintain, hard to trace
+
+Pinia Store:
+  Component A, D, and any others
+  All directly access store
+  ✓ Clear, maintainable, easy to debug
+  ✓ Store is single source of truth
+```
+
+### Solution 2: Vue Router with Store
+
+#### Vuex (Legacy - Vue 2)
+```javascript
+// store.js
+import Vuex from 'vuex'
+
+export default new Vuex.Store({
+  state: {
+    count: 0,
+    users: []
+  },
+  getters: {
+    doubleCount: (state) => state.count * 2
+  },
+  mutations: {
+    increment(state) {
+      state.count++
+    },
+    setUsers(state, users) {
+      state.users = users
+    }
+  },
+  actions: {
+    async fetchUsers({ commit }) {
+      const response = await fetch('/api/users')
+      const users = await response.json()
+      commit('setUsers', users)
+    }
+  }
+})
+```
+
+---
+
+## Routing - Theory: Single Page Applications
+
+### Why Vue Router Exists
+
+Traditional web apps: Each URL = full page reload (slow, flickers)
+Single Page App: One HTML file, Vue controls what shows based on URL
+
+**Vue Router Purpose:**
+- Map URLs to components
+- Update component without page reload
+- Maintain browser history (back button works)
+- Enable client-side navigation
+
+**How Vue Router Works:**
+```
+User clicks link
+    ↓
+Router intercepts (prevents page reload)
+    ↓
+Changes route in browser URL
+    ↓
+Vue matches URL to route
+    ↓
+Loads matching component
+    ↓
+Renders new component (no page reload!)
+    ↓
+Browser history updated (back button works)
+```
+
+### Vue Router Setup
+
+```bash
+npm install vue-router@4
+```
+
+```javascript
+// router/index.js - Route definitions
+import { createRouter, createWebHistory } from 'vue-router'
+import Home from '@/pages/Home.vue'
+import About from '@/pages/About.vue'
+import UserDetail from '@/pages/UserDetail.vue'
+import NotFound from '@/pages/NotFound.vue'
+
+// Define routes: URL → Component
+const routes = [
+  {
+    path: '/',                    // URL path
+    component: Home,              // Component to show
+    name: 'home'                  // Named route (for easy linking)
+  },
+  {
+    path: '/about',
+    component: About,
+    name: 'about'
+  },
+  {
+    // Dynamic route - :id is parameter
+    path: '/users/:id',
+    component: UserDetail,
+    name: 'user-detail',
+    props: true                   // Pass URL params as props
+  },
+  {
+    // Catch-all route - must be last
+    path: '/:pathMatch(.*)*',     // Matches anything not matched above
+    component: NotFound,
+    name: 'not-found'
+  }
+]
+
+const router = createRouter({
+  history: createWebHistory(),    // Use browser history
+  routes
+})
+
+export default router
+```
+
+```javascript
+// main.js - Install router
+import { createApp } from 'vue'
+import App from './App.vue'
+import router from './router'
+
+createApp(App).use(router).mount('#app')
+```
+
+### Router Components and Hooks
+
+**RouterLink** - Creates navigation links
+**RouterView** - Shows matched component
+**useRouter()** - Programmatic navigation
+**useRoute()** - Access current route info
+
+```vue
+<!-- App.vue -->
+<template>
+  <div>
+    <!-- Navigation -->
+    <nav>
+      <!-- RouterLink instead of <a> (prevents reload) -->
+      <RouterLink to="/">Home</RouterLink>
+      <RouterLink to="/about">About</RouterLink>
+      <!-- Active link gets 'router-link-active' class -->
+    </nav>
+    
+    <!-- Route content goes here -->
+    <RouterView />
+  </div>
+</template>
+
+<script setup>
+import { useRouter, useRoute } from 'vue-router'
+
+const router = useRouter()  // For programmatic navigation
+const route = useRoute()    // For accessing current route info
+
+// Programmatic navigation (like router.push in Options API)
+const navigate = () => {
+  router.push({ name: 'about' })  // Navigate by name
+  // or
+  router.push('/about')            // Navigate by path
+}
+
+// Access route params and query
+const userId = route.params.id           // /users/123 → id = '123'
+const searchQuery = route.query.search   // ?search=vue → 'vue'
+</script>
+```
+
+### Route Guards - Theory: Protecting Routes
+
+**Why Route Guards Exist:**
+- Verify user is logged in before accessing admin page
+- Fetch data before showing page
+- Prevent unsaved changes
+- Redirect based on user role
+
+**Guard Types:**
+
+```javascript
+// Global guard - runs on EVERY navigation
+router.beforeEach((to, from, next) => {
+  // to = destination route
+  // from = current route
+  // next() = continue, next(false) = cancel, next('/login') = redirect
+  
+  if (to.requiresAuth && !isLoggedIn) {
+    // Destination requires auth but user not logged in
+    next('/login')      // Redirect to login
+  } else {
+    next()              // Allow navigation
+  }
+})
+
+// Global after guard - runs AFTER navigation complete
+router.afterEach((to, from) => {
+  // Good for: analytics, progress indicators
+  document.title = to.meta.title || 'App'
+})
+
+// Per-route guard
+const routes = [
+  {
+    path: '/admin',
+    component: Admin,
+    beforeEnter: (to, from, next) => {
+      // Only runs for this specific route
+      if (user.isAdmin) {
+        next()
+      } else {
+        next('/')  // Redirect if not admin
+      }
+    }
+  }
+]
+
+// In-component guard
+export default {
+  beforeRouteLeave(to, from, next) {
+    // Called when leaving this component
+    if (hasUnsavedChanges) {
+      const answer = confirm('Unsaved changes. Leave anyway?')
+      next(answer)  // true = leave, false = stay
+    } else {
+      next()
+    }
+  }
+}
+```
+
+### Route Guards
+```javascript
+// Global guard
+router.beforeEach((to, from, next) => {
+  if (to.requiresAuth && !isLoggedIn) {
+    next('/login')
+  } else {
+    next()
+  }
+})
+
+router.afterEach((to, from) => {
+  console.log('Navigation complete')
+})
+
+// Per-route guard
+{
+  path: '/admin',
+  component: Admin,
+  beforeEnter: (to, from, next) => {
+    if (isAdmin) next()
+    else next('/')
+  }
+}
+
+// In-component guard
+<script setup>
+import { onBeforeRouteUpdate, onBeforeRouteLeave } from 'vue-router'
+
+onBeforeRouteUpdate((to, from, next) => {
+  console.log('Route updating')
+  next()
+})
+
+onBeforeRouteLeave((to, from, next) => {
+  if (hasUnsavedChanges) {
+    const answer = window.confirm('Discard changes?')
+    answer ? next() : next(false)
+  } else {
+    next()
+  }
+})
+</script>
+```
+
+---
+
+## Composition API - Theory: Modern Vue Code Organization
+
+### Why Composition API Exists
+
+**Problem with Options API:**
+```javascript
+// Options API - scattered logic
+export default {
+  data() {
+    return { count: 0, message: '' }
+  },
+  computed: {
+    doubled() { return this.count * 2 }
+  },
+  watch: {
+    count(newVal) { console.log(newVal) }
+  },
+  methods: {
+    increment() { this.count++ }
+  },
+  mounted() {
+    this.setupListener()
+  }
+}
+
+// Problems:
+// ❌ Related logic scattered across options
+// ❌ Hard to extract and reuse
+// ❌ As component grows, hard to find what belongs together
+// ❌ "What does this component do?" answer scattered
+```
+
+**Solution with Composition API:**
+```javascript
+// Composition API - logic grouped by feature
+export default {
+  setup() {
+    // Counter feature - all together
+    const count = ref(0)
+    const doubled = computed(() => count.value * 2)
+    watch(count, (newVal) => console.log(newVal))
+    const increment = () => count.value++
+    
+    // Message feature - all together
+    const message = ref('')
+    const updateMessage = (msg) => message.value = msg
+    
+    return { count, doubled, increment, message, updateMessage }
+  }
+}
+
+// Benefits:
+// ✓ Related logic together (feature-based not option-based)
+// ✓ Easy to extract into composables
+// ✓ Clearer what component does
+// ✓ Better code reuse
+```
+
+### Composition API Key Concepts
+
+#### ref() - Theory: Reactive Primitives
+
+**Problem Without ref:**
+```javascript
+// ❌ This doesn't work
+let count = 0  // Not reactive
+count++        // Vue doesn't notice change
+```
+
+**Solution With ref:**
+```javascript
+const count = ref(0)  // Wraps in Proxy
+count.value++         // Vue notices change
+```
+
+**How ref Works:**
+```javascript
+const count = ref(0)
+
+// Internally: { value: 0 }
+// Proxy wraps it
+// When value changes, triggers reactivity
+
+// Must use .value in script
+count.value = 5
+
+// But in template, .value is automatic!
+// Template: {{ count }}  (no .value needed)
+```
+
+**When to Use ref vs reactive:**
+```javascript
+// Use ref for primitives and simple values
+const name = ref('John')
+const age = ref(30)
+const isLoading = ref(false)
+
+// Use reactive for objects/arrays
+const user = reactive({
+  name: 'John',
+  email: 'john@example.com'
+})
+
+// Rule of thumb:
+// - Primitive? Use ref
+// - Object/Array? Use reactive (or ref works too)
+```
+
+#### computed() - Theory: Cached Derived Values
+
+**Computed Advantages:**
+```javascript
+// Without computed - recalculates every time
+const fullName = () => firstName.value + ' ' + lastName.value
+// Called 100 times? Recalculates 100 times
+
+// With computed - caches result
+const fullName = computed(() => firstName.value + ' ' + lastName.value)
+// Called 100 times? Calculates once, returns cache
+// Only recalculates if dependencies change
+```
+
+**Getter and Setter:**
+```javascript
+// Computed with setter
+const fullName = computed({
+  get: () => firstName.value + ' ' + lastName.value,
+  set: (newValue) => {
+    const parts = newValue.split(' ')
+    firstName.value = parts[0]
+    lastName.value = parts[1]
+  }
+})
+
+fullName.value = 'Jane Doe'  // Triggers setter
+```
+
+#### watch() - Theory: Respond to Changes
+
+**Watch Modes:**
+```javascript
+// Basic watch - fires when source changes
+watch(count, (newVal, oldVal) => {
+  console.log(`Changed from ${oldVal} to ${newVal}`)
+})
+
+// Immediate - fire right now
+watch(count, (newVal) => {
+  console.log('Initial:', newVal)
+}, { immediate: true })
+
+// Deep - watch nested properties
+watch(user, (newVal) => {
+  console.log('User changed:', newVal)
+}, { deep: true })
+
+// Cleanup - prevent memory leaks
+watch(userId, async (newUserId) => {
+  const controller = new AbortController()
+  
+  try {
+    const response = await fetch(`/api/users/${newUserId}`, {
+      signal: controller.signal
+    })
+    // ...
+  } catch (error) {
+    // ...
+  }
+  
+  // Cleanup function - runs when watch re-runs
+  return () => controller.abort()  // Cancel previous request
+})
+```
+
+### Introduction
+
+### ref() and reactive()
+```javascript
+import { ref, reactive } from 'vue'
+
+// ref - for primitives and simple values
+const count = ref(0)
+const message = ref('Hello')
+
+// Access/update with .value
+count.value++
+console.log(message.value)
+
+// reactive - for objects and arrays
+const user = reactive({
+  name: 'John',
+  age: 30,
+  hobbies: ['reading', 'coding']
+})
+
+// Direct access (no .value needed for reactive objects)
+user.name = 'Jane'
+user.hobbies.push('gaming')
+```
+
+### computed()
+```javascript
+import { computed, ref } from 'vue'
+
+const firstName = ref('John')
+const lastName = ref('Doe')
+
+const fullName = computed(() => {
+  return firstName.value + ' ' + lastName.value
+})
+
+// With setter
+const fullNameWithSetter = computed({
+  get: () => firstName.value + ' ' + lastName.value,
+  set: (newValue) => {
+    const parts = newValue.split(' ')
+    firstName.value = parts[0]
+    lastName.value = parts[1]
+  }
+})
+```
+
+### watch()
+```javascript
+import { watch, ref } from 'vue'
+
+const count = ref(0)
+const user = reactive({ name: 'John' })
+
+// Watch single ref
+watch(count, (newVal, oldVal) => {
+  console.log(`Count changed from ${oldVal} to ${newVal}`)
+})
+
+// Watch with options
+watch(count, (newVal) => {
+  // ...
+}, { immediate: true, deep: true })
+
+// Watch multiple sources
+watch([count, user], ([newCount, newUser]) => {
+  console.log('Either changed')
+})
+
+// Stop watching
+const stop = watch(count, () => {
+  console.log('Count changed')
+})
+
+// Call stop() to stop watching
+stop()
+```
+
+### watchEffect()
+```javascript
+import { watchEffect, ref } from 'vue'
+
+const count = ref(0)
+const message = ref('Hello')
+
+// Automatically tracks dependencies
+watchEffect(() => {
+  console.log(`Count: ${count.value}, Message: ${message.value}`)
+})
+
+// Cleanup function
+watchEffect((onCleanup) => {
+  const timer = setTimeout(() => {
+    console.log(count.value)
+  }, 1000)
+  
+  onCleanup(() => clearTimeout(timer))
+})
+```
+
+### Composables (Reusable Logic)
+```javascript
+// useCounter.js
+import { ref, computed } from 'vue'
+
+export function useCounter(initialValue = 0) {
+  const count = ref(initialValue)
+  const doubled = computed(() => count.value * 2)
+  
+  const increment = () => count.value++
+  const decrement = () => count.value--
+  const reset = () => count.value = initialValue
+  
+  return { count, doubled, increment, decrement, reset }
+}
+
+// useFetch.js
+import { ref, computed } from 'vue'
+
+export function useFetch(url) {
+  const data = ref(null)
+  const error = ref(null)
+  const loading = ref(false)
+  
+  const fetchData = async () => {
+    loading.value = true
+    try {
+      const response = await fetch(url)
+      data.value = await response.json()
+    } catch (e) {
+      error.value = e
+    } finally {
+      loading.value = false
+    }
+  }
+  
+  return { data, error, loading, fetchData }
+}
+
+// Component using composables
+import { useCounter } from '@/composables/useCounter'
+import { useFetch } from '@/composables/useFetch'
+
+export default {
+  setup() {
+    const { count, doubled, increment } = useCounter(0)
+    const { data, loading, fetchData } = useFetch('/api/users')
+    
+    return { count, doubled, increment, data, loading, fetchData }
+  }
+}
+```
+
+---
+
+## Advanced Topics - Theory: Complex Vue Patterns
+
+### Teleport - Theory: Render Anywhere
+
+**Problem Solved:**
+```html
+<!-- Component deeply nested -->
+<div class="page">
+  <div class="section">
+    <div class="container">
+      <Modal>  <!-- Modal here, but CSS is limited by parent -->
+        <!-- Modal renders here, constrained by page/section/container -->
+        <!-- z-index issues, transform/overflow breaks positioning -->
+      </Modal>
+    </div>
+  </div>
+</div>
+
+<!-- Better: Render modal to <body> -->
+<Teleport to="body">
+  <Modal>  <!-- Renders to <body>, not constrained -->
+  </Modal>
+</Teleport>
+```
+
+**Teleport Purpose:**
+- Render component's template to a different DOM node
+- Solves z-index and CSS containment issues with modals, tooltips, dropdowns
+- Component logic stays where it is, only rendering location changes
+
+```vue
+<!-- Component.vue -->
+<template>
+  <Teleport to="body">
+    <div class="modal-overlay">
+      <div class="modal">
+        <h1>Modal</h1>
+        <slot></slot>
+        <button @click="close">Close</button>
+      </div>
+    </div>
+  </Teleport>
+</template>
+
+<!-- Usage - component logic here, renders to body -->
+<Modal>
+  <p>Modal content - logic lives with component, renders to body</p>
+</Modal>
+
+<!-- Result in HTML: -->
+<!-- 
+  <body>
+    <div id="app">...</div>
+    <div class="modal-overlay">  <!-- Teleported here! -->
+      <div class="modal">...</div>
+    </div>
+  </body>
+-->
+```
+
+### Suspense - Theory: Async Component Loading
+
+**Problem Without Suspense:**
+```vue
+<!-- Without Suspense - can't wait for async setup -->
+<AsyncComponent />
+
+<!-- Component has async setup() -->
+<script setup>
+const data = await fetch('/api/data')  // Takes time
+</script>
+
+<!-- Problem: Component renders before data loads -->
+<!-- Race condition, undefined data, errors -->
+```
+
+**Solution With Suspense:**
+```vue
+<!-- With Suspense - shows loading until ready -->
+<Suspense>
+  <template #default>
+    <AsyncComponent />  <!-- Waits for this to be ready -->
+  </template>
+  
+  <template #fallback>
+    <div>Loading...</div>  <!-- Shows until ready -->
+  </template>
+</Suspense>
+
+<!-- Flow:
+  1. Suspense shows fallback
+  2. AsyncComponent setup() runs (fetching data)
+  3. When ready, replaces fallback with default
+  4. No undefined data, clean loading UX -->
+```
+
+### Keep-Alive - Theory: Component State Preservation
+
+**Problem Without Keep-Alive:**
+```vue
+<!-- Without Keep-Alive -->
+<component :is="activeComponent" />
+
+<!-- If you switch components A → B → A -->
+<!-- A is destroyed, then recreated from scratch -->
+<!-- Lost state: form data, scroll position, etc. -->
+```
+
+**Solution With Keep-Alive:**
+```vue
+<!-- With Keep-Alive -->
+<KeepAlive>
+  <component :is="activeComponent" />
+</KeepAlive>
+
+<!-- If you switch components A → B → A -->
+<!-- A is cached, not destroyed -->
+<!-- State preserved: form data, scroll position, etc. -->
+
+<!-- Performance:
+  Without Keep-Alive:
+    A → destroy/recreate → A' (slower, state lost)
+  
+  With Keep-Alive:
+    A (cached) → B (showing) → A (restore from cache, instant)
+-->
+```
+
+**Include/Exclude:**
+```vue
+<!-- Only cache ComponentA and ComponentB -->
+<KeepAlive include="ComponentA,ComponentB">
+  <component :is="activeComponent" />
+</KeepAlive>
+
+<!-- Cache all except ComponentExpensive -->
+<KeepAlive exclude="ComponentExpensive">
+  <component :is="activeComponent" />
+</KeepAlive>
+
+<!-- Lifecycle with Keep-Alive -->
+<script setup>
+import { onActivated, onDeactivated } from 'vue'
+
+onActivated(() => {
+  // Component shown after being cached
+  // Good for: resume timers, restart animations
+})
+
+onDeactivated(() => {
+  // Component hidden but kept alive
+  // Good for: pause timers, save state
+})
+</script>
+```
+
+### Transitions - Theory: Smooth Animations
+
+**Why Transitions Exist:**
+- Abrupt element appearance/disappearance is jarring
+- Transitions smooth changes for better UX
+
+**Transition Phases:**
+```
+v-if becomes true
+  ↓
+Enter phase starts
+  ↓
+Enter-active: Animate
+  ↓
+Enter complete
+  ↓
+Element shown
+
+---
+
+v-if becomes false
+  ↓
+Leave phase starts
+  ↓
+Leave-active: Animate
+  ↓
+Leave complete
+  ↓
+Element removed
+```
+
+```vue
+<template>
+  <Transition name="fade">
+    <div v-if="show">Hello</div>
+  </Transition>
+</template>
+
+<style scoped>
+/* Enter phase: from invisible to visible */
+.fade-enter-from {
+  opacity: 0;
+}
+
+/* During enter animation */
+.fade-enter-active {
+  transition: opacity 0.5s;
+}
+
+/* After enter (final state) */
+.fade-enter-to {
+  opacity: 1;
+}
+
+/* Leave phase: from visible to invisible */
+.fade-leave-from {
+  opacity: 1;
+}
+
+/* During leave animation */
+.fade-leave-active {
+  transition: opacity 0.5s;
+}
+
+/* After leave (final state) */
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* Shorthand: same animation for both */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.5s;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+```
+
+**Transition Group for Lists:**
+```vue
+<!-- Animates items entering/leaving list -->
+<TransitionGroup name="list" tag="ul">
+  <li v-for="item in items" :key="item.id">
+    {{ item.text }}
+  </li>
+</TransitionGroup>
+
+<style scoped>
+.list-enter-active,
+.list-leave-active {
+  transition: all 0.5s;
+}
+
+.list-enter-from,
+.list-leave-to {
+  opacity: 0;
+  transform: translateX(-30px);
+}
+
+/* Smooth repositioning when items added/removed -->
+.list-move {
+  transition: transform 0.5s;
+}
+</style>
+```
+
+### Teleport
+```vue
+<!-- Component.vue -->
+<template>
+  <Teleport to="body">
+    <div class="modal">
+      <h1>Modal</h1>
+      <slot></slot>
+    </div>
+  </Teleport>
+</template>
+
+<!-- Usage -->
+<template>
+  <div>
+    <Modal>
+      <p>Modal content</p>
+    </Modal>
+  </div>
+</template>
+```
+
+### Suspense
+```vue
+<template>
+  <Suspense>
+    <template #default>
+      <AsyncComponent />
+    </template>
+    <template #fallback>
+      <div>Loading...</div>
+    </template>
+  </Suspense>
+</template>
+
+<!-- AsyncComponent.vue -->
+<script setup>
+const data = await fetch('/api/data')
+</script>
+
+<template>
+  <div>{{ data }}</div>
+</template>
+```
+
+### Keep-Alive
+```vue
+<template>
+  <KeepAlive>
+    <component :is="activeComponent" />
+  </KeepAlive>
+</template>
+
+<!-- Keep multiple components alive -->
+<template>
+  <KeepAlive include="ComponentA,ComponentB">
+    <component :is="activeComponent" />
+  </KeepAlive>
+</template>
+```
+
+### Transitions
+```vue
+<template>
+  <Transition name="fade">
+    <div v-if="show">Hello</div>
+  </Transition>
+</template>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.5s;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>
+
+<!-- Transition Group for lists -->
+<template>
+  <TransitionGroup name="list" tag="ul">
+    <li v-for="item in items" :key="item.id">
+      {{ item.text }}
+    </li>
+  </TransitionGroup>
+</template>
+
+<style scoped>
+.list-enter-active,
+.list-leave-active {
+  transition: all 0.3s;
+}
+
+.list-enter-from {
+  opacity: 0;
+  transform: translateX(-30px);
+}
+
+.list-leave-to {
+  opacity: 0;
+  transform: translateX(30px);
+}
+</style>
+```
+
+### Render Functions
+```javascript
+import { h } from 'vue'
+
+export default {
+  props: ['title'],
+  setup(props, { slots }) {
+    return () => h(
+      'div',
+      { class: 'card' },
+      [
+        h('h1', props.title),
+        slots.default?.()
+      ]
+    )
+  }
+}
+
+// JSX (requires @vitejs/plugin-vue-jsx)
+export default {
+  props: ['title'],
+  setup(props, { slots }) {
+    return () => (
+      <div class="card">
+        <h1>{props.title}</h1>
+        {slots.default?.()}
+      </div>
+    )
+  }
+}
+```
+
+### Global Configuration
+```javascript
+// main.js
+import { createApp } from 'vue'
+import App from './App.vue'
+
+const app = createApp(App)
+
+// Global properties
+app.config.globalProperties.$appName = 'My App'
+app.config.globalProperties.$api = apiInstance
+
+// Error handling
+app.config.errorHandler = (err, instance, info) => {
+  console.error(err, info)
+}
+
+// Warning handler (dev only)
+app.config.warnHandler = (msg, instance, trace) => {
+  console.warn(msg, trace)
+}
+
+// Global mixin
+app.mixin({
+  methods: {
+    hello() {
+      console.log('Hello from mixin')
+    }
+  }
+})
+
+app.mount('#app')
+```
+
+---
+
+## Best Practices - Theory: Professional Vue Development
+
+### Why Best Practices Matter
+
+Professional Vue development isn't just about making it work - it's about making it:
+- **Maintainable:** Others (and future you) can understand it
+- **Scalable:** Adding features doesn't become exponentially harder
+- **Performant:** Users get fast experiences
+- **Testable:** You can verify code works correctly
+- **Debuggable:** Finding and fixing bugs is easy
+
+**Bad practices lead to:**
+```
+Technical Debt
+    ↓
+Hard to add features
+    ↓
+More bugs introduced
+    ↓
+Takes longer to fix
+    ↓
+Team frustrated
+    ↓
+Quality suffers
+```
+
+**Good practices create:**
+```
+Clean architecture
+    ↓
+Easy to add features
+    ↓
+Fewer bugs
+    ↓
+Quick fixes
+    ↓
+Team productive
+    ↓
+High quality
+```
+
+### 1. Component Organization - Theory: Structure for Scale
+
+**Why Organization Matters:**
+```
+Bad Organization:
+  src/
+    ├── Button.vue
+    ├── Modal.vue
+    ├── UserList.vue
+    ├── ProductCard.vue
+    └── [50 more files scattered]
+  
+  Problem: 50+ files in one folder, impossible to find anything
+  
+Good Organization:
+  src/
+    ├── components/common/      ← Reusable UI pieces
+    ├── components/layout/      ← Page structure
+    ├── components/features/    ← Feature-specific components
+    ├── pages/                  ← Full page components
+    ├── composables/            ← Logic reuse
+    ├── stores/                 ← Shared state
+    └── services/               ← API and business logic
+  
+  Benefit: Everything has a place, easy to navigate
+```
+
+**Folder Organization Pattern:**
+```
+src/
+├── components/
+│   ├── common/
+│   │   ├── Button.vue
+│   │   ├── Modal.vue
+│   │   └── Card.vue
+│   ├── layout/
+│   │   ├── Header.vue
+│   │   ├── Sidebar.vue
+│   │   └── Footer.vue
+│   └── features/
+│       ├── UserList.vue
+│       └── UserForm.vue
+├── pages/
+│   ├── Home.vue
+│   ├── About.vue
+│   └── NotFound.vue
+├── composables/
+│   ├── useCounter.js
+│   ├── useFetch.js
+│   └── useAuth.js
+├── stores/
+│   ├── userStore.js
+│   └── productStore.js
+├── services/
+│   ├── api.js
+│   ├── auth.js
+│   └── product.js
+├── router/
+│   └── index.js
+└── main.js
+```
+
+### 2. Naming Conventions
+```javascript
+// Components - PascalCase
+MyComponent.vue
+UserProfile.vue
+ProductList.vue
+
+// Files/Directories - kebab-case
+my-component.vue
+user-profile.vue
+
+// Functions - camelCase
+useCounter
+fetchUsers
+handleClick
+
+// Constants - UPPER_SNAKE_CASE
+const API_BASE_URL = 'https://api.example.com'
+const MAX_RETRY_COUNT = 3
+
+// Private variables - leading underscore (convention)
+const _privateData = ref(null)
+```
+
+### 3. Performance Optimization
+```vue
+<script setup>
+import { defineAsyncComponent } from 'vue'
+
+// Lazy load components
+const HeavyComponent = defineAsyncComponent(() =>
+  import('@/components/HeavyComponent.vue')
+)
+
+// With timeout and error handling
+const AsyncComponent = defineAsyncComponent({
+  loader: () => import('@/components/AsyncComponent.vue'),
+  loadingComponent: LoadingComponent,
+  errorComponent: ErrorComponent,
+  delay: 200,
+  timeout: 10000
+})
+</script>
+
+<!-- Use v-show for frequently toggled elements -->
+<div v-show="isOpen">Content</div>
+
+<!-- Use v-if for rarely rendered elements -->
+<div v-if="needsUpdate">Content</div>
+
+<!-- Avoid inline functions -->
+<!-- ❌ Bad -->
+<button @click="() => doSomething(item)">Click</button>
+
+<!-- ✅ Good -->
+<button @click="handleClick(item)">Click</button>
+
+<!-- Use :key with v-for -->
+<div v-for="item in items" :key="item.id">{{ item }}</div>
+```
+
+### 4. Error Handling
+```javascript
+// composable/useAsync.js
+import { ref } from 'vue'
+
+export function useAsync(asyncFunction) {
+  const data = ref(null)
+  const error = ref(null)
+  const loading = ref(false)
+  
+  const execute = async () => {
+    loading.value = true
+    error.value = null
+    try {
+      data.value = await asyncFunction()
+    } catch (e) {
+      error.value = e.message
+      console.error('Error:', e)
+    } finally {
+      loading.value = false
+    }
+  }
+  
+  return { data, error, loading, execute }
+}
+
+// Usage
+import { useAsync } from '@/composables/useAsync'
+
+export default {
+  setup() {
+    const { data, error, loading, execute } = useAsync(
+      () => fetch('/api/users').then(r => r.json())
+    )
+    
+    return { data, error, loading, execute }
+  }
+}
+```
+
+### 5. Testing
+```javascript
+// Counter.test.js
+import { describe, it, expect } from 'vitest'
+import { mount } from '@vue/test-utils'
+import Counter from './Counter.vue'
+
+describe('Counter', () => {
+  it('renders initial count', () => {
+    const wrapper = mount(Counter, {
+      props: { initialCount: 5 }
+    })
+    expect(wrapper.text()).toContain('5')
+  })
+  
+  it('increments count on button click', async () => {
+    const wrapper = mount(Counter)
+    await wrapper.find('button').trigger('click')
+    expect(wrapper.vm.count).toBe(1)
+  })
+  
+  it('emits update event', async () => {
+    const wrapper = mount(Counter)
+    await wrapper.find('button').trigger('click')
+    expect(wrapper.emitted('update')).toBeTruthy()
+  })
+})
+```
+
+### 6. Type Safety with TypeScript
+```vue
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+
+interface User {
+  id: number
+  name: string
+  email: string
+}
+
+const users = ref<User[]>([])
+
+const userCount = computed<number>(() => users.value.length)
+
+const addUser = (user: User): void => {
+  users.value.push(user)
+}
+
+defineProps<{
+  title: string
+  count?: number
+}>()
+
+const emit = defineEmits<{
+  update: [count: number]
+}>()
+</script>
+```
+
+---
+
+## Project Setup
+
+### Create Vue 3 Project
+
+```bash
+# Using Vite (Recommended)
+npm create vite@latest my-project -- --template vue
+cd my-project
+npm install
+npm run dev
+
+# Using Vue CLI
+npm install -g @vue/cli
+vue create my-project
+cd my-project
+npm run serve
+```
+
+### Essential Dependencies
+```bash
+# Router
+npm install vue-router@4
+
+# State management
+npm install pinia
+
+# HTTP client
+npm install axios
+
+# UI Framework (Optional)
+npm install @vant/ui          # Vue UI
+npm install element-plus       # Enterprise UI
+npm install primevue          # Rich UI components
+
+# Testing
+npm install -D vitest @vue/test-utils
+
+# Linting
+npm install -D eslint prettier @vue/eslint-config-prettier
+
+# Build
+npm install -D @vitejs/plugin-vue
+
+# Development
+npm install -D sass typescript
+```
+
+### Vite Configuration
+```javascript
+// vite.config.js
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import path from 'path'
+
+export default defineConfig({
+  plugins: [vue()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src')
+    }
+  },
+  server: {
+    port: 3000,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '')
+      }
+    }
+  }
+})
+```
+
+### ESLint Configuration
+```javascript
+// .eslintrc.js
+module.exports = {
+  env: {
+    node: true,
+    browser: true,
+    es2021: true
+  },
+  extends: [
+    'plugin:vue/vue3-recommended',
+    'eslint:recommended'
+  ],
+  rules: {
+    'vue/multi-word-component-names': 'off',
+    'vue/component-name-in-template-casing': ['error', 'PascalCase'],
+    'no-unused-vars': ['error', { argsIgnorePattern: '^_' }]
+  }
+}
+```
+
+### Environment Variables
+```bash
+# .env.development
+VITE_API_BASE_URL=http://localhost:8080
+VITE_APP_TITLE=My App Dev
+
+# .env.production
+VITE_API_BASE_URL=https://api.example.com
+VITE_APP_TITLE=My App
+```
+
+```javascript
+// Access in code
+const apiUrl = import.meta.env.VITE_API_BASE_URL
+const appTitle = import.meta.env.VITE_APP_TITLE
+```
+
+---
+
+## Common Patterns
+
+### Authentication Pattern
+```javascript
+// stores/authStore.js
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+
+export const useAuthStore = defineStore('auth', () => {
+  const user = ref(null)
+  const token = ref(localStorage.getItem('token'))
+  
+  const isLoggedIn = computed(() => user.value !== null)
+  
+  const login = async (email, password) => {
+    const response = await fetch('/api/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password })
+    })
+    const data = await response.json()
+    token.value = data.token
+    user.value = data.user
+    localStorage.setItem('token', token.value)
+  }
+  
+  const logout = () => {
+    user.value = null
+    token.value = null
+    localStorage.removeItem('token')
+  }
+  
+  const checkAuth = async () => {
+    if (token.value) {
+      const response = await fetch('/api/me', {
+        headers: { Authorization: `Bearer ${token.value}` }
+      })
+      user.value = await response.json()
+    }
+  }
+  
+  return { user, isLoggedIn, login, logout, checkAuth }
+})
+```
+
+### Form Validation Pattern
+```javascript
+// composables/useForm.js
+import { reactive, computed } from 'vue'
+
+export function useForm(initialValues, onSubmit, validate) {
+  const formData = reactive({ ...initialValues })
+  const errors = reactive({})
+  const touched = reactive({})
+  
+  const isValid = computed(() => Object.keys(errors).length === 0)
+  
+  const handleChange = (field, value) => {
+    formData[field] = value
+  }
+  
+  const handleBlur = (field) => {
+    touched[field] = true
+  }
+  
+  const handleSubmit = async (e) => {
+    e?.preventDefault()
+    const newErrors = validate(formData)
+    Object.assign(errors, newErrors)
+    
+    if (isValid.value) {
+      await onSubmit(formData)
+    }
+  }
+  
+  return {
+    formData,
+    errors,
+    touched,
+    isValid,
+    handleChange,
+    handleBlur,
+    handleSubmit
+  }
+}
+```
+
+### Pagination Pattern
+```javascript
+// composables/usePagination.js
+import { ref, computed } from 'vue'
+
+export function usePagination(items, pageSize = 10) {
+  const currentPage = ref(1)
+  
+  const totalPages = computed(() =>
+    Math.ceil(items.value.length / pageSize)
+  )
+  
+  const paginatedItems = computed(() => {
+    const start = (currentPage.value - 1) * pageSize
+    const end = start + pageSize
+    return items.value.slice(start, end)
+  })
+  
+  const nextPage = () => {
+    if (currentPage.value < totalPages.value) {
+      currentPage.value++
+    }
+  }
+  
+  const prevPage = () => {
+    if (currentPage.value > 1) {
+      currentPage.value--
+    }
+  }
+  
+  return {
+    currentPage,
+    totalPages,
+    paginatedItems,
+    nextPage,
+    prevPage
+  }
+}
+```
+
+---
+
+## Debugging Tips
+
+### Vue DevTools
+```bash
+# Install Vue DevTools browser extension
+# Available for Chrome, Firefox, and Edge
+
+# In Vue 3 app, use for:
+- Component hierarchy inspection
+- Props and state tracking
+- Events debugging
+- Router navigation
+- Store state inspection (Pinia)
+```
+
+### Console Debugging
+```javascript
+// Log reactive data
+import { isRef, isReactive } from 'vue'
+
+const data = ref(someValue)
+console.log(isRef(data))  // true
+console.log(data.value)   // actual value
+
+// Watch for changes
+const count = ref(0)
+watch(count, (newVal, oldVal) => {
+  console.log(`Changed from ${oldVal} to ${newVal}`)
+})
+
+// Check computed dependencies
+const fullName = computed(() => {
+  console.log('Computing fullName')
+  return firstName.value + ' ' + lastName.value
+})
+```
+
+### Network Debugging
+```javascript
+// Intercept API calls
+import axios from 'axios'
+
+axios.interceptors.request.use(config => {
+  console.log('Request:', config)
+  return config
+})
+
+axios.interceptors.response.use(
+  response => {
+    console.log('Response:', response)
+    return response
+  },
+  error => {
+    console.error('Error:', error)
+    return Promise.reject(error)
+  }
+)
+```
+
+---
+
+## Interview Questions & Answers
+
+### Q1: What is the difference between v-if and v-show?
+**A:** 
+- `v-if`: Conditionally renders element in DOM. Element is removed when condition is false.
+- `v-show`: Always renders element but toggles CSS display property. Element remains in DOM.
+- Use `v-if` for rarely shown content, `v-show` for frequently toggled content.
+
+### Q2: Explain Vue 3 Composition API vs Vue 2 Options API
+**A:** 
+- **Options API**: Groups code by option type (data, computed, methods). Good for simple components.
+- **Composition API**: Groups code by logical concern. Better for reusability and large components.
+- Vue 3 supports both, but Composition API is recommended.
+
+### Q3: What are lifecycle hooks?
+**A:** Hooks that execute at specific component stages:
+- `mounted`: Component added to DOM
+- `updated`: Component re-rendered
+- `unmounted`: Component removed from DOM
+- `beforeMount`, `beforeUpdate`, `beforeUnmount`: Before lifecycle events
+
+### Q4: How do you handle form inputs with v-model?
+**A:**
+```vue
+<input v-model="message" />
+<input v-model.number="age" />
+<input v-model.trim="text" />
+<textarea v-model="content"></textarea>
+<select v-model="selected">...</select>
+<input type="checkbox" v-model="isChecked" />
+```
+
+### Q5: What is prop drilling and how to solve it?
+**A:** Prop drilling is passing props through many component levels. Solutions:
+- Use `provide/inject` for deeply nested components
+- Use state management (Pinia/Vuex)
+- Use Vue Router for navigation state
+
+### Q6: How do you optimize Vue application performance?
+**A:**
+- Lazy load routes and components
+- Use `v-show` vs `v-if` appropriately
+- Add `:key` to v-for elements
+- Avoid inline functions in templates
+- Use `computed` for complex calculations
+- Code splitting with dynamic imports
+- Use production build
+
+### Q7: Explain two-way binding in Vue
+**A:** 
+- V-model provides two-way binding
+- Updates from template sync back to script
+- Example: `<input v-model="message" />`
+- Can create custom v-model in components using `modelValue` prop and `update:modelValue` event
+
+### Q8: What is a watcher and when to use it?
+**A:**
+- Watches reactive data changes and runs callback
+- Used for side effects (API calls, DOM updates)
+- `watch()` tracks specific properties
+- `watchEffect()` auto-tracks all dependencies
+
+### Q9: How do you structure a large Vue project?
+**A:**
+- Organize components by feature
+- Use composables for reusable logic
+- Separate services/API layer
+- Use store for state management
+- Group routes logically
+- Use environment variables for config
+
+### Q10: Explain slots in Vue
+**A:**
+- Slots allow content distribution to components
+- Named slots for multiple slot positions
+- Scoped slots pass data back to parent
+- Slot fallback content if not provided
+```vue
+<Card>
+  <template v-slot:header>Title</template>
+  <p>Default content</p>
+</Card>
+```
+
+---
+
+## Vue Developer Skills
+
+### Essential Technical Skills
+
+#### 1. JavaScript Fundamentals
+- ES6+ syntax (arrow functions, destructuring, spread operator)
+- Async/await and Promises
+- Array methods (map, filter, reduce)
+- Object manipulation and prototypes
+- Closures and scope understanding
+
+```javascript
+// ES6+ patterns required
+const user = { name: 'John', email: 'john@example.com' }
+const { name, email } = user  // Destructuring
+const users = [user, ...otherUsers]  // Spread operator
+const result = await fetchData()  // Async/await
+const mapped = data.map(item => item.id)  // Arrow functions
+```
+
+#### 2. Vue Core Knowledge
+- Vue lifecycle and reactivity system
+- Component communication (props, events, provide/inject)
+- Computed properties vs methods
+- Watchers and reactive effects
+- Composition API and Composables
+- Component composition patterns
+
+#### 3. CSS & Styling
+- CSS fundamentals (flexbox, grid, positioning)
+- CSS preprocessors (Sass/SCSS)
+- CSS-in-JS and scoped styles
+- Responsive design and media queries
+- CSS animations and transitions
+- CSS modules and BEM naming
+
+```vue
+<style scoped lang="scss">
+.component {
+  display: flex;
+  gap: 1rem;
+  
+  @media (max-width: 768px) {
+    flex-direction: column;
+  }
+  
+  &__title {
+    font-size: 1.5rem;
+    color: var(--primary-color);
+  }
+}
+</style>
+```
+
+#### 4. HTTP & APIs
+- REST API concepts (GET, POST, PUT, DELETE)
+- HTTP status codes and error handling
+- API authentication (JWT, OAuth)
+- CORS and security concepts
+- Using Axios or Fetch API
+- API interceptors and middleware
+
+```javascript
+// API service layer
+export const apiClient = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL,
+  timeout: 10000
+})
+
+apiClient.interceptors.request.use(config => {
+  const token = localStorage.getItem('token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+```
+
+#### 5. State Management
+- Understanding prop drilling problems
+- Pinia or Vuex patterns
+- Global vs local state
+- Store architecture and best practices
+- Side effects and async actions
+
+#### 6. Routing & Navigation
+- Vue Router setup and configuration
+- Route parameters and query strings
+- Route guards and protection
+- Nested routes and lazy loading
+- Programmatic navigation
+
+#### 7. Build Tools & DevOps
+- Module bundlers (Vite, Webpack)
+- Development servers and hot module replacement
+- Environment variables management
+- Build optimization
+- CI/CD pipelines basics
+
+#### 8. Testing
+- Unit testing with Vitest
+- Component testing with Vue Test Utils
+- Mocking and assertions
+- Code coverage
+- E2E testing basics
+
+```javascript
+import { describe, it, expect } from 'vitest'
+import { mount } from '@vue/test-utils'
+import UserCard from './UserCard.vue'
+
+describe('UserCard', () => {
+  it('displays user name', () => {
+    const wrapper = mount(UserCard, {
+      props: { user: { name: 'John', email: 'john@example.com' } }
+    })
+    expect(wrapper.text()).toContain('John')
+  })
+})
+```
+
+### Soft Skills for Vue Developers
+
+#### 1. Problem Solving
+- Break complex features into components
+- Debug issues systematically
+- Research and learn new technologies
+- Ask effective questions
+
+#### 2. Code Quality
+- Write clean, readable code
+- Follow naming conventions
+- Refactor code regularly
+- Understand design patterns
+
+#### 3. Communication
+- Document code and components
+- Explain technical decisions
+- Collaborate with team members
+- Present solutions clearly
+
+#### 4. Performance Awareness
+- Understand lighthouse metrics
+- Identify performance bottlenecks
+- Optimize bundle size
+- Monitor network requests
+
+#### 5. Version Control
+- Git fundamentals (commit, branch, merge)
+- Pull requests and code review
+- Conflict resolution
+- Semantic versioning
+
+### Advanced Skills
+
+#### 1. Performance Optimization
+```javascript
+// Code splitting
+const Component = defineAsyncComponent(() =>
+  import('./HeavyComponent.vue')
+)
+
+// Memoization
+const expensiveComputation = computed(() => {
+  // Only recalculates when dependencies change
+  return heavyOperation(data.value)
+})
+
+// Debouncing
+import { useDebounceFn } from '@vueuse/core'
+const debouncedSearch = useDebounceFn(search, 300)
+```
+
+#### 2. TypeScript Integration
+```typescript
+// Strong typing for components
+interface Props {
+  user: User
+  onUpdate: (user: User) => void
+  disabled?: boolean
+}
+
+interface User {
+  id: number
+  name: string
+  email: string
+}
+
+export default defineComponent({
+  props: {
+    user: { type: Object as PropType<User>, required: true }
+  }
+})
+```
+
+#### 3. Accessibility (a11y)
+- Semantic HTML usage
+- ARIA attributes
+- Keyboard navigation
+- Screen reader compatibility
+- Color contrast and readability
+
+```vue
+<template>
+  <div role="button" @click="onClick" @keydown.enter="onClick" tabindex="0">
+    {{ label }}
+  </div>
+</template>
+```
+
+#### 4. Security Best Practices
+- XSS prevention (avoid v-html with untrusted data)
+- CSRF token handling
+- Input validation and sanitization
+- Secure authentication practices
+- Environment variable security
+
+---
+
+## Practical Applications
+
+### Real-World Application Examples
+
+#### 1. E-Commerce Platform
+
+**Key Features:**
+- Product catalog with filtering and search
+- Shopping cart management
+- User authentication and profiles
+- Order history and tracking
+- Payment integration
+- Admin dashboard
+
+```vue
+<!-- ProductCard.vue - Reusable component -->
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+import type { Product } from '@/types'
+
+interface Props {
+  product: Product
+  onAddToCart: (product: Product, quantity: number) => void
+}
+
+const props = defineProps<Props>()
+const quantity = ref(1)
+
+const isOutOfStock = computed(() => props.product.stock === 0)
+
+const handleAddToCart = () => {
+  props.onAddToCart(props.product, quantity.value)
+  quantity.value = 1
+}
+</script>
+
+<template>
+  <div class="product-card">
+    <img :src="product.image" :alt="product.name" />
+    <h3>{{ product.name }}</h3>
+    <p class="price">${{ product.price }}</p>
+    <p v-if="product.discount" class="discount">
+      Save {{ product.discount }}%
+    </p>
+    
+    <div v-if="!isOutOfStock" class="actions">
+      <input v-model.number="quantity" type="number" min="1" />
+      <button @click="handleAddToCart">Add to Cart</button>
+    </div>
+    <div v-else class="out-of-stock">
+      Out of Stock
+    </div>
+  </div>
+</template>
+```
+
+**Store Setup:**
+```typescript
+// stores/cartStore.ts
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+import type { CartItem, Product } from '@/types'
+
+export const useCartStore = defineStore('cart', () => {
+  const items = ref<CartItem[]>([])
+  
+  const total = computed(() =>
+    items.value.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  )
+  
+  const itemCount = computed(() =>
+    items.value.reduce((sum, item) => sum + item.quantity, 0)
+  )
+  
+  const addToCart = (product: Product, quantity: number) => {
+    const existingItem = items.value.find(item => item.id === product.id)
+    
+    if (existingItem) {
+      existingItem.quantity += quantity
+    } else {
+      items.value.push({
+        ...product,
+        quantity
+      })
+    }
+  }
+  
+  const removeFromCart = (productId: number) => {
+    items.value = items.value.filter(item => item.id !== productId)
+  }
+  
+  const clearCart = () => {
+    items.value = []
+  }
+  
+  return { items, total, itemCount, addToCart, removeFromCart, clearCart }
+})
+```
+
+#### 2. Social Media Dashboard
+
+**Key Features:**
+- User feed with posts and comments
+- Real-time notifications
+- User profiles and followers
+- Image upload
+- Like and comment functionality
+- Search and hashtags
+
+```vue
+<!-- PostFeed.vue -->
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue'
+import { useFeed } from '@/composables/useFeed'
+import { useAuth } from '@/composables/useAuth'
+
+const { posts, loading, loadMore, subscribeToUpdates, unsubscribe } = useFeed()
+const { user } = useAuth()
+
+onMounted(() => {
+  subscribeToUpdates()
+})
+
+onUnmounted(() => {
+  unsubscribe()
+})
+
+const handleLike = (postId: string) => {
+  const post = posts.value.find(p => p.id === postId)
+  if (post) {
+    post.liked = !post.liked
+    post.likeCount += post.liked ? 1 : -1
+  }
+}
+</script>
+
+<template>
+  <div class="feed">
+    <div v-for="post in posts" :key="post.id" class="post">
+      <div class="post-header">
+        <img :src="post.author.avatar" :alt="post.author.name" class="avatar" />
+        <div>
+          <h4>{{ post.author.name }}</h4>
+          <span class="timestamp">{{ formatTime(post.createdAt) }}</span>
+        </div>
+      </div>
+      
+      <p class="content">{{ post.content }}</p>
+      
+      <img v-if="post.image" :src="post.image" class="post-image" />
+      
+      <div class="actions">
+        <button @click="handleLike(post.id)" :class="{ liked: post.liked }">
+          ❤️ {{ post.likeCount }}
+        </button>
+        <button>💬 {{ post.commentCount }}</button>
+        <button>↗️ Share</button>
+      </div>
+    </div>
+    
+    <button v-if="!loading" @click="loadMore">Load More</button>
+    <div v-else class="loading">Loading...</div>
+  </div>
+</template>
+```
+
+#### 3. Project Management Tool
+
+**Key Features:**
+- Kanban boards
+- Task management
+- Team collaboration
+- File attachments
+- Due dates and reminders
+- Real-time updates via WebSocket
+
+```typescript
+// composables/useKanban.ts
+import { ref, computed, watch } from 'vue'
+import { useWebSocket } from '@vueuse/core'
+import type { Task, Board } from '@/types'
+
+export function useKanban(boardId: string) {
+  const tasks = ref<Task[]>([])
+  const columns = ref(['Todo', 'In Progress', 'Done'])
+  
+  const { data: wsData, send: sendWS } = useWebSocket(`ws://api/boards/${boardId}`)
+  
+  // Group tasks by column
+  const tasksByColumn = computed(() => {
+    const grouped: Record<string, Task[]> = {}
+    columns.value.forEach(col => {
+      grouped[col] = tasks.value.filter(task => task.status === col)
+    })
+    return grouped
+  })
+  
+  // Handle real-time updates
+  watch(wsData, (message) => {
+    if (!message) return
+    
+    const { type, payload } = JSON.parse(message)
+    
+    switch (type) {
+      case 'TASK_CREATED':
+        tasks.value.push(payload)
+        break
+      case 'TASK_UPDATED':
+        const index = tasks.value.findIndex(t => t.id === payload.id)
+        if (index !== -1) {
+          tasks.value[index] = payload
+        }
+        break
+      case 'TASK_DELETED':
+        tasks.value = tasks.value.filter(t => t.id !== payload.id)
+        break
+    }
+  })
+  
+  const moveTask = (taskId: string, newStatus: string) => {
+    const task = tasks.value.find(t => t.id === taskId)
+    if (task) {
+      task.status = newStatus
+      sendWS(JSON.stringify({
+        type: 'TASK_UPDATED',
+        payload: task
+      }))
+    }
+  }
+  
+  return { tasks, tasksByColumn, moveTask, columns }
+}
+```
+
+#### 4. Analytics Dashboard
+
+**Key Features:**
+- Real-time data visualization
+- Charts and graphs
+- Filters and date ranges
+- Data export
+- Custom reports
+- Performance metrics
+
+```vue
+<!-- AnalyticsDashboard.vue -->
+<script setup lang="ts">
+import { ref, computed, watch } from 'vue'
+import { useAnalytics } from '@/composables/useAnalytics'
+import { LineChart, BarChart } from '@/components/charts'
+
+const dateRange = ref({ start: '', end: '' })
+const metrics = ref(['users', 'revenue', 'engagement'])
+
+const { data, loading, fetchData } = useAnalytics(dateRange, metrics)
+
+watch(dateRange, () => {
+  fetchData()
+}, { deep: true })
+
+onMounted(() => fetchData())
+
+const chartData = computed(() => ({
+  revenue: {
+    labels: data.value.dates,
+    datasets: [{
+      label: 'Revenue',
+      data: data.value.revenue,
+      borderColor: '#3b82f6',
+      backgroundColor: 'rgba(59, 130, 246, 0.1)'
+    }]
+  },
+  users: {
+    labels: data.value.dates,
+    datasets: [{
+      label: 'Active Users',
+      data: data.value.users,
+      backgroundColor: '#10b981'
+    }]
+  }
+}))
+</script>
+
+<template>
+  <div class="dashboard">
+    <div class="filters">
+      <input v-model="dateRange.start" type="date" />
+      <input v-model="dateRange.end" type="date" />
+      <button @click="fetchData">Apply</button>
+    </div>
+    
+    <div class="metrics-grid">
+      <MetricCard
+        v-for="metric in metrics"
+        :key="metric"
+        :title="metric"
+        :value="data[metric]?.total"
+        :change="data[metric]?.change"
+      />
+    </div>
+    
+    <div class="charts">
+      <LineChart :data="chartData.revenue" />
+      <BarChart :data="chartData.users" />
+    </div>
+  </div>
+</template>
+```
+
+#### 5. Real-Time Chat Application
+
+**Key Features:**
+- Direct messaging
+- Group chats
+- Message notifications
+- Typing indicators
+- File sharing
+- User presence
+
+```typescript
+// composables/useChat.ts
+import { ref, computed } from 'vue'
+import { useWebSocket } from '@vueuse/core'
+import { useDateFormat } from '@vueuse/core'
+import type { Message, ChatRoom } from '@/types'
+
+export function useChat(roomId: string) {
+  const messages = ref<Message[]>([])
+  const currentMessage = ref('')
+  const isTyping = ref(false)
+  const typing = ref<string[]>([])
+  
+  const { data: wsData, send: sendWS } = useWebSocket(
+    `ws://api/chat/${roomId}`
+  )
+  
+  const formattedMessages = computed(() =>
+    messages.value.map(msg => ({
+      ...msg,
+      timestamp: useDateFormat(msg.createdAt, 'HH:mm').value
+    }))
+  )
+  
+  const sendMessage = () => {
+    if (!currentMessage.value.trim()) return
+    
+    const message: Message = {
+      id: Date.now().toString(),
+      content: currentMessage.value,
+      userId: useAuth().user.value.id,
+      createdAt: new Date(),
+      reactions: []
+    }
+    
+    messages.value.push(message)
+    sendWS(JSON.stringify({ type: 'MESSAGE', payload: message }))
+    currentMessage.value = ''
+  }
+  
+  const notifyTyping = () => {
+    sendWS(JSON.stringify({ type: 'TYPING' }))
+  }
+  
+  return {
+    messages,
+    formattedMessages,
+    currentMessage,
+    isTyping,
+    typing,
+    sendMessage,
+    notifyTyping
+  }
+}
+```
+
+### Development Workflow Example
+
+```bash
+# 1. Create new Vue 3 project
+npm create vite@latest my-app -- --template vue
+cd my-app
+
+# 2. Install dependencies
+npm install
+npm install -D vitest @vue/test-utils typescript
+
+# 3. Set up code quality tools
+npm install -D eslint prettier @vue/eslint-config-prettier
+
+# 4. Create folder structure
+mkdir -p src/{components,pages,composables,stores,services,types,utils}
+
+# 5. Start development
+npm run dev
+
+# 6. Build for production
+npm run build
+
+# 7. Preview production build
+npm run preview
+```
+
+### Daily Development Tasks
+
+#### Component Development Workflow
+```vue
+<!-- Step 1: Define types -->
+<script setup lang="ts">
+interface Props {
+  items: Item[]
+  loading?: boolean
+  onSelect: (item: Item) => void
+}
+</script>
+
+<!-- Step 2: Create structure -->
+<template>
+  <div class="list">
+    <div v-if="loading" class="loader">Loading...</div>
+    <div v-else-if="items.length === 0" class="empty">No items</div>
+    <div v-else class="items">
+      <!-- content -->
+    </div>
+  </div>
+</template>
+
+<!-- Step 3: Add styling -->
+<style scoped>
+.list {
+  display: flex;
+  flex-direction: column;
+}
+</style>
+
+<!-- Step 4: Write tests -->
+// Component.test.ts
+describe('ItemList', () => {
+  it('shows loader when loading', () => {
+    const wrapper = mount(ItemList, {
+      props: { loading: true, items: [], onSelect: vi.fn() }
+    })
+    expect(wrapper.find('.loader').exists()).toBe(true)
+  })
+})
+```
+
+---
+
+## Detailed Concepts with Examples
+
+### Reactivity System Deep Dive
+
+#### What is Reactivity?
+Reactivity is the automatic tracking of data changes and updating the DOM accordingly. When a reactive data property changes, Vue automatically updates all components that depend on it.
+
+**How it works:**
+1. Vue observes data properties
+2. When a property changes, Vue detects it
+3. Vue recalculates dependent computed properties and watchers
+4. Vue updates the DOM with new values
+
+```javascript
+// Vue 2 - Object.defineProperty
+const user = { name: 'John' }
+Object.defineProperty(user, 'name', {
+  get() {
+    console.log('Getting name')
+    return this._name
+  },
+  set(value) {
+    console.log('Setting name to', value)
+    this._name = value
+    // Trigger DOM update
+  }
+})
+
+// Vue 3 - Proxy
+const handler = {
+  get(target, property) {
+    console.log('Getting', property)
+    return target[property]
+  },
+  set(target, property, value) {
+    console.log('Setting', property, 'to', value)
+    target[property] = value
+    // Trigger DOM update
+    return true
+  }
+}
+
+const user = new Proxy({}, handler)
+user.name = 'John' // Logs: Setting name to John
+```
+
+#### Reactive vs Non-Reactive Data
+
+```javascript
+// Vue 3 - Composition API
+import { ref, reactive } from 'vue'
+
+// REACTIVE DATA
+const count = ref(0)  // Reactive - changes update DOM
+const user = reactive({ name: 'John' })  // Reactive - changes update DOM
+
+// NON-REACTIVE DATA
+let normalCount = 0  // Not reactive - changes don't update DOM
+const normalUser = { name: 'John' }  // Not reactive
+
+// Explanation:
+// - ref() wraps primitives to make them reactive
+// - reactive() makes objects reactive
+// - Regular variables don't trigger updates
+
+// Example showing the difference:
+export default {
+  setup() {
+    const reactiveCount = ref(0)
+    let normalCount = 0
+    
+    const incrementReactive = () => {
+      reactiveCount.value++  // DOM updates immediately
+      console.log(reactiveCount.value)  // 1, 2, 3...
+    }
+    
+    const incrementNormal = () => {
+      normalCount++  // DOM does NOT update
+      console.log(normalCount)  // 1, 2, 3... but UI stays same
+    }
+    
+    return { reactiveCount, normalCount, incrementReactive, incrementNormal }
+  }
+}
+```
+
+### Template Syntax Deep Dive
+
+#### Interpolation and Expressions
+
+```html
+<!-- Simple interpolation -->
+<p>{{ message }}</p>
+<!-- Output: Hello Vue (value of message) -->
+
+<!-- Expressions -->
+<p>{{ count + 1 }}</p>  <!-- 5 + 1 = 6 -->
+<p>{{ ok ? 'YES' : 'NO' }}</p>  <!-- Ternary operators -->
+<p>{{ message.split('').reverse().join('') }}</p>  <!-- Method calls -->
+
+<!-- NOT ALLOWED -->
+<p>{{ if (ok) { return message } }}</p>  <!-- Statements not allowed -->
+<p>{{ function() { return 1 } }}</p>  <!-- Function declarations not allowed -->
+
+<!-- Complex expressions - use computed instead -->
+<!-- BAD: too complex -->
+<p>{{ items.filter(i => i.active).map(i => i.name).join(', ') }}</p>
+
+<!-- GOOD: use computed -->
+<p>{{ activeItemNames }}</p>
+```
+
+#### Dynamic Attributes
+
+```html
+<!-- Binding single attribute -->
+<img :src="imageSrc" />
+<!-- If imageSrc = 'photo.jpg', renders: <img src="photo.jpg" /> -->
+
+<!-- Binding with expressions -->
+<div :id="`item-${id}`"></div>
+<!-- If id = 42, renders: <div id="item-42"></div> -->
+
+<!-- Binding multiple attributes with object -->
+<div v-bind="attributes"></div>
+<!-- If attributes = { id: 'foo', class: 'bar' } -->
+<!-- Renders: <div id="foo" class="bar"></div> -->
+
+<!-- Conditional attributes -->
+<button :disabled="isLoading">
+  {{ isLoading ? 'Loading...' : 'Click me' }}
+</button>
+
+<!-- Explanation:
+When isLoading = true:  <button disabled>Loading...</button>
+When isLoading = false: <button>Click me</button> -->
+```
+
+### Event Handling Advanced
+
+#### Event Modifiers Explanation
+
+```html
+<!-- .prevent - preventDefault() -->
+<form @submit.prevent="handleSubmit">
+  <!-- Prevents page reload on submit -->
+</form>
+
+<!-- .stop - stopPropagation() -->
+<div @click="parent">
+  <button @click.stop="child">Click child</button>
+  <!-- Only child click handler runs, parent is not triggered -->
+</div>
+
+<!-- .self - only trigger if target is the element itself -->
+<div @click.self="handleClick">
+  <span>Click me</span>  <!-- handleClick NOT triggered -->
+  <button>Click here</button>  <!-- handleClick NOT triggered -->
+  <!-- Only direct click on div triggers it -->
+</div>
+
+<!-- .once - trigger only once -->
+<button @click.once="handleClick">
+  <!-- First click runs handleClick, subsequent clicks do nothing -->
+</button>
+
+<!-- .capture - use event capture phase -->
+<div @click.capture="handleClick">
+  <!-- Triggers during capture phase, before bubbling -->
+</div>
+
+<!-- Key modifiers -->
+<input @keyup.enter="submit" />  <!-- Only on Enter key -->
+<input @keyup.esc="cancel" />    <!-- Only on Escape key -->
+<input @keyup.space="toggle" />  <!-- Only on Space key -->
+
+<!-- Multiple key modifiers -->
+<input @keydown.ctrl.a="selectAll" />  <!-- Ctrl + A -->
+<input @keydown.ctrl.shift.s="save" /> <!-- Ctrl + Shift + S -->
+
+<!-- Mouse button modifiers -->
+<div @click.left="handleLeft"></div>    <!-- Left mouse button -->
+<div @click.right="handleRight"></div>  <!-- Right mouse button -->
+<div @click.middle="handleMiddle"></div><!-- Middle mouse button -->
+```
+
+#### Event Handler Patterns
+
+```vue
+<script setup>
+// Pattern 1: Direct method call
+const handleClick = () => console.log('Clicked')
+
+// Pattern 2: With arguments
+const handleSubmit = (event) => {
+  event.preventDefault()
+  console.log('Form submitted')
+}
+
+// Pattern 3: With bound data
+const handleClick = (id) => {
+  console.log('Clicked item:', id)
+}
+
+// Pattern 4: Multiple handlers
+const beforeSubmit = () => console.log('Before')
+const handleSubmit = (e) => console.log('Submitting')
+const afterSubmit = () => console.log('After')
+</script>
+
+<template>
+  <!-- Pattern 1: Simple call -->
+  <button @click="handleClick">Click me</button>
+
+  <!-- Pattern 2: With event -->
+  <form @submit="handleSubmit"></form>
+
+  <!-- Pattern 3: With arguments -->
+  <button @click="handleClick(123)">Item 1</button>
+  <button @click="handleClick(456)">Item 2</button>
+
+  <!-- Pattern 4: Multiple handlers (run sequentially) -->
+  <form @submit.prevent="beforeSubmit; handleSubmit(); afterSubmit()">
+    <button type="submit">Submit</button>
+  </form>
+
+  <!-- Pattern 5: Inline arrow function -->
+  <button @click="() => handleClick(item.id)">Dynamic ID</button>
+</template>
+```
+
+### Computed Properties Deep Dive
+
+#### Why Use Computed?
+
+```javascript
+// ❌ BAD: Using method in template
+export default {
+  data() {
+    return { items: [1, 2, 3, 4, 5] }
+  },
+  methods: {
+    getFilteredItems() {
+      return this.items.filter(item => item > 2)
+    }
+  }
+}
+
+// Template calls method multiple times
+<p>{{ getFilteredItems() }}</p>  <!-- Runs filter each time -->
+<p>{{ getFilteredItems() }}</p>  <!-- Runs filter again -->
+<p>{{ getFilteredItems() }}</p>  <!-- Runs filter again -->
+
+// ✅ GOOD: Using computed property
+export default {
+  data() {
+    return { items: [1, 2, 3, 4, 5] }
+  },
+  computed: {
+    filteredItems() {
+      console.log('Computing...')
+      return this.items.filter(item => item > 2)
+    }
+  }
+}
+
+// Template - computed caches result
+<p>{{ filteredItems }}</p>  <!-- Computes once, caches -->
+<p>{{ filteredItems }}</p>  <!-- Uses cached value -->
+<p>{{ filteredItems }}</p>  <!-- Uses cached value -->
+
+// Only recomputes when 'items' changes
+```
+
+#### Computed with Getter and Setter
+
+```javascript
+// Getter only (read-only)
+computed: {
+  fullName() {
+    return this.firstName + ' ' + this.lastName
+  }
+}
+// <p>{{ fullName }}</p> → outputs name
+
+// Getter and Setter (read-write)
+computed: {
+  fullName: {
+    get() {
+      return this.firstName + ' ' + this.lastName
+    },
+    set(newValue) {
+      const parts = newValue.split(' ')
+      this.firstName = parts[0]
+      this.lastName = parts[1]
+    }
+  }
+}
+
+// Usage:
+this.fullName = 'Jane Doe'  // Calls setter
+// firstName becomes 'Jane'
+// lastName becomes 'Doe'
+console.log(this.fullName)  // 'Jane Doe' (getter called)
+```
+
+#### Composition API Computed
+
+```javascript
+import { ref, computed } from 'vue'
+
+export default {
+  setup() {
+    const firstName = ref('John')
+    const lastName = ref('Doe')
+    
+    // Readonly computed
+    const fullName = computed(() => {
+      console.log('Computing...')
+      return firstName.value + ' ' + lastName.value
+    })
+    
+    // Computed with setter
+    const editableName = computed({
+      get: () => firstName.value + ' ' + lastName.value,
+      set: (newValue) => {
+        const [first, last] = newValue.split(' ')
+        firstName.value = first
+        lastName.value = last
+      }
+    })
+    
+    return { firstName, lastName, fullName, editableName }
+  }
+}
+```
+
+### Watchers and Effects Deep Dive
+
+#### Watch vs Computed vs WatchEffect
+
+```javascript
+// COMPUTED - for derived state
+const fullName = computed(() => {
+  // Automatically tracks dependencies
+  return firstName.value + ' ' + lastName.value
+})
+// Use: When you need a derived value that updates when dependencies change
+
+// WATCH - for side effects
+watch(firstName, (newVal, oldVal) => {
+  console.log('First name changed from', oldVal, 'to', newVal)
+  // Perform side effects like API calls
+})
+// Use: When you need to perform actions when specific data changes
+
+// WATCHEFFECT - automatically track dependencies
+watchEffect(() => {
+  console.log(`${firstName.value} ${lastName.value}`)
+  // Runs whenever firstName or lastName changes
+})
+// Use: When you want automatic dependency tracking
+```
+
+#### Practical Watch Examples
+
+```javascript
+// Example 1: Auto-save user input
+const message = ref('')
+watch(message, async (newVal) => {
+  // Save to server whenever message changes
+  await saveToServer(newVal)
+}, { debounce: 1000 })  // Wait 1 second after last change
+
+// Example 2: Watch nested object properties
+const user = ref({ name: 'John', profile: { age: 30 } })
+watch(
+  () => user.value.profile.age,
+  (newAge) => {
+    console.log('Age changed to', newAge)
+  }
+)
+
+// Example 3: Watch multiple sources
+const firstName = ref('John')
+const lastName = ref('Doe')
+
+watch([firstName, lastName], ([newFirst, newLast]) => {
+  console.log(`Name changed to ${newFirst} ${newLast}`)
+})
+
+// Example 4: Watch with immediate execution
+const userId = ref(null)
+watch(userId, async (newId) => {
+  if (newId) {
+    const user = await fetchUser(newId)
+    console.log('User:', user)
+  }
+}, { immediate: true })  // Runs immediately on component mount
+
+// Example 5: Deep watch for object changes
+const config = ref({ theme: 'light', fontSize: 16 })
+watch(config, (newConfig) => {
+  applyConfig(newConfig)
+}, { deep: true })  // Watches all nested properties
+
+// Example 6: Stop watching
+const stop = watch(count, () => {
+  console.log('Count changed')
+})
+
+// Later, stop watching
+stop()
+```
+
+### Component Communication Patterns
+
+#### Props: Parent to Child
+
+```vue
+<!-- ParentComponent.vue -->
+<template>
+  <ChildComponent 
+    :title="'Hello Child'" 
+    :count="messageCount"
+    :user="currentUser"
+  />
+</template>
+
+<script setup>
+import { ref } from 'vue'
+import ChildComponent from './ChildComponent.vue'
+
+const messageCount = ref(5)
+const currentUser = ref({ name: 'John', email: 'john@example.com' })
+</script>
+
+<!-- ChildComponent.vue -->
+<script setup>
+// Type-safe props definition
+defineProps({
+  // String prop
+  title: String,
+  
+  // Multiple type validation
+  count: [String, Number],
+  
+  // Required prop
+  id: {
+    type: String,
+    required: true
+  },
+  
+  // Default value
+  status: {
+    type: String,
+    default: 'pending'
+  },
+  
+  // Custom validator
+  priority: {
+    type: Number,
+    validator(value) {
+      return [1, 2, 3].includes(value)
+    }
+  },
+  
+  // Object/Array default
+  config: {
+    type: Object,
+    default: () => ({ theme: 'light' })
+  },
+  
+  // User object
+  user: {
+    type: Object,
+    default: () => ({ name: 'Guest' })
+  }
+})
+</script>
+
+<template>
+  <div class="child">
+    <h1>{{ title }}</h1>
+    <p>Count: {{ count }}</p>
+    <p>User: {{ user.name }}</p>
+  </div>
+</template>
+```
+
+#### Emits: Child to Parent
+
+```vue
+<!-- ChildComponent.vue -->
+<script setup>
+const emit = defineEmits({
+  // Simple event
+  click: null,
+  
+  // Event with payload validation
+  submit: (payload) => {
+    return typeof payload === 'object' &&
+           'email' in payload &&
+           'password' in payload
+  },
+  
+  // Event with payload
+  update: (value) => typeof value === 'string'
+})
+
+const handleSubmit = (formData) => {
+  // Emit event with payload
+  emit('submit', formData)
+}
+
+const handleUpdate = (newValue) => {
+  emit('update', newValue)
+}
+</script>
+
+<template>
+  <form @submit.prevent="handleSubmit({ email: 'test@test.com', password: '123' })">
+    <button type="submit">Submit</button>
+  </form>
+  <button @click="emit('click')">Click Me</button>
+</template>
+
+<!-- ParentComponent.vue -->
+<template>
+  <ChildComponent 
+    @click="handleChildClick"
+    @submit="handleSubmit"
+    @update="handleUpdate"
+  />
+</template>
+
+<script setup>
+const handleChildClick = () => console.log('Child clicked')
+const handleSubmit = (data) => console.log('Form submitted:', data)
+const handleUpdate = (value) => console.log('Updated:', value)
+</script>
+```
+
+#### Provide/Inject: Deep Component Tree
+
+```vue
+<!-- AncestorComponent.vue - Provides data -->
+<script setup>
+import { ref, provide } from 'vue'
+
+const theme = ref('dark')
+const user = ref({ name: 'John', role: 'admin' })
+
+// Provide data to all descendants
+provide('theme', theme)
+provide('currentUser', user)
+
+// Provide with default value
+provide('API_KEY', import.meta.env.VITE_API_KEY || 'default-key')
+</script>
+
+<!-- DeepNestedComponent.vue - Injects data -->
+<script setup>
+import { inject } from 'vue'
+
+// Simple inject
+const theme = inject('theme')
+const currentUser = inject('currentUser')
+
+// Inject with default value
+const apiKey = inject('API_KEY', 'fallback-key')
+
+// Inject and use
+console.log('Current theme:', theme.value)
+console.log('User:', currentUser.value)
+</script>
+
+<!-- Real-world example: Theme system -->
+<!-- AppRoot.vue -->
+<script setup>
+import { ref, provide } from 'vue'
+
+const isDarkMode = ref(false)
+
+const toggleTheme = () => {
+  isDarkMode.value = !isDarkMode.value
+  document.documentElement.setAttribute(
+    'data-theme',
+    isDarkMode.value ? 'dark' : 'light'
+  )
+}
+
+provide('isDarkMode', isDarkMode)
+provide('toggleTheme', toggleTheme)
+</script>
+
+<!-- AnyDescendant.vue -->
+<script setup>
+import { inject } from 'vue'
+
+const isDarkMode = inject('isDarkMode')
+const toggleTheme = inject('toggleTheme')
+</script>
+
+<template>
+  <button @click="toggleTheme">
+    Current theme: {{ isDarkMode ? 'Dark' : 'Light' }}
+  </button>
+</template>
+```
+
+### Advanced Reactivity Patterns
+
+#### Shallow Reactive
+
+```javascript
+import { shallowReactive, shallowRef } from 'vue'
+
+// shallowReactive - only root properties are reactive
+const state = shallowReactive({
+  user: { name: 'John' },
+  count: 0
+})
+
+state.count++  // Reactive - triggers update
+state.user.name = 'Jane'  // NOT reactive - doesn't trigger update
+
+// shallowRef - only ref itself is reactive
+const data = shallowRef({ items: [] })
+data.value.items.push(1)  // NOT reactive
+data.value = { items: [1] }  // Reactive - entire object replaced
+```
+
+#### Computed Caching
+
+```javascript
+// Without computed - recalculates every render
+export default {
+  data() {
+    return { items: Array.from({ length: 1000000 }) }
+  },
+  methods: {
+    getExpensiveResult() {
+      console.log('Calculating...')
+      return this.items.reduce((acc, item) => acc + item, 0)
+    }
+  }
+}
+// Logs "Calculating..." many times
+
+// With computed - caches result
+export default {
+  data() {
+    return { items: Array.from({ length: 1000000 }) }
+  },
+  computed: {
+    expensiveResult() {
+      console.log('Calculating...')
+      return this.items.reduce((acc, item) => acc + item, 0)
+    }
+  }
+}
+// Logs "Calculating..." only once, until items changes
+```
+
+#### Ref Unwrapping
+
+```javascript
+import { ref, reactive } from 'vue'
+
+const count = ref(0)
+const state = reactive({
+  count: ref(5)  // Will be unwrapped in reactive
+})
+
+// Template auto-unwraps
+// <p>{{ count }}</p> - no need .value
+// <p>{{ state.count }}</p> - no need .value
+
+// In script
+console.log(count.value)  // Must use .value
+console.log(state.count)  // Auto-unwrapped, still .value needed in reactive
+```
+
+### Template Slots Deep Dive
+
+#### Named Slots with Scope
+
+```vue
+<!-- Card.vue - Component providing slots -->
+<template>
+  <!-- Named slot for header -->
+  <div class="card">
+    <div class="card-header">
+      <slot name="header">Default Header</slot>
+    </div>
+    
+    <!-- Default/unnamed slot -->
+    <div class="card-body">
+      <slot>Default content</slot>
+    </div>
+    
+    <!-- Named slot for footer -->
+    <div class="card-footer">
+      <slot name="footer">Default Footer</slot>
+    </div>
+  </div>
+</template>
+
+<!-- Usage.vue - Using slots -->
+<template>
+  <Card>
+    <!-- Provide header -->
+    <template v-slot:header>
+      <h1>Custom Header</h1>
+    </template>
+    
+    <!-- Default slot (no name needed) -->
+    <p>This is the main content</p>
+    
+    <!-- Provide footer -->
+    <template v-slot:footer>
+      <button>OK</button>
+    </template>
+  </Card>
+</template>
+
+<!-- Scoped Slots - pass data from child to parent -->
+<!-- UserList.vue -->
+<template>
+  <div class="user-list">
+    <div v-for="(user, index) in users" :key="user.id">
+      <!-- Scoped slot passes user data back to parent -->
+      <slot :user="user" :index="index" :isEven="index % 2 === 0">
+        <span>{{ user.name }}</span>
+      </slot>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref } from 'vue'
+
+const users = ref([
+  { id: 1, name: 'John' },
+  { id: 2, name: 'Jane' },
+  { id: 3, name: 'Bob' }
+])
+</script>
+
+<!-- Usage.vue - Access scoped slot props -->
+<template>
+  <UserList>
+    <template v-slot="{ user, index, isEven }">
+      <div :class="{ 'bg-gray': isEven }">
+        #{{ index }}: {{ user.name }}
+      </div>
+    </template>
+  </UserList>
+</template>
+
+<!-- Output:
+#0: John (background-gray)
+#1: Jane
+#2: Bob (background-gray)
+-->
+```
+
+### Dynamic Components
+
+```vue
+<!-- DynamicView.vue -->
+<script setup>
+import { ref } from 'vue'
+import HomeView from './views/Home.vue'
+import AboutView from './views/About.vue'
+import ContactView from './views/Contact.vue'
+
+const components = {
+  home: HomeView,
+  about: AboutView,
+  contact: ContactView
+}
+
+const currentView = ref('home')
+</script>
+
+<template>
+  <div>
+    <!-- Dynamic component switching -->
+    <component :is="components[currentView]" />
+    
+    <!-- Buttons to switch views -->
+    <button @click="currentView = 'home'">Home</button>
+    <button @click="currentView = 'about'">About</button>
+    <button @click="currentView = 'contact'">Contact</button>
+  </div>
+</template>
+
+<!-- Example: Tab switcher -->
+<script setup>
+import { ref, markRaw } from 'vue'
+import TabA from './tabs/TabA.vue'
+import TabB from './tabs/TabB.vue'
+import TabC from './tabs/TabC.vue'
+
+const tabs = ref([
+  { name: 'Tab A', component: markRaw(TabA) },
+  { name: 'Tab B', component: markRaw(TabB) },
+  { name: 'Tab C', component: markRaw(TabC) }
+])
+
+const currentTabIndex = ref(0)
+const currentTab = tabs.value[currentTabIndex.value]
+</script>
+
+<template>
+  <div>
+    <div class="tabs">
+      <button
+        v-for="(tab, index) in tabs"
+        :key="index"
+        :class="{ active: currentTabIndex === index }"
+        @click="currentTabIndex = index"
+      >
+        {{ tab.name }}
+      </button>
+    </div>
+    
+    <div class="tab-content">
+      <component :is="tabs[currentTabIndex].component" />
+    </div>
+  </div>
+</template>
+```
+
+### V-For with Keys
+
+```html
+<!-- Why keys matter -->
+
+<!-- ❌ WITHOUT KEYS - Can cause bugs -->
+<div v-for="user in users">
+  <input v-model="user.name" />
+</div>
+
+<!-- When users list changes order, inputs get confused -->
+<!-- User data might not match input content -->
+
+<!-- ✅ WITH KEYS - Correct behavior -->
+<div v-for="user in users" :key="user.id">
+  <input v-model="user.name" />
+</div>
+
+<!-- Each user maintains their input value -->
+
+<!-- Key selection guidelines:
+- Use unique IDs: :key="item.id" ✅ BEST
+- Use index if list never reorders: :key="index" OK
+- Never use index if list can reorder: :key="index" ❌ BAD
+- Don't use random values: :key="Math.random()" ❌ WRONG
+-->
+
+<!-- Example showing the problem -->
+<script setup>
+import { ref } from 'vue'
+
+const users = ref([
+  { id: 1, name: 'John', checked: false },
+  { id: 2, name: 'Jane', checked: false },
+  { id: 3, name: 'Bob', checked: false }
+])
+
+const reverseOrder = () => {
+  users.value.reverse()
+}
+</script>
+
+<template>
+  <div>
+    <!-- WITHOUT KEY - checkboxes get mixed up -->
+    <div v-for="(user, index) in users" :key="index">
+      <input type="checkbox" v-model="user.checked" />
+      <label>{{ user.name }}</label>
+    </div>
+    
+    <!-- WITH KEY - checkboxes stay with correct user -->
+    <div v-for="user in users" :key="user.id">
+      <input type="checkbox" v-model="user.checked" />
+      <label>{{ user.name }}</label>
+    </div>
+    
+    <button @click="reverseOrder">Reverse Order</button>
+  </div>
+</template>
+```
+
+### Class and Style Binding Advanced
+
+```html
+<!-- Object syntax for classes -->
+<div :class="{ active: isActive, 'text-danger': hasError }">
+  <!-- If isActive=true, hasError=false -->
+  <!-- Renders: class="active" -->
+</div>
+
+<!-- Array syntax for classes -->
+<div :class="[activeClass, errorClass]">
+  <!-- If activeClass='btn-primary', errorClass='' -->
+  <!-- Renders: class="btn-primary" -->
+</div>
+
+<!-- Conditional class in array -->
+<div :class="[isActive ? 'active' : '', errorClass]">
+  <!-- Renders active class only if isActive is true -->
+</div>
+
+<!-- Object in array -->
+<div :class="[{ active: isActive }, errorClass]">
+  <!-- Combines object and array syntax -->
+</div>
+
+<!-- Style object -->
+<div :style="{ color: activeColor, fontSize: fontSize + 'px' }">
+  <!-- If activeColor='red', fontSize=14 -->
+  <!-- Renders: style="color: red; font-size: 14px;" -->
+</div>
+
+<!-- Style array -->
+<div :style="[baseStyles, overridingStyles]">
+  <!-- baseStyles = { color: 'red' } -->
+  <!-- overridingStyles = { color: 'blue' } -->
+  <!-- Result: color: blue (last value wins) -->
+</div>
+
+<!-- Auto vendor prefixes -->
+<div :style="{ transform: 'rotate(45deg)' }">
+  <!-- Vue automatically adds -webkit-, -moz-, etc. -->
+</div>
+```
+
+---
+
+## Complete Theory Explanations
+
+### The Vue Reactivity Engine - Deep Theory
+
+#### How Vue Tracks Changes (Vue 3 Proxy-based System)
+
+**The Problem Vue Solves:**
+When data changes in traditional JavaScript, the DOM doesn't know about it. Developers had to manually update the DOM:
+
+```javascript
+// Traditional JavaScript - Manual DOM updates
+const user = { name: 'John' }
+document.querySelector('p').textContent = user.name
+
+user.name = 'Jane'  // DOM doesn't update automatically!
+document.querySelector('p').textContent = user.name  // Must manually update again
+```
+
+**Vue's Solution - Automatic Tracking:**
+Vue uses JavaScript Proxies to intercept property access and changes:
+
+```javascript
+// How Vue does it internally (simplified)
+const targetObject = { name: 'John' }
+
+const proxy = new Proxy(targetObject, {
+  get(target, property) {
+    // Track which components use this property
+    trackDependency(property)
+    return target[property]
+  },
+  set(target, property, value) {
+    if (target[property] === value) return  // No change, skip
+    target[property] = value
+    // Notify all dependent components to re-render
+    triggerUpdate(property)
+    return true
+  }
+})
+
+proxy.name = 'Jane'  // Triggers automatic DOM update
+```
+
+**Dependency Tracking Workflow:**
+```
+1. Component renders
+   ↓
+2. Template reads reactive data (e.g., {{ user.name }})
+   ↓
+3. Proxy's get() trap fires - records dependency
+   (this component depends on user.name)
+   ↓
+4. Data changes (user.name = 'Jane')
+   ↓
+5. Proxy's set() trap fires - notifies dependents
+   ↓
+6. Vue re-renders only affected components
+   ↓
+7. Template re-reads user.name and DOM updates
+```
+
+#### Why ref() is Necessary for Primitives
+
+```javascript
+// The problem with primitive values
+const count = 5  // Just a number
+// Can't wrap it in Proxy because:
+// - Numbers are immutable
+// - Can't track "count" changing to 6
+
+// Vue's solution: wrap it in an object
+const count = { value: 5 }
+// Now we can track changes to the object's value property
+
+// That's exactly what ref() does:
+const count = ref(5)
+// Internally: { value: 5 } with Proxy wrapping
+
+// Why you need .value:
+// In script: count.value = 6  (accessing the wrapped object)
+// In template: {{ count }}    (auto-unwrapped)
+```
+
+#### Reactivity Depth Explanation
+
+```javascript
+// Shallow vs Deep Reactivity
+
+// DEEP REACTIVITY (default)
+const user = reactive({
+  name: 'John',
+  profile: {
+    age: 30,
+    address: {
+      city: 'NYC'
+    }
+  }
+})
+
+user.name = 'Jane'              // Triggers update
+user.profile.age = 31           // Triggers update
+user.profile.address.city = 'LA' // Triggers update - even deeply nested!
+
+// SHALLOW REACTIVITY
+const state = shallowReactive({
+  user: { name: 'John' },
+  count: 0
+})
+
+state.count = 1                  // Triggers update
+state.user.name = 'Jane'         // DOESN'T trigger update
+state.user = { name: 'Bob' }     // Triggers update (replaced entire object)
+
+// Why use shallow?
+// - Performance: doesn't track deep changes
+// - Memory: less overhead
+// - Use case: when you don't need deep reactivity
+```
+
+### Component Lifecycle - Complete Theory
+
+#### Why Lifecycle Hooks Matter
+
+**The Problem:**
+```javascript
+// Without lifecycle hooks, when do you run code?
+export default {
+  data() {
+    return { users: [] }
+  }
+  // When should you fetch users from API?
+  // - Not in data() - runs too early, no DOM yet
+  // - Not in methods - methods run when called
+  // Need a hook that runs at the right time
+}
+```
+
+**Lifecycle Hook Timeline:**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                  COMPONENT LIFECYCLE                     │
+└─────────────────────────────────────────────────────────┘
+
+1. CREATION PHASE
+   ├─ beforeCreate()     → Data/methods not ready yet
+   └─ created()          → Data ready, DOM not yet
+   
+2. MOUNTING PHASE
+   ├─ beforeMount()      → Component ready to mount
+   └─ mounted()          → Component in DOM, DOM ready
+   
+3. UPDATING PHASE (repeats when data changes)
+   ├─ beforeUpdate()     → Data changed, re-render starting
+   └─ updated()          → DOM updated with new data
+   
+4. UNMOUNTING PHASE
+   ├─ beforeUnmount()    → Component about to be removed
+   └─ unmounted()        → Component removed from DOM
+```
+
+#### Real-World Lifecycle Usage
+
+```javascript
+export default {
+  data() {
+    return {
+      user: null,
+      loading: false,
+      posts: []
+    }
+  },
+  
+  created() {
+    // WHY: Data exists, no DOM needed yet
+    // USE: Initialize data, setup listeners
+    console.log('Component created, data ready')
+  },
+  
+  mounted() {
+    // WHY: DOM is now available, component visible
+    // USE: Fetch data, initialize libraries, setup scroll listeners
+    this.fetchUser()
+    this.setupScrollListener()
+    this.$nextTick(() => {
+      // Access DOM after render
+      const element = this.$refs.container
+    })
+  },
+  
+  beforeUpdate() {
+    // WHY: Data changed, about to re-render
+    // USE: Save DOM state before changes
+    this.scrollPosition = window.scrollY
+  },
+  
+  updated() {
+    // WHY: DOM updated with new data
+    // USE: React to DOM changes
+    // Restore previous scroll position
+    window.scrollTo(0, this.scrollPosition)
+  },
+  
+  beforeUnmount() {
+    // WHY: Component about to be destroyed
+    // USE: Cleanup: remove listeners, cancel requests
+    this.removeScrollListener()
+    this.cancelPendingRequests()
+  },
+  
+  unmounted() {
+    // WHY: Component completely removed
+    // USE: Final cleanup
+    console.log('Component destroyed')
+  },
+  
+  methods: {
+    fetchUser() {
+      this.loading = true
+      fetch('/api/user')
+        .then(r => r.json())
+        .then(data => {
+          this.user = data
+          this.loading = false
+        })
+    }
+  }
+}
+```
+
+### The Composition API - Conceptual Explanation
+
+#### Why Composition API Exists
+
+**Options API Problem:**
+```javascript
+// Code is scattered by type (not by concern)
+export default {
+  data() {
+    return {
+      userName: '',
+      userEmail: '',
+      postTitle: '',
+      posts: [],
+      comments: []
+    }
+  },
+  computed: {
+    // User-related computed
+    userDisplay() { return this.userName + ' ' + this.userEmail },
+    // Post-related computed
+    postCount() { return this.posts.length }
+  },
+  methods: {
+    // User methods mixed with post methods
+    updateUser() { /* ... */ },
+    fetchUser() { /* ... */ },
+    createPost() { /* ... */ },
+    fetchPosts() { /* ... */ }
+  },
+  watch: {
+    // Watchers scattered everywhere
+    userName() { /* ... */ },
+    postTitle() { /* ... */ }
+  }
+}
+
+// Problem: To understand user logic, you jump between data/computed/methods/watch
+// It's hard to extract user logic into reusable code
+```
+
+**Composition API Solution:**
+```javascript
+// Code organized by feature (not by type)
+// All user logic in one place: useUser()
+// All post logic in one place: usePost()
+
+export default {
+  setup() {
+    // User feature
+    const { userName, userEmail, userDisplay, updateUser, fetchUser } = useUser()
+    
+    // Post feature
+    const { posts, postTitle, postCount, createPost, fetchPosts } = usePost()
+    
+    return {
+      userName, userEmail, userDisplay, updateUser, fetchUser,
+      posts, postTitle, postCount, createPost, fetchPosts
+    }
+  }
+}
+
+// Now user logic is reusable - can use useUser() in other components
+```
+
+#### Composables - Logic Extraction
+
+```javascript
+// ❌ PROBLEM: Duplicated logic across components
+// UserProfile.vue
+export default {
+  setup() {
+    const user = ref(null)
+    const loading = ref(false)
+    const error = ref(null)
+    
+    const fetchUser = async (id) => {
+      loading.value = true
+      try {
+        const res = await fetch(`/api/users/${id}`)
+        user.value = await res.json()
+      } catch (e) {
+        error.value = e.message
+      } finally {
+        loading.value = false
+      }
+    }
+    
+    onMounted(() => fetchUser(route.params.id))
+    return { user, loading, error }
+  }
+}
+
+// ProductDetail.vue - Same logic duplicated!
+export default {
+  setup() {
+    const product = ref(null)
+    const loading = ref(false)
+    const error = ref(null)
+    
+    const fetchProduct = async (id) => {
+      loading.value = true
+      try {
+        const res = await fetch(`/api/products/${id}`)
+        product.value = await res.json()
+      } catch (e) {
+        error.value = e.message
+      } finally {
+        loading.value = false
+      }
+    }
+    
+    onMounted(() => fetchProduct(route.params.id))
+    return { product, loading, error }
+  }
+}
+
+// ✅ SOLUTION: Extract to composable
+// composables/useFetch.js
+export function useFetch(url) {
+  const data = ref(null)
+  const loading = ref(false)
+  const error = ref(null)
+  
+  const fetch = async () => {
+    loading.value = true
+    try {
+      const res = await fetch(url)
+      data.value = await res.json()
+    } catch (e) {
+      error.value = e.message
+    } finally {
+      loading.value = false
+    }
+  }
+  
+  return { data, loading, error, fetch }
+}
+
+// Now reuse everywhere:
+// UserProfile.vue
+const { data: user, loading, error, fetch } = useFetch(`/api/users/${route.params.id}`)
+onMounted(() => fetch())
+
+// ProductDetail.vue
+const { data: product, loading, error, fetch } = useFetch(`/api/products/${route.params.id}`)
+onMounted(() => fetch())
+```
+
+### Computed vs Watch vs WatchEffect - Theory
+
+#### When to Use Which?
+
+```javascript
+// Scenario: User enters first and last name, need full name displayed
+
+// ❌ WRONG: Using watch
+const firstName = ref('John')
+const lastName = ref('Doe')
+const fullName = ref('')
+
+watch([firstName, lastName], ([first, last]) => {
+  fullName.value = `${first} ${last}`
+})
+// Problem: Runs code unnecessarily, adds complexity
+
+// ✅ RIGHT: Using computed
+const firstName = ref('John')
+const lastName = ref('Doe')
+const fullName = computed(() => `${firstName.value} ${lastName.value}`)
+// Benefits: Caches result, efficient, declarative
+
+// Why computed is better:
+// 1. Automatically tracks dependencies
+// 2. Caches result (computed once, used many times)
+// 3. Lazy evaluation (only computes when accessed)
+// 4. Reactive (updates when dependencies change)
+
+// ─────────────────────────────────────────────────
+
+// Scenario: When user's name changes, save to database
+
+// ❌ WRONG: Using computed
+// Computed for side effects? That's what watch is for!
+
+// ✅ RIGHT: Using watch
+watch(fullName, async (newName) => {
+  await saveToDatabase(newName)
+})
+// Benefits: Explicitly handles side effects
+
+// ─────────────────────────────────────────────────
+
+// Scenario: Track all changes in complex object
+
+// Less clear dependencies
+watch(user, (newUser) => {
+  console.log('User object changed', newUser)
+}, { deep: true })
+
+// Clearer dependencies with watchEffect
+watchEffect(() => {
+  console.log(`${user.value.firstName} ${user.value.lastName}`)
+  // Automatically tracks accessed properties
+})
+```
+
+#### Watch Execution Timing
+
+```javascript
+// Watch execution modes explained:
+
+// 1. DEFAULT: Runs after component updates
+const count = ref(0)
+
+watch(count, () => {
+  console.log('Count changed')  // Runs AFTER component updated
+})
+
+count.value++  // 1. Component updates
+               // 2. Watch fires
+
+// 2. IMMEDIATE: Run immediately and on changes
+watch(count, () => {
+  console.log('Count:', count.value)
+}, { immediate: true })
+
+// Runs immediately on setup: "Count: 0"
+// Then runs when count changes: "Count: 1"
+
+// 3. DEEP: Track nested changes
+const user = ref({ profile: { age: 30 } })
+
+watch(user, (newVal) => {
+  console.log('User changed')
+}, { deep: true })
+
+user.value.profile.age = 31  // Without deep: doesn't trigger
+                             // With deep: triggers
+
+// Performance warning: deep watch can be expensive!
+```
+
+### Template Rendering - How Vue Renders
+
+#### Virtual DOM Concept
+
+```javascript
+// Real DOM is slow to update
+// Updating real DOM many times = performance problems
+
+// Virtual DOM solution:
+// 1. Create JavaScript representation of DOM
+// 2. When data changes, create new virtual DOM
+// 3. Compare (diff) old and new
+// 4. Update only the differences in real DOM
+
+// Example:
+// Virtual DOM v1: <div><p>Count: 0</p></div>
+// Virtual DOM v2: <div><p>Count: 1</p></div>
+//
+// Difference: Only "Count: 0" changed to "Count: 1"
+// Vue updates only that text node in real DOM
+// Instead of recreating entire div
+
+// Vue 3 improvements:
+// - Faster diffing algorithm
+// - Tracks dynamic content
+// - Skips unchanged static content
+// - Better performance than Vue 2
+```
+
+#### Why Keys Matter with Virtual DOM
+
+```javascript
+// Without key: Vue uses position to track elements
+const items = ref([
+  { id: 1, name: 'Item A' },
+  { id: 2, name: 'Item B' }
+])
+
+// Virtual DOM thinks:
+// Position 0 = "Item A"
+// Position 1 = "Item B"
+
+items.value.reverse()  // Now items = [B, A]
+
+// Without key, Vue thinks:
+// Position 0 changed from "Item A" to "Item B" ← WRONG!
+// Position 1 changed from "Item B" to "Item A" ← WRONG!
+// Updates the DOM unnecessarily
+
+// With key: Vue tracks by ID
+// key="item.id" tells Vue:
+// "Item A (id:1) moved from position 0 to position 1"
+// "Item B (id:2) moved from position 1 to position 0"
+// Vue moves DOM nodes efficiently - doesn't recreate them
+
+// Example bug without key:
+<input v-for="item in items" :value="item.name" />
+
+// Type in first input: "Item A typed text"
+// Reverse array
+// Without key: text stays in position 0, now shows with "Item B"
+// With key: text stays with "Item A" item
+```
+
+### State Management Philosophy
+
+#### Local vs Global State
+
+```javascript
+// LOCAL STATE: Belongs to one component
+export default {
+  setup() {
+    const isDropdownOpen = ref(false)  // Local state
+    const toggleDropdown = () => {
+      isDropdownOpen.value = !isDropdownOpen.value
+    }
+    return { isDropdownOpen, toggleDropdown }
+  }
+}
+
+// GLOBAL STATE: Used by many components
+// stores/theme.js
+export const useThemeStore = defineStore('theme', () => {
+  const isDarkMode = ref(false)  // Global state
+  const toggleTheme = () => {
+    isDarkMode.value = !isDarkMode.value
+  }
+  return { isDarkMode, toggleTheme }
+})
+
+// Rule of thumb:
+// - If only one component uses it → Local state (ref/reactive)
+// - If multiple components need it → Global state (Store)
+// - If deeply nested → Provide/Inject might be better than Store
+```
+
+#### When to Use Store vs Provide/Inject
+
+```javascript
+// PROVIDE/INJECT: For logical grouping
+// App.vue - provides
+provide('theme', isDarkMode)
+provide('user', currentUser)
+
+// AnyDescendant.vue - injects
+const theme = inject('theme')
+const user = inject('user')
+
+// Use provide/inject when:
+// - Data belongs conceptually together
+// - Passed down a component tree
+// - Don't need complex state mutations
+
+// ─────────────────────────────────────────
+
+// PINIA/STORE: For complex state
+export const useCartStore = defineStore('cart', () => {
+  const items = ref([])
+  
+  const addItem = (product) => {
+    // Complex logic
+    const existing = items.value.find(i => i.id === product.id)
+    if (existing) {
+      existing.quantity++
+    } else {
+      items.value.push({ ...product, quantity: 1 })
+    }
+  }
+  
+  const removeItem = (productId) => {
+    items.value = items.value.filter(i => i.id !== productId)
+  }
+  
+  return { items, addItem, removeItem }
+})
+
+// Use store when:
+// - Complex state mutations
+// - Shared logic across many components
+// - Need actions and getters
+// - Want devtools debugging
+```
+
+### Router Philosophy
+
+#### SPA (Single Page Application) Concept
+
+```javascript
+// Traditional Multi-Page App:
+// /about → Server returns about.html → Browser loads new page
+// /contact → Server returns contact.html → Browser loads new page
+// Problem: Full page reload, slow, flickering
+
+// SPA with Vue Router:
+// /about → Router shows About.vue component → No page reload
+// /contact → Router shows Contact.vue component → Smooth transition
+// All happens in browser - server only serves index.html
+
+// How Vue Router works:
+import { createRouter, createWebHistory } from 'vue-router'
+
+const router = createRouter({
+  history: createWebHistory(),  // Uses HTML5 History API
+  routes: [
+    { path: '/', component: Home },
+    { path: '/about', component: About }
+  ]
+})
+
+// URL bar shows /about
+// But server never requested /about
+// Router matched route and showed About.vue component instead
+
+// Router actually runs:
+// 1. User clicks link
+// 2. Router intercepts (prevents page reload)
+// 3. URL changes to /about (history.pushState)
+// 4. Vue checks routes
+// 5. Finds /about route
+// 6. Renders About.vue component
+// 7. Page updated without reload
+```
+
+#### Route Guards Theory
+
+```javascript
+// Route guards: Functions that run before navigation
+
+// Use cases:
+// 1. Check authentication before loading page
+// 2. Ask user to save before leaving form
+// 3. Validate user permissions
+// 4. Redirect based on conditions
+
+// Execution order:
+router.beforeEach((to, from, next) => {
+  // Runs BEFORE every route change
+  // to = destination route
+  // from = current route
+  // next = function to allow/deny navigation
+  
+  if (to.requiresAuth && !isLoggedIn()) {
+    next('/login')  // Redirect to login
+  } else {
+    next()  // Allow navigation
+  }
+})
+
+// Types of guards:
+// 1. Global: beforeEach, afterEach
+// 2. Per-route: beforeEnter in route definition
+// 3. Component: onBeforeRouteLeave, onBeforeRouteUpdate
+
+// Guard phases:
+// Global beforeEach → Route beforeEnter → Component beforeRouteLeave → Component beforeRouteUpdate → Route loads
+```
+
+### Performance Optimization Theory
+
+#### Why Performance Matters
+
+```javascript
+// Performance metrics users notice:
+// < 100ms = Feels instant
+// 100-300ms = Feels responsive
+// 300-1000ms = Feels slow
+// > 1000ms = Feels broken
+
+// Vue performance techniques:
+
+// 1. CODE SPLITTING: Load code only when needed
+const HeavyComponent = defineAsyncComponent(() =>
+  import('./HeavyComponent.vue')
+)
+// Instead of bundling all code in one file,
+// splits it and loads HeavyComponent only when route accessed
+
+// 2. LAZY EVALUATION: Computed doesn't run until accessed
+const expensiveResult = computed(() => {
+  console.log('Computing...')  // Only logs when accessed
+  return heavyCalculation()
+})
+
+// If component never uses expensiveResult, it never computes
+
+// 3. MEMOIZATION: Cache computed results
+const sum = computed(() => {
+  return bigArray.value.reduce((a, b) => a + b, 0)
+})
+// First access: calculates and caches
+// Second access: returns cached value
+// Third access: returns cached value (doesn't recalculate)
+
+// Only recomputes when bigArray changes
+
+// 4. BATCHING: Group updates together
+// Bad:
+for (let i = 0; i < 1000; i++) {
+  list.value.push(i)  // Triggers 1000 re-renders
+}
+
+// Good:
+const newItems = []
+for (let i = 0; i < 1000; i++) {
+  newItems.push(i)
+}
+list.value = newItems  // Triggers 1 re-render
+```
+
+### Security Considerations
+
+#### XSS (Cross-Site Scripting) Prevention
+
+```html
+<!-- Vue protects by default - escapes HTML -->
+
+<!-- Data -->
+<script setup>
+const userInput = ref('<img src=x onerror="alert(\'hacked\')">')
+</script>
+
+<!-- ✅ SAFE: {{ }} auto-escapes -->
+<div>{{ userInput }}</div>
+<!-- Renders: &lt;img src=x onerror="alert('hacked')"&gt; -->
+<!-- The HTML tags are displayed as text, not executed -->
+
+<!-- ❌ DANGEROUS: v-html renders as HTML -->
+<div v-html="userInput"></div>
+<!-- Renders: <img src=x onerror="alert('hacked')"> -->
+<!-- Image tries to load, onerror fires, XSS attack! -->
+
+<!-- Safe v-html usage: Only with trusted data -->
+<div v-html="sanitizeHtml(userInput)"></div>
+<!-- After sanitization, v-html is safe -->
+```
+
+#### CSRF Token Handling
+
+```javascript
+// CSRF: Cross-Site Request Forgery
+// Attacker tricks you into making unwanted requests
+
+// Solution: CSRF tokens
+
+// Server sends token to client
+const csrfToken = document.querySelector('meta[name="csrf-token"]').content
+
+// Client sends token back with state-changing requests
+const apiClient = axios.create()
+
+apiClient.interceptors.request.use(config => {
+  if (['post', 'put', 'delete'].includes(config.method)) {
+    config.headers['X-CSRF-Token'] = csrfToken
+  }
+  return config
+})
+
+// Server verifies token matches before processing request
+```
+
+### Debugging and Troubleshooting Theory
+
+#### Common Vue Mistakes and Why They Happen
+
+```javascript
+// MISTAKE 1: Mutating props directly
+export default {
+  props: ['count'],
+  methods: {
+    increment() {
+      this.count++  // ❌ WRONG - mutates parent's data
+    }
+  }
+}
+
+// Why it's wrong: Parent doesn't know about change
+// Parent still thinks count is 5, child thinks it's 6
+
+// Fix: Emit event to parent
+export default {
+  props: ['count'],
+  emits: ['update:count'],
+  methods: {
+    increment() {
+      this.$emit('update:count', this.count + 1)
+    }
+  }
+}
+
+// ─────────────────────────────────────────
+
+// MISTAKE 2: Accessing reactive data without .value in script
+const count = ref(0)
+
+// ❌ WRONG
+setTimeout(() => {
+  console.log(count)  // { value: 0 } - the ref object
+}, 1000)
+
+// ✅ RIGHT
+setTimeout(() => {
+  console.log(count.value)  // 0 - the actual value
+}, 1000)
+
+// ─────────────────────────────────────────
+
+// MISTAKE 3: Missing key in v-for
+// <div v-for="item in items">  <!-- ❌ NO KEY -->
+
+// Why: Vue can't track which item is which
+// When list reorders, Vue reuses DOM nodes in wrong order
+// State gets mixed up between items
+
+// Fix: Add key
+// <div v-for="item in items" :key="item.id">
+
+// ─────────────────────────────────────────
+
+// MISTAKE 4: Modifying array without .value in ref
+const items = ref([])
+
+// ❌ WRONG
+items.push(newItem)  // items is still { value: [...] }
+items[0] = modified  // Modifies ref object, not array
+
+// ✅ RIGHT
+items.value.push(newItem)
+items.value[0] = modified
+
+// Or use array method that returns new array:
+items.value = [...items.value, newItem]
+```
+
+---
+
+## Concept-wise Notes and Detailed Theory
+
+### Concept 1: Reactivity - The Foundation of Vue
+
+#### Theory Explained
+Reactivity is Vue's core feature that makes the framework "reactive." When reactive data changes, Vue automatically updates the DOM. This is the fundamental difference between Vue and vanilla JavaScript.
+
+**Core Idea:**
+```
+Reactive Data → Change Detected → Dependencies Notified → DOM Updated
+```
+
+**Three Layers of Reactivity:**
+
+```javascript
+// LAYER 1: DATA DEFINITION
+// You declare which data should be reactive
+import { ref, reactive } from 'vue'
+
+const count = ref(0)  // Primitive reactivity
+const user = reactive({ name: 'John' })  // Object reactivity
+
+// LAYER 2: DEPENDENCY TRACKING
+// Vue watches which components use this data
+export default {
+  setup() {
+    // When this component renders:
+    // Vue records: "This component depends on count"
+    // Why? So Vue knows to re-render it when count changes
+    return { count }
+  }
+}
+
+// Template reads count
+// <p>{{ count }}</p> 
+// Vue's tracking system notes the dependency
+
+// LAYER 3: CHANGE PROPAGATION
+// When data changes, Vue notifies dependents
+count.value = 5  // Change detected
+// Vue: "Components depending on count need to update"
+// Vue: "Computed properties using count need to recalculate"
+// Vue: "Watchers observing count need to fire"
+// Result: DOM updates to show 5
+```
+
+**Why Ref vs Reactive?**
+
+```javascript
+// JAVASCRIPT PRIMITIVES PROBLEM
+const age = 30  // Plain number
+age = 31  // JavaScript allows this, but Vue can't track it
+// Why? Primitives are immutable - can't wrap in Proxy
+
+// SOLUTION: Wrap in object
+const age = { value: 30 }  // Now it's an object
+age.value = 31  // Can track this with Proxy
+
+// That's exactly what ref() does
+const ageRef = ref(30)
+console.log(ageRef)  // { value: 30, __v_isRef: true, ...}
+ageRef.value = 31  // Vue's Proxy trap fires
+
+// OBJECTS don't need wrapping
+const user = reactive({ name: 'John' })
+user.name = 'Jane'  // Can track directly with Proxy
+// No .value needed
+```
+
+**Practical Implication:**
+
+```javascript
+// Choose based on data type:
+const count = ref(0)  // Primitives: string, number, boolean
+const active = ref(false)
+const message = ref('Hello')
+
+const user = reactive({ name: 'John', age: 30 })  // Objects/Arrays
+const items = reactive([])
+
+// Common mistake:
+const items = ref([])  // ref wrapping array
+items.value.push(1)  // Awkward - need .value
+items.value = [1, 2, 3]  // Better - replace entire array
+
+const items = reactive([])  // Better for arrays
+items.push(1)  // Natural - no .value needed
+```
+
+---
+
+### Concept 2: Template Interpolation and Data Binding
+
+#### Theory Explained
+Templates are the HTML view layer. Vue provides syntax to bind data to the template and update it reactively.
+
+**Interpolation Flow:**
+
+```
+Component Data (JavaScript) → Template Syntax → Rendered HTML
+                                    ↓
+                              Vue compiles
+                                    ↓
+                              Watcher installed
+                                    ↓
+                            Data changes → HTML updates
+```
+
+**Text Interpolation - {{ }}**
+
+```html
+<!-- Simple: Display data as text -->
+<p>{{ message }}</p>
+<!-- If message = "Hello", renders: <p>Hello</p> -->
+
+<!-- Expressions: Can perform operations -->
+<p>{{ count + 1 }}</p>
+<!-- Computed inline: 5 + 1 = 6 -->
+
+<!-- Method calls: Can call methods -->
+<p>{{ formatDate(date) }}</p>
+<!-- Calls formatDate method with date -->
+
+<!-- Ternary: Conditional expressions -->
+<p>{{ isAdmin ? 'Administrator' : 'User' }}</p>
+<!-- Shows "Administrator" or "User" based on condition -->
+
+<!-- Array operations: Manipulate data -->
+<p>{{ items.filter(i => i.active).length }}</p>
+<!-- Shows count of active items -->
+
+<!-- WHY: Interpolation is evaluated every render time
+     If you use it in template 5 times, Vue evaluates it 5 times
+     Problem: Expensive operations slow down rendering
+     Solution: Use computed properties instead
+-->
+
+<!-- ❌ BAD: Expensive operation in template -->
+<div>{{ heavyCalculation(data) }}</div>
+<div>{{ heavyCalculation(data) }}</div>
+<div>{{ heavyCalculation(data) }}</div>
+<!-- Runs 3 times! -->
+
+<!-- ✅ GOOD: Use computed -->
+<!-- Script: const result = computed(() => heavyCalculation(data)) -->
+<div>{{ result }}</div>
+<div>{{ result }}</div>
+<div>{{ result }}</div>
+<!-- Computed caches, runs once -->
+```
+
+**Attribute Binding - v-bind or :**
+
+```html
+<!-- Theory: bind JavaScript value to HTML attribute -->
+<!-- Syntax: v-bind:attributeName or :attributeName -->
+
+<!-- Basic attribute -->
+<img v-bind:src="imageSrc" />
+<!-- If imageSrc = "photo.jpg", renders: <img src="photo.jpg" /> -->
+
+<!-- Dynamic class -->
+<div :class="{ active: isActive }">
+  <!-- If isActive = true, renders: class="active" -->
+  <!-- If isActive = false, renders: class="" -->
+</div>
+
+<!-- Why v-bind instead of {{ }}? -->
+<!-- {{ }} is for text content, :prop is for attributes -->
+<!-- <img src="{{ url }}"> doesn't work - would be literal text -->
+<!-- <img :src="url"> works - binds actual URL -->
+
+<!-- Dynamic style -->
+<div :style="{ color: activeColor, fontSize: fontSize + 'px' }">
+  <!-- Builds inline style dynamically -->
+  <!-- If activeColor = 'red', fontSize = 14 -->
+  <!-- Renders: style="color: red; font-size: 14px;" -->
+</div>
+
+<!-- Boolean attributes - special handling -->
+<button :disabled="isLoading">Submit</button>
+<!-- If isLoading = true, renders: <button disabled>Submit</button> -->
+<!-- If isLoading = false, renders: <button>Submit</button> -->
+<!-- Not: <button disabled="false"> - that's invalid HTML -->
+
+<!-- Multiple bindings - v-bind object -->
+<div v-bind="attributes"></div>
+<!-- If attributes = { id: 'foo', class: 'bar', title: 'baz' } -->
+<!-- Renders: <div id="foo" class="bar" title="baz"></div> -->
+```
+
+**Why Binding Matters:**
+
+```javascript
+// Without Vue - manual updates
+document.querySelector('img').src = imageSrc
+document.querySelector('img').alt = imageAlt
+// If imageSrc changes, you must manually update again
+
+// With Vue - automatic updates
+// <img :src="imageSrc" :alt="imageAlt" />
+// If imageSrc changes, Vue automatically updates img.src
+// Reactive synchronization between data and DOM
+```
+
+---
+
+### Concept 3: Event Handling and User Interaction
+
+#### Theory Explained
+Events are how users interact with your application. Vue provides `v-on` (@) directive to listen to events and respond to user actions.
+
+**Event System Theory:**
+
+```
+User Action (click, type, submit)
+        ↓
+Browser emits event
+        ↓
+Vue catches event
+        ↓
+Calls your handler function
+        ↓
+Handler runs your code
+        ↓
+Your code can update data
+        ↓
+Vue detects data change
+        ↓
+Vue updates DOM
+        ↓
+User sees change
+```
+
+**Event Handler Types:**
+
+```javascript
+// TYPE 1: Simple handler without arguments
+export default {
+  methods: {
+    handleClick() {
+      console.log('Button clicked')
+    }
+  }
+}
+
+// Template: <button @click="handleClick">Click</button>
+// When clicked: handleClick() runs
+
+// TYPE 2: Inline handler
+// Template: <button @click="count++">Increment</button>
+// When clicked: count increases by 1
+// Useful for simple operations
+
+// TYPE 3: Handler with argument
+export default {
+  methods: {
+    handleClick(itemId) {
+      console.log('Item clicked:', itemId)
+    }
+  }
+}
+
+// Template: <button @click="handleClick(123)">Click</button>
+// When clicked: handleClick(123) runs
+
+// TYPE 4: Handler with event object
+export default {
+  methods: {
+    handleInput(event) {
+      console.log('Input value:', event.target.value)
+    }
+  }
+}
+
+// Template: <input @input="handleInput" />
+// When user types: event object passed with target.value
+
+// TYPE 5: Both arguments and event
+export default {
+  methods: {
+    handleClick(itemId, event) {
+      console.log('Item:', itemId, 'Event:', event)
+    }
+  }
+}
+
+// Template: <button @click="handleClick(123, $event)">
+// $event = special variable for event object
+```
+
+**Event Modifiers - Why They Exist:**
+
+```javascript
+// Event modifiers are shortcuts for common event patterns
+
+// .prevent = event.preventDefault()
+// Use: Stop default form submission
+// <form @submit.prevent="handleSubmit">
+//   <!-- Form doesn't reload page -->
+// </form>
+
+// .stop = event.stopPropagation()
+// Use: Stop event bubbling up to parent
+// <div @click="parentHandler">
+//   <button @click.stop="childHandler">
+//     <!-- Only childHandler runs, parentHandler doesn't -->
+//   </button>
+// </div>
+
+// .self = only trigger if target is the element itself
+// Use: Don't trigger for events from child elements
+// <div @click.self="handleClick">
+//   <span>Click me</span>  <!-- Doesn't trigger handleClick -->
+//   <!-- Only direct click on div triggers it -->
+// </div>
+
+// .once = trigger only first time
+// Use: Login form submission - only first submit matters
+// <form @submit.once="handleSubmit">
+//   <!-- Second submit does nothing -->
+// </form>
+
+// .capture = use capture phase of event propagation
+// (Advanced: for special event flow scenarios)
+```
+
+**Why Modifiers Are Important:**
+
+```html
+<!-- ❌ WITHOUT MODIFIER: Manual handling -->
+<form @submit="(e) => { e.preventDefault(); handleSubmit() }">
+  <!-- Verbose, easy to forget preventDefault -->
+</form>
+
+<!-- ✅ WITH MODIFIER: Clean and clear -->
+<form @submit.prevent="handleSubmit">
+  <!-- Intent is clear: submit, but prevent default -->
+</form>
+
+<!-- Key modifiers for keyboard input -->
+<input @keyup.enter="search" />
+<!-- Only triggers search on Enter key -->
+<!-- Without modifier: triggers on every keyup (enter, space, etc.) -->
+
+<input @keydown.escape="cancel" />
+<!-- Only triggers on Escape key -->
+
+<!-- Multiple modifiers -->
+<input @keydown.ctrl.s="save" />
+<!-- Ctrl + S combination triggers save -->
+```
+
+---
+
+### Concept 4: Computed Properties - Derived Data
+
+#### Theory Explained
+Computed properties are derived data: data that depends on other data. They automatically update when their dependencies change and cache results for efficiency.
+
+**Computed Theory:**
+
+```
+Dependency Changes → Computed Notified → Recalculates → Caches Result
+                                                             ↓
+                                    Other accesses use cached result
+```
+
+**Why Computed is Better Than Methods:**
+
+```javascript
+// METHOD: Function that returns a value
+export default {
+  data() {
+    return { firstName: 'John', lastName: 'Doe' }
+  },
+  methods: {
+    getFullName() {
+      console.log('getFullName called')
+      return this.firstName + ' ' + this.lastName
+    }
+  }
+}
+
+// Template: <p>{{ getFullName() }}</p>
+// Every time template renders, getFullName() runs
+// Every access calls the function
+// No caching
+
+// If template has:
+// <p>{{ getFullName() }}</p>
+// <p>{{ getFullName() }}</p>
+// <p>{{ getFullName() }}</p>
+// getFullName runs 3 times! Logs "getFullName called" 3 times
+
+// ─────────────────────────────────────────────
+
+// COMPUTED: Cached derived data
+export default {
+  data() {
+    return { firstName: 'John', lastName: 'Doe' }
+  },
+  computed: {
+    fullName() {
+      console.log('fullName computed')
+      return this.firstName + ' ' + this.lastName
+    }
+  }
+}
+
+// Template: <p>{{ fullName }}</p>
+// First access: computed runs, caches result, logs "fullName computed"
+// Second access: uses cached result, doesn't log
+// Third access: uses cached result, doesn't log
+
+// Same template with:
+// <p>{{ fullName }}</p>
+// <p>{{ fullName }}</p>
+// <p>{{ fullName }}</p>
+// fullName runs once! Logs "fullName computed" only once
+// Huge performance benefit
+
+// Cache invalidates when dependencies change:
+this.firstName = 'Jane'  // firstName changed
+// Vue: "fullName depends on firstName, invalidate cache"
+// Next access: fullName recomputes
+```
+
+**Getter and Setter - Advanced:**
+
+```javascript
+// GETTER ONLY (read-only)
+computed: {
+  fullName() {
+    return this.firstName + ' ' + this.lastName
+  }
+}
+
+// Can only read: {{ fullName }}
+// Cannot assign: this.fullName = 'Jane Doe' // ❌ Error
+
+// ─────────────────────────────────────────────
+
+// GETTER AND SETTER (read-write)
+computed: {
+  fullName: {
+    get() {
+      return this.firstName + ' ' + this.lastName
+    },
+    set(newValue) {
+      // Called when someone assigns to fullName
+      const parts = newValue.split(' ')
+      this.firstName = parts[0]
+      this.lastName = parts[1]
+    }
+  }
+}
+
+// Can read: console.log(this.fullName)  // "John Doe"
+// Can write: this.fullName = 'Jane Smith'
+//   ↓ setter fires
+//   ↓ splits "Jane Smith" into ["Jane", "Smith"]
+//   ↓ sets firstName = "Jane", lastName = "Smith"
+
+// Next read returns: "Jane Smith"
+
+// Why use setter?
+// Two-way binding with derived data
+// Input updates firstName/lastName via setter
+```
+
+**Computed vs Reactive - When to Use:**
+
+```javascript
+// COMPUTED: For read-only derived values
+// 📊 Example: total price = items * quantity
+const items = ref(5)
+const price = ref(10)
+const total = computed(() => items.value * price.value)
+
+// Use computed when: data is derived, read-only
+
+// ─────────────────────────────────────────────
+
+// REACTIVE: For state that can be directly modified
+// 📝 Example: form data
+const formData = reactive({
+  name: '',
+  email: '',
+  message: ''
+})
+
+// Use reactive when: need to modify directly, complex objects
+```
+
+---
+
+### Concept 5: Watchers - Reactive Effects
+
+#### Theory Explained
+Watchers listen to reactive data changes and run code in response. Used for side effects: API calls, database updates, analytics, etc.
+
+**Watcher Theory:**
+
+```
+Data Changes → Watcher Detects → Handler Runs → Side Effect Happens
+```
+
+**Watch vs Computed:**
+
+```javascript
+// COMPUTED: Transform data (no side effects)
+const firstName = ref('John')
+const fullName = computed(() => {
+  // Pure function - returns value, no side effects
+  return firstName.value + ' Doe'
+})
+
+// WATCH: React to changes (perform side effects)
+watch(firstName, (newValue, oldValue) => {
+  // Side effects here
+  console.log(`Name changed from ${oldValue} to ${newValue}`)
+  analyticsService.track('name_changed', newValue)
+  saveToDatabase(newValue)
+})
+
+// Key difference:
+// Computed: Input → Pure function → Output (no side effects)
+// Watch: Data changes → Handler → Side effects (API calls, etc.)
+```
+
+**Watch Modes - When They Fire:**
+
+```javascript
+// DEFAULT: After component updates
+const count = ref(0)
+
+watch(count, () => {
+  console.log('Count changed')
+})
+
+// 1. User modifies data: count.value = 5
+// 2. Component updates (re-renders)
+// 3. Watch handler runs: console.logs "Count changed"
+// Order: Data change → Component update → Watch handler
+
+// ─────────────────────────────────────────────
+
+// IMMEDIATE: Run right away and on changes
+watch(count, () => {
+  console.log('Count:', count.value)
+}, { immediate: true })
+
+// Component setup:
+// 1. immediately option activates
+// 2. Handler runs immediately: console.logs "Count: 0"
+// 3. Later, count changes to 5
+// 4. Handler runs again: console.logs "Count: 5"
+
+// Use case: Initialize state based on prop value
+watch(() => route.params.id, async (id) => {
+  user.value = await fetchUser(id)
+}, { immediate: true })
+
+// ─────────────────────────────────────────────
+
+// DEEP: Watch nested object changes
+const user = ref({
+  profile: {
+    name: 'John',
+    address: {
+      city: 'NYC'
+    }
+  }
+})
+
+watch(user, () => {
+  console.log('User changed')
+}, { deep: true })
+
+// Without deep: doesn't detect nested changes
+user.value.profile.name = 'Jane'  // ❌ Doesn't trigger
+
+// With deep: detects all nested changes
+user.value.profile.name = 'Jane'  // ✅ Triggers
+user.value.profile.address.city = 'LA'  // ✅ Triggers
+
+// ⚠️ Performance warning: deep watch can be expensive
+// with large or deeply nested objects
+```
+
+**Watch Cleanup:**
+
+```javascript
+const search = ref('')
+
+watch(search, async (newSearch, oldSearch, onCleanup) => {
+  // Start API call
+  let cancelled = false
+  onCleanup(() => {
+    cancelled = true  // Mark as cancelled
+  })
+  
+  const results = await apiClient.search(newSearch)
+  
+  if (!cancelled) {
+    // Only update if not cancelled
+    searchResults.value = results
+  }
+})
+
+// Why needed?
+// User types: "J" → API request starts for "J"
+// User types: "JS" → Before "J" results return, new request starts
+// "J" results return → Would overwrite "JS" results (wrong!)
+// Solution: Cancel "J" request when "JS" typed
+
+// Cleanup prevents race conditions in async watchers
+```
+
+---
+
+### Concept 6: Component Props - Parent to Child Communication
+
+#### Theory Explained
+Props are the way parents pass data to children. They're one-way: parent can update, but child cannot (data flows down, not up).
+
+**Props Theory:**
+
+```
+Parent Component
+    ↓ (passes data)
+   Props
+    ↓ (child receives)
+Child Component
+    ↓ (cannot modify back)
+Parent stays source of truth
+```
+
+**Why Props Are One-Way:**
+
+```javascript
+// GOOD: Data flows one way
+// Parent.vue
+export default {
+  setup() {
+    const count = ref(0)
+    const increment = () => count.value++
+    
+    return { count, increment }
+  }
+}
+
+// Template: <Child :count="count" @increment="increment" />
+
+// Child.vue
+// Receives count as prop
+// Cannot do: count.value++ (violates prop)
+// Instead: emit event to parent
+// Parent increments count
+// New value flows back down as updated prop
+
+// Why one-way?
+// Single source of truth: Parent owns data
+// Prevents confusion: Parent is responsible for updates
+// Easier to debug: Data flows in one direction
+
+// ─────────────────────────────────────────────
+
+// ❌ BAD: Child modifying prop directly
+export default {
+  props: ['count'],
+  methods: {
+    increment() {
+      this.count++  // 🚨 WRONG - mutates parent's data
+      // Parent thinks count is 5
+      // Child thinks count is 6
+      // Confusion and bugs!
+    }
+  }
+}
+
+// ✅ RIGHT: Child emitting event
+export default {
+  props: ['count'],
+  emits: ['update:count'],
+  methods: {
+    increment() {
+      this.$emit('update:count', this.count + 1)
+    }
+  }
+}
+
+// Parent handles update:
+// <Child :count="count" @update:count="(val) => count = val" />
+// Or use v-model shorthand:
+// <Child v-model="count" />
+```
+
+**Prop Validation - Ensuring Correct Data:**
+
+```javascript
+// NO VALIDATION (Bad practice)
+defineProps(['user'])
+// Any data accepted, including wrong types
+
+// TYPE VALIDATION
+defineProps({
+  user: Object,        // Any object
+  count: Number,       // Any number
+  active: Boolean,     // Any boolean
+  items: Array         // Any array
+})
+
+// MULTIPLE TYPES
+defineProps({
+  count: [String, Number],  // Accepts either string or number
+})
+
+// REQUIRED VALIDATION
+defineProps({
+  id: {
+    type: String,
+    required: true  // Must be provided, error if missing
+  }
+})
+
+// DEFAULT VALUE
+defineProps({
+  status: {
+    type: String,
+    default: 'pending'  // If not provided, uses 'pending'
+  }
+})
+
+// CUSTOM VALIDATOR
+defineProps({
+  priority: {
+    type: Number,
+    validator(value) {
+      // Custom validation logic
+      return value >= 1 && value <= 5  // Only 1-5 allowed
+    }
+  }
+})
+
+// Why validate?
+// Catch bugs early: Wrong data type → Error in console
+// Documentation: Props validator documents expected data
+// Runtime safety: Invalid data rejected before use
+```
+
+---
+
+### Concept 7: Component Events - Child to Parent Communication
+
+#### Theory Explained
+Events are how children communicate with parents. Child emits event with data, parent listens and responds. Maintains one-way data flow.
+
+**Events Theory:**
+
+```
+Child Component
+    ↓ (emits event)
+  Event
+    ↓ (parent listens)
+Parent Component
+    ↓ (responds/updates)
+New prop value flows to child
+```
+
+**Emit Pattern:**
+
+```javascript
+// SIMPLE EVENT: Just notification, no data
+// Child.vue
+const emit = defineEmits(['close'])
+
+const handleClose = () => {
+  emit('close')  // Notify parent
+}
+
+// Parent template:
+// <Modal @close="isModalOpen = false" />
+// When child emits 'close', parent closes modal
+
+// ─────────────────────────────────────────────
+
+// EVENT WITH PAYLOAD: Pass data with event
+// Child.vue
+const emit = defineEmits(['update:count'])
+
+const handleIncrement = () => {
+  emit('update:count', newCount)  // Send data to parent
+}
+
+// Parent template:
+// <Counter :count="count" @update:count="(val) => count = val" />
+
+// ─────────────────────────────────────────────
+
+// EVENT WITH VALIDATION: Ensure correct payload
+const emit = defineEmits({
+  submit: (payload) => {
+    // Validator function
+    // Returns true if valid, false if invalid
+    return typeof payload === 'object' &&
+           'email' in payload &&
+           'password' in payload
+  }
+})
+
+// Parent will get console warning if invalid payload sent
+
+// ─────────────────────────────────────────────
+
+// MULTIPLE EVENTS: Component emits different events
+const emit = defineEmits(['save', 'cancel', 'delete'])
+
+const handleSave = (formData) => {
+  emit('save', formData)
+}
+
+const handleCancel = () => {
+  emit('cancel')
+}
+
+const handleDelete = (id) => {
+  emit('delete', id)
+}
+
+// Parent:
+// <Form @save="onSave" @cancel="onCancel" @delete="onDelete" />
+```
+
+**v-model Pattern - Two-way Binding Shorthand:**
+
+```javascript
+// Without v-model:
+// <input :value="message" @input="(e) => message = e.target.value" />
+// Verbose, hard to read
+
+// With v-model:
+// <input v-model="message" />
+// Clean and intuitive
+
+// How v-model works internally:
+// 1. Binds :modelValue prop
+// 2. Listens for @update:modelValue event
+// 3. Automatically updates parent data
+
+// For custom component:
+// Parent: <MyInput v-model="text" />
+// Equivalent to:
+// Parent: <MyInput :modelValue="text" @update:modelValue="text = $event" />
+
+// Child component must:
+// 1. Accept modelValue prop
+// 2. Emit update:modelValue event
+
+// Child.vue with v-model support:
+defineProps(['modelValue'])
+const emit = defineEmits(['update:modelValue'])
+
+const handleInput = (newValue) => {
+  emit('update:modelValue', newValue)
+}
+```
+
+---
+
+### Concept 8: Provide/Inject - Deep Tree Communication
+
+#### Theory Explained
+For deeply nested components, passing props through every level (prop drilling) is tedious. Provide/Inject allows any descendant to access data without props.
+
+**Provide/Inject Theory:**
+
+```
+Ancestor Component (provides data)
+    ↓
+Parent Component (doesn't need to know)
+    ↓
+Child Component (doesn't need to know)
+    ↓
+Deep Nested Component (injects data directly from ancestor)
+```
+
+**Why Provide/Inject?**
+
+```javascript
+// ❌ WITHOUT PROVIDE/INJECT: Prop drilling
+// App.vue
+export default {
+  setup() {
+    const theme = ref('dark')
+    
+    return { theme }
+  }
+}
+
+// Template: <Header :theme="theme" />
+
+// Header.vue (receives but doesn't use)
+export default {
+  props: ['theme'],
+  setup(props) {
+    return { theme: props.theme }
+  }
+}
+
+// Template: <Navbar :theme="theme" />
+
+// Navbar.vue (receives but doesn't use)
+export default {
+  props: ['theme'],
+  setup(props) {
+    return { theme: props.theme }
+  }
+}
+
+// Template: <UserMenu :theme="theme" />
+
+// UserMenu.vue (finally uses it!)
+export default {
+  props: ['theme'],
+  setup(props) {
+    // Use theme here
+    const backgroundColor = props.theme === 'dark' ? '#333' : '#fff'
+  }
+}
+
+// Problem: Header and Navbar components don't use theme
+// But they must pass it through (prop drilling)
+// Tedious to maintain
+
+// ─────────────────────────────────────────────
+
+// ✅ WITH PROVIDE/INJECT: Direct injection
+
+// App.vue (provides)
+export default {
+  setup() {
+    const theme = ref('dark')
+    provide('theme', theme)  // Make available to all descendants
+    
+    return { theme }
+  }
+}
+
+// Header.vue (no props needed)
+export default {
+  setup() {
+    // No props, no drilling
+    return {}
+  }
+}
+
+// Navbar.vue (no props needed)
+export default {
+  setup() {
+    // No props, no drilling
+    return {}
+  }
+}
+
+// UserMenu.vue (injects directly)
+export default {
+  setup() {
+    const theme = inject('theme')  // Get from App directly
+    const backgroundColor = theme.value === 'dark' ? '#333' : '#fff'
+    return { backgroundColor }
+  }
+}
+
+// Benefits:
+// - No prop drilling through intermediate components
+// - Cleaner code
+// - Easier to maintain
+// - Intermediate components don't need to know about theme
+```
+
+**Provide/Inject with Reactivity:**
+
+```javascript
+// SHARING REACTIVE DATA
+// Parent.vue
+export default {
+  setup() {
+    const isDarkMode = ref(false)
+    
+    provide('isDarkMode', isDarkMode)  // Provide ref
+    // Descendants get the ref, not the value
+    // When ref changes, all descendants see the change
+  }
+}
+
+// Child.vue
+export default {
+  setup() {
+    const isDarkMode = inject('isDarkMode')
+    
+    // isDarkMode is a ref
+    console.log(isDarkMode.value)  // Access with .value
+    
+    // When parent changes isDarkMode:
+    watch(isDarkMode, (newVal) => {
+      applyTheme(newVal)
+    })
+  }
+}
+
+// ─────────────────────────────────────────────
+
+// SHARING METHODS
+// Parent.vue
+export default {
+  setup() {
+    const toggleTheme = () => {
+      isDarkMode.value = !isDarkMode.value
+    }
+    
+    provide('toggleTheme', toggleTheme)
+  }
+}
+
+// Child.vue
+export default {
+  setup() {
+    const toggleTheme = inject('toggleTheme')
+    
+    return { toggleTheme }
+  }
+}
+
+// Template: <button @click="toggleTheme">Toggle Theme</button>
+```
+
+---
+
+### Concept 9: Slots - Component Composition
+
+#### Theory Explained
+Slots allow parent components to pass content to child components. Child controls structure, parent controls content. Powerful for component reusability.
+
+**Slots Theory:**
+
+```
+Parent Component (provides content)
+    ↓
+    Slot content
+    ↓
+Child Component (renders in <slot> position)
+```
+
+**Default Slot - Basic Content:**
+
+```javascript
+// Card.vue (child)
+export default {}
+
+// Template:
+// <div class="card">
+//   <slot></slot>  <!-- Parent content goes here -->
+// </div>
+
+// Parent template:
+// <Card>
+//   <p>This content goes into the slot</p>
+// </Card>
+
+// Renders:
+// <div class="card">
+//   <p>This content goes into the slot</p>
+// </div>
+
+// ─────────────────────────────────────────────
+
+// FALLBACK CONTENT: If parent doesn't provide content
+// Card.vue:
+// <slot>Default card content here</slot>
+
+// Parent (doesn't provide content):
+// <Card></Card>
+
+// Renders:
+// <div class="card">
+//   Default card content here  <!-- Fallback used -->
+// </div>
+
+// Parent (provides content):
+// <Card><p>Custom content</p></Card>
+
+// Renders:
+// <div class="card">
+//   <p>Custom content</p>  <!-- Parent content replaces fallback -->
+// </div>
+```
+
+**Named Slots - Multiple Regions:**
+
+```javascript
+// Card.vue
+// <div class="card">
+//   <div class="header">
+//     <slot name="header"></slot>
+//   </div>
+//   <div class="body">
+//     <slot></slot>  <!-- unnamed slot (default) -->
+//   </div>
+//   <div class="footer">
+//     <slot name="footer"></slot>
+//   </div>
+// </div>
+
+// Parent:
+// <Card>
+//   <template v-slot:header>
+//     <h1>Card Title</h1>
+//   </template>
+//
+//   <p>Body content here</p>
+//
+//   <template v-slot:footer>
+//     <button>OK</button>
+//   </template>
+// </Card>
+
+// v-slot:header tells Vue: put this in the header slot
+// No v-slot means: put this in unnamed (default) slot
+// v-slot:footer tells Vue: put this in the footer slot
+
+// Renders:
+// <div class="card">
+//   <div class="header">
+//     <h1>Card Title</h1>
+//   </div>
+//   <div class="body">
+//     <p>Body content here</p>
+//   </div>
+//   <div class="footer">
+//     <button>OK</button>
+//   </div>
+// </div>
+```
+
+**Scoped Slots - Passing Data Back:**
+
+```javascript
+// UserList.vue (child - passes data to parent)
+export default {
+  setup() {
+    const users = ref([
+      { id: 1, name: 'John' },
+      { id: 2, name: 'Jane' },
+      { id: 3, name: 'Bob' }
+    ])
+  }
+}
+
+// Template:
+// <div>
+//   <div v-for="(user, index) in users" :key="user.id">
+//     <slot :user="user" :index="index">
+//       <span>{{ user.name }}</span>  <!-- fallback -->
+//     </slot>
+//   </div>
+// </div>
+
+// :user and :index are slot props
+// They pass data from child to parent
+
+// ─────────────────────────────────────────────
+
+// Parent (receives data from slot)
+// <UserList>
+//   <template v-slot="{ user, index }">
+//     <div class="user-row">
+//       #{{ index }}: {{ user.name }}
+//     </div>
+//   </template>
+// </UserList>
+
+// Destructuring { user, index } extracts slot props
+// Parent can now use user and index
+
+// Renders:
+// <div class="user-row">#0: John</div>
+// <div class="user-row">#1: Jane</div>
+// <div class="user-row">#2: Bob</div>
+
+// ─────────────────────────────────────────────
+
+// USE CASE: Flexible list rendering
+// Parent decides how each item looks
+// Child provides the data
+// Perfect separation of concerns
+```
+
+---
+
+### Concept 10: Lifecycle and Component Timing
+
+#### Theory Explained
+Components have different lifecycle stages. Vue runs hooks at each stage to let you execute code at the right time.
+
+**Lifecycle Stages - When to Use Each:**
+
+```javascript
+// STAGE 1: CREATION (data and methods ready, DOM not)
+beforeCreate() {
+  // Almost never used
+  // data() not ready yet
+}
+
+created() {
+  // Data ready, methods ready
+  // DOM not ready yet
+  // Use for: Initialize data, fetch data that doesn't need DOM
+  this.user = fetch('/api/user')
+  this.setupListeners()
+}
+
+// ─────────────────────────────────────────────
+
+// STAGE 2: MOUNTING (adding to DOM)
+beforeMount() {
+  // Component ready to mount
+  // Last chance to modify before DOM
+  // Rarely used
+}
+
+mounted() {
+  // Component now in DOM
+  // Can access DOM refs, initialize DOM libraries
+  // Use for: DOM initialization, scroll listeners, autofocus
+  this.$refs.input.focus()
+  initializeChart(this.$refs.chartContainer)
+  window.addEventListener('scroll', this.handleScroll)
+}
+
+// ─────────────────────────────────────────────
+
+// STAGE 3: UPDATING (when data changes)
+beforeUpdate() {
+  // Data changed, DOM not updated yet
+  // Rare use case: save DOM state
+  this.scrollPosition = window.scrollY
+}
+
+updated() {
+  // Data changed, DOM updated
+  // Use for: React to DOM changes
+  this.scrollTo(this.scrollPosition)
+}
+
+// ─────────────────────────────────────────────
+
+// STAGE 4: UNMOUNTING (removing from DOM)
+beforeUnmount() {
+  // About to be destroyed
+  // Clean up external resources
+  // Use for: Remove listeners, cancel requests
+  window.removeEventListener('scroll', this.handleScroll)
+}
+
+unmounted() {
+  // Completely removed
+  // Final cleanup
+  this.cancelPendingRequests()
+}
+```
+
+**Common Lifecycle Patterns:**
+
+```javascript
+// PATTERN 1: Fetch data on mount
+export default {
+  data() {
+    return { user: null }
+  },
+  async mounted() {
+    this.user = await fetchUser()
+  }
+}
+
+// PATTERN 2: Cleanup listeners
+export default {
+  mounted() {
+    window.addEventListener('resize', this.handleResize)
+  },
+  unmounted() {
+    window.removeEventListener('resize', this.handleResize)
+  }
+}
+
+// PATTERN 3: Respond to prop changes
+export default {
+  props: ['userId'],
+  watch: {
+    userId(newId) {
+      this.fetchUserData(newId)
+    }
+  },
+  mounted() {
+    this.fetchUserData(this.userId)
+  }
+}
+```
+
+---
+
+## Resources
+
+- [Official Vue.js Documentation](https://vuejs.org)
+- [Vue Router](https://router.vuejs.org)
+- [Pinia Store](https://pinia.vuejs.org)
+- [Vite Guide](https://vitejs.dev)
+- [Vue DevTools](https://devtools.vuejs.org)
+- [Vue 3 Migration Guide](https://v3-migration.vuejs.org)
+- [Vue Test Utils](https://test-utils.vuejs.org)
+- [VueUse - Utility Hooks](https://vueuse.org)
+
+---
+
+**Last Updated:** December 29, 2025
+**Version:** Vue.js 3.x
