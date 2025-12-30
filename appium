@@ -1,0 +1,3527 @@
+# Appium Complete Notes - Theory & Implementation
+
+## Table of Contents
+1. [Introduction & Overview](#introduction--overview)
+2. [Architecture & Theory](#architecture--theory)
+3. [Installation & Setup](#installation--setup)
+4. [Desired Capabilities](#desired-capabilities)
+5. [Locator Strategies](#locator-strategies)
+6. [Element Interactions](#element-interactions)
+7. [Wait Strategies](#wait-strategies)
+8. [Mobile Gestures](#mobile-gestures)
+9. [Mobile App Testing](#mobile-app-testing)
+10. [Web Testing on Mobile](#web-testing-on-mobile)
+11. [Advanced Features](#advanced-features)
+12. [Test Framework Integration](#test-framework-integration)
+13. [Best Practices & Patterns](#best-practices--patterns)
+14. [Performance & Optimization](#performance--optimization)
+15. [Common Issues & Solutions](#common-issues--solutions)
+16. [Interview Q&A](#interview-qa)
+
+---
+
+## Introduction & Overview
+
+### What is Appium?
+
+Appium is an open-source test automation framework for mobile applications. It allows automation of iOS, Android, and Windows apps using a unified WebDriver API.
+
+**Key Features:**
+- **Cross-platform:** iOS, Android, Windows, hybrid apps
+- **Cross-language:** Java, Python, JavaScript, Ruby, etc.
+- **No app modification:** Test production apps without source code
+- **WebDriver standard:** Uses Selenium WebDriver JSON Wire protocol
+- **Open source:** Free and community-driven
+- **Inspector:** Built-in element inspector for locator identification
+
+### Supported Platforms
+
+| Platform | Native | Hybrid | Web |
+|----------|--------|--------|-----|
+| **Android** | ✅ | ✅ | ✅ |
+| **iOS** | ✅ | ✅ | ✅ |
+| **Windows** | ✅ | - | - |
+
+### Use Cases
+
+1. **Mobile App Testing:** Native and hybrid apps
+2. **Web Testing:** Mobile browsers
+3. **Cross-platform Testing:** Same tests for iOS and Android
+4. **Regression Testing:** Automated test suites
+5. **Performance Testing:** Memory, CPU monitoring
+6. **Accessibility Testing:** Screen reader validation
+
+---
+
+## Architecture & Theory
+
+### Appium Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Test Client                              │
+│  (Java, Python, JavaScript, Ruby, etc.)                    │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+        ┌────────────▼────────────────┐
+        │   HTTP/JSON Wire Protocol   │
+        └────────────┬────────────────┘
+                     │
+┌────────────────────▼────────────────────────────────────────┐
+│              Appium Server                                  │
+│  - Routes commands to drivers                              │
+│  - Manages sessions                                        │
+│  - Handles logging                                         │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+        ┌────────────┴─────────────┐
+        │                          │
+    ┌───▼────┐              ┌─────▼────┐
+    │ Android│              │   iOS    │
+    │ Driver │              │  Driver  │
+    └───┬────┘              └──┬──────┘
+        │                      │
+    ┌───▼────────────┐     ┌───▼─────────┐
+    │ ADB (Android)  │     │ XCUITest    │
+    │ UIAutomator    │     │ (iOS)       │
+    └─────────────────┘     └─────────────┘
+        │                      │
+    ┌───▼────────────┐     ┌───▼─────────┐
+    │ Android Device │     │ iOS Device  │
+    │ or Emulator    │     │ or Simulator│
+    └─────────────────┘     └─────────────┘
+```
+
+### How Appium Works
+
+**Step-by-Step Process:**
+
+```
+1. Test Client sends command via HTTP
+   ↓
+2. Appium Server receives request
+   ↓
+3. Server routes to appropriate driver (Android/iOS)
+   ↓
+4. Driver translates to platform-specific commands
+   ↓
+5. Commands sent to device/emulator via ADB (Android) or XCUITest (iOS)
+   ↓
+6. Device executes command
+   ↓
+7. Response sent back through same chain
+   ↓
+8. Test client receives result
+```
+
+### Appium Server Endpoints
+
+**Main REST API Endpoints:**
+
+```
+POST /wd/hub/session              → Create new session
+GET /wd/hub/session/{sessionId}   → Get session details
+DELETE /wd/hub/session/{sessionId}→ Delete session (quit)
+
+POST /wd/hub/session/{sessionId}/element    → Find element
+POST /wd/hub/session/{sessionId}/elements   → Find elements
+
+POST /wd/hub/session/{sessionId}/element/{elementId}/click
+POST /wd/hub/session/{sessionId}/element/{elementId}/clear
+POST /wd/hub/session/{sessionId}/element/{elementId}/value
+POST /wd/hub/session/{sessionId}/element/{elementId}/text
+```
+
+---
+
+## Installation & Setup
+
+### System Requirements
+
+**Android Setup:**
+```bash
+# 1. Install Node.js
+# 2. Install Android SDK
+# 3. Set ANDROID_HOME environment variable
+export ANDROID_HOME=/path/to/android/sdk
+
+# 4. Install ADB (Android Debug Bridge)
+export PATH=$PATH:$ANDROID_HOME/platform-tools
+
+# 5. Verify ADB
+adb version
+```
+
+**iOS Setup (macOS only):**
+```bash
+# 1. Install Xcode
+# 2. Install Xcode command-line tools
+xcode-select --install
+
+# 3. Install Xcode build tools
+sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+```
+
+### Install Appium
+
+```bash
+# Global installation
+npm install -g appium
+
+# Verify installation
+appium --version
+
+# Install Appium Inspector (UI for element identification)
+npm install -g appium-inspector
+
+# Or download from: https://github.com/appium/appium-inspector/releases
+```
+
+### Start Appium Server
+
+```bash
+# Default configuration (localhost:4723)
+appium
+
+# With custom host and port
+appium --host 127.0.0.1 --port 4723
+
+# Enable logging
+appium --log-level debug
+
+# Complete setup example
+appium \
+  --host 127.0.0.1 \
+  --port 4723 \
+  --log-level debug \
+  --session-override
+```
+
+### Project Setup (Java Example)
+
+**pom.xml:**
+```xml
+<dependency>
+    <groupId>io.appium</groupId>
+    <artifactId>java-client</artifactId>
+    <version>8.3.0</version>
+</dependency>
+
+<dependency>
+    <groupId>org.seleniumhq.selenium</groupId>
+    <artifactId>selenium-java</artifactId>
+    <version>4.0.0</version>
+</dependency>
+
+<dependency>
+    <groupId>junit</groupId>
+    <artifactId>junit</artifactId>
+    <version>4.13.2</version>
+    <scope>test</scope>
+</dependency>
+```
+
+---
+
+## Desired Capabilities
+
+### Theory
+
+Desired Capabilities are a set of key-value pairs that describe the requirements for a test session. They tell the Appium server what kind of session you want to start.
+
+### Common Capabilities
+
+**Android Capabilities:**
+```java
+UiAutomator2Options options = new UiAutomator2Options();
+
+// Required capabilities
+options.setDeviceName("Android Device");           // Device name
+options.setPlatformName("Android");               // Platform
+options.setPlatformVersion("11");                 // OS version
+
+// App information
+options.setApp("/path/to/app.apk");               // App path
+options.setAppPackage("com.example.app");         // Package name
+options.setAppActivity(".MainActivity");          // Main activity
+
+// Optional capabilities
+options.setAutoGrantPermissions(true);            // Auto grant permissions
+options.setNewCommandTimeout(300);                // Command timeout (seconds)
+options.setNoReset(true);                         // Don't reset app state
+options.setFullReset(false);                      // Don't uninstall app
+options.setChromedriverExecutable("/path/to/chromedriver"); // For Chrome/WebView
+options.setMaxSessions(1);                        // Max parallel sessions
+```
+
+**iOS Capabilities:**
+```java
+XCUITestOptions options = new XCUITestOptions();
+
+// Required capabilities
+options.setDeviceName("iPhone 13");               // Device name
+options.setPlatformName("iOS");                   // Platform
+options.setPlatformVersion("15.0");              // OS version
+
+// App information
+options.setApp("/path/to/app.ipa");               // App path
+options.setBundleId("com.example.app");           // Bundle ID
+
+// Optional capabilities
+options.setXcodeOrgId("DEVELOPER_ID");            // Developer ID
+options.setXcodeSigningId("iPhone Developer");    // Signing ID
+options.setAutoGrantPermissions(true);            // Auto grant permissions
+options.setWdaLocalPort(8100);                    // WebDriverAgent port
+options.setSimulatorTraceDir("/path/to/trace");   // Performance trace
+```
+
+**Web Capabilities (Mobile Browser):**
+```java
+// For Chrome on Android
+ChromeOptions options = new ChromeOptions();
+options.setCapability("browserName", "Chrome");
+options.setCapability("platformName", "Android");
+options.setCapability("automationName", "UIAutomator2");
+options.setCapability("deviceName", "Android Device");
+
+// For Safari on iOS
+options.setCapability("browserName", "Safari");
+options.setCapability("platformName", "iOS");
+options.setCapability("automationName", "XCUITest");
+options.setCapability("deviceName", "iPhone 13");
+```
+
+### Capability Examples
+
+**Example 1: Android App Testing**
+```java
+@Before
+public void setUp() throws MalformedURLException {
+    UiAutomator2Options options = new UiAutomator2Options()
+        .setDeviceName("emulator-5554")
+        .setPlatformName("Android")
+        .setPlatformVersion("11")
+        .setApp(System.getProperty("user.dir") + "/app/app.apk")
+        .setAppPackage("com.example.calculator")
+        .setAppActivity(".MainActivity")
+        .setAutoGrantPermissions(true)
+        .setNewCommandTimeout(300);
+
+    URL url = new URL("http://127.0.0.1:4723");
+    driver = new AndroidDriver(url, options);
+}
+
+@After
+public void tearDown() {
+    if (driver != null) {
+        driver.quit();
+    }
+}
+```
+
+**Example 2: iOS App Testing**
+```java
+@Before
+public void setUp() throws MalformedURLException {
+    XCUITestOptions options = new XCUITestOptions()
+        .setDeviceName("iPhone 13")
+        .setPlatformName("iOS")
+        .setPlatformVersion("15.0")
+        .setApp("/path/to/app.ipa")
+        .setBundleId("com.example.app")
+        .setAutoGrantPermissions(true);
+
+    URL url = new URL("http://127.0.0.1:4723");
+    driver = new IOSDriver(url, options);
+}
+```
+
+---
+
+## Locator Strategies
+
+### Theory
+
+Locator strategies are methods to find elements in an app. Different strategies work better in different scenarios.
+
+### Locator Types
+
+**1. ID (Resource ID - Android)**
+```java
+// Android - Resource ID
+WebElement element = driver.findElement(AppiumBy.id("com.example:id/button_login"));
+
+// Best for: Android apps with unique IDs
+// Pros: Fast, reliable, unique
+// Cons: Not available on iOS
+```
+
+**2. AccessibilityID**
+```java
+// Both Android and iOS
+WebElement element = driver.findElement(AppiumBy.accessibilityId("Logout Button"));
+
+// Best for: Both platforms, accessibility testing
+// Pros: Works on both, semantically meaningful
+// Cons: May not always be unique
+```
+
+**3. ClassName**
+```java
+// Find element by class name
+WebElement element = driver.findElement(AppiumBy.className("android.widget.Button"));
+
+// Best for: Android native elements
+// Pros: Available for all native elements
+// Cons: Often not unique, multiple same types
+```
+
+**4. XPath**
+```java
+// Absolute XPath
+WebElement element = driver.findElement(AppiumBy.xpath(
+    "//android.widget.Button[@text='Login']"
+));
+
+// Relative XPath
+WebElement element = driver.findElement(AppiumBy.xpath(
+    "//XCUIElementTypeButton[@name='Login']"
+));
+
+// XPath with predicates
+WebElement element = driver.findElement(AppiumBy.xpath(
+    "//android.widget.LinearLayout[@resource-id='com.example:id/container']/android.widget.Button[1]"
+));
+
+// Best for: Complex selections, cross-platform
+// Pros: Powerful, flexible
+// Cons: Fragile to UI changes, slower
+```
+
+**5. Predicate String (iOS)**
+```java
+// iOS predicate string
+WebElement element = driver.findElement(AppiumBy.iOSNsPredicateString(
+    "type == 'XCUIElementTypeButton' AND name == 'Login'"
+));
+
+// Complex predicate
+WebElement element = driver.findElement(AppiumBy.iOSNsPredicateString(
+    "type == 'XCUIElementTypeTextField' AND value BEGINSWITH 'Enter'"
+));
+
+// Best for: iOS-specific testing
+// Pros: Native iOS approach, powerful
+// Cons: iOS only
+```
+
+**6. Class Chain (iOS)**
+```java
+// Class chain locator
+WebElement element = driver.findElement(AppiumBy.iOSClassChain(
+    "**/XCUIElementTypeButton[`name == 'Login'`]"
+));
+
+// Complex class chain
+WebElement element = driver.findElement(AppiumBy.iOSClassChain(
+    "**/XCUIElementTypeWindow[1]/XCUIElementTypeButton"
+));
+
+// Best for: iOS element hierarchy navigation
+// Pros: Efficient, hierarchical
+// Cons: iOS only
+```
+
+**7. Android DataMatcher**
+```java
+// Android data matcher for list items
+WebElement element = driver.findElement(AppiumBy.androidDataMatcher(
+    "hasEntry(name, \"John\")"
+));
+
+// Best for: Android DataMatcher-enabled apps
+// Pros: Access to adapter data
+// Cons: Limited to specific apps
+```
+
+### Locator Strategy Comparison
+
+| Strategy | Android | iOS | Speed | Reliability | Notes |
+|----------|---------|-----|-------|-------------|-------|
+| ID | ✅ | ❌ | ⚡⚡ | ⭐⭐⭐⭐⭐ | Fastest for Android |
+| AccessibilityID | ✅ | ✅ | ⚡⚡ | ⭐⭐⭐⭐ | Best cross-platform |
+| ClassName | ✅ | ✅ | ⚡⚡ | ⭐⭐⭐ | Often not unique |
+| XPath | ✅ | ✅ | ⚡ | ⭐⭐⭐ | Flexible but fragile |
+| Predicate | ❌ | ✅ | ⚡⚡ | ⭐⭐⭐⭐ | iOS native approach |
+| Class Chain | ❌ | ✅ | ⚡⚡⚡ | ⭐⭐⭐⭐ | Fastest for iOS |
+
+### Locator Best Practices
+
+**Good Locator:**
+```java
+// ✅ Good - Specific, stable, accessible
+WebElement loginButton = driver.findElement(
+    AppiumBy.accessibilityId("login_button")
+);
+
+WebElement emailField = driver.findElement(
+    AppiumBy.id("com.example:id/email_input")
+);
+```
+
+**Bad Locator:**
+```java
+// ❌ Bad - Generic, fragile, slow
+WebElement element = driver.findElement(
+    AppiumBy.xpath("//android.widget.LinearLayout[3]/android.widget.Button[2]")
+);
+
+// ❌ Bad - Hardcoded coordinates
+WebElement element = driver.findElement(
+    AppiumBy.xpath("//XCUIElementTypeButton[@x='100' and @y='200']")
+);
+```
+
+---
+
+## Element Interactions
+
+### Common Element Operations
+
+**Finding Elements:**
+```java
+// Find single element
+WebElement element = driver.findElement(AppiumBy.id("element_id"));
+
+// Find multiple elements
+List<WebElement> elements = driver.findElements(AppiumBy.className("android.widget.Button"));
+
+// Wait for element (will cover in Wait Strategies section)
+WebElement element = wait.until(
+    ExpectedConditions.presenceOfElementLocated(AppiumBy.id("element_id"))
+);
+```
+
+**Click Operations:**
+```java
+// Simple click
+WebElement button = driver.findElement(AppiumBy.id("button_id"));
+button.click();
+
+// Multiple clicks
+button.click();
+button.click();
+
+// Double click using W3C Actions
+Actions actions = new Actions(driver);
+actions.doubleClick(button).perform();
+
+// Long press
+actions.clickAndHold(button)
+    .pause(Duration.ofSeconds(2))
+    .release()
+    .perform();
+```
+
+**Text Input:**
+```java
+// Clear and type
+WebElement emailField = driver.findElement(AppiumBy.id("email_input"));
+emailField.clear();
+emailField.sendKeys("user@example.com");
+
+// Type without clearing
+emailField.sendKeys(" - additional text");
+
+// Get current text
+String currentText = emailField.getText();
+System.out.println("Email: " + currentText);
+```
+
+**Attribute Access:**
+```java
+// Get element attributes
+WebElement element = driver.findElement(AppiumBy.id("element_id"));
+
+String id = element.getAttribute("resource-id");
+String text = element.getAttribute("text");
+String contentDesc = element.getAttribute("content-desc");
+
+// Check if element is displayed
+boolean isDisplayed = element.isDisplayed();
+
+// Check if element is enabled
+boolean isEnabled = element.isEnabled();
+
+// Get tag name
+String tagName = element.getTagName();
+
+// Get element location
+Point location = element.getLocation();
+System.out.println("X: " + location.x + ", Y: " + location.y);
+
+// Get element size
+Dimension size = element.getSize();
+System.out.println("Width: " + size.width + ", Height: " + size.height);
+```
+
+**Element Scrolling:**
+```java
+// Scroll to element (Android)
+((AppiumDriver) driver).executeScript(
+    "mobile: scrollGesture",
+    ImmutableMap.of(
+        "left", 100,
+        "top", 100,
+        "width", 200,
+        "height", 200,
+        "direction", "down",
+        "percent", 3.0
+    )
+);
+
+// Scroll in a specific view
+scrollInView("android.widget.ListView", "down", 5);
+
+// iOS scroll
+((AppiumDriver) driver).executeScript(
+    "mobile: scroll",
+    ImmutableMap.of("direction", "down")
+);
+```
+
+---
+
+## Wait Strategies
+
+### Theory
+
+Waits are crucial in mobile testing because:
+- Network latency
+- App loading time
+- Animation delays
+- Asynchronous operations
+
+Three types of waits:
+1. **Implicit Wait** - Default wait for all operations
+2. **Explicit Wait** - Wait for specific conditions
+3. **Fluent Wait** - Custom polling interval and timeout
+
+### Implicit Wait
+
+```java
+@Before
+public void setUp() {
+    // Apply implicit wait to all operations
+    driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(10));
+}
+
+// Now every findElement will wait up to 10 seconds
+WebElement element = driver.findElement(AppiumBy.id("element_id"));
+```
+
+**Pros:**
+- Simple to implement
+- Applies globally
+
+**Cons:**
+- Fixed timeout
+- Can mask timing issues
+- Waits for all operations
+
+### Explicit Wait
+
+```java
+// Standard Explicit Wait
+WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+
+// Wait for element presence
+WebElement element = wait.until(
+    ExpectedConditions.presenceOfElementLocated(AppiumBy.id("element_id"))
+);
+
+// Wait for element visibility
+WebElement element = wait.until(
+    ExpectedConditions.visibilityOfElementLocated(AppiumBy.id("element_id"))
+);
+
+// Wait for element clickability
+WebElement button = wait.until(
+    ExpectedConditions.elementToBeClickable(AppiumBy.id("button_id"))
+);
+button.click();
+
+// Wait for element invisibility
+boolean invisibile = wait.until(
+    ExpectedConditions.invisibilityOfElementLocated(AppiumBy.id("loading_spinner"))
+);
+
+// Wait for specific text in element
+WebElement element = wait.until(
+    ExpectedConditions.textToBePresentInElementLocated(
+        AppiumBy.id("message_label"),
+        "Success"
+    )
+);
+```
+
+**Pros:**
+- Flexible conditions
+- Specific to operation
+- Better error messages
+
+**Cons:**
+- More verbose
+- Need to write custom conditions
+
+### Fluent Wait
+
+```java
+// Custom polling with fluent wait
+FluentWait<WebDriver> fluentWait = new FluentWait<>(driver)
+    .withTimeout(Duration.ofSeconds(10))        // Max wait time
+    .pollingEvery(Duration.ofMillis(500))       // Check every 500ms
+    .ignoring(NoSuchElementException.class)     // Ignore these exceptions
+    .ignoring(StaleElementReferenceException.class);
+
+WebElement element = fluentWait.until(
+    driver -> driver.findElement(AppiumBy.id("element_id"))
+);
+```
+
+### Custom Wait Conditions
+
+```java
+// Custom wait condition class
+public class CustomWaitConditions {
+    public static ExpectedCondition<WebElement> elementToHaveText(
+            By locator, String text) {
+        return driver -> {
+            WebElement element = driver.findElement(locator);
+            if (element.getText().contains(text)) {
+                return element;
+            }
+            return null;
+        };
+    }
+
+    public static ExpectedCondition<Boolean> elementToBeStable(
+            WebElement element) {
+        return driver -> {
+            Point location1 = element.getLocation();
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            Point location2 = element.getLocation();
+            return location1.equals(location2);
+        };
+    }
+}
+
+// Usage
+WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+WebElement element = wait.until(
+    CustomWaitConditions.elementToHaveText(
+        AppiumBy.id("status_label"),
+        "Loading"
+    )
+);
+```
+
+### Wait Best Practices
+
+```java
+// ✅ Good - Explicit wait for specific condition
+WebElement loginButton = wait.until(
+    ExpectedConditions.elementToBeClickable(AppiumBy.id("login_button"))
+);
+loginButton.click();
+
+// ❌ Bad - Hardcoded sleep
+Thread.sleep(5000);
+driver.findElement(AppiumBy.id("login_button")).click();
+
+// ✅ Good - Wait for element with specific text
+WebElement message = wait.until(
+    ExpectedConditions.textToBePresentInElementLocated(
+        AppiumBy.id("message_label"),
+        "Success"
+    )
+);
+
+// ✅ Good - Wait for element to disappear
+wait.until(
+    ExpectedConditions.invisibilityOfElementLocated(AppiumBy.id("loading"))
+);
+```
+
+---
+
+## Mobile Gestures
+
+### Theory
+
+Mobile gestures are user interactions unique to mobile devices like tap, swipe, pinch, etc.
+
+### Tap Gesture
+
+```java
+// Simple tap
+WebElement element = driver.findElement(AppiumBy.id("button_id"));
+driver.executeScript("mobile: tap", ImmutableMap.of(
+    "x", element.getLocation().x,
+    "y", element.getLocation().y
+));
+
+// Or using W3C Actions
+new Actions(driver)
+    .tap(element)
+    .perform();
+
+// Multi-tap (double tap)
+PointerInput pointer = new PointerInput(PointerInput.Kind.TOUCH, "finger");
+Sequence tap = new Sequence(pointer, 1);
+tap.addAction(pointer.createPointerMove(Duration.ZERO, PointerInput.Origin.viewport(), 100, 200));
+tap.addAction(pointer.createPointerDown(PointerInput.MouseButton.LEFT.asArg()));
+tap.addAction(pointer.createPointerUp(PointerInput.MouseButton.LEFT.asArg()));
+tap.addAction(pointer.createPointerDown(PointerInput.MouseButton.LEFT.asArg()));
+tap.addAction(pointer.createPointerUp(PointerInput.MouseButton.LEFT.asArg()));
+driver.perform(Collections.singletonList(tap));
+```
+
+### Swipe Gesture
+
+```java
+// Swipe left
+driver.executeScript("mobile: swipeGesture", ImmutableMap.of(
+    "left", 100,
+    "top", 100,
+    "width", 200,
+    "height", 200,
+    "direction", "left",
+    "percent", 0.75
+));
+
+// Swipe right
+driver.executeScript("mobile: swipeGesture", ImmutableMap.of(
+    "left", 100,
+    "top", 100,
+    "width", 200,
+    "height", 200,
+    "direction", "right",
+    "percent", 0.75
+));
+
+// Swipe up
+driver.executeScript("mobile: swipeGesture", ImmutableMap.of(
+    "left", 100,
+    "top", 100,
+    "width", 200,
+    "height", 200,
+    "direction", "up",
+    "percent", 0.75
+));
+
+// Swipe down
+driver.executeScript("mobile: swipeGesture", ImmutableMap.of(
+    "left", 100,
+    "top", 100,
+    "width", 200,
+    "height", 200,
+    "direction", "down",
+    "percent", 0.75
+));
+
+// Using W3C Actions
+PointerInput pointer = new PointerInput(PointerInput.Kind.TOUCH, "finger");
+Sequence swipe = new Sequence(pointer, 1);
+swipe.addAction(pointer.createPointerMove(Duration.ZERO, PointerInput.Origin.viewport(), 100, 100));
+swipe.addAction(pointer.createPointerDown(PointerInput.MouseButton.LEFT.asArg()));
+swipe.addAction(pointer.createPointerMove(Duration.ofMillis(500), PointerInput.Origin.viewport(), 500, 100));
+swipe.addAction(pointer.createPointerUp(PointerInput.MouseButton.LEFT.asArg()));
+driver.perform(Collections.singletonList(swipe));
+```
+
+### Pinch & Zoom
+
+```java
+// Pinch gesture (zoom out)
+driver.executeScript("mobile: pinchGesture", ImmutableMap.of(
+    "scale", 0.5,      // Scale factor (0.5 = zoom out)
+    "velocity", 1.0
+));
+
+// Zoom gesture (zoom in)
+driver.executeScript("mobile: pinchGesture", ImmutableMap.of(
+    "scale", 2.0,      // Scale factor (2.0 = zoom in)
+    "velocity", 1.0
+));
+
+// Using W3C Actions for pinch
+PointerInput finger1 = new PointerInput(PointerInput.Kind.TOUCH, "finger1");
+PointerInput finger2 = new PointerInput(PointerInput.Kind.TOUCH, "finger2");
+
+Sequence pinch = new Sequence(finger1, 1);
+pinch.addAction(finger1.createPointerMove(Duration.ZERO, PointerInput.Origin.viewport(), 100, 100));
+pinch.addAction(finger1.createPointerDown(PointerInput.MouseButton.LEFT.asArg()));
+pinch.addAction(finger1.createPointerMove(Duration.ofMillis(500), PointerInput.Origin.viewport(), 50, 50));
+pinch.addAction(finger1.createPointerUp(PointerInput.MouseButton.LEFT.asArg()));
+
+Sequence pinch2 = new Sequence(finger2, 1);
+pinch2.addAction(finger2.createPointerMove(Duration.ZERO, PointerInput.Origin.viewport(), 300, 300));
+pinch2.addAction(finger2.createPointerDown(PointerInput.MouseButton.LEFT.asArg()));
+pinch2.addAction(finger2.createPointerMove(Duration.ofMillis(500), PointerInput.Origin.viewport(), 350, 350));
+pinch2.addAction(finger2.createPointerUp(PointerInput.MouseButton.LEFT.asArg()));
+
+driver.perform(Arrays.asList(pinch, pinch2));
+```
+
+### Long Press
+
+```java
+// Long press gesture
+driver.executeScript("mobile: longClickGesture", ImmutableMap.of(
+    "x", 100,
+    "y", 200,
+    "duration", 2000  // milliseconds
+));
+
+// Using Actions
+Actions actions = new Actions(driver);
+actions.clickAndHold(element)
+    .pause(Duration.ofSeconds(2))
+    .release()
+    .perform();
+```
+
+### Rotation
+
+```java
+// Rotate device (Android)
+driver.rotate(ScreenOrientation.LANDSCAPE);
+driver.rotate(ScreenOrientation.PORTRAIT);
+
+// Get current orientation
+ScreenOrientation orientation = driver.getOrientation();
+```
+
+---
+
+## Mobile App Testing
+
+### Android Specific Features
+
+**Working with Android Activities:**
+```java
+// Start specific activity
+driver.startActivity(
+    "com.example.app",
+    ".MainActivity"
+);
+
+// Get current activity
+String activity = driver.currentActivity();
+System.out.println("Current Activity: " + activity);
+
+// Get app package
+String package = driver.getCurrentPackage();
+System.out.println("Current Package: " + package);
+```
+
+**ADB Commands Through Appium:**
+```java
+// Execute shell command
+String output = driver.executeScript(
+    "mobile: shell",
+    ImmutableMap.of("command", "getprop ro.build.version.release")
+);
+
+// Get app status
+String status = driver.queryAppState("com.example.app");
+// Returns: 0 (not installed), 1 (not running), 2 (running foreground), 3 (running background)
+
+// Get app crash status
+String crashStatus = driver.checkAppCrash();
+```
+
+**Permissions:**
+```java
+// Grant permissions
+driver.grantPermissions("android.permission.CAMERA");
+driver.grantPermissions("android.permission.ACCESS_FINE_LOCATION");
+
+// Revoke permissions
+driver.revokePermissions("android.permission.CAMERA");
+
+// Check permission status
+String status = driver.checkPermission("android.permission.CAMERA");
+```
+
+### iOS Specific Features
+
+**Working with iOS Apps:**
+```java
+// Launch app with bundle ID
+driver.launchApp();
+
+// Terminate app
+driver.terminateApp("com.example.app");
+
+// Reset app
+driver.resetApp();
+
+// Get installed apps
+List<String> apps = driver.queryAppState("com.example.app");
+```
+
+**Siri Commands (iOS):**
+```java
+// Activate Siri
+driver.executeScript("mobile: siriCommand", ImmutableMap.of(
+    "text", "Open Calculator"
+));
+```
+
+### Common Operations
+
+**App Installation & Removal:**
+```java
+// Install app (Android)
+driver.installApp("/path/to/app.apk");
+
+// Uninstall app
+driver.removeApp("com.example.app");
+
+// Check if app installed
+boolean installed = driver.isAppInstalled("com.example.app");
+```
+
+**Get App Info:**
+```java
+// Get app logs
+List<String> logs = driver.manage().logs().getAvailableLogTypes();
+
+// Get system logs
+LogEntries entries = driver.manage().logs().get("logcat");
+for (LogEntry entry : entries) {
+    System.out.println(entry.getMessage());
+}
+```
+
+---
+
+## Web Testing on Mobile
+
+### Mobile Web Testing
+
+**Testing Web on Android Chrome:**
+```java
+@Before
+public void setUp() throws MalformedURLException {
+    // Capabilities for mobile web testing
+    UiAutomator2Options options = new UiAutomator2Options()
+        .setDeviceName("emulator-5554")
+        .setPlatformName("Android")
+        .setPlatformVersion("11")
+        .setBrowserName("Chrome")           // Chrome browser
+        .setChromedriverExecutable("/path/to/chromedriver")
+        .setNewCommandTimeout(300);
+
+    URL url = new URL("http://127.0.0.1:4723");
+    driver = new AndroidDriver(url, options);
+}
+
+@Test
+public void testMobileWeb() {
+    // Navigate to URL
+    driver.get("https://www.example.com");
+
+    // Standard Selenium operations
+    WebElement searchBox = driver.findElement(AppiumBy.id("search"));
+    searchBox.sendKeys("Appium");
+    
+    WebElement searchButton = driver.findElement(AppiumBy.xpath("//button[contains(text(), 'Search')]"));
+    searchButton.click();
+}
+```
+
+**Testing Web on iOS Safari:**
+```java
+@Before
+public void setUp() throws MalformedURLException {
+    XCUITestOptions options = new XCUITestOptions()
+        .setDeviceName("iPhone 13")
+        .setPlatformName("iOS")
+        .setPlatformVersion("15.0")
+        .setBrowserName("Safari");          // Safari browser
+
+    URL url = new URL("http://127.0.0.1:4723");
+    driver = new IOSDriver(url, options);
+}
+```
+
+### Hybrid App Testing
+
+**Testing WebView in Android:**
+```java
+// Get available contexts
+Set<String> contexts = driver.getContextHandles();
+for (String context : contexts) {
+    System.out.println("Context: " + context);
+    // Output: NATIVE_APP, WEBVIEW_<packagename>
+}
+
+// Switch to WebView context
+driver.context("WEBVIEW_com.example.app");
+
+// Test web elements
+WebElement element = driver.findElement(By.id("web_element_id"));
+element.click();
+
+// Switch back to native
+driver.context("NATIVE_APP");
+```
+
+---
+
+## Advanced Features
+
+### Mobile Execution Scripts
+
+**Pre-built Mobile Scripts (Android):**
+```java
+// Take screenshot
+String screenshot = (String) driver.executeScript("mobile: screenshot");
+
+// Get battery info
+Map<String, Object> battery = (Map<String, Object>) driver.executeScript(
+    "mobile: batteryInfo"
+);
+
+// Get device info
+Map<String, Object> info = (Map<String, Object>) driver.executeScript(
+    "mobile: deviceInfo"
+);
+
+// Get memory info
+Map<String, Object> memory = (Map<String, Object>) driver.executeScript(
+    "mobile: memoryInfo"
+);
+```
+
+### Performance Monitoring
+
+**Android Performance:**
+```java
+// Get CPU info
+Map<String, Object> cpuStats = (Map<String, Object>) driver.executeScript(
+    "mobile: performanceData",
+    ImmutableMap.of(
+        "packageName", "com.example.app",
+        "dataType", "cpuinfo"
+    )
+);
+
+// Get memory stats
+Map<String, Object> memoryStats = (Map<String, Object>) driver.executeScript(
+    "mobile: performanceData",
+    ImmutableMap.of(
+        "packageName", "com.example.app",
+        "dataType", "memoryinfo"
+    )
+);
+
+// Get fps (frames per second)
+Map<String, Object> fpsStats = (Map<String, Object>) driver.executeScript(
+    "mobile: performanceData",
+    ImmutableMap.of(
+        "packageName", "com.example.app",
+        "dataType", "gfxinfo"
+    )
+);
+```
+
+### Network Simulation
+
+**Network Throttling:**
+```java
+// Set network connection type (Android)
+driver.setConnection(ConnectionStateBuilder.wifi().build());
+driver.setConnection(ConnectionStateBuilder.cellular().build());
+driver.setConnection(ConnectionStateBuilder.airplaneMode().build());
+
+// Get current network status
+Connection connection = driver.getConnection();
+boolean wifiEnabled = connection.isWiFiEnabled();
+boolean dataEnabled = connection.isDataEnabled();
+boolean airplaneMode = connection.isAirplaneModeEnabled();
+```
+
+---
+
+## Test Framework Integration
+
+### JUnit Setup
+
+```java
+import org.junit.Before;
+import org.junit.After;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class LoginTest {
+    private AndroidDriver driver;
+    private WebDriverWait wait;
+
+    @Before
+    public void setUp() throws MalformedURLException {
+        UiAutomator2Options options = new UiAutomator2Options()
+            .setDeviceName("emulator-5554")
+            .setPlatformName("Android")
+            .setApp(System.getProperty("user.dir") + "/app/app.apk");
+
+        driver = new AndroidDriver(new URL("http://127.0.0.1:4723"), options);
+        wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+    }
+
+    @Test
+    public void testLogin() {
+        // Test code
+        WebElement emailField = wait.until(
+            ExpectedConditions.presenceOfElementLocated(AppiumBy.id("email_input"))
+        );
+        emailField.sendKeys("user@example.com");
+
+        WebElement passwordField = driver.findElement(AppiumBy.id("password_input"));
+        passwordField.sendKeys("password123");
+
+        WebElement loginButton = driver.findElement(AppiumBy.id("login_button"));
+        loginButton.click();
+
+        // Assertion
+        WebElement dashboard = wait.until(
+            ExpectedConditions.presenceOfElementLocated(AppiumBy.id("dashboard_view"))
+        );
+        assertTrue(dashboard.isDisplayed());
+    }
+
+    @After
+    public void tearDown() {
+        if (driver != null) {
+            driver.quit();
+        }
+    }
+}
+```
+
+### TestNG Setup
+
+```java
+import org.testng.annotations.*;
+import org.testng.Assert;
+
+public class LoginTest {
+    private AndroidDriver driver;
+
+    @BeforeClass
+    public void setUp() throws MalformedURLException {
+        UiAutomator2Options options = new UiAutomator2Options()
+            .setDeviceName("emulator-5554")
+            .setPlatformName("Android")
+            .setApp(System.getProperty("user.dir") + "/app/app.apk");
+
+        driver = new AndroidDriver(new URL("http://127.0.0.1:4723"), options);
+    }
+
+    @Test(priority = 1)
+    public void testLogin() {
+        // Test code
+    }
+
+    @Test(priority = 2, dependsOnMethods = {"testLogin"})
+    public void testLogout() {
+        // Test code
+    }
+
+    @AfterClass
+    public void tearDown() {
+        if (driver != null) {
+            driver.quit();
+        }
+    }
+}
+```
+
+---
+
+## Best Practices & Patterns
+
+### Page Object Model (POM)
+
+**POM Theory:**
+Page Object Model is a design pattern that creates an object repository for web elements. It improves maintainability and reduces code duplication.
+
+**Implementation:**
+```java
+// BasePage class
+public class BasePage {
+    protected AndroidDriver driver;
+    protected WebDriverWait wait;
+
+    public BasePage(AndroidDriver driver) {
+        this.driver = driver;
+        this.wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+    }
+
+    protected WebElement find(By locator) {
+        return wait.until(ExpectedConditions.presenceOfElementLocated(locator));
+    }
+
+    protected void click(By locator) {
+        wait.until(ExpectedConditions.elementToBeClickable(locator)).click();
+    }
+
+    protected void type(By locator, String text) {
+        find(locator).sendKeys(text);
+    }
+
+    protected String getText(By locator) {
+        return find(locator).getText();
+    }
+}
+
+// LoginPage class
+public class LoginPage extends BasePage {
+    private final By emailField = AppiumBy.id("email_input");
+    private final By passwordField = AppiumBy.id("password_input");
+    private final By loginButton = AppiumBy.id("login_button");
+    private final By errorMessage = AppiumBy.id("error_message");
+
+    public LoginPage(AndroidDriver driver) {
+        super(driver);
+    }
+
+    public void enterEmail(String email) {
+        type(emailField, email);
+    }
+
+    public void enterPassword(String password) {
+        type(passwordField, password);
+    }
+
+    public void clickLogin() {
+        click(loginButton);
+    }
+
+    public String getErrorMessage() {
+        return getText(errorMessage);
+    }
+
+    public void login(String email, String password) {
+        enterEmail(email);
+        enterPassword(password);
+        clickLogin();
+    }
+}
+
+// Test class using POM
+public class LoginTest {
+    private AndroidDriver driver;
+    private LoginPage loginPage;
+
+    @Before
+    public void setUp() throws MalformedURLException {
+        // Initialize driver
+        loginPage = new LoginPage(driver);
+    }
+
+    @Test
+    public void testValidLogin() {
+        loginPage.login("user@example.com", "password123");
+        // Assert dashboard is displayed
+    }
+
+    @Test
+    public void testInvalidLogin() {
+        loginPage.login("user@example.com", "wrongpassword");
+        String error = loginPage.getErrorMessage();
+        assertEquals("Invalid credentials", error);
+    }
+}
+```
+
+### Data-Driven Testing
+
+```java
+public class DataDrivenTest {
+    private AndroidDriver driver;
+    private LoginPage loginPage;
+
+    @DataProvider(name = "loginData")
+    public Object[][] getLoginData() {
+        return new Object[][] {
+            {"user1@example.com", "pass123", true},
+            {"user2@example.com", "pass456", true},
+            {"invalid@example.com", "wrongpass", false},
+        };
+    }
+
+    @Test(dataProvider = "loginData")
+    public void testLoginWithDifferentCredentials(
+            String email, String password, boolean shouldSucceed) {
+        loginPage.login(email, password);
+        // Assert based on shouldSucceed
+    }
+}
+```
+
+### Parallel Execution
+
+```java
+// testng.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd">
+<suite name="Parallel Tests" parallel="methods" thread-count="2">
+    <test name="AndroidTest">
+        <classes>
+            <class name="tests.LoginTest"/>
+            <class name="tests.SearchTest"/>
+        </classes>
+    </test>
+</suite>
+```
+
+---
+
+## Performance & Optimization
+
+### Performance Best Practices
+
+**1. Efficient Locators:**
+```java
+// ✅ Fast - Direct ID
+driver.findElement(AppiumBy.id("button_id"));
+
+// ✅ Moderately Fast - AccessibilityID
+driver.findElement(AppiumBy.accessibilityId("button"));
+
+// ❌ Slow - Complex XPath
+driver.findElement(AppiumBy.xpath(
+    "//android.widget.LinearLayout[@content-desc='container']/" +
+    "android.widget.LinearLayout[@resource-id='section']/android.widget.Button[2]"
+));
+```
+
+**2. Smart Waits:**
+```java
+// ✅ Good - Specific condition
+wait.until(ExpectedConditions.elementToBeClickable(AppiumBy.id("button")));
+
+// ❌ Bad - Long implicit wait
+driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(30));
+```
+
+**3. Optimize Screenshots:**
+```java
+// ✅ Good - Full page screenshot
+File screenshot = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
+
+// ❌ Bad - Multiple screenshots
+for (int i = 0; i < 100; i++) {
+    driver.getScreenshotAs(OutputType.FILE);
+}
+```
+
+---
+
+## Common Issues & Solutions
+
+### Issue 1: NoSuchElementException
+
+**Problem:** Element not found on page
+
+**Solutions:**
+```java
+// 1. Wait for element
+WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+WebElement element = wait.until(
+    ExpectedConditions.presenceOfElementLocated(AppiumBy.id("element_id"))
+);
+
+// 2. Check locator strategy
+// Try different locators: ID → AccessibilityID → XPath
+
+// 3. Verify element visibility
+wait.until(ExpectedConditions.visibilityOfElementLocated(AppiumBy.id("element_id")));
+
+// 4. Use scrolling if element is off-screen
+driver.executeScript("mobile: scrollGesture", ImmutableMap.of(
+    "direction", "down",
+    "percent", 3.0
+));
+```
+
+### Issue 2: StaleElementReferenceException
+
+**Problem:** Element reference is stale (DOM changed)
+
+**Solutions:**
+```java
+// 1. Re-find element
+List<WebElement> elements = driver.findElements(AppiumBy.className("button"));
+for (WebElement element : elements) {
+    try {
+        element.click();
+    } catch (StaleElementReferenceException e) {
+        // Re-find and click
+        element = driver.findElement(AppiumBy.id("button_id"));
+        element.click();
+    }
+}
+
+// 2. Use explicit waits
+wait.until(ExpectedConditions.stalenessOf(element));
+WebElement newElement = driver.findElement(AppiumBy.id("element_id"));
+
+// 3. Use try-catch
+try {
+    element.click();
+} catch (StaleElementReferenceException e) {
+    element = driver.findElement(AppiumBy.id("element_id"));
+    element.click();
+}
+```
+
+### Issue 3: Element Not Clickable
+
+**Problem:** Element exists but cannot be clicked
+
+**Solutions:**
+```java
+// 1. Wait for element to be clickable
+wait.until(ExpectedConditions.elementToBeClickable(AppiumBy.id("button")));
+
+// 2. Scroll to element
+driver.executeScript("mobile: scrollGesture", ImmutableMap.of(
+    "direction", "down"
+));
+
+// 3. Use JavaScript click (as last resort)
+JavascriptExecutor js = (JavascriptExecutor) driver;
+js.executeScript("arguments[0].click();", element);
+
+// 4. Check if element is covered by another element
+Point location = element.getLocation();
+Dimension size = element.getSize();
+
+// Verify element is not covered
+boolean isClickable = (boolean) driver.executeScript(
+    "return arguments[0].offsetWidth > 0 && arguments[0].offsetHeight > 0;",
+    element
+);
+```
+
+### Issue 4: Connection Refused
+
+**Problem:** Cannot connect to Appium server
+
+**Solutions:**
+```bash
+# 1. Verify Appium server is running
+appium
+
+# 2. Check port availability
+lsof -i :4723
+
+# 3. Use different port
+appium --port 4724
+
+# 4. Check firewall settings
+# Ensure port 4723 is not blocked
+
+# 5. Verify URL in test
+new AndroidDriver(new URL("http://127.0.0.1:4723"), options);
+```
+
+### Issue 5: Device Not Found
+
+**Problem:** Connected device not recognized by Appium
+
+**Solutions:**
+```bash
+# 1. Check device connectivity
+adb devices
+
+# 2. Enable USB debugging
+# Settings → Developer Options → USB Debugging
+
+# 3. Restart ADB
+adb kill-server
+adb start-server
+
+# 4. Reconnect device
+adb disconnect
+adb connect <device_id>
+
+# 5. Specify device name in capabilities
+options.setDeviceName("device_id_from_adb_devices");
+```
+
+---
+
+## Interview Q&A
+
+### Beginner Questions
+
+**Q1: What is Appium and what are its main advantages?**
+
+A: Appium is an open-source test automation framework for mobile applications. 
+
+**Advantages:**
+- **Cross-platform:** Single codebase for iOS, Android, Windows
+- **No app modification:** Tests production-ready apps
+- **WebDriver standard:** Uses Selenium WebDriver protocol
+- **Multiple languages:** Java, Python, JavaScript, Ruby, etc.
+- **Open source:** Free and community-supported
+
+**Q2: Explain the Appium architecture.**
+
+A: Appium uses a client-server architecture:
+- **Client:** Test code that sends commands via HTTP
+- **Server:** Receives commands and routes to drivers
+- **Drivers:** Convert commands to platform-specific format
+- **Device:** Executes commands via ADB (Android) or XCUITest (iOS)
+
+**Q3: What are Desired Capabilities and why are they needed?**
+
+A: Desired Capabilities are key-value pairs that specify requirements for a test session. They tell Appium what kind of environment to set up.
+
+**Example:**
+```java
+UiAutomator2Options options = new UiAutomator2Options()
+    .setDeviceName("emulator-5554")
+    .setPlatformName("Android")
+    .setApp("/path/to/app.apk");
+```
+
+**Q4: Difference between Implicit and Explicit waits.**
+
+A:
+
+| Aspect | Implicit | Explicit |
+|--------|----------|----------|
+| **Scope** | Global | Specific condition |
+| **Implementation** | Once per driver | Per operation |
+| **Flexibility** | Fixed timeout | Custom conditions |
+| **Usage** | Default wait | Specific needs |
+
+### Intermediate Questions
+
+**Q5: What are different locator strategies in Appium?**
+
+A: 
+1. **ID** - Resource ID (Android)
+2. **AccessibilityID** - Accessibility identifier (both platforms)
+3. **ClassName** - UI element class name
+4. **XPath** - XML path expression
+5. **Predicate String** - iOS native query
+6. **Class Chain** - iOS element hierarchy
+
+**Best to use:** AccessibilityID for cross-platform, ID for Android, Predicate/ClassChain for iOS
+
+**Q6: Explain Page Object Model pattern.**
+
+A: POM is a design pattern that:
+- Creates object repository for UI elements
+- Separates test logic from UI details
+- Improves maintainability
+- Reduces code duplication
+
+**Benefits:**
+- Easy to update locators
+- Readable tests
+- Reusable page components
+- Better error handling
+
+**Q7: How do you handle mobile gestures in Appium?**
+
+A: Using mobile execution scripts:
+```java
+// Swipe
+driver.executeScript("mobile: swipeGesture", ImmutableMap.of(
+    "direction", "left",
+    "percent", 0.75
+));
+
+// Pinch
+driver.executeScript("mobile: pinchGesture", ImmutableMap.of(
+    "scale", 0.5
+));
+
+// Long press
+driver.executeScript("mobile: longClickGesture", ImmutableMap.of(
+    "x", 100,
+    "y", 200,
+    "duration", 2000
+));
+```
+
+**Q8: What is the difference between Native and Hybrid apps?**
+
+A:
+
+| Aspect | Native | Hybrid |
+|--------|--------|--------|
+| **Built** | Platform-specific | WebView + Native |
+| **Testing** | Native testing only | Both native and web |
+| **Performance** | Better | Slower |
+| **UI Elements** | Native | HTML/CSS/JavaScript |
+| **Appium Context** | NATIVE_APP | NATIVE_APP + WEBVIEW |
+
+### Advanced Questions
+
+**Q9: How do you handle WebView testing in Appium?**
+
+A:
+```java
+// Get available contexts
+Set<String> contexts = driver.getContextHandles();
+
+// Switch to WebView
+driver.context("WEBVIEW_com.example.app");
+
+// Test web elements
+WebElement element = driver.findElement(By.id("web_element_id"));
+
+// Switch back to native
+driver.context("NATIVE_APP");
+```
+
+**Q10: Explain performance monitoring in Appium.**
+
+A: Use mobile execution scripts:
+```java
+// CPU info
+driver.executeScript("mobile: performanceData", ImmutableMap.of(
+    "packageName", "com.example.app",
+    "dataType", "cpuinfo"
+));
+
+// Memory info
+driver.executeScript("mobile: performanceData", ImmutableMap.of(
+    "packageName", "com.example.app",
+    "dataType", "memoryinfo"
+));
+
+// FPS info
+driver.executeScript("mobile: performanceData", ImmutableMap.of(
+    "packageName", "com.example.app",
+    "dataType", "gfxinfo"
+));
+```
+
+**Q11: How do you implement parallel execution in Appium?**
+
+A: Using TestNG with parallel configuration:
+```xml
+<suite name="Parallel Tests" parallel="methods" thread-count="2">
+    <test name="Test1">
+        <classes>
+            <class name="tests.LoginTest"/>
+        </classes>
+    </test>
+    <test name="Test2">
+        <classes>
+            <class name="tests.SearchTest"/>
+        </classes>
+    </test>
+</suite>
+```
+
+**Each test runs on different device/emulator:**
+```java
+@BeforeClass
+@Parameters({"device"})
+public void setUp(String device) {
+    options.setDeviceName(device);
+    // Initialize driver
+}
+```
+
+**Q12: Common issues and solutions.**
+
+A:
+1. **NoSuchElementException:** Use explicit waits, verify locators
+2. **StaleElementReferenceException:** Re-find elements after DOM changes
+3. **Element not clickable:** Wait for element, scroll, check visibility
+4. **Connection refused:** Start Appium server, check port
+5. **Device not found:** Check ADB, enable USB debugging, restart ADB
+
+---
+
+### Scenario-Based Questions
+
+**Q13: Design a test for a login-logout flow.**
+
+**Solution:**
+```java
+public class LoginLogoutTest {
+    private AndroidDriver driver;
+    private LoginPage loginPage;
+    private HomePage homePage;
+    private WebDriverWait wait;
+
+    @Before
+    public void setUp() throws MalformedURLException {
+        UiAutomator2Options options = new UiAutomator2Options()
+            .setDeviceName("emulator-5554")
+            .setPlatformName("Android")
+            .setApp(System.getProperty("user.dir") + "/app/app.apk");
+
+        driver = new AndroidDriver(new URL("http://127.0.0.1:4723"), options);
+        wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+        
+        loginPage = new LoginPage(driver);
+        homePage = new HomePage(driver);
+    }
+
+    @Test
+    public void testLoginLogoutFlow() {
+        // Login
+        loginPage.enterEmail("user@example.com");
+        loginPage.enterPassword("password123");
+        loginPage.clickLogin();
+
+        // Verify home screen
+        assertTrue(homePage.isDisplayed());
+        
+        // Logout
+        homePage.clickMenu();
+        homePage.clickLogout();
+
+        // Verify back to login
+        assertTrue(loginPage.isDisplayed());
+    }
+
+    @After
+    public void tearDown() {
+        if (driver != null) {
+            driver.quit();
+        }
+    }
+}
+```
+
+**Q14: How to test a list-based app with dynamic content?**
+
+**Solution:**
+```java
+public class ScrollTest {
+    private AndroidDriver driver;
+    private WebDriverWait wait;
+
+    @Test
+    public void testScrollAndFindItem() {
+        // Scroll down and find specific item
+        while (true) {
+            try {
+                WebElement item = driver.findElement(
+                    AppiumBy.xpath("//android.widget.TextView[@text='Target Item']")
+                );
+                item.click();
+                break;
+            } catch (NoSuchElementException e) {
+                // Scroll down if item not found
+                driver.executeScript("mobile: scrollGesture", ImmutableMap.of(
+                    "left", 100,
+                    "top", 100,
+                    "width", 200,
+                    "height", 500,
+                    "direction", "down",
+                    "percent", 0.5
+                ));
+            }
+        }
+    }
+}
+```
+
+---
+
+## Practical Applications & Real-World Examples
+
+### Application 1: E-commerce Mobile App Testing
+
+**Scenario:** Test complete shopping flow - Browse → Add to Cart → Checkout → Payment
+
+**Theory:**
+This scenario demonstrates:
+- Multi-screen navigation
+- Dynamic content handling
+- Data validation
+- State persistence
+- Error handling
+
+**Process Flow:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ START: App Launch                                           │
+└────────────────┬────────────────────────────────────────────┘
+                 │
+         ┌───────▼───────┐
+         │  Home Screen  │  (Verify home elements loaded)
+         └───────┬───────┘
+                 │
+        ┌────────▼────────┐
+        │ Search Products │  (Type product name)
+        └────────┬────────┘
+                 │
+        ┌────────▼────────┐
+        │  Product List   │  (Scroll and select product)
+        └────────┬────────┘
+                 │
+     ┌──────────▼──────────┐
+     │ Product Details    │  (Add to cart, verify price)
+     └──────────┬──────────┘
+                 │
+        ┌────────▼────────┐
+        │   View Cart     │  (Verify items, quantities)
+        └────────┬────────┘
+                 │
+        ┌────────▼────────┐
+        │   Checkout      │  (Enter shipping info)
+        └────────┬────────┘
+                 │
+        ┌────────▼────────┐
+        │   Payment       │  (Process payment)
+        └────────┬────────┘
+                 │
+        ┌────────▼────────┐
+        │ Confirmation    │  (Verify success)
+        └────────┬────────┘
+                 │
+         └───────▼────────┘
+            END: Success
+```
+
+**Complete Implementation:**
+
+```java
+import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.android.options.UiAutomator2Options;
+import org.openqa.selenium.support.ui.WebDriverWait;
+import org.junit.Before;
+import org.junit.After;
+import org.junit.Test;
+import static org.junit.Assert.*;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.time.Duration;
+
+// ============ PAGE OBJECTS ============
+
+public class BasePage {
+    protected AndroidDriver driver;
+    protected WebDriverWait wait;
+
+    public BasePage(AndroidDriver driver) {
+        this.driver = driver;
+        this.wait = new WebDriverWait(driver, Duration.ofSeconds(15));
+    }
+
+    protected WebElement findElement(AppiumBy locator) {
+        return wait.until(ExpectedConditions.presenceOfElementLocated(locator));
+    }
+
+    protected void click(AppiumBy locator) {
+        wait.until(ExpectedConditions.elementToBeClickable(locator)).click();
+    }
+
+    protected void type(AppiumBy locator, String text) {
+        findElement(locator).sendKeys(text);
+    }
+
+    protected String getText(AppiumBy locator) {
+        return findElement(locator).getText();
+    }
+
+    protected void scrollDown(int times) {
+        for (int i = 0; i < times; i++) {
+            driver.executeScript("mobile: scrollGesture", ImmutableMap.of(
+                "left", 100,
+                "top", 100,
+                "width", 200,
+                "height", 500,
+                "direction", "down",
+                "percent", 0.75
+            ));
+        }
+    }
+}
+
+// Home Screen
+public class HomeScreenPage extends BasePage {
+    private final AppiumBy searchBar = AppiumBy.id("com.ecommerce:id/search_bar");
+    private final AppiumBy categoryMenu = AppiumBy.id("com.ecommerce:id/category_menu");
+
+    public HomeScreenPage(AndroidDriver driver) {
+        super(driver);
+    }
+
+    public void verifyHomeScreenDisplayed() {
+        assertTrue(findElement(searchBar).isDisplayed());
+    }
+
+    public void searchProduct(String productName) {
+        type(searchBar, productName);
+        driver.pressKey(new KeyEvent(AndroidKey.ENTER));
+    }
+
+    public void navigateToCategory(String categoryName) {
+        click(categoryMenu);
+        click(AppiumBy.xpath("//android.widget.TextView[@text='" + categoryName + "']"));
+    }
+}
+
+// Product List Page
+public class ProductListPage extends BasePage {
+    private final AppiumBy productItem = AppiumBy.xpath("//android.widget.LinearLayout[@resource-id='com.ecommerce:id/product_item']");
+    private final AppiumBy productName = AppiumBy.xpath("//android.widget.TextView[@resource-id='com.ecommerce:id/product_name']");
+    private final AppiumBy productPrice = AppiumBy.xpath("//android.widget.TextView[@resource-id='com.ecommerce:id/product_price']");
+
+    public ProductListPage(AndroidDriver driver) {
+        super(driver);
+    }
+
+    public void selectProduct(String productName) {
+        click(AppiumBy.xpath("//android.widget.LinearLayout[.//android.widget.TextView[@text='" + productName + "']]"));
+    }
+
+    public void scrollToProduct(String productName) {
+        int attempts = 0;
+        while (attempts < 5) {
+            try {
+                WebElement product = driver.findElement(
+                    AppiumBy.xpath("//android.widget.TextView[@text='" + productName + "']")
+                );
+                if (product.isDisplayed()) {
+                    break;
+                }
+            } catch (NoSuchElementException e) {
+                scrollDown(1);
+                attempts++;
+            }
+        }
+    }
+}
+
+// Product Details Page
+public class ProductDetailsPage extends BasePage {
+    private final AppiumBy productTitle = AppiumBy.id("com.ecommerce:id/product_title");
+    private final AppiumBy productPrice = AppiumBy.id("com.ecommerce:id/product_price");
+    private final AppiumBy productDescription = AppiumBy.id("com.ecommerce:id/product_description");
+    private final AppiumBy addToCartButton = AppiumBy.id("com.ecommerce:id/add_to_cart_button");
+    private final AppiumBy quantityInput = AppiumBy.id("com.ecommerce:id/quantity_input");
+    private final AppiumBy sizeSelector = AppiumBy.id("com.ecommerce:id/size_selector");
+
+    public ProductDetailsPage(AndroidDriver driver) {
+        super(driver);
+    }
+
+    public String getProductTitle() {
+        return getText(productTitle);
+    }
+
+    public String getProductPrice() {
+        return getText(productPrice);
+    }
+
+    public void selectSize(String size) {
+        click(sizeSelector);
+        click(AppiumBy.xpath("//android.widget.TextView[@text='" + size + "']"));
+    }
+
+    public void setQuantity(int quantity) {
+        WebElement quantityField = findElement(quantityInput);
+        quantityField.clear();
+        quantityField.sendKeys(String.valueOf(quantity));
+    }
+
+    public void addToCart() {
+        click(addToCartButton);
+        // Wait for confirmation
+        wait.until(ExpectedConditions.textToBePresentInElementLocated(
+            addToCartButton,
+            "Added to Cart"
+        ));
+    }
+}
+
+// Cart Page
+public class CartPage extends BasePage {
+    private final AppiumBy cartItems = AppiumBy.id("com.ecommerce:id/cart_item");
+    private final AppiumBy cartTotal = AppiumBy.id("com.ecommerce:id/cart_total");
+    private final AppiumBy proceedToCheckoutButton = AppiumBy.id("com.ecommerce:id/proceed_checkout");
+    private final AppiumBy removeItemButton = AppiumBy.xpath("//android.widget.Button[@resource-id='com.ecommerce:id/remove_item']");
+
+    public CartPage(AndroidDriver driver) {
+        super(driver);
+    }
+
+    public int getCartItemsCount() {
+        return driver.findElements(cartItems).size();
+    }
+
+    public String getCartTotal() {
+        return getText(cartTotal);
+    }
+
+    public void proceedToCheckout() {
+        click(proceedToCheckoutButton);
+    }
+
+    public void removeItem(int index) {
+        List<WebElement> items = driver.findElements(cartItems);
+        if (index < items.size()) {
+            WebElement item = items.get(index);
+            item.findElement(By.id("com.ecommerce:id/remove_item")).click();
+        }
+    }
+}
+
+// Checkout Page
+public class CheckoutPage extends BasePage {
+    private final AppiumBy firstName = AppiumBy.id("com.ecommerce:id/first_name");
+    private final AppiumBy lastName = AppiumBy.id("com.ecommerce:id/last_name");
+    private final AppiumBy email = AppiumBy.id("com.ecommerce:id/email");
+    private final AppiumBy address = AppiumBy.id("com.ecommerce:id/address");
+    private final AppiumBy city = AppiumBy.id("com.ecommerce:id/city");
+    private final AppiumBy zipCode = AppiumBy.id("com.ecommerce:id/zip_code");
+    private final AppiumBy paymentMethod = AppiumBy.id("com.ecommerce:id/payment_method");
+    private final AppiumBy placeOrderButton = AppiumBy.id("com.ecommerce:id/place_order");
+
+    public CheckoutPage(AndroidDriver driver) {
+        super(driver);
+    }
+
+    public void fillShippingInfo(String fname, String lname, String emailAddr, String addr, String cityName, String zip) {
+        type(firstName, fname);
+        type(lastName, lname);
+        type(email, emailAddr);
+        type(address, addr);
+        type(city, cityName);
+        type(zipCode, zip);
+    }
+
+    public void selectPaymentMethod(String method) {
+        click(paymentMethod);
+        click(AppiumBy.xpath("//android.widget.RadioButton[@text='" + method + "']"));
+    }
+
+    public void placeOrder() {
+        click(placeOrderButton);
+    }
+}
+
+// Order Confirmation Page
+public class ConfirmationPage extends BasePage {
+    private final AppiumBy confirmationMessage = AppiumBy.id("com.ecommerce:id/confirmation_message");
+    private final AppiumBy orderNumber = AppiumBy.id("com.ecommerce:id/order_number");
+    private final AppiumBy estimatedDelivery = AppiumBy.id("com.ecommerce:id/estimated_delivery");
+    private final AppiumBy continueShoppingButton = AppiumBy.id("com.ecommerce:id/continue_shopping");
+
+    public ConfirmationPage(AndroidDriver driver) {
+        super(driver);
+    }
+
+    public boolean isOrderConfirmed() {
+        return findElement(confirmationMessage).getText().contains("Order Placed Successfully");
+    }
+
+    public String getOrderNumber() {
+        return getText(orderNumber);
+    }
+
+    public String getEstimatedDelivery() {
+        return getText(estimatedDelivery);
+    }
+}
+
+// ============ TEST CLASS ============
+
+public class ECommerceShoppingFlowTest {
+    private AndroidDriver driver;
+    private HomeScreenPage homeScreen;
+    private ProductListPage productList;
+    private ProductDetailsPage productDetails;
+    private CartPage cartPage;
+    private CheckoutPage checkoutPage;
+    private ConfirmationPage confirmationPage;
+
+    @Before
+    public void setUp() throws MalformedURLException {
+        // Initialize driver with capabilities
+        UiAutomator2Options options = new UiAutomator2Options()
+            .setDeviceName("emulator-5554")
+            .setPlatformName("Android")
+            .setPlatformVersion("11")
+            .setApp(System.getProperty("user.dir") + "/app/ecommerce.apk")
+            .setAppPackage("com.ecommerce")
+            .setAppActivity(".MainActivity")
+            .setAutoGrantPermissions(true)
+            .setNewCommandTimeout(300);
+
+        URL url = new URL("http://127.0.0.1:4723");
+        driver = new AndroidDriver(url, options);
+
+        // Initialize page objects
+        homeScreen = new HomeScreenPage(driver);
+        productList = new ProductListPage(driver);
+        productDetails = new ProductDetailsPage(driver);
+        cartPage = new CartPage(driver);
+        checkoutPage = new CheckoutPage(driver);
+        confirmationPage = new ConfirmationPage(driver);
+    }
+
+    @Test
+    public void testCompleteShoppingFlow() {
+        // Step 1: Verify home screen
+        System.out.println("Step 1: Verifying home screen...");
+        homeScreen.verifyHomeScreenDisplayed();
+
+        // Step 2: Search for product
+        System.out.println("Step 2: Searching for product...");
+        homeScreen.searchProduct("Wireless Headphones");
+
+        // Step 3: Scroll and select product
+        System.out.println("Step 3: Selecting product from list...");
+        productList.scrollToProduct("Wireless Headphones");
+        productList.selectProduct("Wireless Headphones");
+
+        // Step 4: Add product to cart
+        System.out.println("Step 4: Adding product to cart...");
+        String productTitle = productDetails.getProductTitle();
+        String productPrice = productDetails.getProductPrice();
+        productDetails.selectSize("Medium");
+        productDetails.setQuantity(2);
+        productDetails.addToCart();
+
+        // Step 5: Verify cart
+        System.out.println("Step 5: Verifying cart items...");
+        assertEquals(1, cartPage.getCartItemsCount());
+        assertTrue(cartPage.getCartTotal().contains("$"));
+
+        // Step 6: Proceed to checkout
+        System.out.println("Step 6: Proceeding to checkout...");
+        cartPage.proceedToCheckout();
+
+        // Step 7: Fill shipping information
+        System.out.println("Step 7: Filling shipping information...");
+        checkoutPage.fillShippingInfo(
+            "John",
+            "Doe",
+            "john.doe@example.com",
+            "123 Main Street",
+            "New York",
+            "10001"
+        );
+
+        // Step 8: Select payment method
+        System.out.println("Step 8: Selecting payment method...");
+        checkoutPage.selectPaymentMethod("Credit Card");
+
+        // Step 9: Place order
+        System.out.println("Step 9: Placing order...");
+        checkoutPage.placeOrder();
+
+        // Step 10: Verify confirmation
+        System.out.println("Step 10: Verifying order confirmation...");
+        assertTrue(confirmationPage.isOrderConfirmed());
+        String orderNumber = confirmationPage.getOrderNumber();
+        assertNotNull(orderNumber);
+        System.out.println("Order confirmed! Order Number: " + orderNumber);
+    }
+
+    @After
+    public void tearDown() {
+        if (driver != null) {
+            driver.quit();
+        }
+    }
+}
+```
+
+**Key Learning Points:**
+1. **Page Object Model** - Encapsulates page elements and actions
+2. **Wait strategies** - Uses explicit waits for element visibility
+3. **Error handling** - Scrolls to find elements that may be off-screen
+4. **Data validation** - Verifies prices, quantities, order numbers
+5. **Process flow** - Clear sequence of user interactions
+
+---
+
+### Application 2: Social Media App Testing
+
+**Scenario:** Test user feed, posts, comments, and user interactions
+
+**Theory:**
+This demonstrates:
+- Scrolling through dynamic content
+- Handling animations
+- Testing infinite scroll
+- Data-driven testing
+
+**Implementation:**
+
+```java
+public class SocialMediaFeedTest {
+    private AndroidDriver driver;
+    private WebDriverWait wait;
+
+    @Before
+    public void setUp() throws MalformedURLException {
+        UiAutomator2Options options = new UiAutomator2Options()
+            .setDeviceName("emulator-5554")
+            .setPlatformName("Android")
+            .setApp("/path/to/social_app.apk");
+
+        driver = new AndroidDriver(new URL("http://127.0.0.1:4723"), options);
+        wait = new WebDriverWait(driver, Duration.ofSeconds(15));
+    }
+
+    @Test
+    public void testLikeAndCommentOnPost() {
+        // Wait for feed to load
+        wait.until(ExpectedConditions.presenceOfAllElementsLocatedBy(
+            AppiumBy.id("com.social:id/post_item")
+        ));
+
+        // Get first post
+        List<WebElement> posts = driver.findElements(AppiumBy.id("com.social:id/post_item"));
+        WebElement firstPost = posts.get(0);
+
+        // Like post
+        WebElement likeButton = firstPost.findElement(By.id("com.social:id/like_button"));
+        likeButton.click();
+        
+        // Verify like count increased
+        WebElement likeCount = firstPost.findElement(By.id("com.social:id/like_count"));
+        assertTrue(Integer.parseInt(likeCount.getText()) > 0);
+
+        // Open comments
+        WebElement commentButton = firstPost.findElement(By.id("com.social:id/comment_button"));
+        commentButton.click();
+
+        // Type comment
+        WebElement commentInput = wait.until(
+            ExpectedConditions.presenceOfElementLocated(AppiumBy.id("com.social:id/comment_input"))
+        );
+        commentInput.sendKeys("Great post!");
+
+        // Post comment
+        WebElement postCommentButton = driver.findElement(AppiumBy.id("com.social:id/post_comment_button"));
+        postCommentButton.click();
+
+        // Verify comment appears
+        WebElement commentText = wait.until(
+            ExpectedConditions.presenceOfElementLocated(
+                AppiumBy.xpath("//android.widget.TextView[@text='Great post!']")
+            )
+        );
+        assertTrue(commentText.isDisplayed());
+    }
+
+    @Test
+    public void testInfiniteScrollLoading() {
+        // Get initial post count
+        List<WebElement> initialPosts = driver.findElements(AppiumBy.id("com.social:id/post_item"));
+        int initialCount = initialPosts.size();
+
+        // Scroll down multiple times
+        for (int i = 0; i < 3; i++) {
+            driver.executeScript("mobile: scrollGesture", ImmutableMap.of(
+                "direction", "down",
+                "percent", 3.0
+            ));
+
+            // Wait for new posts to load
+            wait.until((ExpectedCondition<Boolean>) d -> {
+                List<WebElement> posts = d.findElements(AppiumBy.id("com.social:id/post_item"));
+                return posts.size() > initialCount + (i * 5);
+            });
+        }
+
+        // Verify new posts loaded
+        List<WebElement> finalPosts = driver.findElements(AppiumBy.id("com.social:id/post_item"));
+        assertTrue(finalPosts.size() > initialCount);
+        System.out.println("Loaded " + finalPosts.size() + " posts");
+    }
+
+    @After
+    public void tearDown() {
+        if (driver != null) {
+            driver.quit();
+        }
+    }
+}
+```
+
+---
+
+### Application 3: Banking App Testing
+
+**Scenario:** Test secure login, fund transfer, and transaction history
+
+**Theory:**
+This demonstrates:
+- Security testing
+- Data masking
+- State management
+- Error scenarios
+
+**Implementation:**
+
+```java
+public class BankingAppTest {
+    private AndroidDriver driver;
+    private WebDriverWait wait;
+
+    @Before
+    public void setUp() throws MalformedURLException {
+        UiAutomator2Options options = new UiAutomator2Options()
+            .setDeviceName("emulator-5554")
+            .setPlatformName("Android")
+            .setApp("/path/to/banking_app.apk")
+            .setAutoGrantPermissions(true);
+
+        driver = new AndroidDriver(new URL("http://127.0.0.1:4723"), options);
+        wait = new WebDriverWait(driver, Duration.ofSeconds(20));
+    }
+
+    @Test
+    public void testFundTransfer() throws InterruptedException {
+        // Login
+        loginWithCredentials("user@bank.com", "SecurePass123!");
+
+        // Navigate to transfer
+        WebElement transferButton = wait.until(
+            ExpectedConditions.elementToBeClickable(AppiumBy.id("com.bank:id/transfer_button"))
+        );
+        transferButton.click();
+
+        // Select recipient
+        WebElement selectRecipient = wait.until(
+            ExpectedConditions.presenceOfElementLocated(AppiumBy.id("com.bank:id/select_recipient"))
+        );
+        selectRecipient.click();
+
+        // Search and select recipient
+        WebElement searchBox = driver.findElement(AppiumBy.id("com.bank:id/search_recipient"));
+        searchBox.sendKeys("John Smith");
+
+        WebElement recipient = wait.until(
+            ExpectedConditions.elementToBeClickable(
+                AppiumBy.xpath("//android.widget.TextView[@text='John Smith - 1234567890']")
+            )
+        );
+        recipient.click();
+
+        // Enter amount
+        WebElement amountField = driver.findElement(AppiumBy.id("com.bank:id/amount"));
+        amountField.sendKeys("1000");
+
+        // Add note
+        WebElement noteField = driver.findElement(AppiumBy.id("com.bank:id/note"));
+        noteField.sendKeys("Payment for services");
+
+        // Confirm transfer
+        WebElement confirmButton = driver.findElement(AppiumBy.id("com.bank:id/confirm_transfer"));
+        confirmButton.click();
+
+        // Verify OTP screen
+        WebElement otpInput = wait.until(
+            ExpectedConditions.presenceOfElementLocated(AppiumBy.id("com.bank:id/otp_input"))
+        );
+
+        // Enter OTP (in real scenario, get from SMS)
+        otpInput.sendKeys("123456");
+
+        // Submit OTP
+        WebElement submitOtp = driver.findElement(AppiumBy.id("com.bank:id/submit_otp"));
+        submitOtp.click();
+
+        // Verify success
+        WebElement successMessage = wait.until(
+            ExpectedConditions.presenceOfElementLocated(AppiumBy.id("com.bank:id/success_message"))
+        );
+        assertTrue(successMessage.getText().contains("Transfer successful"));
+
+        // Verify transaction reference
+        WebElement transactionRef = driver.findElement(AppiumBy.id("com.bank:id/transaction_ref"));
+        assertNotNull(transactionRef.getText());
+    }
+
+    @Test
+    public void testTransactionHistoryFiltering() {
+        loginWithCredentials("user@bank.com", "SecurePass123!");
+
+        // Navigate to history
+        WebElement historyButton = driver.findElement(AppiumBy.id("com.bank:id/history_button"));
+        historyButton.click();
+
+        // Wait for transactions to load
+        wait.until(ExpectedConditions.presenceOfAllElementsLocatedBy(
+            AppiumBy.id("com.bank:id/transaction_item")
+        ));
+
+        // Filter by date range
+        WebElement filterButton = driver.findElement(AppiumBy.id("com.bank:id/filter_button"));
+        filterButton.click();
+
+        // Set date range
+        WebElement fromDate = driver.findElement(AppiumBy.id("com.bank:id/from_date"));
+        fromDate.click();
+        selectDate(1, "December", 2024); // Dec 1, 2024
+
+        WebElement toDate = driver.findElement(AppiumBy.id("com.bank:id/to_date"));
+        toDate.click();
+        selectDate(31, "December", 2024); // Dec 31, 2024
+
+        // Apply filter
+        WebElement applyButton = driver.findElement(AppiumBy.id("com.bank:id/apply_filter"));
+        applyButton.click();
+
+        // Verify filtered results
+        List<WebElement> transactions = driver.findElements(AppiumBy.id("com.bank:id/transaction_item"));
+        assertTrue(transactions.size() > 0);
+    }
+
+    private void loginWithCredentials(String email, String password) {
+        WebElement emailField = wait.until(
+            ExpectedConditions.presenceOfElementLocated(AppiumBy.id("com.bank:id/email"))
+        );
+        emailField.sendKeys(email);
+
+        WebElement passwordField = driver.findElement(AppiumBy.id("com.bank:id/password"));
+        passwordField.sendKeys(password);
+
+        WebElement loginButton = driver.findElement(AppiumBy.id("com.bank:id/login_button"));
+        loginButton.click();
+
+        // Wait for home screen
+        wait.until(ExpectedConditions.presenceOfElementLocated(AppiumBy.id("com.bank:id/account_balance")));
+    }
+
+    private void selectDate(int day, String month, int year) {
+        // Select day
+        WebElement dayValue = driver.findElement(AppiumBy.xpath("//android.widget.TextView[@text='" + day + "']"));
+        dayValue.click();
+
+        // Select month
+        WebElement monthValue = driver.findElement(AppiumBy.xpath("//android.widget.TextView[@text='" + month + "']"));
+        monthValue.click();
+
+        // Select year
+        WebElement yearValue = driver.findElement(AppiumBy.xpath("//android.widget.TextView[@text='" + year + "']"));
+        yearValue.click();
+    }
+
+    @After
+    public void tearDown() {
+        if (driver != null) {
+            driver.quit();
+        }
+    }
+}
+```
+
+---
+
+### Application 4: Multi-Device Parallel Testing
+
+**Scenario:** Run same test on multiple devices simultaneously
+
+**Theory:**
+This demonstrates:
+- Parallel execution
+- Device management
+- Resource optimization
+- CI/CD integration
+
+**Configuration (testng.xml):**
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd">
+<suite name="Parallel Mobile Tests" parallel="tests" thread-count="2">
+    
+    <test name="Android Device 1" enabled="true">
+        <parameter name="deviceName" value="emulator-5554"/>
+        <parameter name="platformVersion" value="11"/>
+        <parameter name="udid" value="emulator-5554"/>
+        <classes>
+            <class name="tests.LoginTest"/>
+            <class name="tests.SearchTest"/>
+        </classes>
+    </test>
+
+    <test name="Android Device 2" enabled="true">
+        <parameter name="deviceName" value="emulator-5556"/>
+        <parameter name="platformVersion" value="12"/>
+        <parameter name="udid" value="emulator-5556"/>
+        <classes>
+            <class name="tests.LoginTest"/>
+            <class name="tests.SearchTest"/>
+        </classes>
+    </test>
+
+</suite>
+```
+
+**Implementation:**
+
+```java
+public class ParallelDeviceTest {
+    private AndroidDriver driver;
+    private String deviceName;
+    private String platformVersion;
+
+    @BeforeClass
+    @Parameters({"deviceName", "platformVersion", "udid"})
+    public void setUp(String deviceName, String platformVersion, String udid) 
+            throws MalformedURLException {
+        this.deviceName = deviceName;
+        this.platformVersion = platformVersion;
+
+        UiAutomator2Options options = new UiAutomator2Options()
+            .setDeviceName(deviceName)
+            .setPlatformName("Android")
+            .setPlatformVersion(platformVersion)
+            .setUdid(udid)
+            .setApp(System.getProperty("user.dir") + "/app/app.apk")
+            .setAutoGrantPermissions(true)
+            .setNewCommandTimeout(300);
+
+        URL url = new URL("http://127.0.0.1:4723");
+        driver = new AndroidDriver(url, options);
+        
+        System.out.println("Driver initialized for device: " + deviceName);
+    }
+
+    @Test
+    public void testOnMultipleDevices() {
+        System.out.println("Running test on device: " + deviceName);
+        
+        // Test logic
+        WebElement loginButton = driver.findElement(AppiumBy.id("login_button"));
+        loginButton.click();
+
+        System.out.println("Test completed on device: " + deviceName);
+    }
+
+    @AfterClass
+    public void tearDown() {
+        if (driver != null) {
+            driver.quit();
+            System.out.println("Driver quit for device: " + deviceName);
+        }
+    }
+}
+```
+
+**Run Tests:**
+```bash
+# Run parallel tests
+mvn test -Dsuite=testng.xml
+
+# Run with specific thread count
+mvn test -DthreadCount=3
+```
+
+---
+
+### Application 5: API & UI Integration Testing
+
+**Scenario:** Test mobile UI with real API calls
+
+**Theory:**
+This demonstrates:
+- API testing alongside UI testing
+- Data consistency verification
+- End-to-end testing
+
+**Implementation:**
+
+```java
+public class APIAndUIIntegrationTest {
+    private AndroidDriver driver;
+    private WebDriverWait wait;
+    private RestAssured restAssured;
+    private static final String API_BASE_URL = "https://api.example.com";
+
+    @Before
+    public void setUp() throws MalformedURLException {
+        UiAutomator2Options options = new UiAutomator2Options()
+            .setDeviceName("emulator-5554")
+            .setPlatformName("Android")
+            .setApp("/path/to/app.apk");
+
+        driver = new AndroidDriver(new URL("http://127.0.0.1:4723"), options);
+        wait = new WebDriverWait(driver, Duration.ofSeconds(15));
+
+        RestAssured.baseURI = API_BASE_URL;
+    }
+
+    @Test
+    public void testUserProfileUIAndAPI() {
+        // Login through UI
+        loginViaUI("user@example.com", "password123");
+
+        // Navigate to profile
+        WebElement profileButton = driver.findElement(AppiumBy.id("profile_button"));
+        profileButton.click();
+
+        // Get displayed user info
+        String displayedName = driver.findElement(AppiumBy.id("user_name")).getText();
+        String displayedEmail = driver.findElement(AppiumBy.id("user_email")).getText();
+
+        // Verify with API
+        Response response = RestAssured.given()
+            .header("Authorization", "Bearer " + getAuthToken())
+            .get("/api/users/profile");
+
+        assertEquals(200, response.getStatusCode());
+
+        // Extract API data
+        String apiName = response.jsonPath().getString("name");
+        String apiEmail = response.jsonPath().getString("email");
+
+        // Compare UI and API data
+        assertEquals("UI name should match API name", displayedName, apiName);
+        assertEquals("UI email should match API email", displayedEmail, apiEmail);
+    }
+
+    @Test
+    public void testProductListUIAndAPI() {
+        // Get products via API
+        Response apiResponse = RestAssured.given()
+            .get("/api/products")
+            .then()
+            .statusCode(200)
+            .extract()
+            .response();
+
+        List<String> apiProductNames = apiResponse.jsonPath().getList("products.name");
+
+        // Navigate to products in UI
+        WebElement productsButton = driver.findElement(AppiumBy.id("products_button"));
+        productsButton.click();
+
+        // Wait for products to load
+        wait.until(ExpectedConditions.presenceOfAllElementsLocatedBy(
+            AppiumBy.id("product_name")
+        ));
+
+        // Get UI product names
+        List<WebElement> productElements = driver.findElements(AppiumBy.id("product_name"));
+        List<String> uiProductNames = productElements.stream()
+            .map(WebElement::getText)
+            .collect(Collectors.toList());
+
+        // Verify all API products are shown in UI
+        for (String apiProductName : apiProductNames) {
+            assertTrue("Product " + apiProductName + " should be in UI",
+                uiProductNames.contains(apiProductName));
+        }
+    }
+
+    private void loginViaUI(String email, String password) {
+        WebElement emailField = wait.until(
+            ExpectedConditions.presenceOfElementLocated(AppiumBy.id("email_input"))
+        );
+        emailField.sendKeys(email);
+
+        WebElement passwordField = driver.findElement(AppiumBy.id("password_input"));
+        passwordField.sendKeys(password);
+
+        WebElement loginButton = driver.findElement(AppiumBy.id("login_button"));
+        loginButton.click();
+
+        wait.until(ExpectedConditions.presenceOfElementLocated(AppiumBy.id("home_screen")));
+    }
+
+    private String getAuthToken() {
+        // In real scenario, retrieve from app preferences or API login
+        return "sample_auth_token_12345";
+    }
+
+    @After
+    public void tearDown() {
+        if (driver != null) {
+            driver.quit();
+        }
+    }
+}
+```
+
+---
+
+### Application 6: Performance Testing
+
+**Scenario:** Measure app performance metrics
+
+**Theory:**
+Demonstrates performance monitoring for:
+- CPU usage
+- Memory consumption
+- FPS (frames per second)
+- Network performance
+
+**Implementation:**
+
+```java
+public class PerformanceTest {
+    private AndroidDriver driver;
+    private static final String PACKAGE_NAME = "com.example.app";
+
+    @Before
+    public void setUp() throws MalformedURLException {
+        UiAutomator2Options options = new UiAutomator2Options()
+            .setDeviceName("emulator-5554")
+            .setPlatformName("Android")
+            .setApp("/path/to/app.apk");
+
+        driver = new AndroidDriver(new URL("http://127.0.0.1:4723"), options);
+    }
+
+    @Test
+    public void testCPUPerformance() {
+        // Get initial CPU stats
+        Map<String, Object> cpuStatsBefore = getPerformanceData("cpuinfo");
+
+        // Perform action
+        WebElement button = driver.findElement(AppiumBy.id("heavy_operation_button"));
+        button.click();
+
+        // Wait for operation to complete
+        try {
+            Thread.sleep(3000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        // Get final CPU stats
+        Map<String, Object> cpuStatsAfter = getPerformanceData("cpuinfo");
+
+        // Log results
+        System.out.println("CPU Before: " + cpuStatsBefore);
+        System.out.println("CPU After: " + cpuStatsAfter);
+
+        // Assert CPU usage within acceptable range
+        double cpuUsage = (double) cpuStatsAfter.get("usage");
+        assertTrue("CPU usage should be < 80%", cpuUsage < 80);
+    }
+
+    @Test
+    public void testMemoryPerformance() {
+        // Get initial memory
+        Map<String, Object> memBefore = getPerformanceData("memoryinfo");
+        double initialMemory = (double) memBefore.get("nativeHeap");
+
+        // Perform memory-intensive operation
+        for (int i = 0; i < 5; i++) {
+            WebElement item = driver.findElement(AppiumBy.id("large_image_item_" + i));
+            ((JavascriptExecutor) driver).executeScript("mobile: scroll", ImmutableMap.of(
+                "direction", "down"
+            ));
+        }
+
+        // Get final memory
+        Map<String, Object> memAfter = getPerformanceData("memoryinfo");
+        double finalMemory = (double) memAfter.get("nativeHeap");
+
+        // Calculate memory increase
+        double memoryIncrease = finalMemory - initialMemory;
+        System.out.println("Memory increase: " + memoryIncrease + " MB");
+
+        // Assert memory increase is reasonable
+        assertTrue("Memory increase should be < 100 MB", memoryIncrease < 100);
+    }
+
+    @Test
+    public void testFPSPerformance() {
+        // Get FPS stats during animation
+        Map<String, Object> fpsStats = getPerformanceData("gfxinfo");
+
+        double droppedFrames = (double) fpsStats.get("droppedFrames");
+        double totalFrames = (double) fpsStats.get("totalFrames");
+        double fps = totalFrames - droppedFrames;
+
+        System.out.println("Total Frames: " + totalFrames);
+        System.out.println("Dropped Frames: " + droppedFrames);
+        System.out.println("FPS: " + fps);
+
+        // Assert FPS is acceptable (>= 30 FPS minimum)
+        assertTrue("FPS should be >= 30", fps >= 30);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> getPerformanceData(String dataType) {
+        return (Map<String, Object>) driver.executeScript(
+            "mobile: performanceData",
+            ImmutableMap.of(
+                "packageName", PACKAGE_NAME,
+                "dataType", dataType
+            )
+        );
+    }
+
+    @After
+    public void tearDown() {
+        if (driver != null) {
+            driver.quit();
+        }
+    }
+}
+```
+
+---
+
+### Application 7: Gesture Testing
+
+**Scenario:** Comprehensive gesture testing
+
+**Theory:**
+Demonstrates various mobile gestures:
+- Swipes (4 directions)
+- Pinch and zoom
+- Long press
+- Multi-finger gestures
+
+**Implementation:**
+
+```java
+public class GestureTest {
+    private AndroidDriver driver;
+    private WebDriverWait wait;
+
+    @Before
+    public void setUp() throws MalformedURLException {
+        UiAutomator2Options options = new UiAutomator2Options()
+            .setDeviceName("emulator-5554")
+            .setPlatformName("Android")
+            .setApp("/path/to/app.apk");
+
+        driver = new AndroidDriver(new URL("http://127.0.0.1:4723"), options);
+        wait = new WebDriverWait(driver, Duration.ofSeconds(15));
+    }
+
+    @Test
+    public void testSwipeLeft() {
+        // Swipe left to go to next screen
+        driver.executeScript("mobile: swipeGesture", ImmutableMap.of(
+            "left", 100,
+            "top", 400,
+            "width", 300,
+            "height", 300,
+            "direction", "left",
+            "percent", 0.75
+        ));
+
+        // Verify new screen loaded
+        WebElement nextElement = wait.until(
+            ExpectedConditions.presenceOfElementLocated(AppiumBy.id("next_screen_element"))
+        );
+        assertTrue(nextElement.isDisplayed());
+    }
+
+    @Test
+    public void testSwipeRight() {
+        driver.executeScript("mobile: swipeGesture", ImmutableMap.of(
+            "direction", "right",
+            "percent", 0.75
+        ));
+    }
+
+    @Test
+    public void testSwipeUp() {
+        driver.executeScript("mobile: swipeGesture", ImmutableMap.of(
+            "direction", "up",
+            "percent", 0.5
+        ));
+    }
+
+    @Test
+    public void testSwipeDown() {
+        driver.executeScript("mobile: swipeGesture", ImmutableMap.of(
+            "direction", "down",
+            "percent", 0.5
+        ));
+    }
+
+    @Test
+    public void testPinchZoomOut() {
+        driver.executeScript("mobile: pinchGesture", ImmutableMap.of(
+            "scale", 0.5,  // Zoom out
+            "velocity", 1.0
+        ));
+
+        // Verify zoom state
+        WebElement image = driver.findElement(AppiumBy.id("zoomable_image"));
+        Dimension size = image.getSize();
+        System.out.println("Image size after zoom out: " + size);
+    }
+
+    @Test
+    public void testPinchZoomIn() {
+        driver.executeScript("mobile: pinchGesture", ImmutableMap.of(
+            "scale", 2.0,  // Zoom in
+            "velocity", 1.0
+        ));
+    }
+
+    @Test
+    public void testLongPress() {
+        WebElement element = wait.until(
+            ExpectedConditions.presenceOfElementLocated(AppiumBy.id("long_press_element"))
+        );
+
+        driver.executeScript("mobile: longClickGesture", ImmutableMap.of(
+            "x", element.getLocation().x + (element.getSize().width / 2),
+            "y", element.getLocation().y + (element.getSize().height / 2),
+            "duration", 2000
+        ));
+
+        // Verify context menu appeared
+        WebElement contextMenu = wait.until(
+            ExpectedConditions.presenceOfElementLocated(AppiumBy.id("context_menu"))
+        );
+        assertTrue(contextMenu.isDisplayed());
+    }
+
+    @Test
+    public void testDoubleTap() {
+        PointerInput pointer = new PointerInput(PointerInput.Kind.TOUCH, "finger");
+        Sequence doubleTap = new Sequence(pointer, 1);
+        
+        doubleTap.addAction(pointer.createPointerMove(Duration.ZERO, PointerInput.Origin.viewport(), 300, 300));
+        doubleTap.addAction(pointer.createPointerDown(PointerInput.MouseButton.LEFT.asArg()));
+        doubleTap.addAction(pointer.createPointerUp(PointerInput.MouseButton.LEFT.asArg()));
+        doubleTap.addAction(pointer.createPointerDown(PointerInput.MouseButton.LEFT.asArg()));
+        doubleTap.addAction(pointer.createPointerUp(PointerInput.MouseButton.LEFT.asArg()));
+
+        driver.perform(Collections.singletonList(doubleTap));
+
+        // Verify action performed (e.g., zoom in)
+        WebElement zoomedElement = wait.until(
+            ExpectedConditions.presenceOfElementLocated(AppiumBy.id("zoomed_element"))
+        );
+        assertTrue(zoomedElement.isDisplayed());
+    }
+
+    @After
+    public void tearDown() {
+        if (driver != null) {
+            driver.quit();
+        }
+    }
+}
+```
+
+---
+
+## Resources
+
+- **Official Appium Documentation:** https://appium.io/docs/en/about-appium/intro/
+- **Appium GitHub:** https://github.com/appium
+- **Java Client Library:** https://github.com/appium/java-client
+- **Appium Inspector:** https://github.com/appium/appium-inspector
+- **Best Practices:** https://appium.io/docs/en/guides/element-finding/
+
+## Quick Reference
+
+**Common Commands:**
+```bash
+# Start Appium server
+appium
+
+# Start with custom port
+appium --port 4724
+
+# Enable debug logging
+appium --log-level debug
+
+# Check device connectivity
+adb devices
+
+# Connect to wireless device
+adb connect <device_ip>:5555
+
+# View app activities
+adb shell dumpsys window windows | grep -E 'mCurrentFocus|mFocusedApp'
+```
+
+**Common Locators:**
+```java
+AppiumBy.id("element_id")
+AppiumBy.accessibilityId("accessibility_id")
+AppiumBy.className("android.widget.Button")
+AppiumBy.xpath("//android.widget.Button[@text='Login']")
+AppiumBy.iOSNsPredicateString("type == 'XCUIElementTypeButton'")
+AppiumBy.iOSClassChain("**/XCUIElementTypeButton")
+```
+
+---
+
+## Interview Q&A: Scenario-Based & Practical
+
+### Scenario 1: Android Banking App - Secure Login with 2FA
+
+**Q1: Design a test for secure login handling 2FA and session timeout.**
+
+**Answer:**
+
+```java
+public class BankingLoginTest {
+    private AndroidDriver driver;
+    private WebDriverWait wait;
+
+    @Before
+    public void setUp() throws MalformedURLException {
+        UiAutomator2Options options = new UiAutomator2Options()
+            .setDeviceName("emulator-5554")
+            .setPlatformName("Android")
+            .setApp(System.getProperty("user.dir") + "/app/banking.apk")
+            .setAutoGrantPermissions(true);
+
+        driver = new AndroidDriver(new URL("http://127.0.0.1:4723"), options);
+        wait = new WebDriverWait(driver, Duration.ofSeconds(20));
+    }
+
+    @Test
+    public void testSecureLoginWith2FA() {
+        // Step 1: Verify login screen
+        WebElement emailField = wait.until(
+            ExpectedConditions.presenceOfElementLocated(AppiumBy.id("email_input"))
+        );
+        assertTrue(emailField.isDisplayed());
+
+        // Step 2: Enter credentials
+        emailField.sendKeys("user@bank.com");
+        WebElement passwordField = driver.findElement(AppiumBy.id("password_input"));
+        passwordField.sendKeys("SecurePassword123!");
+
+        // Step 3: Verify password field is masked
+        assertEquals("password", passwordField.getAttribute("type"));
+
+        // Step 4: Click login
+        driver.findElement(AppiumBy.id("login_button")).click();
+
+        // Step 5: Wait for 2FA screen
+        WebElement otpInput = wait.until(
+            ExpectedConditions.presenceOfElementLocated(AppiumBy.id("otp_input"))
+        );
+
+        // Step 6: Enter OTP
+        String otp = getOTPFromTestData();
+        enterOTPWithDelay(otpInput, otp);
+
+        // Step 7: Verify successful login
+        WebElement homeScreen = wait.until(
+            ExpectedConditions.presenceOfElementLocated(AppiumBy.id("home_screen"))
+        );
+        assertTrue(homeScreen.isDisplayed());
+    }
+
+    @Test
+    public void testSessionTimeoutHandling() {
+        performLogin("user@bank.com", "SecurePassword123!", "123456");
+
+        // Background app - simulate session expiry
+        ((AndroidDriver) driver).runAppInBackground(Duration.ofSeconds(10));
+        driver.activateApp("com.bank.mobile");
+
+        // Verify logged out after timeout
+        WebElement loginButton = wait.until(
+            ExpectedConditions.presenceOfElementLocated(AppiumBy.id("login_button"))
+        );
+        assertTrue(loginButton.isDisplayed());
+    }
+
+    private void performLogin(String email, String password, String otp) {
+        driver.findElement(AppiumBy.id("email_input")).sendKeys(email);
+        driver.findElement(AppiumBy.id("password_input")).sendKeys(password);
+        driver.findElement(AppiumBy.id("login_button")).click();
+
+        WebElement otpInput = wait.until(
+            ExpectedConditions.presenceOfElementLocated(AppiumBy.id("otp_input"))
+        );
+        enterOTPWithDelay(otpInput, otp);
+    }
+
+    private void enterOTPWithDelay(WebElement otpInput, String otp) {
+        // Theory: Enter character by character to simulate real user input
+        for (char c : otp.toCharArray()) {
+            otpInput.sendKeys(String.valueOf(c));
+            try { Thread.sleep(100); } catch (InterruptedException e) { }
+        }
+        driver.findElement(AppiumBy.id("submit_otp")).click();
+    }
+
+    private String getOTPFromTestData() { return "123456"; }
+
+    @After
+    public void tearDown() {
+        if (driver != null) driver.quit();
+    }
+}
+```
+
+**Key Points:**
+- ✅ Test 2FA flow end-to-end
+- ✅ Verify security features (password masking)
+- ✅ Test session timeout handling
+- ✅ Simulate realistic user timing
+
+---
+
+### Scenario 2: Cross-Platform Testing Strategy
+
+**Q1: How do you write tests that work on both iOS and Android?**
+
+**Answer:**
+
+```java
+// Abstract Page Object for platform-agnostic testing
+public abstract class BasePage {
+    protected WebDriver driver;
+    protected WebDriverWait wait;
+
+    protected abstract By getLoginButtonLocator();
+    protected abstract By getEmailInputLocator();
+    protected abstract By getPasswordInputLocator();
+
+    public void login(String email, String password) {
+        driver.findElement(getEmailInputLocator()).sendKeys(email);
+        driver.findElement(getPasswordInputLocator()).sendKeys(password);
+        driver.findElement(getLoginButtonLocator()).click();
+    }
+}
+
+// Android implementation
+public class AndroidLoginPage extends BasePage {
+    @Override
+    protected By getLoginButtonLocator() {
+        return AppiumBy.id("com.app:id/login_button");
+    }
+
+    @Override
+    protected By getEmailInputLocator() {
+        return AppiumBy.id("com.app:id/email_input");
+    }
+
+    @Override
+    protected By getPasswordInputLocator() {
+        return AppiumBy.id("com.app:id/password_input");
+    }
+}
+
+// iOS implementation
+public class iOSLoginPage extends BasePage {
+    @Override
+    protected By getLoginButtonLocator() {
+        return AppiumBy.accessibilityId("LoginButton");
+    }
+
+    @Override
+    protected By getEmailInputLocator() {
+        return AppiumBy.iOSNsPredicateString("type == 'XCUIElementTypeTextField'");
+    }
+
+    @Override
+    protected By getPasswordInputLocator() {
+        return AppiumBy.iOSNsPredicateString("type == 'XCUIElementTypeSecureTextField'");
+    }
+}
+
+// Parameterized test
+@Test(dataProvider = "platforms")
+public void testLoginAcrossPlatforms(String platformName) {
+    WebDriver driver = initializeDriver(platformName);
+    BasePage loginPage = platformName.equals("android") 
+        ? new AndroidLoginPage() 
+        : new iOSLoginPage();
+
+    loginPage.login("user@example.com", "Password123!");
+    driver.quit();
+}
+
+@DataProvider(name = "platforms")
+public Object[][] platformData() {
+    return new Object[][] { {"android"}, {"ios"} };
+}
+```
+
+---
+
+### Scenario 3: Handling Dynamic Content & Flaky Tests
+
+**Q1: How do you prevent flaky tests with dynamic content?**
+
+**Answer:**
+
+```java
+public class DynamicContentTest {
+    private WebDriver driver;
+    private WebDriverWait wait;
+
+    @Test
+    public void testDynamicListLoading() {
+        // Theory: Wait for specific condition, not arbitrary time
+        
+        // ❌ BAD: Thread.sleep(5000);
+        
+        // ✅ GOOD: Explicit wait with condition
+        wait.until(driver -> {
+            List<WebElement> items = driver.findElements(AppiumBy.id("list_item"));
+            return items.size() > 10; // Wait until 10 items loaded
+        });
+
+        List<WebElement> items = driver.findElements(AppiumBy.id("list_item"));
+        assertEquals(10, items.size());
+    }
+
+    @Test
+    public void testCustomWaitCondition() {
+        // Wait for element to reach stable state
+        wait.until((ExpectedCondition<Boolean>) driver -> {
+            try {
+                WebElement statusText = driver.findElement(AppiumBy.id("status"));
+                return statusText.getText().equals("Ready");
+            } catch (NoSuchElementException e) {
+                return false;
+            }
+        });
+    }
+
+    @Test
+    public void testElementClickability() {
+        // Wait for element to be clickable (visible AND enabled)
+        WebElement button = wait.until(
+            ExpectedConditions.elementToBeClickable(AppiumBy.id("submit_button"))
+        );
+        button.click();
+    }
+
+    @Test
+    public void testStaleElementHandling() {
+        try {
+            WebElement item = driver.findElement(AppiumBy.id("item"));
+            item.click();
+        } catch (StaleElementReferenceException e) {
+            // Element became stale, retry
+            WebElement item = driver.findElement(AppiumBy.id("item"));
+            item.click();
+        }
+    }
+}
+```
+
+---
+
+### Scenario 4: Performance Monitoring
+
+**Q1: How do you monitor app performance during testing?**
+
+**Answer:**
+
+```java
+public class PerformanceMonitoringTest {
+    private AndroidDriver driver;
+
+    @Test
+    public void testCPUPerformance() {
+        Map<String, Object> perfData = driver.executeScript(
+            "mobile: performanceData",
+            ImmutableMap.of(
+                "packageName", "com.example.app",
+                "dataType", "cpuinfo"
+            )
+        );
+
+        Double cpuUsage = (Double) perfData.get("cpuUsage");
+        assertTrue(cpuUsage < 80, "CPU usage should be < 80%");
+    }
+
+    @Test
+    public void testMemoryLeak() {
+        // Get initial memory
+        Map<String, Object> memBefore = getMemoryInfo();
+        long initialMemory = ((Number) memBefore.get("nativeHeap")).longValue();
+
+        // Perform scrolling
+        for (int i = 0; i < 10; i++) {
+            driver.executeScript("mobile: scrollGesture", ImmutableMap.of(
+                "direction", "down",
+                "percent", 0.75
+            ));
+        }
+
+        // Get final memory
+        Map<String, Object> memAfter = getMemoryInfo();
+        long finalMemory = ((Number) memAfter.get("nativeHeap")).longValue();
+
+        // Verify reasonable memory increase
+        long increase = finalMemory - initialMemory;
+        assertTrue(increase < 100, "Memory increase should be < 100 MB");
+    }
+
+    @Test
+    public void testFPSPerformance() {
+        Map<String, Object> gfxInfo = driver.executeScript(
+            "mobile: performanceData",
+            ImmutableMap.of(
+                "packageName", "com.example.app",
+                "dataType", "gfxinfo"
+            )
+        );
+
+        long totalFrames = ((Number) gfxInfo.get("totalFrames")).longValue();
+        long droppedFrames = ((Number) gfxInfo.get("droppedFrames")).longValue();
+        
+        double smoothFramePercentage = ((totalFrames - droppedFrames) * 100.0) / totalFrames;
+        assertTrue(smoothFramePercentage >= 90, "Should maintain 90%+ smooth frames");
+    }
+
+    private Map<String, Object> getMemoryInfo() {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> memInfo = (Map<String, Object>) driver.executeScript(
+            "mobile: performanceData",
+            ImmutableMap.of("packageName", "com.example.app", "dataType", "memoryinfo")
+        );
+        return memInfo;
+    }
+}
+```
+
+---
+
+### Scenario 5: CI/CD Pipeline Integration
+
+**Q1: How do you run Appium tests in CI/CD pipeline?**
+
+**Answer:**
+
+```groovy
+// Jenkinsfile example
+pipeline {
+    agent any
+
+    stages {
+        stage('Setup Emulator') {
+            steps {
+                sh '''
+                    emulator -avd test_device -no-display &
+                    adb wait-for-device
+                    adb shell input keyevent 82  # Unlock
+                '''
+            }
+        }
+
+        stage('Build APK') {
+            steps {
+                sh 'gradle assembleRelease'
+            }
+        }
+
+        stage('Start Appium Server') {
+            steps {
+                sh 'appium --port 4723 --log-level debug &'
+                sh 'sleep 10'  // Wait for server to start
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                sh '''
+                    mvn clean test \\
+                        -Dappium.server.url=http://localhost:4723 \\
+                        -Ddevice.name=emulator-5554 \\
+                        -Dapp.path=build/outputs/apk/release/app-release.apk
+                '''
+            }
+        }
+
+        stage('Generate Report') {
+            steps {
+                allure includeProperties: false,
+                    results: [[path: 'target/allure-results']]
+            }
+        }
+    }
+
+    post {
+        always {
+            sh '''
+                pkill -f appium
+                pkill -f emulator
+            '''
+        }
+
+        failure {
+            emailext(
+                subject: 'Appium Tests Failed',
+                body: 'Check Jenkins logs for details',
+                to: 'team@example.com'
+            )
+        }
+    }
+}
+```
+
+---
+
+### Best Interview Answers
+
+**Common Interview Questions & Ideal Responses:**
+
+1. **"What are your wait strategies?"**
+   - *Answer:* "I use explicit waits with specific conditions like presenceOfElementLocated or elementToBeClickable. I never use Thread.sleep(). For complex scenarios, I create custom wait conditions that check business logic."
+
+2. **"How do you handle flaky tests?"**
+   - *Answer:* "First, I ensure I'm using proper wait strategies. Second, I handle StaleElementReferenceException with retry logic. Third, I structure tests to avoid race conditions by ensuring operations are atomic."
+
+3. **"How do you test on both platforms?"**
+   - *Answer:* "I use Page Object Model with abstract classes. Android and iOS implementations override platform-specific locators, but tests remain the same. I run parameterized tests for both platforms."
+
+4. **"What about performance testing?"**
+   - *Answer:* "I use Appium's mobile: performanceData script to monitor CPU, memory, and FPS. I establish baseline metrics and fail tests if they exceed thresholds."
+
+5. **"How do you manage 2FA in tests?"**
+   - *Answer:* "Options: (1) Disable OTP in test environment, (2) Intercept from logs/database, (3) Use TOTP generation if standard. I choose based on app architecture."
+
+---
+
+### Red Flags (Avoid in Interviews)
+
+- ❌ "I use Thread.sleep()"
+- ❌ "I don't handle exceptions"
+- ❌ "I test only on emulator"
+- ❌ "I don't monitor performance"
+- ❌ "Page Object Model is unnecessary"
+
+### Green Flags (Impress Interviewers)
+
+- ✅ "I implement explicit waits with custom conditions"
+- ✅ "I test on both simulators and real devices"
+- ✅ "I monitor performance metrics in tests"
+- ✅ "I use Page Object Model consistently"
+- ✅ "I implement proper CI/CD integration"
+- ✅ "I handle race conditions and timing issues"
+
+---
+
+**Last Updated:** 2025
+**Version:** 1.0
