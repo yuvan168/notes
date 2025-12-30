@@ -1,0 +1,6443 @@
+# Laravel Complete Notes
+
+## Table of Contents
+1. [Introduction & Setup](#introduction--setup)
+2. [Routing](#routing)
+3. [Controllers](#controllers)
+4. [Views & Blade](#views--blade)
+5. [Models & Eloquent ORM](#models--eloquent-orm)
+6. [Database & Migrations](#database--migrations)
+7. [Authentication](#authentication)
+8. [Authorization](#authorization)
+9. [Middleware](#middleware)
+10. [Validation](#validation)
+11. [Error Handling](#error-handling)
+12. [File Storage](#file-storage)
+13. [Caching](#caching)
+14. [Job Queues](#job-queues)
+15. [Broadcasting](#broadcasting)
+16. [Testing](#testing)
+17. [API Development](#api-development)
+18. [Advanced Topics](#advanced-topics)
+19. [Interview Questions & Answers](#interview-questions--answers)
+20. [Real-World Practical Applications](#real-world-practical-applications)
+21. [Production Best Practices](#production-best-practices)
+22. [Common PHP Developer Job Scenarios](#common-php-developer-job-scenarios)
+
+---
+
+## Introduction & Setup
+
+### What is Laravel?
+Laravel is a PHP web framework designed for building web applications with an expressive, elegant syntax. It follows the MVC (Model-View-Controller) pattern and emphasizes developer experience.
+
+### Key Features
+- Elegant syntax & rapid development
+- Built-in authentication & authorization
+- Database abstraction via Eloquent ORM
+- Blade templating engine
+- Job queues & event system
+- Broadcasting for real-time updates
+- Comprehensive testing tools
+
+### Installation
+
+```bash
+# Using Composer
+composer create-project laravel/laravel project-name
+
+# Or using Laravel Installer
+laravel new project-name
+
+# Start development server
+php artisan serve
+```
+
+### Project Structure
+```
+laravel-app/
+├── app/
+│   ├── Http/
+│   │   ├── Controllers/
+│   │   ├── Middleware/
+│   │   └── Requests/
+│   ├── Models/
+│   ├── Events/
+│   ├── Jobs/
+│   └── Console/
+├── routes/
+│   ├── web.php
+│   ├── api.php
+│   └── console.php
+├── resources/
+│   ├── views/
+│   └── css/
+│   └── js/
+├── database/
+│   ├── migrations/
+│   ├── seeders/
+│   └── factories/
+├── storage/
+├── tests/
+├── config/
+├── bootstrap/
+└── public/
+```
+
+### Configuration
+Edit `.env` file for environment-specific settings:
+```
+APP_NAME=MyApp
+APP_ENV=local
+APP_DEBUG=true
+APP_URL=http://localhost:8000
+
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=laravel_app
+DB_USERNAME=root
+DB_PASSWORD=
+```
+
+---
+
+## Routing
+
+### Basic Routes
+```php
+// routes/web.php
+
+// Simple GET route
+Route::get('/posts', function () {
+    return 'List of posts';
+});
+
+// POST route
+Route::post('/posts', function () {
+    return 'Create post';
+});
+
+// Route with parameter
+Route::get('/posts/{id}', function ($id) {
+    return "Post: $id";
+});
+
+// Named route
+Route::get('/profile', function () {
+    return 'Profile';
+})->name('profile');
+
+// Multiple methods
+Route::match(['get', 'post'], '/path', function () {
+    //
+});
+```
+
+### Resource Routes
+```php
+// Generates 7 standard routes (index, create, store, show, edit, update, destroy)
+Route::resource('posts', PostController::class);
+
+// Only specific actions
+Route::resource('posts', PostController::class)->only(['index', 'show']);
+
+// Exclude specific actions
+Route::resource('posts', PostController::class)->except(['destroy']);
+```
+
+### Route Groups
+```php
+// Group with prefix
+Route::prefix('admin')->group(function () {
+    Route::get('/dashboard', [DashboardController::class, 'index']);
+});
+
+// Group with middleware
+Route::middleware(['auth'])->group(function () {
+    Route::get('/profile', [ProfileController::class, 'show']);
+});
+
+// Group with namespace
+Route::namespace('Admin')->group(function () {
+    // Controllers here are in Admin namespace
+});
+
+// Combined
+Route::prefix('api')->middleware(['auth:api'])->group(function () {
+    Route::resource('posts', PostController::class);
+});
+```
+
+### Route Parameters
+```php
+// Optional parameter
+Route::get('/posts/{id?}', function ($id = null) {
+    return $id ?? 'All posts';
+});
+
+// Parameter constraints
+Route::get('/posts/{id}', function ($id) {
+    //
+})->where('id', '[0-9]+');
+
+// Multiple constraints
+Route::get('/posts/{category}/{post}', function ($category, $post) {
+    //
+})->where(['category' => '[a-z]+', 'post' => '[0-9]+']);
+
+// Global constraints in RouteServiceProvider
+public function boot(): void
+{
+    Route::pattern('id', '[0-9]+');
+}
+```
+
+### Redirects
+```php
+Route::redirect('/here', '/there', 301);
+Route::permanentRedirect('/here', '/there');
+Route::view('/welcome', 'welcome');
+```
+
+---
+
+## Controllers
+
+### Creating Controllers
+```bash
+# Basic controller
+php artisan make:controller PostController
+
+# Controller with resource methods
+php artisan make:controller PostController --resource
+
+# Model-bound controller
+php artisan make:controller PostController --model=Post
+```
+
+### Controller Methods
+```php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Post;
+
+class PostController extends Controller
+{
+    // List all posts
+    public function index()
+    {
+        $posts = Post::all();
+        return view('posts.index', ['posts' => $posts]);
+    }
+
+    // Show create form
+    public function create()
+    {
+        return view('posts.create');
+    }
+
+    // Store new post
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'title' => 'required|string|max:255',
+            'body' => 'required|string',
+        ]);
+
+        Post::create($validated);
+        return redirect('/posts')->with('success', 'Post created!');
+    }
+
+    // Show specific post
+    public function show(Post $post)
+    {
+        return view('posts.show', ['post' => $post]);
+    }
+
+    // Show edit form
+    public function edit(Post $post)
+    {
+        return view('posts.edit', ['post' => $post]);
+    }
+
+    // Update post
+    public function update(Request $request, Post $post)
+    {
+        $validated = $request->validate([
+            'title' => 'required|string|max:255',
+            'body' => 'required|string',
+        ]);
+
+        $post->update($validated);
+        return redirect("/posts/{$post->id}")->with('success', 'Post updated!');
+    }
+
+    // Delete post
+    public function destroy(Post $post)
+    {
+        $post->delete();
+        return redirect('/posts')->with('success', 'Post deleted!');
+    }
+}
+```
+
+### Controller Dependency Injection
+```php
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use App\Services\PostService;
+
+class PostController extends Controller
+{
+    // Constructor injection
+    public function __construct(private PostService $postService)
+    {
+    }
+
+    // Method injection
+    public function store(Request $request, PostService $postService)
+    {
+        $postService->create($request->validated());
+    }
+}
+```
+
+### Single Action Controllers
+```php
+<?php
+
+namespace App\Http\Controllers;
+
+class DownloadInvoiceController extends Controller
+{
+    public function __invoke(Invoice $invoice)
+    {
+        return $invoice->download();
+    }
+}
+
+// routes/web.php
+Route::get('/invoice/download', DownloadInvoiceController::class);
+```
+
+---
+
+## Views & Blade
+
+### Creating Views
+```bash
+php artisan make:view posts.index
+php artisan make:view posts/create
+```
+
+### Blade Syntax
+
+#### Displaying Data
+```blade
+<!-- Escape output (default) -->
+{{ $variable }}
+
+<!-- Display without escaping -->
+{!! $html !!}
+
+<!-- If variable exists -->
+{{ $variable ?? 'default value' }}
+
+<!-- JSON encoding -->
+@json($array)
+```
+
+#### Control Structures
+```blade
+<!-- If statements -->
+@if ($user->isAdmin())
+    <p>Admin</p>
+@elseif ($user->isModerator())
+    <p>Moderator</p>
+@else
+    <p>User</p>
+@endif
+
+@unless ($user->isAdmin())
+    <!-- Display if not admin -->
+@endunless
+
+<!-- Loops -->
+@foreach ($users as $user)
+    <p>{{ $user->name }}</p>
+@endforeach
+
+@forelse ($users as $user)
+    <p>{{ $user->name }}</p>
+@empty
+    <p>No users found</p>
+@endforelse
+
+<!-- While loops -->
+@while ($count++ < 10)
+    <p>Count: {{ $count }}</p>
+@endwhile
+```
+
+#### Template Inheritance
+```blade
+<!-- layouts/app.blade.php -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>@yield('title')</title>
+</head>
+<body>
+    @yield('content')
+</body>
+</html>
+
+<!-- posts/index.blade.php -->
+@extends('layouts.app')
+
+@section('title', 'Posts')
+
+@section('content')
+    <h1>Posts</h1>
+    @foreach ($posts as $post)
+        <p>{{ $post->title }}</p>
+    @endforeach
+@endsection
+```
+
+#### Components
+```blade
+<!-- Create component -->
+<!-- resources/views/components/alert.blade.php -->
+<div class="alert alert-{{ $type ?? 'info' }}">
+    {{ $slot }}
+</div>
+
+<!-- Use component -->
+<x-alert>
+    This is an alert!
+</x-alert>
+
+<x-alert type="danger">
+    Danger alert!
+</x-alert>
+```
+
+#### Component Properties
+```blade
+<!-- resources/views/components/post-card.blade.php -->
+<div class="card">
+    <h3>{{ $post->title }}</h3>
+    <p>{{ $post->excerpt }}</p>
+    @if ($showAuthor ?? false)
+        <p>By {{ $post->author->name }}</p>
+    @endif
+</div>
+
+<!-- Usage -->
+<x-post-card :post="$post" :show-author="true" />
+```
+
+#### Slot-based Components
+```blade
+<!-- resources/views/components/panel.blade.php -->
+<div class="panel">
+    <div class="panel-heading">
+        {{ $heading }}
+    </div>
+    <div class="panel-body">
+        {{ $slot }}
+    </div>
+</div>
+
+<!-- Usage -->
+<x-panel>
+    <x-slot name="heading">
+        Important Notice
+    </x-slot>
+    Panel content here
+</x-panel>
+```
+
+#### Forms
+```blade
+<!-- CSRF token -->
+<form method="POST" action="/posts">
+    @csrf
+    
+    <input type="text" name="title">
+    <input type="submit">
+</form>
+
+<!-- Method spoofing (PUT, PATCH, DELETE) -->
+<form method="POST" action="/posts/{{ $post->id }}">
+    @csrf
+    @method('PATCH')
+    
+    <input type="text" name="title" value="{{ $post->title }}">
+    <input type="submit">
+</form>
+
+<!-- Populate with old values -->
+<input type="text" name="title" value="{{ old('title', $post->title ?? '') }}">
+
+<!-- Display errors -->
+@if ($errors->has('title'))
+    <span class="error">{{ $errors->first('title') }}</span>
+@endif
+
+@error('email')
+    <span class="error">{{ $message }}</span>
+@enderror
+```
+
+---
+
+## Models & Eloquent ORM
+
+### Creating Models
+```bash
+# Basic model
+php artisan make:model Post
+
+# Model with migration
+php artisan make:model Post -m
+
+# Model with migration and factory
+php artisan make:model Post -mf
+
+# Model with seeder
+php artisan make:model Post -s
+```
+
+### Model Basics
+```php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+class Post extends Model
+{
+    use HasFactory;
+
+    // Table name (optional if follows convention)
+    protected $table = 'posts';
+
+    // Primary key (optional if 'id')
+    protected $primaryKey = 'id';
+
+    // Fillable attributes
+    protected $fillable = ['title', 'body', 'author_id'];
+
+    // Or use guarded (opposite of fillable)
+    protected $guarded = ['id'];
+
+    // Hidden attributes
+    protected $hidden = ['password'];
+
+    // Cast attributes
+    protected $casts = [
+        'published_at' => 'datetime',
+        'is_active' => 'boolean',
+        'metadata' => 'array',
+    ];
+
+    // Timestamps
+    public $timestamps = true; // Default
+}
+```
+
+### Query Builder Basics
+```php
+// Get all records
+$posts = Post::all();
+
+// Get first record
+$post = Post::first();
+
+// Get by ID
+$post = Post::find(1);
+$post = Post::findOrFail(1); // Throws ModelNotFoundException
+
+// Where clause
+$posts = Post::where('status', 'published')->get();
+
+// Multiple conditions
+$posts = Post::where('status', 'published')
+    ->where('author_id', 1)
+    ->get();
+
+// Where with operators
+$posts = Post::where('views', '>', 100)->get();
+$posts = Post::where('title', 'like', '%Laravel%')->get();
+
+// WhereIn
+$posts = Post::whereIn('status', ['published', 'draft'])->get();
+
+// WhereNull
+$posts = Post::whereNull('deleted_at')->get();
+
+// Count
+$count = Post::count();
+$count = Post::where('status', 'published')->count();
+
+// First or Last
+$post = Post::where('status', 'published')->first();
+$post = Post::where('status', 'published')->latest()->first();
+
+// Order By
+$posts = Post::orderBy('created_at', 'desc')->get();
+$posts = Post::latest('created_at')->get();
+
+// Limit & Offset
+$posts = Post::limit(10)->offset(0)->get();
+$posts = Post::skip(10)->take(10)->get();
+
+// Pagination
+$posts = Post::paginate(15); // Returns PaginationInterface
+$posts = Post::simplePaginate(15);
+```
+
+### Creating & Updating Records
+```php
+// Create
+$post = Post::create([
+    'title' => 'My Post',
+    'body' => 'Content here',
+    'author_id' => 1,
+]);
+
+// Create and return
+$post = new Post();
+$post->title = 'My Post';
+$post->body = 'Content here';
+$post->save();
+
+// Update
+$post = Post::find(1);
+$post->update([
+    'title' => 'Updated Title',
+]);
+
+// Update via query
+Post::where('status', 'draft')->update(['status' => 'published']);
+
+// Find or create
+$post = Post::firstOrCreate(
+    ['title' => 'My Post'],
+    ['body' => 'Content']
+);
+
+// Find or new
+$post = Post::firstOrNew(
+    ['title' => 'My Post'],
+    ['body' => 'Content']
+);
+$post->save();
+
+// Update or create
+$post = Post::updateOrCreate(
+    ['id' => 1],
+    ['title' => 'Updated Title']
+);
+```
+
+### Deleting Records
+```php
+// Delete instance
+$post = Post::find(1);
+$post->delete();
+
+// Delete via query
+Post::where('status', 'draft')->delete();
+
+// Force delete (soft deletes)
+$post->forceDelete();
+
+// Restore soft deleted
+$post->restore();
+```
+
+### Relationships
+
+#### One to Many
+```php
+// Post.php
+class Post extends Model
+{
+    public function comments()
+    {
+        return $this->hasMany(Comment::class);
+    }
+}
+
+// Comment.php
+class Comment extends Model
+{
+    public function post()
+    {
+        return $this->belongsTo(Post::class);
+    }
+}
+
+// Usage
+$post = Post::find(1);
+$comments = $post->comments;
+$comments = $post->comments()->where('approved', true)->get();
+
+$comment = Comment::find(1);
+$post = $comment->post;
+```
+
+#### Many to Many
+```php
+// User.php
+class User extends Model
+{
+    public function roles()
+    {
+        return $this->belongsToMany(Role::class);
+    }
+}
+
+// Role.php
+class Role extends Model
+{
+    public function users()
+    {
+        return $this->belongsToMany(User::class);
+    }
+}
+
+// Usage
+$user = User::find(1);
+$roles = $user->roles;
+$user->roles()->attach($roleId);
+$user->roles()->detach($roleId);
+$user->roles()->sync([1, 2, 3]); // Replace all
+```
+
+#### Has Many Through
+```php
+class Country extends Model
+{
+    public function posts()
+    {
+        return $this->hasManyThrough(Post::class, User::class);
+    }
+}
+
+// Usage
+$posts = Country::find(1)->posts;
+```
+
+#### Polymorphic Relations
+```php
+class Comment extends Model
+{
+    public function commentable()
+    {
+        return $this->morphTo();
+    }
+}
+
+class Post extends Model
+{
+    public function comments()
+    {
+        return $this->morphMany(Comment::class, 'commentable');
+    }
+}
+
+// Usage
+$post = Post::find(1);
+$post->comments()->create(['body' => 'Comment text']);
+```
+
+### Eager Loading
+```php
+// Avoid N+1 queries
+$posts = Post::with('comments', 'author')->get();
+
+// Nested eager loading
+$posts = Post::with('author', 'comments.author')->get();
+
+// Conditional eager loading
+$posts = Post::with(['comments' => function ($query) {
+    $query->where('approved', true)->latest();
+}])->get();
+
+// Lazy eager loading
+$posts = Post::all();
+$posts->load('comments'); // Load after query
+```
+
+---
+
+## Database & Migrations
+
+### Creating Migrations
+```bash
+php artisan make:migration create_posts_table
+php artisan make:migration add_category_to_posts_table
+
+# Create model with migration
+php artisan make:model Post -m
+```
+
+### Migration Syntax
+```php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('posts', function (Blueprint $table) {
+            $table->id();
+            $table->string('title');
+            $table->text('body');
+            $table->foreignId('author_id')->constrained('users');
+            $table->string('slug')->unique();
+            $table->enum('status', ['draft', 'published', 'archived'])->default('draft');
+            $table->integer('views')->default(0);
+            $table->timestamps(); // created_at, updated_at
+            $table->softDeletes(); // deleted_at for soft deletes
+            $table->index('author_id');
+            $table->fullText('title', 'body'); // For full-text search
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('posts');
+    }
+};
+```
+
+### Column Types
+```php
+$table->id(); // Auto-incrementing UNSIGNED BIGINT
+$table->string('name'); // VARCHAR
+$table->string('email', 100); // VARCHAR with length
+$table->text('description'); // TEXT
+$table->integer('count'); // INTEGER
+$table->bigInteger('views'); // BIGINT
+$table->decimal('price', 8, 2); // DECIMAL(8,2)
+$table->float('rating'); // FLOAT
+$table->boolean('is_active'); // BOOLEAN
+$table->enum('status', ['draft', 'published']); // ENUM
+$table->date('birthday'); // DATE
+$table->datetime('published_at'); // DATETIME
+$table->timestamp('created_at'); // TIMESTAMP
+$table->timestamps(); // created_at, updated_at
+$table->softDeletes(); // deleted_at
+$table->json('metadata'); // JSON
+$table->uuid('id'); // UUID
+$table->ipAddress('ip'); // IP ADDRESS
+```
+
+### Modifiers
+```php
+$table->string('email')->nullable(); // Can be NULL
+$table->string('name')->default('Guest'); // Default value
+$table->string('slug')->unique(); // Unique constraint
+$table->integer('count')->unsigned(); // Unsigned
+$table->string('name')->index(); // Add index
+$table->string('name')->fullText(); // Full-text index
+$table->string('email')->after('name'); // Column position
+$table->string('name')->change(); // Modify existing column
+$table->string('name')->renamed('full_name'); // Rename column
+```
+
+### Foreign Keys
+```php
+// Add foreign key
+$table->foreignId('user_id')->constrained(); // Auto references users.id
+
+// Custom reference
+$table->foreignId('author_id')->constrained('users', 'id');
+
+// With actions
+$table->foreignId('user_id')
+    ->constrained()
+    ->onDelete('cascade')
+    ->onUpdate('cascade');
+
+// Drop foreign key
+$table->dropForeign(['user_id']);
+```
+
+### Running Migrations
+```bash
+# Run all pending migrations
+php artisan migrate
+
+# Rollback last batch
+php artisan migrate:rollback
+
+# Rollback all migrations
+php artisan migrate:reset
+
+# Refresh (reset and re-run)
+php artisan migrate:refresh
+
+# Refresh with seeding
+php artisan migrate:refresh --seed
+
+# Get migration status
+php artisan migrate:status
+```
+
+### Seeders
+```bash
+php artisan make:seeder PostSeeder
+```
+
+```php
+<?php
+
+namespace Database\Seeders;
+
+use App\Models\Post;
+use Illuminate\Database\Seeder;
+
+class PostSeeder extends Seeder
+{
+    public function run(): void
+    {
+        Post::factory(50)->create();
+        
+        // Or manual seeding
+        Post::create([
+            'title' => 'My First Post',
+            'body' => 'Content here',
+        ]);
+    }
+}
+```
+
+```bash
+# Run seeders
+php artisan db:seed
+
+# Run specific seeder
+php artisan db:seed --class=PostSeeder
+```
+
+### Factories
+```bash
+php artisan make:factory PostFactory
+```
+
+```php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Post;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+class PostFactory extends Factory
+{
+    protected $model = Post::class;
+
+    public function definition(): array
+    {
+        return [
+            'title' => $this->faker->sentence,
+            'body' => $this->faker->paragraphs(3, true),
+            'author_id' => User::factory(),
+            'views' => $this->faker->numberBetween(0, 1000),
+        ];
+    }
+
+    // Custom states
+    public function published()
+    {
+        return $this->state(function (array $attributes) {
+            return [
+                'status' => 'published',
+                'published_at' => now(),
+            ];
+        });
+    }
+}
+```
+
+```php
+// Usage
+Post::factory()->create();
+Post::factory(10)->create();
+Post::factory()->published()->create();
+```
+
+---
+
+## Authentication
+
+### Setup Authentication
+```bash
+php artisan make:auth
+php artisan migrate
+```
+
+### Laravel Breeze (Recommended)
+```bash
+composer require laravel/breeze --dev
+php artisan breeze:install
+npm install && npm run build
+```
+
+### Manual Authentication
+
+```php
+// Register user
+Route::post('/register', function (Request $request) {
+    $validated = $request->validate([
+        'name' => 'required|string|max:255',
+        'email' => 'required|email|unique:users',
+        'password' => 'required|min:8|confirmed',
+    ]);
+
+    $user = User::create([
+        'name' => $validated['name'],
+        'email' => $validated['email'],
+        'password' => bcrypt($validated['password']),
+    ]);
+
+    Auth::login($user);
+    return redirect('/dashboard');
+});
+
+// Login
+Route::post('/login', function (Request $request) {
+    $credentials = $request->validate([
+        'email' => 'required|email',
+        'password' => 'required',
+    ]);
+
+    if (Auth::attempt($credentials, $request->remember)) {
+        $request->session()->regenerate();
+        return redirect('/dashboard');
+    }
+
+    return back()->withErrors(['email' => 'Invalid credentials']);
+});
+
+// Logout
+Route::post('/logout', function (Request $request) {
+    Auth::logout();
+    $request->session()->invalidate();
+    $request->session()->regenerateToken();
+    return redirect('/');
+});
+```
+
+### Checking Authentication
+```php
+// Check if authenticated
+if (Auth::check()) {
+    // User is authenticated
+}
+
+if (Auth::guest()) {
+    // User is not authenticated
+}
+
+// Get current user
+$user = Auth::user();
+$userId = Auth::id();
+
+// Authenticate user
+Auth::login($user);
+Auth::loginUsingId($userId);
+
+// Logout
+Auth::logout();
+```
+
+### Middleware Authentication
+```php
+Route::get('/dashboard', [DashboardController::class, 'index'])
+    ->middleware('auth');
+
+// Or in controller
+public function __construct()
+{
+    $this->middleware('auth');
+}
+
+// Only for guests
+Route::middleware('guest')->group(function () {
+    Route::get('/login', [LoginController::class, 'show']);
+});
+```
+
+### Remember Me
+```php
+Auth::attempt(['email' => $email, 'password' => $password], $remember = true);
+```
+
+### Password Hashing
+```php
+// Hash password
+$hashed = Hash::make($password);
+
+// Check password
+if (Hash::check($password, $hashed)) {
+    // Password matches
+}
+
+// Create with hashed password
+User::create([
+    'email' => 'user@example.com',
+    'password' => Hash::make('secret'),
+]);
+```
+
+---
+
+## Authorization
+
+### Creating Policies
+```bash
+php artisan make:policy PostPolicy --model=Post
+```
+
+### Policy Methods
+```php
+<?php
+
+namespace App\Policies;
+
+use App\Models\Post;
+use App\Models\User;
+
+class PostPolicy
+{
+    public function viewAny(User $user): bool
+    {
+        return true;
+    }
+
+    public function view(User $user, Post $post): bool
+    {
+        return true;
+    }
+
+    public function create(User $user): bool
+    {
+        return true;
+    }
+
+    public function update(User $user, Post $post): bool
+    {
+        return $user->id === $post->author_id;
+    }
+
+    public function delete(User $user, Post $post): bool
+    {
+        return $user->id === $post->author_id;
+    }
+}
+```
+
+### Using Policies
+```php
+// In controller
+public function edit(Post $post)
+{
+    $this->authorize('update', $post);
+    return view('posts.edit', ['post' => $post]);
+}
+
+// In blade
+@can('update', $post)
+    <a href="/posts/{{ $post->id }}/edit">Edit</a>
+@endcan
+
+@cannot('update', $post)
+    <p>You cannot edit this post</p>
+@endcannot
+
+// In routes
+Route::middleware('can:view,post')->get('/posts/{post}', [PostController::class, 'show']);
+```
+
+### Gates
+```php
+// Define in AuthServiceProvider
+Gate::define('update-post', function (User $user, Post $post) {
+    return $user->id === $post->author_id;
+});
+
+// Use gate
+if (Gate::allows('update-post', $post)) {
+    // Allowed
+}
+
+if (Gate::denies('update-post', $post)) {
+    // Denied
+}
+
+// In blade
+@if (Gate::allows('update-post', $post))
+    <a href="/posts/{{ $post->id }}/edit">Edit</a>
+@endif
+
+// In controller
+$this->authorize('update-post', $post);
+```
+
+---
+
+## Middleware
+
+### Creating Middleware
+```bash
+php artisan make:middleware CheckAge
+```
+
+### Middleware Structure
+```php
+<?php
+
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+
+class CheckAge
+{
+    public function handle(Request $request, Closure $next)
+    {
+        if ($request->input('age') < 18) {
+            return redirect('home');
+        }
+
+        return $next($request);
+    }
+
+    public function terminate(Request $request, $response)
+    {
+        // After response sent
+    }
+}
+```
+
+### Registering Middleware
+
+```php
+// Global middleware (app/Http/Kernel.php)
+protected $middleware = [
+    \App\Http\Middleware\CheckAge::class,
+];
+
+// Route middleware
+protected $routeMiddleware = [
+    'checkage' => \App\Http\Middleware\CheckAge::class,
+];
+
+// Usage
+Route::get('/posts', [PostController::class, 'index'])
+    ->middleware('checkage');
+
+Route::middleware(['auth', 'checkage'])->group(function () {
+    // Routes here
+});
+```
+
+### Before & After Middleware
+```php
+// Before (before request processed)
+class BeforeMiddleware
+{
+    public function handle(Request $request, Closure $next)
+    {
+        // Do something before
+        return $next($request);
+    }
+}
+
+// After (after response generated)
+class AfterMiddleware
+{
+    public function handle(Request $request, Closure $next)
+    {
+        $response = $next($request);
+        // Do something after
+        return $response;
+    }
+}
+```
+
+---
+
+## Validation
+
+### Basic Validation
+```php
+$validated = $request->validate([
+    'name' => 'required|string|max:255',
+    'email' => 'required|email|unique:users',
+    'age' => 'required|numeric|min:18',
+]);
+
+// Data is automatically validated and available as $validated
+```
+
+### Validation Rules
+```php
+// String rules
+'name' => 'required|string|max:255',
+'email' => 'required|email|unique:users',
+'slug' => 'required|string|regex:/^[a-z0-9\-]+$/',
+
+// Numeric rules
+'age' => 'required|numeric|min:0|max:150',
+'count' => 'required|integer|min:1',
+'price' => 'required|numeric|min:0.01',
+
+// Array rules
+'tags' => 'required|array|min:1|max:10',
+'tags.*' => 'string',
+
+// File rules
+'photo' => 'required|image|mimes:jpeg,png|max:2048',
+'document' => 'required|file|mimes:pdf,doc|max:5000',
+
+// Conditional rules
+'country' => 'required_if:region,US',
+'zip_code' => 'required_with:country',
+'description' => 'nullable|string',
+
+// Custom rules
+'password' => 'required|min:8|current_password',
+'email' => 'required|email|exists:users,email',
+```
+
+### Display Errors
+```blade
+<!-- Check if errors exist -->
+@if ($errors->any())
+    <ul>
+        @foreach ($errors->all() as $error)
+            <li>{{ $error }}</li>
+        @endforeach
+    </ul>
+@endif
+
+<!-- Display specific field error -->
+@error('email')
+    <span class="error">{{ $message }}</span>
+@enderror
+
+<!-- Check if field has error -->
+@if ($errors->has('name'))
+    <span class="error">{{ $errors->first('name') }}</span>
+@endif
+```
+
+### Form Request Validation
+```bash
+php artisan make:request StorePostRequest
+```
+
+```php
+<?php
+
+namespace App\Http\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class StorePostRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    public function rules(): array
+    {
+        return [
+            'title' => 'required|string|max:255',
+            'body' => 'required|string',
+            'tags' => 'array',
+            'tags.*' => 'string',
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'title.required' => 'Please provide a title',
+            'body.required' => 'Content is required',
+        ];
+    }
+}
+```
+
+```php
+// Use in controller
+public function store(StorePostRequest $request)
+{
+    $validated = $request->validated();
+    Post::create($validated);
+}
+```
+
+---
+
+## Error Handling
+
+### Exception Handler
+```php
+// app/Exceptions/Handler.php
+
+public function register(): void
+{
+    $this->reportable(function (Throwable $e) {
+        // Log exception
+    });
+
+    $this->renderable(function (Exception $e, Request $request) {
+        if ($e instanceof PostNotFoundException) {
+            return response()->view('errors.post-not-found', status: 404);
+        }
+    });
+}
+```
+
+### Custom Exceptions
+```bash
+php artisan make:exception PostNotFoundException
+```
+
+```php
+<?php
+
+namespace App\Exceptions;
+
+use Exception;
+
+class PostNotFoundException extends Exception
+{
+    public function render()
+    {
+        return response()->view('errors.post-not-found', status: 404);
+    }
+}
+```
+
+### Error Views
+```blade
+<!-- resources/views/errors/404.blade.php -->
+<h1>Page Not Found</h1>
+<p>The page you're looking for doesn't exist.</p>
+
+<!-- resources/views/errors/500.blade.php -->
+<h1>Server Error</h1>
+<p>Something went wrong on our end.</p>
+```
+
+---
+
+## File Storage
+
+### Storing Files
+```php
+// Store uploaded file
+$file = $request->file('document');
+$path = $file->store('documents'); // stores in storage/app/documents
+
+// Store with custom name
+$path = $file->storeAs('documents', 'custom-name.pdf');
+
+// Store in specific disk
+$path = $file->store('documents', 's3');
+
+// Get stored file
+$url = Storage::url($path);
+```
+
+### File Operations
+```php
+use Illuminate\Support\Facades\Storage;
+
+// Check if file exists
+if (Storage::exists($path)) {
+    //
+}
+
+// Get file contents
+$contents = Storage::get($path);
+
+// Put contents
+Storage::put($path, $contents);
+
+// Delete file
+Storage::delete($path);
+
+// Copy file
+Storage::copy($oldPath, $newPath);
+
+// Move file
+Storage::move($oldPath, $newPath);
+
+// Create directory
+Storage::makeDirectory($directory);
+
+// List files
+$files = Storage::files($directory);
+```
+
+### Configuring Storage
+```php
+// config/filesystems.php
+'disks' => [
+    'local' => [
+        'driver' => 'local',
+        'root' => storage_path('app'),
+    ],
+
+    's3' => [
+        'driver' => 's3',
+        'key' => env('AWS_ACCESS_KEY_ID'),
+        'secret' => env('AWS_SECRET_ACCESS_KEY'),
+        'region' => env('AWS_DEFAULT_REGION'),
+        'bucket' => env('AWS_BUCKET'),
+    ],
+],
+```
+
+---
+
+## Caching
+
+### Cache Basics
+```php
+use Illuminate\Support\Facades\Cache;
+
+// Store value
+Cache::put('key', 'value', $minutes = 10);
+Cache::put('key', 'value', now()->addHours(2));
+
+// Get value
+$value = Cache::get('key');
+$value = Cache::get('key', 'default-value');
+
+// Remember (get or store)
+$value = Cache::remember('key', $minutes = 10, function () {
+    return expensive_operation();
+});
+
+// Store forever
+Cache::forever('key', 'value');
+
+// Increment/Decrement
+Cache::increment('counter');
+Cache::decrement('counter');
+
+// Remove
+Cache::forget('key');
+Cache::flush(); // Remove all
+
+// Has key
+if (Cache::has('key')) {
+    //
+}
+```
+
+### Cache Drivers
+```php
+// .env
+CACHE_DRIVER=redis
+
+// Supported: array, database, file, memcached, redis
+```
+
+### Cache Tags (Redis only)
+```php
+Cache::tags(['posts', 'user:1'])->put('key', 'value', 60);
+
+Cache::tags(['posts'])->flush(); // Clear all posts cache
+```
+
+---
+
+## Job Queues
+
+### Creating Jobs
+```bash
+php artisan make:job SendEmail
+```
+
+```php
+<?php
+
+namespace App\Jobs;
+
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Queue\Queueable;
+
+class SendEmail implements ShouldQueue
+{
+    use Queueable;
+
+    public function __construct(private string $email)
+    {
+    }
+
+    public function handle(): void
+    {
+        Mail::to($this->email)->send(new WelcomeMail());
+    }
+
+    // Retry settings
+    public $tries = 3;
+    public $timeout = 60; // Seconds
+    public $backoff = 10; // Seconds before retry
+
+    // Handle failure
+    public function failed(Exception $exception): void
+    {
+        Log::error('Send email failed: ' . $exception->getMessage());
+    }
+}
+```
+
+### Dispatching Jobs
+```php
+// Dispatch synchronously
+SendEmail::dispatch('user@example.com');
+
+// Dispatch async
+SendEmail::dispatch('user@example.com')->onQueue('emails');
+
+// Dispatch with delay
+SendEmail::dispatch('user@example.com')->delay(now()->addMinutes(10));
+
+// Or in controller
+public function store(Request $request)
+{
+    $user = User::create($request->validated());
+    SendEmail::dispatch($user->email);
+    return response()->json(['message' => 'User created']);
+}
+```
+
+### Running Queue Worker
+```bash
+# Start worker
+php artisan queue:work
+
+# Work specific queue
+php artisan queue:work --queue=emails
+
+# With multiple processes
+php artisan queue:work --processes=4
+
+# Listen to failed jobs
+php artisan queue:failed-table
+php artisan migrate
+php artisan queue:failed
+```
+
+---
+
+## Broadcasting
+
+### Real-time Events
+```bash
+php artisan make:event PostCreated
+```
+
+```php
+<?php
+
+namespace App\Events;
+
+use App\Models\Post;
+use Illuminate\Broadcasting\Channel;
+use Illuminate\Broadcasting\InteractsWithBroadcasting;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+
+class PostCreated implements ShouldBroadcast
+{
+    use InteractsWithBroadcasting;
+
+    public function __construct(public Post $post)
+    {
+    }
+
+    public function broadcastOn(): array
+    {
+        return [
+            new Channel('posts'),
+        ];
+    }
+
+    public function broadcastAs(): string
+    {
+        return 'post.created';
+    }
+}
+```
+
+### Firing Events
+```php
+// Fire event
+event(new PostCreated($post));
+
+// In model
+Post::created(function ($post) {
+    event(new PostCreated($post));
+});
+```
+
+### Broadcasting Configuration
+```php
+// config/broadcasting.php
+'default' => env('BROADCAST_DRIVER', 'log'),
+
+'connections' => [
+    'pusher' => [
+        'driver' => 'pusher',
+        'key' => env('PUSHER_APP_KEY'),
+        'secret' => env('PUSHER_APP_SECRET'),
+        'app_id' => env('PUSHER_APP_ID'),
+        'options' => [
+            'cluster' => env('PUSHER_APP_CLUSTER'),
+        ],
+    ],
+],
+```
+
+### JavaScript Broadcasting
+```javascript
+// In JavaScript
+Echo.channel('posts')
+    .listen('PostCreated', (e) => {
+        console.log('New post created:', e.post);
+    });
+
+// Private channel
+Echo.private('user.' + userId)
+    .listen('MessageSent', (e) => {
+        console.log('New message:', e.message);
+    });
+```
+
+---
+
+## Testing
+
+### Creating Tests
+```bash
+php artisan make:test PostControllerTest
+php artisan make:test PostTest --unit
+```
+
+### Feature Tests
+```php
+<?php
+
+namespace Tests\Feature;
+
+use Tests\TestCase;
+use App\Models\Post;
+use App\Models\User;
+
+class PostControllerTest extends TestCase
+{
+    public function test_can_view_posts()
+    {
+        Post::factory(3)->create();
+        $response = $this->get('/posts');
+        $response->assertStatus(200);
+        $response->assertViewHas('posts');
+    }
+
+    public function test_authenticated_user_can_create_post()
+    {
+        $user = User::factory()->create();
+        
+        $response = $this->actingAs($user)
+            ->post('/posts', [
+                'title' => 'New Post',
+                'body' => 'Content',
+            ]);
+
+        $response->assertRedirect('/posts');
+        $this->assertDatabaseHas('posts', ['title' => 'New Post']);
+    }
+
+    public function test_validation_error()
+    {
+        $response = $this->post('/posts', [
+            'title' => '',
+            'body' => '',
+        ]);
+
+        $response->assertSessionHasErrors(['title', 'body']);
+    }
+}
+```
+
+### Unit Tests
+```php
+<?php
+
+namespace Tests\Unit;
+
+use Tests\TestCase;
+use App\Models\Post;
+use App\Models\User;
+
+class PostTest extends TestCase
+{
+    public function test_post_belongs_to_user()
+    {
+        $user = User::factory()->create();
+        $post = Post::factory()->create(['author_id' => $user->id]);
+
+        $this->assertTrue($post->author->is($user));
+    }
+
+    public function test_post_has_comments()
+    {
+        $post = Post::factory()->create();
+        $post->comments()->create(['body' => 'Comment']);
+
+        $this->assertCount(1, $post->comments);
+    }
+}
+```
+
+### Running Tests
+```bash
+# Run all tests
+php artisan test
+
+# Run specific test
+php artisan test tests/Feature/PostControllerTest.php
+
+# Run with coverage
+php artisan test --coverage
+
+# Run failing tests
+php artisan test --fails
+```
+
+---
+
+## API Development
+
+### API Resources
+```bash
+php artisan make:resource PostResource
+php artisan make:resource PostCollection
+```
+
+```php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class PostResource extends JsonResource
+{
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'title' => $this->title,
+            'body' => $this->body,
+            'author' => new UserResource($this->author),
+            'created_at' => $this->created_at,
+        ];
+    }
+}
+```
+
+### API Routes
+```php
+// routes/api.php
+Route::apiResource('posts', PostController::class);
+
+// Response format
+Route::middleware('auth:sanctum')->group(function () {
+    Route::apiResource('posts', PostController::class);
+});
+```
+
+### API Controller
+```php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Http\Resources\PostResource;
+use App\Models\Post;
+use Illuminate\Http\Request;
+
+class PostController extends Controller
+{
+    public function index()
+    {
+        $posts = Post::paginate();
+        return PostResource::collection($posts);
+    }
+
+    public function store(Request $request)
+    {
+        $post = Post::create($request->validated());
+        return new PostResource($post);
+    }
+
+    public function show(Post $post)
+    {
+        return new PostResource($post);
+    }
+
+    public function update(Request $request, Post $post)
+    {
+        $post->update($request->validated());
+        return new PostResource($post);
+    }
+
+    public function destroy(Post $post)
+    {
+        $post->delete();
+        return response()->noContent();
+    }
+}
+```
+
+### Pagination
+```php
+// Return paginated results
+$posts = Post::paginate(15);
+return PostResource::collection($posts);
+
+// Response includes:
+// data, current_page, from, last_page, per_page, to, total
+```
+
+### Pagination in Response
+```json
+{
+  "data": [...],
+  "links": {
+    "first": "...",
+    "last": "...",
+    "prev": "...",
+    "next": "..."
+  },
+  "meta": {
+    "current_page": 1,
+    "from": 1,
+    "last_page": 5,
+    "path": "...",
+    "per_page": 15,
+    "to": 15,
+    "total": 100
+  }
+}
+```
+
+### API Authentication (Sanctum)
+```bash
+composer require laravel/sanctum
+php artisan vendor:publish --provider="Laravel\Sanctum\SanctumServiceProvider"
+php artisan migrate
+```
+
+```php
+// Create token
+$token = $user->createToken('api-token')->plainTextToken;
+
+// Use token in request headers
+Authorization: Bearer {token}
+
+// Protect routes
+Route::middleware('auth:sanctum')->group(function () {
+    Route::apiResource('posts', PostController::class);
+});
+
+// Logout
+$request->user()->currentAccessToken()->delete();
+```
+
+---
+
+## Advanced Topics
+
+### Service Layer Pattern
+```php
+<?php
+
+namespace App\Services;
+
+use App\Models\Post;
+use App\Repositories\PostRepository;
+
+class PostService
+{
+    public function __construct(private PostRepository $repository)
+    {
+    }
+
+    public function createPost(array $data): Post
+    {
+        return $this->repository->create($data);
+    }
+
+    public function updatePost(Post $post, array $data): Post
+    {
+        return $this->repository->update($post, $data);
+    }
+}
+```
+
+### Repository Pattern
+```php
+<?php
+
+namespace App\Repositories;
+
+use App\Models\Post;
+
+class PostRepository
+{
+    public function all()
+    {
+        return Post::all();
+    }
+
+    public function find($id)
+    {
+        return Post::findOrFail($id);
+    }
+
+    public function create(array $data)
+    {
+        return Post::create($data);
+    }
+
+    public function update(Post $post, array $data)
+    {
+        $post->update($data);
+        return $post;
+    }
+}
+```
+
+### Events & Listeners
+```bash
+php artisan make:listener SendPostCreatedNotification --event=PostCreated
+```
+
+```php
+<?php
+
+namespace App\Listeners;
+
+use App\Events\PostCreated;
+
+class SendPostCreatedNotification
+{
+    public function handle(PostCreated $event): void
+    {
+        Notification::send($event->post->author, new PostCreatedNotification($event->post));
+    }
+}
+```
+
+### Notifications
+```bash
+php artisan make:notification PostCreated
+```
+
+```php
+<?php
+
+namespace App\Notifications;
+
+use Illuminate\Notifications\Notification;
+use Illuminate\Notifications\Messages\MailMessage;
+
+class PostCreated extends Notification
+{
+    public function via($notifiable)
+    {
+        return ['mail', 'database'];
+    }
+
+    public function toMail($notifiable)
+    {
+        return (new MailMessage)
+            ->line('A new post was created.')
+            ->action('View Post', url('/posts/1'));
+    }
+
+    public function toDatabase($notifiable)
+    {
+        return [
+            'post_id' => $this->post->id,
+            'message' => 'New post created',
+        ];
+    }
+}
+```
+
+### Mail
+```bash
+php artisan make:mail WelcomeEmail
+```
+
+```php
+<?php
+
+namespace App\Mail;
+
+use Illuminate\Mail\Mailable;
+use Illuminate\Mail\Mailables\Content;
+use Illuminate\Mail\Mailables\Envelope;
+
+class WelcomeEmail extends Mailable
+{
+    public function envelope(): Envelope
+    {
+        return new Envelope(
+            subject: 'Welcome to our App',
+        );
+    }
+
+    public function content(): Content
+    {
+        return new Content(
+            view: 'emails.welcome',
+        );
+    }
+}
+```
+
+### Custom Artisan Commands
+```bash
+php artisan make:command GenerateReport
+```
+
+```php
+<?php
+
+namespace App\Console\Commands;
+
+use Illuminate\Console\Command;
+
+class GenerateReport extends Command
+{
+    protected $signature = 'report:generate {--type=daily}';
+    protected $description = 'Generate report';
+
+    public function handle(): void
+    {
+        $type = $this->option('type');
+        $this->info("Generating $type report...");
+    }
+}
+```
+
+```bash
+php artisan report:generate --type=monthly
+```
+
+---
+
+## Common Patterns & Best Practices
+
+### Validation Best Practices
+```php
+// Use Form Requests
+public function store(StorePostRequest $request)
+{
+    Post::create($request->validated());
+}
+
+// Fail early
+if ($something->invalid()) {
+    abort(403, 'Unauthorized');
+}
+```
+
+### Query Optimization
+```php
+// Use eager loading
+$posts = Post::with(['author', 'comments'])->get();
+
+// Use indexes
+Schema::table('posts', function (Blueprint $table) {
+    $table->index('author_id');
+});
+
+// Avoid N+1 queries
+// Don't do: foreach ($posts as $post) { $post->author; }
+
+// Use select only needed columns
+$posts = Post::select('id', 'title', 'author_id')->get();
+```
+
+### Code Organization
+```
+app/
+├── Http/
+│   ├── Controllers/
+│   ├── Requests/
+│   ├── Resources/
+│   └── Middleware/
+├── Models/
+├── Services/
+├── Repositories/
+├── Events/
+├── Listeners/
+├── Notifications/
+├── Exceptions/
+└── Policies/
+```
+
+### Error Handling
+```php
+// Meaningful error messages
+throw new PostNotFoundException('Post with ID ' . $id . ' not found');
+
+// Log errors
+Log::error('Operation failed', ['exception' => $e]);
+
+// User-friendly responses
+abort(404, 'Post not found');
+```
+
+### Security
+```php
+// Always hash passwords
+$user->password = Hash::make($password);
+
+// Validate CSRF tokens (automatic in forms)
+<form method="POST">
+    @csrf
+</form>
+
+// Use authorization gates/policies
+$this->authorize('delete', $post);
+
+// Sanitize input
+$title = strip_tags($title);
+```
+
+---
+
+## Command Reference
+
+### Artisan Commands
+```bash
+# Serve application
+php artisan serve
+
+# Create models & files
+php artisan make:model Post -mcr
+php artisan make:controller PostController
+php artisan make:migration create_posts_table
+php artisan make:seeder PostSeeder
+php artisan make:factory PostFactory
+php artisan make:policy PostPolicy
+
+# Database
+php artisan migrate
+php artisan migrate:rollback
+php artisan db:seed
+php artisan tinker
+
+# Cache & Optimization
+php artisan cache:clear
+php artisan route:cache
+php artisan view:cache
+php artisan config:cache
+
+# Testing
+php artisan test
+php artisan test --coverage
+
+# Queue
+php artisan queue:work
+php artisan queue:failed
+
+# Maintenance
+php artisan down
+php artisan up
+```
+
+---
+
+## Interview Questions & Answers
+
+### Q1: Explain the MVC Pattern in Laravel
+**Answer:**
+- **Model**: Represents data and database interactions using Eloquent ORM. Handles business logic and data validation.
+- **View**: Blade templates that render HTML for users. Contains presentation logic.
+- **Controller**: Handles requests, processes input, calls models, and returns views. Acts as intermediary between models and views.
+
+```php
+// Example workflow
+// Request → Route → Controller → Model → Database
+// Database → Model → Controller → View → Response
+```
+
+### Q2: What's the difference between Authorization and Authentication?
+**Answer:**
+- **Authentication**: Verifying who the user is (login process)
+- **Authorization**: Checking what a user is allowed to do (permissions/roles)
+
+```php
+// Authentication
+Auth::attempt(['email' => $email, 'password' => $password]);
+
+// Authorization
+$this->authorize('delete', $post); // Uses policies
+Gate::allows('edit-post', $post); // Uses gates
+```
+
+### Q3: Explain N+1 Query Problem and How to Fix It
+**Answer:**
+The N+1 problem occurs when you execute 1 query to fetch a parent record and then N additional queries to fetch related records.
+
+```php
+// BAD - N+1 Problem (1 + 100 = 101 queries)
+$posts = Post::all(); // 1 query
+foreach ($posts as $post) {
+    echo $post->author->name; // 100 queries for 100 posts
+}
+
+// GOOD - Eager Loading (2 queries)
+$posts = Post::with('author')->get();
+foreach ($posts as $post) {
+    echo $post->author->name; // No additional queries
+}
+
+// GOOD - Lazy Eager Loading
+$posts = Post::all();
+$posts->load('author'); // Load after initial query
+```
+
+### Q4: What are Migrations and Why Are They Important?
+**Answer:**
+Migrations are version control for your database. They allow you to:
+- Define database schema in code
+- Collaborate easily with other developers
+- Deploy consistent database structure across environments
+- Rollback changes if needed
+
+```php
+// Migration represents a version of your database
+// Each migration is a timestamp-prefixed file
+// 2024_01_15_120000_create_posts_table.php
+// 2024_01_16_085000_add_category_to_posts_table.php
+
+php artisan migrate; // Apply pending migrations
+php artisan migrate:rollback; // Undo last batch
+```
+
+### Q5: Explain Dependency Injection in Laravel
+**Answer:**
+Laravel's service container automatically resolves and injects dependencies, promoting loose coupling and testability.
+
+```php
+// Constructor Injection
+class PostController extends Controller
+{
+    public function __construct(private PostRepository $repo)
+    {
+    }
+
+    public function index()
+    {
+        return $this->repo->all();
+    }
+}
+
+// Method Injection
+public function store(Request $request, PostService $service)
+{
+    $service->create($request->validated());
+}
+
+// Benefits:
+// - Easy to test (inject mocks)
+// - Loose coupling
+// - Centralized configuration
+```
+
+### Q6: What is Eloquent ORM and Its Advantages?
+**Answer:**
+Eloquent is Laravel's ORM (Object-Relational Mapping) that allows you to interact with databases using PHP objects instead of raw SQL.
+
+```php
+// Advantages:
+// 1. Readable syntax
+$user = User::find(1);
+$posts = $user->posts()->where('published', true)->get();
+
+// 2. Relationships built-in
+class User extends Model {
+    public function posts() { return $this->hasMany(Post::class); }
+}
+
+// 3. Automatic timestamps
+// 4. Query builder integration
+// 5. Mass assignment protection
+// 6. Mutators and accessors
+// 7. Events and hooks
+```
+
+### Q7: How Do You Handle Validation in Laravel?
+**Answer:**
+Laravel provides multiple validation approaches:
+
+```php
+// 1. Controller validation (simple cases)
+$validated = $request->validate([
+    'email' => 'required|email|unique:users',
+    'password' => 'required|min:8',
+]);
+
+// 2. Form Request validation (recommended)
+// php artisan make:request StoreUserRequest
+public function store(StoreUserRequest $request)
+{
+    User::create($request->validated());
+}
+
+// 3. Manual validation
+$validator = Validator::make($request->all(), [
+    'email' => 'required|email',
+]);
+
+if ($validator->fails()) {
+    return back()->withErrors($validator);
+}
+
+// Benefits of Form Request:
+// - Centralized validation logic
+// - Authorization checks
+// - Custom error messages
+// - Cleaner controller code
+```
+
+### Q8: Explain Middleware in Laravel
+**Answer:**
+Middleware provides a mechanism to filter HTTP requests entering your application.
+
+```php
+// Uses:
+// 1. Authentication (auth middleware)
+// 2. CORS headers
+// 3. Request logging
+// 4. Rate limiting
+// 5. Input sanitization
+
+// Execution flow:
+// Request → Middleware1 → Middleware2 → Controller → Middleware2 → Middleware1 → Response
+
+class CheckAge {
+    public function handle(Request $request, Closure $next) {
+        // Before request processing
+        
+        $response = $next($request);
+        
+        // After response generated
+        return $response;
+    }
+}
+```
+
+### Q9: How Does Eloquent Query Caching Work?
+**Answer:**
+Caching query results improves performance by avoiding repeated database hits.
+
+```php
+// Cache for 1 hour
+$posts = Cache::remember('posts', 60, function () {
+    return Post::with('author')->get();
+});
+
+// Cache forever
+Cache::rememberForever('settings', function () {
+    return Setting::all();
+});
+
+// Invalidate cache
+Cache::forget('posts');
+
+// Use in practice
+public function getPosts()
+{
+    return Cache::remember('posts_page_1', 3600, function () {
+        return Post::paginate(15);
+    });
+}
+```
+
+### Q10: Explain Service Container and Service Providers
+**Answer:**
+Service Container is the heart of Laravel's dependency injection system. Service Providers register services into the container.
+
+```php
+// In config/app.php, register providers
+'providers' => [
+    App\Providers\AppServiceProvider::class,
+],
+
+// Create provider
+class AppServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+        // Register into container
+        $this->app->singleton(PostRepository::class, function () {
+            return new PostRepository();
+        });
+    }
+
+    public function boot(): void
+    {
+        // Publish configuration after registration
+    }
+}
+
+// Usage
+app(PostRepository::class);
+```
+
+### Q11: What are Guards and How Do You Implement Multiple Auth Guards?
+**Answer:**
+Guards define how users are authenticated. Laravel supports multiple guards (web, api, admin).
+
+```php
+// config/auth.php
+'guards' => [
+    'web' => ['driver' => 'session', 'provider' => 'users'],
+    'api' => ['driver' => 'sanctum', 'provider' => 'users'],
+    'admin' => ['driver' => 'session', 'provider' => 'admins'],
+],
+
+// Usage
+Auth::guard('admin')->check();
+Auth::guard('api')->attempt($credentials);
+
+// In routes
+Route::middleware('auth:admin')->group(function () {
+    // Admin routes
+});
+
+Route::middleware('auth:api')->group(function () {
+    // API routes
+});
+```
+
+### Q12: Explain Soft Deletes and Hard Deletes
+**Answer:**
+Soft deletes mark records as deleted without removing them. Hard deletes permanently remove records.
+
+```php
+// Soft Delete Setup
+use SoftDeletes;
+
+class Post extends Model
+{
+    use SoftDeletes;
+    protected $dates = ['deleted_at'];
+}
+
+// Soft delete (marks deleted_at timestamp)
+$post->delete();
+
+// Query soft deleted records
+$posts = Post::onlyTrashed()->get();
+$posts = Post::withTrashed()->get();
+
+// Restore soft deleted
+$post->restore();
+
+// Hard delete (permanent)
+$post->forceDelete();
+
+// Benefits:
+// - Data recovery capability
+// - Archive functionality
+// - Audit trails
+```
+
+### Q13: How Do You Optimize Database Queries?
+**Answer:**
+
+```php
+// 1. Use eager loading
+$posts = Post::with(['author', 'comments'])->get();
+
+// 2. Select only needed columns
+$posts = Post::select('id', 'title', 'author_id')->get();
+
+// 3. Use chunk for large datasets
+Post::chunk(100, function ($posts) {
+    foreach ($posts as $post) {
+        // Process 100 posts at a time
+    }
+});
+
+// 4. Use indexes
+Schema::table('posts', function (Blueprint $table) {
+    $table->index('author_id');
+    $table->index('created_at');
+});
+
+// 5. Use database transactions
+DB::transaction(function () {
+    $post = Post::create($data);
+    $post->comments()->create($commentData);
+});
+
+// 6. Defer heavy operations
+SendNotificationJob::dispatch($user)->delay(now()->addMinutes(5));
+
+// 7. Use query scopes
+class Post extends Model {
+    public function scopePublished($query) {
+        return $query->where('status', 'published');
+    }
+}
+
+$posts = Post::published()->get();
+```
+
+### Q14: What is CSRF Protection and How Does It Work?
+**Answer:**
+CSRF (Cross-Site Request Forgery) protection prevents unauthorized actions from external sites.
+
+```php
+// How it works:
+// 1. User visits your site, gets unique CSRF token
+// 2. Token embedded in forms
+// 3. On form submission, token validated
+// 4. Attacker on other site can't generate valid token
+
+// In Blade template
+<form method="POST" action="/posts">
+    @csrf
+    <input type="text" name="title">
+</form>
+
+// Token is sent in request header or POST data
+// Middleware automatically validates
+// Disable for specific routes (API endpoints)
+Route::middleware('api')->post('/posts', ...);
+```
+
+### Q15: Explain Rate Limiting and How to Implement It
+**Answer:**
+Rate limiting controls how many requests a user can make within a time period.
+
+```php
+// Built-in rate limiting
+Route::middleware('throttle:60,1')->group(function () {
+    Route::get('/posts', [PostController::class, 'index']);
+});
+
+// Custom rate limiting
+Route::middleware('throttle:100,15')->group(function () { // 100 requests per 15 mins
+    Route::apiResource('posts', PostController::class);
+});
+
+// Custom rate limit key
+Route::middleware('throttle:api')->group(function () {
+    // In config/cache.php, define rate limiter
+});
+
+// In code
+RateLimiter::for('api', function (Request $request) {
+    return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
+});
+```
+
+---
+
+## Real-World Practical Applications
+
+### Application 1: E-Commerce Platform
+
+#### Requirements:
+- Product catalog with categories
+- Shopping cart functionality
+- Order management
+- Payment integration
+- Inventory tracking
+
+```php
+// Models
+class Product extends Model {
+    public function category() {
+        return $this->belongsTo(Category::class);
+    }
+    
+    public function cartItems() {
+        return $this->hasMany(CartItem::class);
+    }
+    
+    public function inventory() {
+        return $this->hasOne(Inventory::class);
+    }
+}
+
+class Order extends Model {
+    public function items() {
+        return $this->hasMany(OrderItem::class);
+    }
+    
+    public function payment() {
+        return $this->hasOne(Payment::class);
+    }
+}
+
+// Service
+class OrderService {
+    public function placeOrder(User $user, array $cartItems) {
+        return DB::transaction(function () use ($user, $cartItems) {
+            $order = Order::create([
+                'user_id' => $user->id,
+                'status' => 'pending',
+                'total' => 0,
+            ]);
+            
+            $total = 0;
+            foreach ($cartItems as $item) {
+                $product = Product::findOrFail($item['product_id']);
+                
+                // Check inventory
+                if ($product->inventory->quantity < $item['quantity']) {
+                    throw new InsufficientInventoryException();
+                }
+                
+                $itemTotal = $product->price * $item['quantity'];
+                $order->items()->create([
+                    'product_id' => $product->id,
+                    'quantity' => $item['quantity'],
+                    'price' => $product->price,
+                ]);
+                
+                $product->inventory()->decrement('quantity', $item['quantity']);
+                $total += $itemTotal;
+            }
+            
+            $order->update(['total' => $total]);
+            
+            // Dispatch notification job
+            SendOrderConfirmationEmail::dispatch($order);
+            
+            return $order;
+        });
+    }
+}
+
+// Controller
+class OrderController extends Controller {
+    public function __construct(private OrderService $orderService) {}
+    
+    public function store(StoreOrderRequest $request) {
+        try {
+            $order = $this->orderService->placeOrder(
+                Auth::user(),
+                $request->validated()['items']
+            );
+            return redirect("/orders/{$order->id}")
+                ->with('success', 'Order placed successfully!');
+        } catch (InsufficientInventoryException $e) {
+            return back()->withErrors(['inventory' => 'Insufficient stock']);
+        }
+    }
+}
+```
+
+### Application 2: Multi-Tenant SaaS Platform
+
+```php
+// Middleware for tenant identification
+class IdentifyTenant {
+    public function handle(Request $request, Closure $next) {
+        $domain = $request->getHost();
+        $tenant = Tenant::where('domain', $domain)->first();
+        
+        if (!$tenant) {
+            abort(404, 'Tenant not found');
+        }
+        
+        app()->instance('tenant', $tenant);
+        DB::statement("USE `{$tenant->database_name}`");
+        
+        return $next($request);
+    }
+}
+
+// Model with tenant scope
+class Post extends Model {
+    protected static function booted() {
+        static::addGlobalScope('tenant', function (Builder $query) {
+            $query->where('tenant_id', app('tenant')->id);
+        });
+    }
+}
+
+// API with tenant isolation
+Route::middleware(['auth:sanctum', 'identify_tenant'])->group(function () {
+    Route::apiResource('posts', PostController::class);
+});
+```
+
+### Application 3: Real-Time Chat Application
+
+```php
+// Broadcasting event
+class MessageSent implements ShouldBroadcast {
+    use InteractsWithBroadcasting;
+    
+    public function __construct(public Message $message) {}
+    
+    public function broadcastOn(): array {
+        return [
+            new PrivateChannel("chat.{$this->message->conversation_id}"),
+        ];
+    }
+}
+
+// Model
+class Message extends Model {
+    protected static function booted() {
+        static::created(function ($message) {
+            event(new MessageSent($message));
+            
+            // Update conversation
+            $message->conversation()->touch();
+            $message->conversation()->increment('unread_count');
+        });
+    }
+}
+
+// JavaScript listener
+Echo.private(`chat.${conversationId}`)
+    .listen('MessageSent', (e) => {
+        addMessageToUI(e.message);
+        markAsRead();
+    });
+```
+
+### Application 4: Content Management System (CMS)
+
+```php
+// Traits for reusable functionality
+trait Publishable {
+    public function scopePublished($query) {
+        return $query->where('status', 'published');
+    }
+    
+    public function publish() {
+        $this->update([
+            'status' => 'published',
+            'published_at' => now(),
+        ]);
+    }
+}
+
+class Post extends Model {
+    use Publishable, SoftDeletes;
+    
+    public function tags() {
+        return $this->belongsToMany(Tag::class);
+    }
+    
+    public function comments() {
+        return $this->morphMany(Comment::class, 'commentable');
+    }
+}
+
+// Revision tracking
+class PostRevision extends Model {
+    public static function createFromPost(Post $post) {
+        return self::create([
+            'post_id' => $post->id,
+            'title' => $post->title,
+            'body' => $post->body,
+            'data' => $post->toArray(),
+        ]);
+    }
+    
+    public function restoreToPost() {
+        $this->post->update($this->data);
+    }
+}
+```
+
+---
+
+## Production Best Practices
+
+### 1. Environment Configuration
+```php
+// .env file (not in version control)
+APP_ENV=production
+APP_DEBUG=false // Never true in production
+LOG_LEVEL=error
+CACHE_DRIVER=redis
+SESSION_DRIVER=redis
+QUEUE_CONNECTION=redis
+
+// Use env() only in config files
+// config/app.php
+'debug' => env('APP_DEBUG', false),
+
+// Cache configuration in production
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+```
+
+### 2. Database Connection Pooling
+```php
+// For high-traffic applications
+// config/database.php
+'mysql' => [
+    'driver' => 'mysql',
+    'host' => env('DB_HOST'),
+    'pool' => [
+        'min' => 2,
+        'max' => 15,
+    ],
+],
+```
+
+### 3. Logging Strategy
+```php
+// config/logging.php
+'channels' => [
+    'single' => [
+        'driver' => 'single',
+        'path' => storage_path('logs/laravel.log'),
+        'level' => env('LOG_LEVEL', 'debug'),
+    ],
+    'stack' => [
+        'driver' => 'stack',
+        'channels' => ['single', 'slack'],
+    ],
+]
+
+// Log errors to Slack
+Log::stack(['single', 'slack'])->error('Critical error', [
+    'user_id' => Auth::id(),
+    'ip' => request()->ip(),
+]);
+```
+
+### 4. Security Headers
+```php
+// Middleware for security headers
+class SecurityHeaders {
+    public function handle(Request $request, Closure $next) {
+        $response = $next($request);
+        
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
+        $response->headers->set('X-Frame-Options', 'DENY');
+        $response->headers->set('X-XSS-Protection', '1; mode=block');
+        $response->headers->set('Strict-Transport-Security', 'max-age=31536000');
+        
+        return $response;
+    }
+}
+```
+
+### 5. Performance Monitoring
+```php
+// Track slow queries
+DB::listen(function ($query) {
+    if ($query->time > 1000) { // More than 1 second
+        Log::warning('Slow query', [
+            'sql' => $query->sql,
+            'time' => $query->time,
+        ]);
+    }
+});
+
+// Use APM tools (New Relic, DataDog)
+// Monitoring uptime, response times, errors
+```
+
+### 6. Database Optimization for Production
+```php
+// Use read replicas for scaling
+'mysql' => [
+    'read' => [
+        'host' => env('DB_READ_HOST'),
+    ],
+    'write' => [
+        'host' => env('DB_HOST'),
+    ],
+],
+
+// Use Eloquent caching
+Cache::remember("user.{$id}", 3600, function () {
+    return User::find($id);
+});
+```
+
+### 7. Deployment Strategy
+```bash
+# Pre-deployment checks
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+
+# Run migrations
+php artisan migrate --force
+
+# Clear cache
+php artisan cache:clear
+php artisan view:clear
+
+# Restart queue workers
+php artisan queue:restart
+```
+
+---
+
+## Common PHP Developer Job Scenarios
+
+### Scenario 1: Performance Issue - Slow Dashboard Load
+**Problem**: Dashboard takes 10+ seconds to load
+
+**Solution Steps**:
+```php
+// 1. Identify bottleneck
+$start = microtime(true);
+$data = expensiveOperation();
+$time = microtime(true) - $start;
+Log::info("Operation took {$time} seconds");
+
+// 2. Fix N+1 queries
+// Before
+$users = User::all();
+foreach ($users as $user) {
+    echo $user->posts()->count(); // 100+ queries
+}
+
+// After
+$users = User::with('posts')->get();
+$usersWithPostCount = $users->map(fn($u) => [
+    ...$u->toArray(),
+    'post_count' => $u->posts()->count(),
+]);
+
+// 3. Implement caching
+$dashboard = Cache::remember("dashboard.user.{$userId}", 3600, function () {
+    return [
+        'stats' => $this->getStats(),
+        'recent_posts' => Post::latest()->limit(10)->get(),
+        'top_users' => User::withCount('posts')->orderByDesc('posts_count')->limit(5)->get(),
+    ];
+});
+
+// 4. Use pagination
+$posts = Post::paginate(20);
+
+// 5. Defer heavy operations
+ProcessAnalyticsJob::dispatch($userId)->onQueue('background');
+```
+
+### Scenario 2: Bug Fix - Users Receiving Duplicate Emails
+**Problem**: Some users get multiple notification emails
+
+**Solution**:
+```php
+// Issue: Race condition in event listener
+// Solution: Use database transactions and locking
+
+class NotifyUserListener {
+    public function handle(UserCreated $event) {
+        $user = $event->user;
+        
+        // Lock user record to prevent concurrent updates
+        $user->lockForUpdate();
+        
+        // Check if already notified
+        if (!$user->email_sent) {
+            SendWelcomeEmail::dispatch($user);
+            $user->update(['email_sent' => true]);
+        }
+    }
+}
+
+// Or use queued jobs with idempotency
+class SendNotificationJob implements ShouldQueue {
+    public function uniqueId() {
+        return "notification.{$this->user->id}";
+    }
+    
+    public function handle() {
+        // This job won't run twice for same user
+    }
+}
+```
+
+### Scenario 3: Feature Request - Add User Roles & Permissions
+**Problem**: Need to implement role-based access control
+
+**Solution**:
+```php
+// 1. Create tables
+php artisan make:migration create_roles_table
+php artisan make:migration create_permissions_table
+php artisan make:migration create_role_user_table
+
+// 2. Models
+class Role extends Model {
+    public function permissions() {
+        return $this->belongsToMany(Permission::class);
+    }
+    
+    public function users() {
+        return $this->belongsToMany(User::class);
+    }
+}
+
+class User extends Model {
+    public function roles() {
+        return $this->belongsToMany(Role::class);
+    }
+    
+    public function hasPermission($permission) {
+        return $this->roles()
+            ->whereHas('permissions', fn($q) => $q->where('name', $permission))
+            ->exists();
+    }
+}
+
+// 3. Middleware
+class CheckPermission {
+    public function handle(Request $request, Closure $next, $permission) {
+        if (!Auth::user()->hasPermission($permission)) {
+            abort(403, 'Unauthorized');
+        }
+        return $next($request);
+    }
+}
+
+// 4. Usage
+Route::middleware('permission:edit_posts')->group(function () {
+    Route::patch('/posts/{post}', [PostController::class, 'update']);
+});
+```
+
+### Scenario 4: Testing - Write Tests for Complex Business Logic
+**Problem**: Need to test order creation with inventory management
+
+**Solution**:
+```php
+class OrderCreationTest extends TestCase {
+    public function test_can_create_order_with_sufficient_inventory() {
+        $product = Product::factory()->create();
+        Inventory::factory()->create([
+            'product_id' => $product->id,
+            'quantity' => 100,
+        ]);
+        
+        $response = $this->actingAs(User::factory()->create())
+            ->post('/orders', [
+                'items' => [
+                    ['product_id' => $product->id, 'quantity' => 10],
+                ],
+            ]);
+        
+        $response->assertRedirect();
+        $this->assertDatabaseHas('orders', ['user_id' => auth()->id()]);
+        $this->assertEquals(90, $product->inventory->fresh()->quantity);
+    }
+    
+    public function test_cannot_create_order_with_insufficient_inventory() {
+        $product = Product::factory()->create();
+        Inventory::factory()->create([
+            'product_id' => $product->id,
+            'quantity' => 5,
+        ]);
+        
+        $response = $this->actingAs(User::factory()->create())
+            ->post('/orders', [
+                'items' => [
+                    ['product_id' => $product->id, 'quantity' => 10],
+                ],
+            ]);
+        
+        $response->assertSessionHasErrors('inventory');
+        $this->assertDatabaseMissing('orders', ['user_id' => auth()->id()]);
+    }
+}
+```
+
+### Scenario 5: Debugging - Production Error Investigation
+**Problem**: Users report "Something went wrong" error in production
+
+**Solution Steps**:
+```php
+// 1. Check error logs
+tail -f storage/logs/laravel.log
+
+// 2. Enable debug mode temporarily (CAREFULLY)
+// .env
+APP_DEBUG=true
+
+// 3. Use Tinker for debugging
+php artisan tinker
+>>> User::find(123)->posts
+>>> cache()->remember('test', 60, fn() => 'value')
+
+// 4. Add context to logging
+Log::error('Order creation failed', [
+    'user_id' => Auth::id(),
+    'order_data' => $data,
+    'exception' => $e->getMessage(),
+    'trace' => $e->getTraceAsString(),
+]);
+
+// 5. Use APM tools
+// Install: composer require newrelic/newrelic-php-agent
+// Track transactions, errors, slow queries
+
+// 6. Monitor with alert rules
+// Alert if error rate > 5% in last 5 minutes
+```
+
+### Scenario 6: Database Migration - Add Column to Large Table
+**Problem**: Add new column to table with millions of rows (downtime risk)
+
+**Solution**:
+```php
+// Strategy: Add nullable column first, then populate, then make not nullable
+
+// Step 1: Add nullable column
+Schema::table('posts', function (Blueprint $table) {
+    $table->string('slug')->nullable()->after('title');
+});
+
+// Step 2: Populate data in batches
+Post::chunk(1000, function ($posts) {
+    foreach ($posts as $post) {
+        $post->update(['slug' => Str::slug($post->title)]);
+    }
+});
+
+// Step 3: Add index
+Schema::table('posts', function (Blueprint $table) {
+    $table->unique('slug');
+});
+
+// Step 4: Make not nullable
+Schema::table('posts', function (Blueprint $table) {
+    $table->string('slug')->nullable(false)->change();
+});
+
+// Alternatively: Generate slugs before migration
+$this->command->info('Generating slugs...');
+Post::all()->each(function ($post) {
+    $post->update(['slug' => Str::slug($post->title)]);
+});
+```
+
+### Scenario 7: API Rate Limiting Bypass
+**Problem**: User wants higher API limits than others
+
+**Solution**:
+```php
+// Custom rate limiter
+RateLimiter::for('api', function (Request $request) {
+    $user = $request->user();
+    
+    if ($user && $user->is_premium) {
+        // Premium users: 1000 requests per hour
+        return Limit::perHour(1000)->by($user->id);
+    }
+    
+    // Free users: 100 requests per hour
+    return Limit::perHour(100)->by($request->ip());
+});
+
+Route::middleware('throttle:api')->group(function () {
+    Route::apiResource('posts', PostController::class);
+});
+```
+
+### Scenario 8: Handling Webhook Failures
+**Problem**: Need to reliably process third-party webhooks
+
+**Solution**:
+```php
+// Store webhooks in database first
+class WebhookController extends Controller {
+    public function handleStripeEvent(Request $request) {
+        $webhook = WebhookEvent::create([
+            'provider' => 'stripe',
+            'event_type' => $request->input('type'),
+            'payload' => $request->all(),
+            'status' => 'pending',
+        ]);
+        
+        // Queue job to process
+        ProcessWebhookJob::dispatch($webhook);
+        
+        return response()->json(['received' => true]);
+    }
+}
+
+// Process with retries
+class ProcessWebhookJob implements ShouldQueue {
+    public $tries = 5;
+    public $backoff = [10, 30, 60, 120, 300]; // Exponential backoff
+    
+    public function handle(WebhookEvent $webhook) {
+        try {
+            match ($webhook->event_type) {
+                'charge.succeeded' => $this->handleChargeSucceeded($webhook),
+                'charge.failed' => $this->handleChargeFailed($webhook),
+                default => throw new UnhandledWebhookEvent(),
+            };
+            
+            $webhook->update(['status' => 'processed']);
+        } catch (Exception $e) {
+            if ($this->attempts() >= $this->tries) {
+                $webhook->update(['status' => 'failed', 'error' => $e->getMessage()]);
+                Log::error('Webhook processing failed', ['webhook_id' => $webhook->id]);
+            }
+            throw $e;
+        }
+    }
+}
+```
+
+### Scenario 9: Database Consistency - Ensure Data Integrity
+**Problem**: Maintain data consistency across related tables
+
+**Solution**:
+```php
+// Use database transactions
+DB::transaction(function () {
+    $user = User::create($userData);
+    $user->profile()->create($profileData);
+    $user->roles()->attach($roleIds);
+}, $attempts = 3);
+
+// Use foreign keys with cascade
+Schema::create('posts', function (Blueprint $table) {
+    $table->id();
+    $table->foreignId('user_id')
+        ->constrained()
+        ->onDelete('cascade') // Delete posts when user deleted
+        ->onUpdate('cascade');
+});
+
+// Validate relationships in model
+class Post extends Model {
+    protected static function booted() {
+        static::deleting(function ($post) {
+            // Ensure related data is cleaned up
+            $post->comments()->delete();
+            $post->likes()->delete();
+        });
+    }
+}
+
+// Use atomic operations
+Post::where('status', 'draft')
+    ->where('created_at', '<', now()->subDays(30))
+    ->delete(); // Single atomic operation
+```
+
+### Scenario 10: API Versioning
+**Problem**: Need to support multiple API versions
+
+**Solution**:
+```php
+// routes/api.php
+Route::prefix('v1')->group(function () {
+    Route::apiResource('posts', V1\PostController::class);
+});
+
+Route::prefix('v2')->group(function () {
+    Route::apiResource('posts', V2\PostController::class);
+});
+
+// Or using header-based versioning
+Route::middleware('api.version')->group(function () {
+    Route::apiResource('posts', PostController::class);
+});
+
+// Middleware
+class ApiVersion {
+    public function handle(Request $request, Closure $next) {
+        $version = $request->header('Accept-Version', 'v1');
+        app()->bind('api.version', $version);
+        
+        return $next($request);
+    }
+}
+
+// Service class handles version logic
+class PostService {
+    public function toArray($post) {
+        $data = [
+            'id' => $post->id,
+            'title' => $post->title,
+            'body' => $post->body,
+        ];
+        
+        if (app('api.version') === 'v2') {
+            $data['author'] = $post->author->name;
+            $data['created_at'] = $post->created_at->toIso8601String();
+        }
+        
+        return $data;
+    }
+}
+```
+
+---
+
+---
+
+## Comprehensive Theory & Keypoints Guide
+
+### I. ROUTING - THEORY & INTERVIEW GUIDE
+
+**Theory Explanation:**
+Routing is the mechanism that maps HTTP requests to specific controller actions or closures. Laravel uses a top-down matching approach where the first matching route handles the request. Routes define the public interface of your application and determine how URLs are structured.
+
+**Key Interview Questions & Answers:**
+
+**Q: What happens when a request comes to Laravel?**
+A: Request → Route Matching (top to bottom) → Middleware Pipeline → Controller → Response → Return Middleware → Client
+
+**Q: Why use named routes?**
+A: 
+- Decouple URLs from code (change URL without changing references)
+- Prevent broken links if URL pattern changes
+- Make blade templates cleaner
+- Enable route caching in production
+
+**Q: Explain route model binding**
+A:
+```php
+// Implicit binding - automatically injects model
+Route::get('/posts/{post}', function (Post $post) {
+    return $post; // $post is automatically fetched from DB
+});
+
+// Explicit binding in RouteServiceProvider
+Route::model('post', Post::class);
+
+// Custom binding
+Route::bind('post', function ($value) {
+    return Post::where('slug', $value)->first() ?? abort(404);
+});
+```
+
+**Q: What's difference between prefix and path?**
+A:
+```php
+// Prefix adds before route path
+Route::prefix('admin')->group(function () {
+    Route::get('/dashboard', ...); // /admin/dashboard
+});
+
+// Path is the full route
+Route::get('/admin/dashboard', ...); // /admin/dashboard
+```
+
+**Key Practical Applications:**
+
+```php
+// SEO-friendly slug-based routing
+Route::get('/blog/{post:slug}', [PostController::class, 'show']);
+// URL: /blog/my-first-post → Post model fetched by slug
+
+// API versioning with prefixes
+Route::prefix('api/v1')->group(function () {
+    Route::apiResource('posts', PostController::class);
+});
+
+// Admin panel with middleware protection
+Route::prefix('admin')
+    ->middleware(['auth', 'admin'])
+    ->group(function () {
+        Route::resource('users', UserController::class);
+    });
+
+// Trailing slashes redirect
+Route::get('/posts/', [PostController::class, 'index']);
+Route::redirect('/posts', '/posts/', 301); // Redirect without slash to with slash
+```
+
+---
+
+### II. CONTROLLERS - THEORY & INTERVIEW GUIDE
+
+**Theory Explanation:**
+Controllers orchestrate the request/response cycle. They contain business logic, validate input, interact with models, and return responses. Single Responsibility Principle: each controller method should do one thing.
+
+**Key Interview Questions:**
+
+**Q: What are controller responsibilities?**
+A:
+1. Receive request
+2. Validate input (via Form Request)
+3. Execute business logic
+4. Interact with models/services
+5. Return response (view, JSON, redirect)
+
+**Q: Explain dependency injection vs direct instantiation**
+A:
+```php
+// BAD - Hard to test, tightly coupled
+class PostController {
+    public function store(Request $request) {
+        $repo = new PostRepository(); // Can't test with mock
+        $repo->create($data);
+    }
+}
+
+// GOOD - Easy to test, loosely coupled
+class PostController {
+    public function __construct(private PostRepository $repo) {}
+    
+    public function store(Request $request) {
+        $this->repo->create($data);
+    }
+    
+    // Can inject mock in tests
+}
+```
+
+**Q: When to use service classes?**
+A: When business logic gets complex:
+```php
+// BAD - Logic in controller
+public function store(Request $request) {
+    $validated = $request->validated();
+    
+    $user = User::create($validated);
+    $user->roles()->attach($request->input('roles'));
+    $user->permissions()->attach($request->input('permissions'));
+    
+    SendWelcomeEmail::dispatch($user);
+    CreateActivityLog::dispatch('user.created', $user->id);
+    
+    return response()->json($user);
+}
+
+// GOOD - Logic in service
+public function store(Request $request, UserService $service) {
+    $user = $service->createWithRolesAndPermissions($request->validated());
+    return response()->json($user);
+}
+```
+
+**Practical Application - Resource Controller Pattern:**
+
+```php
+// RESTful API with single responsibility
+class PostController extends Controller {
+    public function __construct(
+        private PostService $service,
+        private PostRepository $repo
+    ) {}
+
+    public function index(Request $request) {
+        // Handle filtering, pagination
+        $posts = $this->repo->getPublished()
+            ->where('category', $request->category)
+            ->paginate();
+        
+        return PostResource::collection($posts);
+    }
+
+    public function store(StorePostRequest $request) {
+        $post = $this->service->create($request->validated());
+        return new PostResource($post);
+    }
+
+    public function show(Post $post) {
+        // Increment views (side effect in model)
+        $post->incrementViews();
+        return new PostResource($post);
+    }
+
+    public function update(UpdatePostRequest $request, Post $post) {
+        $this->authorize('update', $post);
+        $post = $this->service->update($post, $request->validated());
+        return new PostResource($post);
+    }
+
+    public function destroy(Post $post) {
+        $this->authorize('delete', $post);
+        $this->service->delete($post);
+        return response()->noContent();
+    }
+}
+```
+
+---
+
+### III. ELOQUENT ORM - THEORY & INTERVIEW GUIDE
+
+**Theory Explanation:**
+Eloquent is Laravel's powerful ORM that abstracts database operations into PHP objects. It uses the Active Record pattern where models represent database tables and rows become object instances.
+
+**Core Concepts:**
+
+**Q: Explain Active Record pattern**
+A: Each model class maps to a database table, and each instance represents a row. The object contains both data and behavior related to that data.
+
+**Q: N+1 Problem - Complete Explanation**
+A:
+```php
+// PROBLEM: 1 query for users + N queries for each user's posts
+$users = User::all(); // 1 query: SELECT * FROM users
+foreach ($users as $user) {
+    echo count($user->posts); // N queries: SELECT * FROM posts WHERE user_id = ?
+}
+
+// SOLUTION 1: Eager Loading with->with()
+$users = User::with('posts')->get(); // 2 queries total
+// Query 1: SELECT * FROM users
+// Query 2: SELECT * FROM posts WHERE user_id IN (1,2,3,...)
+
+// SOLUTION 2: Count relationships without N+1
+$users = User::withCount('posts')->get(); // 2 queries
+// Each user has posts_count attribute
+
+// SOLUTION 3: Select specific columns
+$users = User::with(['posts' => function ($query) {
+    $query->select('id', 'user_id', 'title');
+}])->get();
+
+// SOLUTION 4: Lazy eager loading (in loop)
+$users = User::all();
+$users->load('posts'); // Load after fetching
+```
+
+**Interview Practice:**
+
+```php
+// Complex eager loading scenario
+$users = User::with([
+    'posts' => function ($query) {
+        $query->latest()->limit(5);
+    },
+    'posts.comments' => function ($query) {
+        $query->approved()->latest();
+    },
+    'profile',
+    'roles'
+])->get();
+
+// Performance check
+// Without eager loading: 1 + n + (n*m) queries
+// With eager loading: 4 queries maximum
+```
+
+**Practical Applications:**
+
+```php
+// 1. Relationship counting
+$authors = Author::withCount('posts')
+    ->orderByDesc('posts_count')
+    ->take(10)
+    ->get(); // Top 10 authors by post count
+
+// 2. Conditional relationships
+$users = User::with([
+    'posts' => function ($query) {
+        $query->where('published', true)
+            ->orderByDesc('created_at');
+    }
+])->get();
+
+// 3. Polymorphic relationships
+$comments = Comment::with('commentable')->get();
+// $comments[0]->commentable could be Post or Video
+
+// 4. Querying relationships
+$users = User::has('posts')
+    ->whereHas('posts', function ($query) {
+        $query->where('published', true);
+    })
+    ->get(); // Users with at least one published post
+
+// 5. Relationship existence
+$users = User::has('posts', '>', 5)->get(); // Users with more than 5 posts
+```
+
+---
+
+### IV. DATABASE MIGRATIONS - THEORY & INTERVIEW GUIDE
+
+**Theory Explanation:**
+Migrations are version control for your database schema. They allow tracking, reverting, and collaborating on database structure changes. Each migration is timestamped to ensure proper ordering.
+
+**Key Interview Questions:**
+
+**Q: Why not use raw SQL for database changes?**
+A:
+- Migrations are version controlled
+- Can easily rollback changes
+- Ensure consistency across environments
+- Document schema evolution
+- Enable collaboration without conflicts
+
+**Q: What's the difference between up() and down()?**
+A:
+```php
+public function up(): void {
+    // Forward migration - CREATE or ALTER
+    Schema::create('posts', function (Blueprint $table) {
+        $table->id();
+        $table->string('title');
+    });
+}
+
+public function down(): void {
+    // Rollback migration - DROP or REVERT
+    Schema::dropIfExists('posts');
+}
+
+// Usage:
+php artisan migrate; // Run up()
+php artisan migrate:rollback; // Run down()
+```
+
+**Q: How to modify existing table safely in production?**
+A:
+```php
+// Step 1: Add nullable column
+Schema::table('users', function (Blueprint $table) {
+    $table->string('middle_name')->nullable()->after('first_name');
+});
+
+// Step 2: Populate column in batches (separate migration)
+User::chunk(500, function ($users) {
+    foreach ($users as $user) {
+        $user->middle_name = 'Default';
+        $user->save();
+    }
+});
+
+// Step 3: Add index or constraints
+Schema::table('users', function (Blueprint $table) {
+    $table->index('middle_name');
+});
+
+// Step 4: Make not nullable (if desired)
+Schema::table('users', function (Blueprint $table) {
+    $table->string('middle_name')->nullable(false)->change();
+});
+```
+
+**Practical Application - Complex Migration:**
+
+```php
+// Create comprehensive schema
+Schema::create('posts', function (Blueprint $table) {
+    // Primary key
+    $table->id();
+    
+    // Foreign keys with relationships
+    $table->foreignId('user_id')
+        ->constrained('users')
+        ->cascadeOnDelete()
+        ->cascadeOnUpdate();
+    
+    // Standard columns
+    $table->string('title')->index(); // For search queries
+    $table->string('slug')->unique(); // SEO-friendly URL
+    $table->text('body');
+    $table->text('excerpt')->nullable();
+    
+    // Status tracking
+    $table->enum('status', ['draft', 'published', 'archived'])
+        ->default('draft')
+        ->index(); // For filtering
+    
+    // Metadata
+    $table->json('metadata')->nullable();
+    $table->integer('views')->default(0)->unsigned();
+    
+    // Timestamps
+    $table->timestamps(); // created_at, updated_at
+    $table->softDeletes(); // deleted_at for soft delete
+    
+    // Indexes for performance
+    $table->index(['user_id', 'status']); // Composite index
+    $table->fullText(['title', 'body']); // Full-text search
+});
+```
+
+---
+
+### V. AUTHENTICATION - THEORY & INTERVIEW GUIDE
+
+**Theory Explanation:**
+Authentication verifies who a user is. Laravel provides built-in guards (session-based, token-based) and providers that handle the verification logic.
+
+**Key Interview Questions:**
+
+**Q: Difference between authentication and authorization?**
+A:
+- **Authentication**: WHO are you? (Login verification)
+- **Authorization**: What can you DO? (Permission checking)
+
+**Q: Explain Laravel's authentication flow**
+A:
+```
+1. User enters credentials (email, password)
+2. Controller calls Auth::attempt(['email' => $email, 'password' => $password])
+3. Laravel hashes provided password and compares with DB
+4. If match → Create session/token → Return true
+5. If no match → Return false → Show error
+
+// The password is NEVER stored in plaintext
+// Always use Hash::make() to hash before storing
+```
+
+**Q: Hash vs Encryption?**
+A:
+```php
+// HASHING - One-way, irreversible
+$hashed = Hash::make($password); // bcrypt/argon2
+Hash::check($plaintext, $hashed); // Verify
+// Use for: passwords, sensitive data that doesn't need recovery
+
+// ENCRYPTION - Two-way, reversible
+$encrypted = encrypt($data);
+$decrypted = decrypt($encrypted);
+// Use for: personal data, payment info that needs recovery
+```
+
+**Practical Authentication Scenarios:**
+
+```php
+// 1. Custom authentication
+class LoginController extends Controller {
+    public function authenticate(Request $request) {
+        $credentials = $request->validate([
+            'email' => ['required', 'email'],
+            'password' => ['required'],
+        ]);
+
+        if (Auth::attempt($credentials, $request->boolean('remember'))) {
+            $request->session()->regenerate();
+            return redirect()->intended('/dashboard');
+        }
+
+        return back()->withErrors([
+            'email' => 'The provided credentials do not match our records.',
+        ])->onlyInput('email');
+    }
+}
+
+// 2. Token-based authentication (API)
+class LoginController extends Controller {
+    public function login(Request $request) {
+        $credentials = $request->validate([
+            'email' => ['required', 'email'],
+            'password' => ['required'],
+        ]);
+
+        if (!Auth::attempt($credentials)) {
+            return response()->json(['message' => 'Invalid credentials'], 401);
+        }
+
+        $user = Auth::user();
+        $token = $user->createToken('api-token')->plainTextToken;
+
+        return response()->json([
+            'token' => $token,
+            'user' => $user,
+        ]);
+    }
+}
+
+// 3. Remember me functionality
+Auth::attempt($credentials, $remember = true);
+// Creates long-lived cookie for persistent login
+
+// 4. Multi-guard authentication
+if (Auth::guard('admin')->attempt($adminCredentials)) {
+    // Admin authenticated
+}
+```
+
+---
+
+### VI. VALIDATION - THEORY & INTERVIEW GUIDE
+
+**Theory Explanation:**
+Validation ensures data integrity and security before storing/processing. Client-side validation provides UX, server-side is mandatory for security. Laravel validates with readable syntax and clear error messages.
+
+**Key Interview Questions:**
+
+**Q: Why is server-side validation essential even with client-side?**
+A: Client-side validation can be bypassed (disabled JavaScript, browser devtools). Server-side is security-critical and ensures data integrity.
+
+**Q: Form Request vs Controller validation?**
+A:
+```php
+// SIMPLE VALIDATION - In controller
+$request->validate([
+    'title' => 'required|string|max:255',
+]);
+
+// COMPLEX VALIDATION - Use Form Request
+// 1. Separation of concerns
+// 2. Reusable validation
+// 3. Authorization checks
+// 4. Custom messages
+
+class StorePostRequest extends FormRequest {
+    public function authorize(): bool {
+        return true; // Can check permissions here
+    }
+    
+    public function rules(): array {
+        return [
+            'title' => 'required|string|max:255|unique:posts',
+            'body' => 'required|string|min:10',
+        ];
+    }
+    
+    public function messages(): array {
+        return [
+            'title.unique' => 'This title has already been used!',
+            'body.min' => 'Body must be at least 10 characters',
+        ];
+    }
+}
+```
+
+**Q: Custom validation rules?**
+A:
+```php
+// 1. Inline custom rule
+$request->validate([
+    'password' => [
+        'required',
+        function ($attribute, $value, $fail) {
+            if (!preg_match('/^[a-z]+\d+$/', $value)) {
+                $fail('Password must contain letters and numbers');
+            }
+        },
+    ],
+]);
+
+// 2. Custom rule class
+php artisan make:rule NoSpaces
+
+class NoSpaces implements Rule {
+    public function passes($attribute, $value) {
+        return !str_contains($value, ' ');
+    }
+    
+    public function message() {
+        return 'The :attribute must not contain spaces.';
+    }
+}
+
+// Use: 'name' => [new NoSpaces()]
+```
+
+**Practical Validation Patterns:**
+
+```php
+// 1. Conditional validation
+$rules = [
+    'type' => 'required|in:personal,business',
+    'business_name' => 'required_if:type,business',
+    'ssn' => 'required_if:type,personal|size:11',
+];
+
+// 2. Complex field validation
+$rules = [
+    'password' => [
+        'required',
+        'min:8',
+        'regex:/[a-z]/', // Lowercase
+        'regex:/[A-Z]/', // Uppercase
+        'regex:/[0-9]/', // Number
+        'regex:/[\W]/', // Special char
+    ],
+];
+
+// 3. Validate relationships
+$rules = [
+    'author_id' => ['required', 'exists:users,id'],
+    'category_id' => ['required', Rule::exists('categories', 'id')],
+];
+
+// 4. Array validation
+$rules = [
+    'items' => 'required|array|min:1|max:10',
+    'items.*.product_id' => 'required|exists:products,id',
+    'items.*.quantity' => 'required|integer|min:1',
+];
+
+// 5. Custom messages
+public function messages(): array {
+    return [
+        'email.unique' => 'Email :input is already registered!',
+        'password.regex' => 'Password must contain uppercase, lowercase, number, and special character',
+        'items.*.required' => 'Each item must have a product ID',
+    ];
+}
+```
+
+---
+
+### VII. MIDDLEWARE - THEORY & INTERVIEW GUIDE
+
+**Theory Explanation:**
+Middleware provides a filtering mechanism for HTTP requests. It's like a series of gates that requests pass through before reaching the controller, and responses pass through before returning to clients.
+
+**Key Interview Questions:**
+
+**Q: Middleware execution order**
+A:
+```
+Request → Global Middleware → Route Middleware → Controller
+                                                      ↓
+Response ← Global Middleware ← Route Middleware ← Controller
+
+// Global middleware (app/Http/Kernel.php):
+// Executed for EVERY request
+
+// Route middleware:
+// Only for specific routes
+```
+
+**Q: Before vs After middleware**
+A:
+```php
+// BEFORE Middleware - Process BEFORE controller
+class CheckRole {
+    public function handle(Request $request, Closure $next) {
+        if (!$request->user()->hasRole('admin')) {
+            abort(403);
+        }
+        return $next($request); // Proceed to controller
+    }
+}
+
+// AFTER Middleware - Process AFTER controller
+class LogResponse {
+    public function handle(Request $request, Closure $next) {
+        $response = $next($request); // Call controller
+        
+        // Modify response
+        Log::info('Request processed', ['user' => auth()->id()]);
+        return $response;
+    }
+}
+```
+
+**Practical Middleware Patterns:**
+
+```php
+// 1. API Token validation
+class ValidateApiToken {
+    public function handle(Request $request, Closure $next) {
+        if (!$request->hasHeader('X-API-Token')) {
+            return response()->json(['error' => 'Missing API token'], 401);
+        }
+
+        $token = $request->header('X-API-Token');
+        if (!ApiKey::valid($token)) {
+            return response()->json(['error' => 'Invalid API token'], 401);
+        }
+
+        return $next($request);
+    }
+}
+
+// 2. Request logging & tracking
+class LogApiRequests {
+    public function handle(Request $request, Closure $next) {
+        $start = microtime(true);
+        $response = $next($request);
+        $duration = microtime(true) - $start;
+
+        ApiLog::create([
+            'method' => $request->method(),
+            'path' => $request->path(),
+            'status' => $response->status(),
+            'duration' => $duration,
+            'user_id' => auth()->id(),
+        ]);
+
+        return $response;
+    }
+}
+
+// 3. Tenant isolation
+class EnsureTenantAccess {
+    public function handle(Request $request, Closure $next) {
+        $tenant = Tenant::where('domain', request()->getHost())->first();
+        
+        if (!$tenant) {
+            return abort(404);
+        }
+
+        // Set tenant for this request
+        app()->instance('tenant', $tenant);
+        DB::connection()->setDatabaseName($tenant->database);
+
+        return $next($request);
+    }
+}
+
+// 4. Rate limiting per user
+class RateLimitUser {
+    public function handle(Request $request, Closure $next) {
+        $key = "api_rate_{$request->user()->id}";
+        $limit = 100; // 100 requests
+        $decay = 60; // per 60 seconds
+
+        if (Cache::has($key) && Cache::get($key) >= $limit) {
+            return response()->json(['error' => 'Rate limit exceeded'], 429);
+        }
+
+        Cache::increment($key, 1, $decay);
+        return $next($request);
+    }
+}
+```
+
+---
+
+### VIII. ERROR HANDLING - THEORY & INTERVIEW GUIDE
+
+**Theory Explanation:**
+Error handling provides graceful degradation and debugging information. In development, detailed errors help find bugs. In production, generic errors prevent information leakage while logging details server-side.
+
+**Key Interview Questions:**
+
+**Q: Development vs Production error handling**
+A:
+```php
+// .env
+APP_DEBUG=true  // Development: show detailed errors
+APP_DEBUG=false // Production: show generic "Something went wrong"
+
+// config/app.php
+'debug' => env('APP_DEBUG', false),
+
+// Production never shows:
+// - Stack traces
+// - Database queries
+// - Configuration details
+// - File paths
+```
+
+**Practical Error Handling:**
+
+```php
+// 1. Custom exception
+php artisan make:exception PostNotFoundException
+
+class PostNotFoundException extends Exception {
+    public function render(Request $request) {
+        return response()->view('errors.post-not-found', [], 404);
+    }
+}
+
+// 2. Exception handler
+public function register(): void {
+    $this->reportable(function (Throwable $e) {
+        // Log error
+        if ($this->shouldReport($e)) {
+            Log::error('Exception occurred', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'user_id' => auth()->id(),
+                'request_url' => request()->url(),
+            ]);
+        }
+    });
+
+    $this->renderable(function (PostNotFoundException $e, Request $request) {
+        if ($request->expectsJson()) {
+            return response()->json(['error' => 'Post not found'], 404);
+        }
+        return response()->view('errors.404', [], 404);
+    });
+}
+
+// 3. Error logging with context
+Log::error('Order processing failed', [
+    'order_id' => $orderId,
+    'amount' => $amount,
+    'user_id' => auth()->id(),
+    'exception' => $e,
+]);
+
+// 4. Graceful error responses
+try {
+    $result = PaymentGateway::charge($amount);
+} catch (PaymentGatewayException $e) {
+    return redirect()->back()
+        ->withErrors(['payment' => 'Payment failed. Please try again.']);
+} catch (Exception $e) {
+    Log::critical('Unexpected payment error', ['exception' => $e]);
+    return response()->view('errors.500', [], 500);
+}
+```
+
+---
+
+## IX. TESTING - THEORY & INTERVIEW GUIDE
+
+**Theory Explanation:**
+Testing ensures code quality and prevents regressions. Laravel supports feature tests (full request/response) and unit tests (isolated components). Tests improve refactoring confidence and document expected behavior.
+
+**Key Interview Questions:**
+
+**Q: Feature tests vs Unit tests?**
+A:
+```php
+// FEATURE TEST - Full stack test
+class PostControllerTest extends TestCase {
+    public function test_can_create_post() {
+        $response = $this->actingAs(User::factory()->create())
+            ->post('/posts', [
+                'title' => 'Test Post',
+                'body' => 'Test content',
+            ]);
+
+        $response->assertRedirect('/posts');
+        $this->assertDatabaseHas('posts', ['title' => 'Test Post']);
+    }
+}
+
+// UNIT TEST - Single component
+class PostTest extends TestCase {
+    public function test_post_slug_generation() {
+        $post = new Post(['title' => 'My First Post']);
+        $this->assertEquals('my-first-post', $post->generateSlug());
+    }
+}
+```
+
+**Key Points:**
+- Feature tests use real database (test database), slower but comprehensive
+- Unit tests mock dependencies, faster, test isolated logic
+- Always test happy path and error cases
+- Use factories for consistent test data
+
+---
+
+## X. CACHING STRATEGY - THEORY & INTERVIEW GUIDE
+
+**Theory Explanation:**
+Caching stores expensive operation results to avoid repeating them. Database queries, API calls, and computations are common caching targets. Proper cache invalidation is critical.
+
+**Key Interview Questions:**
+
+**Q: Cache invalidation strategies?**
+A:
+```php
+// 1. Time-based expiration
+Cache::put('user.profile.1', $profile, 3600); // 1 hour
+
+// 2. Manual invalidation
+Cache::forget('user.profile.1');
+
+// 3. Tag-based invalidation
+Cache::tags(['user:1', 'profile'])->put('user.profile.1', $profile);
+Cache::tags(['user:1'])->flush(); // Clear all user:1 tagged cache
+
+// 4. Event-based invalidation
+class Post extends Model {
+    protected static function booted() {
+        static::updated(function ($post) {
+            Cache::forget("post.{$post->id}");
+        });
+    }
+}
+```
+
+**Key Points:**
+- Cache drivers: file, database, redis, memcached
+- Redis best for production (fastest, supports tags)
+- Don't cache everything - only expensive operations
+- Set appropriate TTL (time-to-live)
+
+---
+
+## XI. QUEUES & JOBS - THEORY & INTERVIEW GUIDE
+
+**Theory Explanation:**
+Queues defer time-consuming operations to background workers. Instead of blocking the request, jobs are pushed to a queue and processed asynchronously. This improves response times and user experience.
+
+**Key Interview Questions:**
+
+**Q: When to use queued jobs?**
+A:
+- Email sending (blocks for 1+ second)
+- Image processing (CPU intensive)
+- API calls (network latency)
+- Report generation (long-running)
+- Bulk data operations (affects database)
+- Any operation > 1 second
+
+**Q: Job failure handling?**
+A:
+```php
+class SendEmailJob implements ShouldQueue {
+    public $tries = 3; // Retry 3 times
+    public $backoff = [10, 30, 60]; // Backoff seconds
+
+    public function handle() {
+        try {
+            Mail::send(...);
+        } catch (Exception $e) {
+            if ($this->attempts() >= $this->tries) {
+                Log::error('Email send failed after retries', ['job' => $this]);
+            }
+            throw $e; // Re-throw for retry
+        }
+    }
+
+    public function failed(Exception $e) {
+        // Cleanup after final failure
+        Log::critical('Job failed permanently', ['exception' => $e]);
+    }
+}
+```
+
+**Key Points:**
+- Exponential backoff prevents overwhelming services
+- Dead letter queue captures failed jobs
+- Monitor queue depth in production
+- Use Redis for high-volume queues
+
+---
+
+## XII. DATABASE OPTIMIZATION - THEORY & INTERVIEW GUIDE
+
+**Theory Explanation:**
+Database queries are often performance bottlenecks. Optimization involves proper indexing, query design, and access patterns to minimize database load and response times.
+
+**Key Interview Questions:**
+
+**Q: How to identify slow queries?**
+A:
+```php
+// Enable query logging
+DB::listen(function ($query) {
+    if ($query->time > 1000) { // > 1 second
+        Log::warning('Slow query', [
+            'sql' => $query->sql,
+            'time' => $query->time . 'ms',
+            'bindings' => $query->bindings,
+        ]);
+    }
+});
+
+// Use APM tools (DataDog, New Relic, Sentry)
+```
+
+**Q: Index strategy?**
+A:
+```php
+// Good indexing
+Schema::table('posts', function (Blueprint $table) {
+    $table->index('published'); // Single column for WHERE
+    $table->index(['user_id', 'published']); // Composite for WHERE user_id = ? AND published
+    $table->fullText(['title', 'body']); // Full-text search
+});
+
+// Query uses indexes
+$posts = Post::where('user_id', 1)
+    ->where('published', true)
+    ->get();
+```
+
+**Key Points:**
+- Indexes speed up SELECT/WHERE, slow down INSERT/UPDATE
+- B-tree indexes best for range queries
+- Full-text indexes best for text search
+- Monitor index usage and remove unused ones
+
+---
+
+## MASTER KEYPOINTS SUMMARY
+
+### For Interviews:
+1. **Understand Why** - Know why patterns exist, not just syntax
+   - Why use Service Layer? → Separates business logic from HTTP
+   - Why eager load? → Prevents N+1 query problem
+   - Why queue jobs? → Improves response time
+
+2. **Explain Trade-offs** 
+   - Caching vs Freshness: Cache is fast but data might be stale
+   - Eager vs Lazy Loading: Eager faster but loads unused data
+   - Service Layer: More code but better testability
+
+3. **Performance Thinking**
+   - First: Profile to find actual bottleneck
+   - N+1 queries common culprit
+   - Indexing critical for large tables
+   - Caching for expensive operations
+
+4. **Security Mindset**
+   - Always validate server-side
+   - Hash passwords with bcrypt/argon2
+   - CSRF tokens on forms
+   - Authorization checks on sensitive actions
+
+5. **Scalability Patterns**
+   - Queues for long operations
+   - Caching for database load
+   - Read replicas for read-heavy workloads
+   - Database sharding for massive scale
+
+### For Jobs:
+1. **Read existing code first** - Understand your team's patterns
+2. **Write testable code** - Use dependency injection, mock external services
+3. **Optimize iteratively** - Measure before optimizing
+4. **Document decisions** - Comment on "why", not "what"
+5. **Know your tools** - Redis, Docker, git, debugging tools
+6. **Write migrations properly** - Can't rollback sloppy changes
+7. **Handle errors gracefully** - Log context, show user-friendly messages
+8. **Monitor production** - Set up error tracking and APM tools
+
+### Production Checklist:
+```php
+Configuration:
+- APP_DEBUG=false (never true in production)
+- APP_ENV=production
+- Use HTTPS everywhere (TLS/SSL)
+- Disable Laravel Debugbar in production
+
+Security:
+- CSRF tokens on all form submissions
+- Validate & sanitize ALL user input
+- SQL injection prevention (use Eloquent/prepared statements)
+- Authentication on sensitive endpoints
+- Rate limiting on APIs and login endpoints
+- Update dependencies regularly (composer update)
+
+Performance:
+- Cache expensive database queries
+- Use eager loading (with())
+- Add database indexes
+- Queue long-running operations
+- Use CDN for static assets
+- Implement response caching headers
+
+Monitoring:
+- Set up error tracking (Sentry, Rollbar)
+- APM tools for performance monitoring (New Relic, DataDog)
+- Database slow query log
+- Application log rotation
+- Uptime monitoring
+
+Data:
+- Automated daily backups
+- Test backup restoration regularly
+- Database encryption for sensitive data
+- Secrets in .env, never in code
+- Use migrations for schema changes
+```
+
+### Common Interview Answers:
+```
+Q: "Tell me about your experience with Laravel"
+A: "I've built [project] using Laravel. Key things I've done:
+   - Implemented REST API with authentication using Sanctum
+   - Optimized N+1 queries using eager loading
+   - Used queues to process emails asynchronously
+   - Implemented caching for expensive operations
+   - Wrote tests for critical features using PHPUnit
+   I understand the importance of security, performance, and testing."
+
+Q: "How do you optimize slow queries?"
+A: "First I identify them using logging or monitoring tools. Then:
+   1. Check if query uses indexes
+   2. Add composite indexes if needed
+   3. Use eager loading to prevent N+1
+   4. Select only needed columns
+   5. Consider caching if data doesn't change often
+   For large datasets, I use chunking to avoid memory issues."
+
+Q: "How do you handle errors in production?"
+A: "I set APP_DEBUG=false and implement:
+   1. Custom exception handlers for specific errors
+   2. Error logging with context (user_id, request URL)
+   3. User-friendly error messages in responses
+   4. APM tools to catch unexpected errors
+   5. Alert team on critical errors via Slack
+   This way users see helpful errors and we can debug issues."
+```
+
+---
+
+## Useful Resources
+
+- Official Documentation: https://laravel.com/docs
+- Laravel News: https://laravel-news.com
+- Laracasts: https://laracasts.com
+- Community: https://laracasts.com/discuss
+- GitHub: https://github.com/laravel/laravel
+- Laravel Awesome: https://github.com/chiraggude/awesome-laravel
+- PHP Standards: https://www.php-fig.org/psr/psr-12/
+# Laravel Interview & Job Ready - Quick Reference Guide
+
+## Table of Contents
+1. [Quick Facts](#quick-facts)
+2. [Core Concepts Explained](#core-concepts-explained)
+3. [Interview Preparation Checklists](#interview-preparation-checklists)
+4. [Job Scenarios](#job-scenarios)
+5. [Common Questions & Answers](#common-questions--answers)
+
+---
+
+## Quick Facts
+
+### What is Laravel?
+- PHP web framework for building web applications
+- Follows MVC pattern (Model-View-Controller)
+- Elegant, readable syntax designed for developer happiness
+- Current: Laravel 10+ (released 2023)
+- Package manager: Composer
+
+### Why Use Laravel?
+- ✅ Rapid development
+- ✅ Built-in authentication & authorization
+- ✅ Eloquent ORM for database interactions
+- ✅ Blade templating engine
+- ✅ Queue system for background jobs
+- ✅ Comprehensive testing tools
+- ✅ Large community & packages (Laravel Ecosystem)
+
+---
+
+## Core Concepts Explained
+
+### 1. MVC Pattern
+```
+REQUEST
+  ↓
+ROUTE → CONTROLLER (Logic) → MODEL (Database)
+  ↓                          ↓
+  ← ← ← ← ← ← ← ← ← ← ← ← ←
+  ↓
+ VIEW (HTML)
+  ↓
+RESPONSE
+```
+
+**Model**: Data layer - Eloquent ORM
+**View**: Presentation layer - Blade templates
+**Controller**: Business logic - Handles requests
+
+---
+
+### 2. Request Lifecycle
+
+```
+HTTP Request
+    ↓
+index.php (Bootstrap)
+    ↓
+Service Providers (Register services)
+    ↓
+Middleware (Before)
+    ↓
+Route Matching
+    ↓
+Middleware (Route-specific)
+    ↓
+Controller Action
+    ↓
+Response Created
+    ↓
+Middleware (After)
+    ↓
+HTTP Response
+```
+
+---
+
+### 3. Key Terms & Definitions
+
+**Routing**: Mapping URLs to controller actions
+```php
+Route::get('/posts', [PostController::class, 'index']);
+// GET /posts → PostController@index
+```
+
+**Middleware**: Request filtering layer
+```php
+// Executed before reaching controller
+// Examples: Authentication, CORS, logging
+```
+
+**Eloquent**: Object-Relational Mapping
+```php
+$user = User::find(1); // Not: $user = DB::select('SELECT * FROM users WHERE id = 1')
+```
+
+**Dependency Injection**: Auto-resolving dependencies
+```php
+public function __construct(PostService $service) {
+    // Laravel automatically instantiates PostService
+}
+```
+
+**Service Container**: Manages application dependencies
+```php
+app()->bind('service', PostService::class);
+app('service')->method();
+```
+
+---
+
+## Interview Preparation Checklists
+
+### Before Interview
+
+#### Concept Knowledge Checklist
+- [ ] Understand MVC pattern and request lifecycle
+- [ ] Know difference between authentication & authorization
+- [ ] Explain N+1 query problem and solutions
+- [ ] Understand Service Container & Dependency Injection
+- [ ] Know Active Record pattern (Eloquent)
+- [ ] Understand middleware execution order
+- [ ] Know routing basics (named routes, route groups)
+- [ ] Understand migrations and schema builder
+- [ ] Know testing (feature vs unit tests)
+- [ ] Understand queues and background jobs
+
+#### Practical Experience Checklist
+- [ ] Built at least one full CRUD application
+- [ ] Implemented authentication (login/register)
+- [ ] Used relationships (one-to-many, many-to-many)
+- [ ] Written migrations for schema changes
+- [ ] Used eager loading with relations
+- [ ] Implemented custom middleware
+- [ ] Written tests for critical features
+- [ ] Used queues for background jobs
+- [ ] Implemented caching
+- [ ] Deployed Laravel app to production
+
+#### Tools & Tools Checklist
+- [ ] Comfortable with Laravel Tinker (REPL)
+- [ ] Know common Artisan commands
+- [ ] Use Laravel Debug Bar in development
+- [ ] Familiar with database tool (phpMyAdmin, DBeaver)
+- [ ] Know how to read Laravel logs
+- [ ] Understand composer and dependencies
+- [ ] Familiar with PHP version and features
+- [ ] Know how to debug (dd(), var_dump(), logging)
+
+---
+
+### During Interview
+
+#### What Interviewers Look For
+1. **Problem Solving** - How you approach problems
+2. **Best Practices** - Security, performance, testing
+3. **Communication** - Explain your thinking clearly
+4. **Real Experience** - Talk about actual projects
+5. **Learning Ability** - How you tackle new concepts
+
+#### How to Answer Technical Questions
+```
+1. CLARIFY - Ask clarifying questions if needed
+   "Are we talking about a simple API or something more complex?"
+
+2. EXPLAIN - State your approach before coding
+   "I would use eager loading to prevent N+1 queries..."
+
+3. CODE - Write clean, well-structured code
+   - Use meaningful variable names
+   - Follow Laravel conventions
+   - Add comments for complex logic
+
+4. OPTIMIZE - Discuss potential improvements
+   - Performance considerations
+   - Security concerns
+   - Testing strategy
+
+5. VERIFY - Confirm your solution works
+   - Walk through the logic
+   - Consider edge cases
+```
+
+#### Red Flags to Avoid
+- ❌ Don't just recite documentation
+- ❌ Don't claim expertise you don't have
+- ❌ Don't forget about security (validation, authorization)
+- ❌ Don't write N+1 queries without thinking
+- ❌ Don't put secrets in code
+- ❌ Don't skip error handling
+- ❌ Don't ignore testing importance
+
+---
+
+## Job Scenarios
+
+### Scenario 1: Your First Day
+**Task**: Fix a bug where users receive duplicate emails
+
+**Approach**:
+1. Read the email job code
+2. Check the queue implementation
+3. Look for race conditions
+4. Implement idempotency or locking
+5. Write a test case
+6. Deploy with monitoring
+
+**Key Skills Shown**:
+- Understanding Laravel's queue system
+- Debugging ability
+- Testing mindset
+- Production awareness
+
+---
+
+### Scenario 2: Feature Request
+**Task**: Add user roles & permissions to admin panel
+
+**Approach**:
+1. Create Role & Permission models
+2. Set up many-to-many relationships
+3. Create migrations
+4. Implement authorization gates/policies
+5. Add middleware for route protection
+6. Write tests for authorization
+7. Update admin UI
+
+**Key Skills Shown**:
+- Database design
+- Relationships understanding
+- Authorization implementation
+- Testing coverage
+
+---
+
+### Scenario 3: Performance Issue
+**Task**: Dashboard loading in 10+ seconds
+
+**Approach**:
+1. Profile with slow query logging
+2. Identify N+1 queries → Add eager loading
+3. Check for missing indexes
+4. Implement caching for expensive calculations
+5. Defer non-critical operations to queues
+6. Benchmark improvements
+7. Set up monitoring
+
+**Key Skills Shown**:
+- Problem identification
+- Performance optimization
+- Debugging skills
+- Monitoring setup
+
+---
+
+### Scenario 4: Code Review
+**Task**: Review junior developer's code
+
+**Things to Check**:
+```php
+// ❌ BAD - N+1 queries
+$posts = Post::all();
+foreach ($posts as $post) {
+    echo $post->author->name; // Extra query per post
+}
+
+// ✅ GOOD - Eager loading
+$posts = Post::with('author')->get();
+foreach ($posts as $post) {
+    echo $post->author->name;
+}
+
+// ❌ BAD - Missing validation
+public function store(Request $request) {
+    User::create($request->all()); // Accepts any field!
+}
+
+// ✅ GOOD - Explicit validation
+public function store(StoreUserRequest $request) {
+    User::create($request->validated());
+}
+
+// ❌ BAD - No authorization check
+public function delete(Post $post) {
+    $post->delete();
+}
+
+// ✅ GOOD - Authorization check
+public function delete(Post $post) {
+    $this->authorize('delete', $post);
+    $post->delete();
+}
+
+// ❌ BAD - Plain password hashing
+'password' => $request->password,
+
+// ✅ GOOD - Proper hashing
+'password' => Hash::make($request->password),
+```
+
+---
+
+## Common Questions & Answers
+
+### Q1: "What's your experience with Laravel?"
+
+**Good Answer**:
+```
+"I have [X] years of professional Laravel experience. I've built:
+
+1. REST API with authentication - Implemented user login/registration 
+   using Laravel Sanctum tokens, with proper validation and error handling
+
+2. E-commerce functionality - Product catalog with filtering, shopping 
+   cart, and order management using relationships and transactions
+
+3. Admin dashboard - Real-time data display with caching for 
+   performance and queued background jobs for reporting
+
+I'm comfortable with:
+- Eloquent ORM and relationships
+- Authentication & authorization
+- Database migrations and optimization
+- Testing critical features
+- Deployment to production
+
+I'm particularly interested in [specific area], as I believe 
+[your reasoning]."
+```
+
+**Key Points**:
+- Specific projects, not generic
+- Technical depth shown
+- Real-world thinking
+- Enthusiasm for learning
+
+---
+
+### Q2: "How do you prevent N+1 queries?"
+
+**Good Answer**:
+```
+"N+1 queries happen when you execute 1 query to fetch parent records, 
+then N additional queries to fetch related records. Here's how I prevent it:
+
+1. EAGER LOADING with with():
+   $posts = Post::with('author', 'comments')->get();
+   This uses 3 queries total instead of 101.
+
+2. WITHCOUNT for counting:
+   $users = User::withCount('posts')->get();
+   Much faster than looping and counting.
+
+3. LAZY EAGER LOADING when needed:
+   $posts = Post::all();
+   $posts->load('author'); // Load after initial query
+
+4. SPECIFIC COLUMNS to reduce data:
+   $posts = Post::with(['author' => function($q) {
+       $q->select('id', 'name');
+   }])->get();
+
+I always check with query logging in development to catch issues early."
+```
+
+**Key Points**:
+- Specific technical knowledge
+- Multiple solutions shown
+- Practical approach
+- Development practices mentioned
+
+---
+
+### Q3: "How do you handle errors in production?"
+
+**Good Answer**:
+```
+"I handle errors differently based on environment:
+
+DEVELOPMENT (APP_DEBUG=true):
+- Show detailed error pages with stack trace
+- Log all queries and requests
+- Use Laravel Debugbar for profiling
+
+PRODUCTION (APP_DEBUG=false):
+- Show user-friendly error message
+- Log errors with context:
+  * User ID
+  * Request URL
+  * Full exception
+  * Bindings/parameters
+- Send critical alerts to Slack
+- Use APM tool (Sentry/DataDog) for monitoring
+
+Example flow:
+try {
+    // Risky operation
+} catch (SpecificException $e) {
+    Log::error('Operation failed', [
+        'user_id' => auth()->id(),
+        'action' => 'payment_processing',
+        'exception' => $e
+    ]);
+    return response()->json(
+        ['error' => 'Payment failed. Please try again.'],
+        422
+    );
+}
+
+This balances security, debugging, and user experience."
+```
+
+**Key Points**:
+- Environment-aware thinking
+- Security mindset
+- Logging practices
+- User experience consideration
+
+---
+
+### Q4: "How do you write testable code?"
+
+**Good Answer**:
+```
+"I follow several principles to write testable code:
+
+1. DEPENDENCY INJECTION:
+   // Testable - Can inject mock
+   public function __construct(PaymentService $service) {
+       $this->service = $service;
+   }
+
+2. SEPARATION OF CONCERNS:
+   // Business logic in service, not controller
+   $payment = $this->paymentService->process($order);
+
+3. AVOID STATICS (mostly):
+   // Bad - Hard to mock
+   $user = Auth::user();
+   
+   // Good - Can inject or mock
+   public function __construct(private GuardInterface $auth) {}
+
+4. TEST CRITICAL PATHS:
+   // Test happy path
+   public function test_order_creation_succeeds() { ... }
+   
+   // Test edge cases
+   public function test_order_fails_with_invalid_product() { ... }
+
+5. USE FACTORIES:
+   $user = User::factory()->create(['role' => 'admin']);
+
+My test coverage:
+- Critical business logic: 100%
+- Controllers: 80%+
+- Helpers: 100%
+- Simple getters: Skip (risk/benefit ratio)
+"
+```
+
+**Key Points**:
+- Practical testing strategy
+- Dependency injection understanding
+- Real-world coverage ratios
+- Risk-based approach
+
+---
+
+### Q5: "Tell me about a challenging problem you solved"
+
+**Good Answer**:
+```
+"In my previous role, we had a performance issue where the user 
+dashboard was taking 10+ seconds to load.
+
+PROBLEM IDENTIFICATION:
+- Used query logging to find bottlenecks
+- Identified 50+ queries for a single user dashboard load
+
+ROOT CAUSES:
+1. N+1 problem - Loading user relationships in loop
+2. Missing database indexes
+3. No caching for expensive calculations
+
+SOLUTION:
+1. Eager loading:
+   $users = User::with('posts', 'comments', 'profile')->get();
+
+2. Database optimization:
+   - Added composite index on (user_id, created_at)
+   - Added index on frequently filtered columns
+
+3. Caching:
+   Cache::remember('dashboard.'.$user->id, 3600, function() {
+       return $this->calculateStats($user);
+   });
+
+4. Queues:
+   - Moved report generation to background job
+   - Return immediately instead of computing in request
+
+RESULTS:
+- Dashboard load time: 10s → 200ms
+- Database queries: 50+ → 4
+- User satisfaction: significantly improved
+
+TOOLS USED:
+- Laravel Debugbar for identifying queries
+- Database EXPLAIN for analyzing performance
+- APM tool for monitoring improvements
+"
+```
+
+**Key Points**:
+- Real problem with measurable results
+- Systematic approach to debugging
+- Multiple optimization techniques
+- Business impact mentioned
+
+---
+
+## Your Next Steps
+
+1. **Review the main Laravel notes** (`LARAVEL_COMPLETE_NOTES.md`)
+   - Focus on theory explanations
+   - Study interview Q&A sections
+   - Review practical code examples
+
+2. **Build a project**
+   - Create a REST API with authentication
+   - Implement relationships
+   - Write tests
+   - Deploy to production
+
+3. **Practice interviews**
+   - Answer questions from the notes out loud
+   - Record yourself explaining concepts
+   - Discuss your past projects in detail
+
+4. **Understand production**
+   - Know how to deploy Laravel
+   - Understand monitoring & logging
+   - Know about performance optimization
+   - Understand security best practices
+
+5. **Stay current**
+   - Follow Laravel News (laravel-news.com)
+   - Watch Laracasts tutorials
+   - Read other developers' code
+   - Contribute to open source
+
+---
+
+**Good luck with your Laravel journey! 🚀**
+
+The comprehensive notes combined with this quick reference guide should prepare you for both technical interviews and real-world development jobs.
+
+Remember: Employers value developers who understand the "why" behind patterns, not just the syntax. Focus on understanding concepts deeply.
+# Complete Laravel Learning Package - Master Index
+
+## 📚 Documents Created
+
+You now have a comprehensive Laravel learning package with **4 interconnected documents**:
+
+### 1. **LARAVEL_COMPLETE_NOTES.md** (4,528 lines)
+The most comprehensive Laravel reference guide
+
+**Contents**:
+- Introduction & Setup
+- Routing fundamentals
+- Controllers (CRUD patterns)
+- Views & Blade templating
+- Models & Eloquent ORM
+- Database migrations
+- Authentication & Authorization
+- Middleware system
+- Validation framework
+- Error handling
+- File storage
+- Caching strategies
+- Job queues & broadcasting
+- Testing (feature & unit)
+- API development
+- Advanced topics
+- 15 Interview Q&A pairs
+- Real-world applications (4 complete examples)
+- Production best practices
+- 10 Common job scenarios
+
+**Plus NEW sections**:
+- **Comprehensive Theory & Keypoints Guides** for 8 core concepts:
+  1. Routing theory + interview Q&A
+  2. Controllers theory + interview Q&A
+  3. Eloquent ORM theory + interview Q&A
+  4. Database Migrations theory + interview Q&A
+  5. Authentication theory + interview Q&A
+  6. Validation theory + interview Q&A
+  7. Middleware theory + interview Q&A
+  8. Error Handling theory + interview Q&A
+
+- **4 Advanced Complete Guides**:
+  9. Testing (feature tests, unit tests, patterns)
+  10. Caching (invalidation, strategies, patterns)
+  11. Queues & Jobs (failure handling, batching)
+  12. Database Optimization (indexes, profiling)
+
+- **Master Keypoints Summary**:
+  - Interview preparation (5 key areas)
+  - Job preparation (8 key skills)
+  - Production checklist (configuration, security, performance, monitoring, data)
+  - Common interview answers (3 example responses with approach)
+
+---
+
+### 2. **LARAVEL_INTERVIEW_JOB_GUIDE.md** (350+ lines)
+Quick reference guide for interviews and job preparation
+
+**Contents**:
+- Quick facts about Laravel
+- Core concepts explained (MVC, request lifecycle, key terms)
+- Interview preparation checklists:
+  - Concept knowledge
+  - Practical experience
+  - Tools & techniques
+- During interview tips
+- Job scenarios (4 complete examples):
+  1. First day - Bug fix
+  2. Feature request - Roles & Permissions
+  3. Performance issue - Optimization
+  4. Code review - Best practices
+- 5 Common interview questions with detailed good answers
+- Your next steps for preparation
+
+**Key Sections**:
+```
+✅ MVC Pattern explanation
+✅ Request Lifecycle flow chart
+✅ Concept definitions
+✅ Pre-interview checklist
+✅ During-interview tips
+✅ Red flags to avoid
+✅ Real job scenarios
+✅ Sample answers
+✅ Career next steps
+```
+
+---
+
+### 3. **LARAVEL_PRACTICAL_PATTERNS.md** (350+ lines)
+Real-world coding patterns you'll use every day
+
+**Contents**:
+1. **Authentication Patterns** (2 complete examples)
+   - Login with remember me
+   - Token-based API authentication
+
+2. **CRUD Operations** (1 complete example)
+   - Resource controller with filtering/sorting
+   - Pagination and authorization
+
+3. **API Patterns** (1 complete example)
+   - RESTful JSON API
+   - Resource classes
+   - Status codes and responses
+
+4. **Performance Patterns** (2 complete examples)
+   - Query optimization (N+1 prevention)
+   - Caching strategies
+
+5. **Error Handling Patterns** (1 complete example)
+   - Custom exceptions
+   - Exception handler
+   - Logging with context
+
+6. **Testing Patterns** (1 complete example)
+   - Happy path testing
+   - Validation testing
+   - Authorization testing
+
+7. **Security Patterns** (2 complete examples)
+   - Authorization checks (policies)
+   - CSRF protection
+
+8. **Database Patterns** (2 complete examples)
+   - Safe schema changes
+   - Relationship constraints
+
+**Each pattern includes**:
+- ✅ Complete, ready-to-use code
+- ✅ Key points explained
+- ✅ Common pitfalls
+- ✅ Best practices
+
+---
+
+### 4. **LARAVEL_NOTES_UPDATE_SUMMARY.md** (200+ lines)
+Overview of what was added to the complete notes
+
+**Contains**:
+- File statistics
+- Section breakdown
+- New content details
+- How to use each document
+
+---
+
+## 🎯 How to Use This Package
+
+### For Interview Preparation (2-4 weeks)
+
+**Week 1: Theory & Fundamentals**
+1. Read `LARAVEL_COMPLETE_NOTES.md`:
+   - Introduction & Setup
+   - Routing theory & interview guide
+   - Controllers theory & interview guide
+   - MVC pattern in `LARAVEL_INTERVIEW_JOB_GUIDE.md`
+
+2. Complete interview checklist from `LARAVEL_INTERVIEW_JOB_GUIDE.md`:
+   - Concept knowledge section
+   - Study each concept
+
+**Week 2: Core Concepts**
+1. Read deep theory sections:
+   - Eloquent ORM theory
+   - Database Migrations theory
+   - Authentication theory
+   - Validation theory
+
+2. Practice coding patterns from `LARAVEL_PRACTICAL_PATTERNS.md`:
+   - Authentication patterns
+   - CRUD patterns
+   - API patterns
+
+**Week 3: Advanced Concepts**
+1. Study advanced guides:
+   - Testing theory
+   - Caching strategy
+   - Queues & jobs
+   - Database optimization
+
+2. Read job scenarios from `LARAVEL_INTERVIEW_JOB_GUIDE.md`:
+   - Study all 4 scenarios
+   - Practice explaining solutions
+
+**Week 4: Interview Practice**
+1. Review common interview answers
+2. Practice answering questions out loud
+3. Study production best practices
+4. Review security & performance patterns
+
+### For Daily Development
+
+**Keep these bookmarks**:
+- **LARAVEL_PRACTICAL_PATTERNS.md** - Copy/paste code templates
+- **LARAVEL_COMPLETE_NOTES.md** - Refer to sections as needed
+- **LARAVEL_INTERVIEW_JOB_GUIDE.md** - Quick reference for key concepts
+
+**When you encounter**:
+- N+1 query issue → Check "Performance Patterns"
+- Need authentication → Check "Authentication Patterns"
+- Need to write tests → Check "Testing Patterns"
+- Performance problem → Check "Database Optimization" section
+- Need API endpoint → Check "API Patterns"
+
+### For Learning (Study Path)
+
+**Level 1: Beginner** (1-2 months)
+1. `LARAVEL_INTERVIEW_JOB_GUIDE.md` - Quick Facts section
+2. Build simple CRUD app using `LARAVEL_PRACTICAL_PATTERNS.md`
+3. Read LARAVEL_COMPLETE_NOTES.md basics:
+   - Setup
+   - Routing
+   - Controllers
+   - Views
+   - Models
+
+**Level 2: Intermediate** (2-4 months)
+1. Deep dive into theory guides in LARAVEL_COMPLETE_NOTES.md
+2. Build REST API using patterns
+3. Learn authentication & authorization
+4. Write tests for your code
+5. Study all job scenarios
+
+**Level 3: Advanced** (4+ months)
+1. Read advanced topics
+2. Implement caching & queues
+3. Optimize database queries
+4. Learn production deployment
+5. Study error handling patterns
+6. Build multi-tenant applications
+
+---
+
+## 📊 Content Statistics
+
+| Document | Lines | Code Examples | Interview Q&A | Patterns |
+|----------|-------|---------------|---------------|----------|
+| Complete Notes | 4,528 | 150+ | 30+ | 20+ |
+| Interview Guide | 350+ | 30+ | 5+ | 4+ |
+| Practical Patterns | 350+ | 20+ | - | 13 |
+| Update Summary | 200+ | - | - | - |
+| **TOTAL** | **5,400+** | **200+** | **35+** | **37+** |
+
+---
+
+## 🔍 What Each Document Is Best For
+
+### LARAVEL_COMPLETE_NOTES.md
+✅ Comprehensive reference
+✅ Deep understanding of concepts
+✅ Interview preparation
+✅ Theory explanations
+✅ Real-world applications
+✅ Production checklists
+✅ Job scenarios
+
+**Best used**: As primary learning resource, interview prep
+
+---
+
+### LARAVEL_INTERVIEW_JOB_GUIDE.md
+✅ Quick facts
+✅ Interview preparation
+✅ Job scenario walkthroughs
+✅ Sample interview answers
+✅ Pre-interview checklist
+
+**Best used**: Interview prep, quick reference during interviews
+
+---
+
+### LARAVEL_PRACTICAL_PATTERNS.md
+✅ Copy/paste code templates
+✅ Real-world patterns
+✅ Best practices in code
+✅ Common scenarios
+✅ Security patterns
+✅ Testing patterns
+
+**Best used**: Daily development, code references, starting projects
+
+---
+
+### LARAVEL_NOTES_UPDATE_SUMMARY.md
+✅ Overview of content
+✅ What's included
+✅ Statistics
+✅ Navigation guide
+
+**Best used**: Understanding what's available
+
+---
+
+## 🎓 Key Concepts You'll Master
+
+### Fundamentals
+- [ ] MVC pattern
+- [ ] Request lifecycle
+- [ ] Routing system
+- [ ] Controllers
+- [ ] Views & Blade
+
+### Database
+- [ ] Eloquent ORM
+- [ ] Relationships
+- [ ] Migrations
+- [ ] Query optimization
+- [ ] Indexing strategies
+
+### Features
+- [ ] Authentication
+- [ ] Authorization (policies, gates)
+- [ ] Middleware
+- [ ] Validation
+- [ ] File storage
+
+### Advanced
+- [ ] Caching strategies
+- [ ] Job queues
+- [ ] Testing (feature & unit)
+- [ ] API development
+- [ ] Error handling
+
+### Production
+- [ ] Security best practices
+- [ ] Performance optimization
+- [ ] Error logging & monitoring
+- [ ] Database backups
+- [ ] Deployment
+
+---
+
+## 💡 Interview Tips
+
+### Before Interview
+1. Read LARAVEL_INTERVIEW_JOB_GUIDE.md fully
+2. Study theory sections in LARAVEL_COMPLETE_NOTES.md
+3. Review common interview answers
+4. Practice explaining concepts out loud
+5. Know your own project examples
+
+### During Interview
+1. Ask clarifying questions
+2. Explain your approach before coding
+3. Write clean code
+4. Discuss trade-offs
+5. Mention testing and security
+
+### Questions You Should Be Ready For
+- "Tell me about your Laravel experience"
+- "How would you prevent N+1 queries?"
+- "Explain authentication vs authorization"
+- "How do you handle errors?"
+- "Describe your testing strategy"
+- "How do you optimize database queries?"
+- "What's your approach to security?"
+- "Tell me about a challenging problem you solved"
+
+---
+
+## 🚀 Getting Started
+
+### Immediate Actions
+1. **Read this file** (you're doing it!) ✅
+2. **Skim LARAVEL_INTERVIEW_JOB_GUIDE.md** (20 min)
+3. **Browse LARAVEL_PRACTICAL_PATTERNS.md** (20 min)
+4. **Pick a pattern and code it** (1-2 hours)
+
+### Short Term (This Week)
+1. Read theory sections matching your interview date
+2. Practice coding patterns
+3. Build a small project using patterns
+4. Review interview checklists
+
+### Medium Term (This Month)
+1. Deep dive into each section
+2. Build a REST API project
+3. Write comprehensive tests
+4. Deploy to production
+5. Review job scenarios
+
+### Long Term (Ongoing)
+1. Use as reference during development
+2. Keep patterns for copy/pasting
+3. Review before interviews
+4. Update with your own patterns
+
+---
+
+## 📌 Quick Start Checklist
+
+- [ ] Read LARAVEL_INTERVIEW_JOB_GUIDE.md
+- [ ] Review MVC pattern explanation
+- [ ] Study one code pattern from LARAVEL_PRACTICAL_PATTERNS.md
+- [ ] Read one theory section from LARAVEL_COMPLETE_NOTES.md
+- [ ] Build something using the pattern
+- [ ] Add tests to your code
+- [ ] Review production best practices
+- [ ] Practice explaining what you built
+
+---
+
+## 🎯 Success Metrics
+
+### After 1 Week
+- ✅ Can explain MVC pattern
+- ✅ Know common Laravel components
+- ✅ Can read and understand Laravel code
+- ✅ Know where to find answers
+
+### After 1 Month
+- ✅ Can build CRUD application
+- ✅ Understand relationships
+- ✅ Can write tests
+- ✅ Know security best practices
+- ✅ Can answer interview questions
+
+### After 3 Months
+- ✅ Can architect Laravel applications
+- ✅ Understand performance optimization
+- ✅ Can implement complex features
+- ✅ Know production deployment
+- ✅ Can mentor others
+
+---
+
+## 📞 Support Resources
+
+### Laravel Official
+- Documentation: https://laravel.com/docs
+- Laracasts: https://laracasts.com
+
+### Community
+- Laravel News: https://laravel-news.com
+- Laravel Discord: https://discord.gg/laravel
+- Stack Overflow: Tag `laravel`
+
+### Tools
+- Laravel Debugbar for development
+- Tinker for interactive shell
+- Horizon for queue monitoring
+- Forge for deployment
+
+---
+
+## 🏆 Final Notes
+
+This package contains:
+- **Everything you need** for Laravel interviews
+- **Everything you need** for PHP development jobs
+- **Everything you need** to become a Laravel expert
+- **Real patterns** used in production apps
+- **Best practices** from experienced developers
+
+**Remember**:
+1. **Understand the "why"** not just the syntax
+2. **Practice coding** - reading isn't enough
+3. **Build projects** - reinforce learning
+4. **Ask questions** - clarify concepts
+5. **Share knowledge** - explain to others
+6. **Stay updated** - Laravel evolves
+7. **Keep learning** - there's always more
+
+---
+
+**Good luck! You're well-prepared with this comprehensive learning package. 🚀**
+
+**Next step**: Pick one document and start reading!
+# Laravel Complete Notes - Comprehensive Update Summary
+
+## File Updated
+**File:** `LARAVEL_COMPLETE_NOTES.md` (4,528 lines)
+
+## What Was Added
+
+### 1. **Comprehensive Theory & Keypoints Guide** ✅
+Added in-depth theory explanations and interview Q&A for core concepts:
+
+#### I. **Routing - Theory & Interview Guide**
+- Theory explanation of URL routing and request matching
+- Key interview questions with detailed answers
+- Route model binding (implicit & explicit)
+- Prefix vs path differentiation
+- Practical SEO-friendly routing examples
+- API versioning with route prefixes
+
+#### II. **Controllers - Theory & Interview Guide**
+- Controller responsibilities breakdown
+- Dependency injection vs direct instantiation
+- When to use service classes
+- Resource controller pattern
+- Single action controllers best practices
+
+#### III. **Eloquent ORM - Theory & Interview Guide**
+- Active Record pattern explanation
+- N+1 problem: definition, causes, and 4 solutions
+- Relationship counting without N+1
+- Polymorphic relationships
+- Lazy eager loading techniques
+
+#### IV. **Database Migrations - Theory & Interview Guide**
+- Why migrations matter (version control, rollback, consistency)
+- up() vs down() methods explanation
+- Safe table modification in production (3-4 step process)
+- Complex migration examples
+- Composite indexes and full-text search
+
+#### V. **Authentication - Theory & Interview Guide**
+- Authentication flow explanation
+- Hash vs Encryption difference
+- Token-based authentication (API)
+- Multi-guard authentication
+- Remember me functionality
+
+#### VI. **Validation - Theory & Interview Guide**
+- Server-side validation importance
+- Form Request vs Controller validation
+- Custom validation rules
+- Conditional validation patterns
+- Array and relationship validation
+
+#### VII. **Middleware - Theory & Interview Guide**
+- Middleware execution order (before/after)
+- API token validation
+- Request logging & tracking
+- Tenant isolation middleware
+- Rate limiting per user
+
+#### VIII. **Error Handling - Theory & Interview Guide**
+- Development vs Production error handling
+- Custom exceptions
+- Exception handler registration
+- Error logging with context
+- Graceful error responses
+
+### 2. **Advanced Sections Added** ✅
+
+#### IX. **Testing - Complete Guide**
+- Feature tests vs Unit tests comparison
+- Testing authentication flows
+- Testing authorization (permissions)
+- Testing validation rules
+- Testing database transactions
+- Testing job queues
+- Testing best practices
+
+#### X. **Caching Strategy - Complete Guide**
+- Cache invalidation strategies (time-based, manual, tag-based, event-based)
+- Caching database queries
+- Cache warming for pre-computation
+- Cache stampede prevention
+- Practical caching patterns
+
+#### XI. **Queues & Jobs - Complete Guide**
+- When to use queued jobs (email, images, API calls, reports)
+- Job failure handling with retries
+- Exponential backoff strategies
+- Job chaining and batching
+- Dead letter queue for failed jobs
+- Queue monitoring in production
+
+#### XII. **Database Optimization - Complete Guide**
+- Identifying slow queries with logging
+- Query profiling tools
+- Index strategy and types
+- Chunking for large datasets
+- Database transactions for atomicity
+- Read replicas for scalability
+
+### 3. **Master Keypoints Summary** ✅
+
+#### For Interviews:
+1. **Understand Why** - Know patterns, not just syntax
+2. **Explain Trade-offs** - Caching vs Freshness, Eager vs Lazy
+3. **Performance Thinking** - N+1, indexing, optimization
+4. **Security Mindset** - Validation, hashing, authorization
+5. **Scalability Patterns** - Queues, caching, sharding
+
+#### For Jobs:
+1. Read existing code first
+2. Write testable code (DI, mocking)
+3. Optimize iteratively (measure first)
+4. Document decisions (why, not what)
+5. Know your tools (Redis, Docker, git)
+6. Write proper migrations
+7. Handle errors gracefully
+8. Monitor production
+
+#### Production Checklist:
+- Configuration (APP_DEBUG=false, HTTPS, env variables)
+- Security (CSRF, validation, SQL injection, rate limiting)
+- Performance (caching, eager loading, indexes, queues)
+- Monitoring (error tracking, APM, slow query logs)
+- Data (backups, encryption, migrations)
+
+### 4. **Common Interview Answers** ✅
+Provided 3 example answers for common Laravel interview questions:
+1. "Tell me about your Laravel experience"
+2. "How do you optimize slow queries?"
+3. "How do you handle errors in production?"
+
+## Key Features of This Update
+
+✅ **Theory + Practice**: Each concept has both theory explanation AND practical code examples
+✅ **Interview Ready**: Q&A format with detailed explanations for technical discussions
+✅ **Real-World Scenarios**: Examples based on actual job requirements
+✅ **Production Focus**: Checklists and patterns for production code
+✅ **Job-Focused**: Tips specific to PHP developer roles
+✅ **Performance**: N+1 problems, indexing, caching strategies covered
+✅ **Security**: Validation, authentication, authorization emphasis
+✅ **Best Practices**: Error handling, testing, migrations guidance
+
+## Total Content Added
+- **8 Comprehensive Theory & Interview Guides** (Routing, Controllers, Eloquent, Migrations, Auth, Validation, Middleware, Error Handling)
+- **4 Advanced Complete Guides** (Testing, Caching, Queues, Database Optimization)
+- **1 Master Keypoints Summary** (Interviews, Jobs, Production Checklist)
+- **Common Interview Answer Examples** with context and approach
+
+## File Statistics
+- Original file: ~3,400 lines
+- Updated file: 4,528 lines
+- Lines added: ~1,100+ lines of comprehensive content
+- Code examples: 100+ practical code blocks
+- Interview Q&A pairs: 30+ questions with detailed answers
+
+## How to Use This Document
+
+### For Job Interviews:
+1. Read the interview Q&A sections for your target concepts
+2. Study the theory explanations to understand the "why"
+3. Use the common interview answers as templates
+4. Reference the production checklist for real-world questions
+
+### For Daily Development:
+1. Use practical code examples from each section
+2. Refer to optimization patterns when performance issues arise
+3. Follow production checklist before deploying
+4. Use error handling patterns from examples
+
+### For Learning:
+1. Start with theory explanations
+2. Review practical code examples
+3. Understand trade-offs in each approach
+4. Reference interview Q&A to test understanding
+
+## Sections Now Covered
+
+1. ✅ Introduction & Setup
+2. ✅ Routing (+ Theory & Interview Guide)
+3. ✅ Controllers (+ Theory & Interview Guide)
+4. ✅ Views & Blade
+5. ✅ Models & Eloquent ORM (+ Theory & Interview Guide)
+6. ✅ Database & Migrations (+ Theory & Interview Guide)
+7. ✅ Authentication (+ Theory & Interview Guide)
+8. ✅ Authorization
+9. ✅ Middleware (+ Theory & Interview Guide)
+10. ✅ Validation (+ Theory & Interview Guide)
+11. ✅ Error Handling (+ Theory & Interview Guide)
+12. ✅ File Storage
+13. ✅ Caching (+ Complete Guide)
+14. ✅ Job Queues (+ Complete Guide)
+15. ✅ Broadcasting
+16. ✅ Testing (+ Complete Guide)
+17. ✅ API Development
+18. ✅ Advanced Topics
+19. ✅ Interview Questions & Answers
+20. ✅ Real-World Practical Applications
+21. ✅ Production Best Practices
+22. ✅ Common PHP Developer Job Scenarios
+23. ✅ **NEW: Comprehensive Theory & Keypoints (8 guides)**
+24. ✅ **NEW: Master Keypoints Summary**
+# Laravel Practical Coding Patterns - Real-World Examples
+
+## Table of Contents
+1. [Authentication Patterns](#authentication-patterns)
+2. [CRUD Operations](#crud-operations)
+3. [API Patterns](#api-patterns)
+4. [Performance Patterns](#performance-patterns)
+5. [Error Handling Patterns](#error-handling-patterns)
+6. [Testing Patterns](#testing-patterns)
+7. [Security Patterns](#security-patterns)
+8. [Database Patterns](#database-patterns)
+
+---
+
+## Authentication Patterns
+
+### Pattern 1: Login with Remember Me
+```php
+// Routes
+Route::post('/login', [LoginController::class, 'store']);
+Route::post('/logout', [LoginController::class, 'destroy']);
+
+// Controller
+class LoginController extends Controller {
+    public function store(Request $request) {
+        $validated = $request->validate([
+            'email' => 'required|email',
+            'password' => 'required|min:8',
+        ]);
+
+        // Attempt authentication
+        if (Auth::attempt($validated, $request->boolean('remember'))) {
+            // Regenerate session to prevent fixation attacks
+            $request->session()->regenerate();
+            
+            // Redirect to intended page or dashboard
+            return redirect()->intended('/dashboard');
+        }
+
+        // Authentication failed
+        return back()
+            ->withInput($request->only('email'))
+            ->withErrors(['email' => 'Invalid credentials']);
+    }
+
+    public function destroy(Request $request) {
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+        return redirect('/');
+    }
+}
+
+// Blade Form
+<form method="POST" action="/login">
+    @csrf
+    
+    <input type="email" name="email" value="{{ old('email') }}" required>
+    @error('email') <span>{{ $message }}</span> @enderror
+    
+    <input type="password" name="password" required>
+    
+    <label>
+        <input type="checkbox" name="remember">
+        Remember Me
+    </label>
+    
+    <button type="submit">Login</button>
+</form>
+```
+
+**Key Points**:
+- Use `Auth::attempt()` for session-based auth
+- Regenerate session to prevent fixation
+- Use `redirect()->intended()` to return to original page
+- Always validate input server-side
+
+### Pattern 2: Token-Based API Authentication
+```php
+// Routes
+Route::post('/api/login', [AuthController::class, 'login']);
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/api/logout', [AuthController::class, 'logout']);
+    Route::get('/api/me', [AuthController::class, 'me']);
+});
+
+// Controller
+class AuthController extends Controller {
+    public function login(Request $request) {
+        $validated = $request->validate([
+            'email' => 'required|email',
+            'password' => 'required|min:8',
+            'device_name' => 'required|string',
+        ]);
+
+        // Check credentials
+        if (!Auth::attempt(['email' => $validated['email'], 'password' => $validated['password']])) {
+            return response()->json(['message' => 'Invalid credentials'], 401);
+        }
+
+        $user = Auth::user();
+        
+        // Create token
+        $token = $user->createToken($validated['device_name'])->plainTextToken;
+
+        return response()->json([
+            'token' => $token,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+            ],
+        ]);
+    }
+
+    public function logout(Request $request) {
+        // Revoke current token
+        $request->user()->currentAccessToken()->delete();
+        
+        // Or revoke all tokens
+        // $request->user()->tokens()->delete();
+
+        return response()->json(['message' => 'Logged out']);
+    }
+
+    public function me(Request $request) {
+        return response()->json($request->user());
+    }
+}
+
+// Usage (Frontend)
+// Headers: Authorization: Bearer {token}
+```
+
+**Key Points**:
+- Use Sanctum for token-based APIs
+- One token per device for better security
+- Can revoke specific or all tokens
+- Tokens stored in HTTP-only cookies for web clients
+
+---
+
+## CRUD Operations
+
+### Pattern 1: Complete Resource Controller
+```php
+// Model with relationships
+class Post extends Model {
+    protected $fillable = ['title', 'body', 'published'];
+
+    public function author() {
+        return $this->belongsTo(User::class);
+    }
+}
+
+// Form Request for validation
+class StorePostRequest extends FormRequest {
+    public function authorize(): bool {
+        return auth()->check(); // Only authenticated users can create
+    }
+
+    public function rules(): array {
+        return [
+            'title' => 'required|string|max:255|unique:posts',
+            'body' => 'required|string|min:10',
+        ];
+    }
+}
+
+// Resource Controller
+class PostController extends Controller {
+    // List with pagination, filtering, sorting
+    public function index(Request $request) {
+        $query = Post::with('author');
+
+        // Filtering
+        if ($request->filled('search')) {
+            $query->where('title', 'like', "%{$request->search}%");
+        }
+
+        // Sorting
+        if ($request->filled('sort')) {
+            $direction = $request->get('direction', 'asc');
+            $query->orderBy($request->sort, $direction);
+        } else {
+            $query->latest();
+        }
+
+        $posts = $query->paginate(15);
+        return view('posts.index', ['posts' => $posts]);
+    }
+
+    // Show create form
+    public function create() {
+        return view('posts.create');
+    }
+
+    // Store new resource
+    public function store(StorePostRequest $request) {
+        $post = auth()->user()->posts()->create($request->validated());
+        
+        // Optional: Dispatch event or job
+        event(new PostCreated($post));
+
+        return redirect("/posts/{$post->id}")
+            ->with('success', 'Post created successfully!');
+    }
+
+    // Show single resource
+    public function show(Post $post) {
+        // Check authorization
+        $this->authorize('view', $post);
+        
+        // Eager load relationships
+        return view('posts.show', ['post' => $post->load('author', 'comments')]);
+    }
+
+    // Show edit form
+    public function edit(Post $post) {
+        $this->authorize('update', $post);
+        return view('posts.edit', ['post' => $post]);
+    }
+
+    // Update resource
+    public function update(UpdatePostRequest $request, Post $post) {
+        $this->authorize('update', $post);
+        
+        $post->update($request->validated());
+        
+        return redirect("/posts/{$post->id}")
+            ->with('success', 'Post updated successfully!');
+    }
+
+    // Delete resource
+    public function destroy(Post $post) {
+        $this->authorize('delete', $post);
+        
+        $post->delete();
+        
+        return redirect('/posts')
+            ->with('success', 'Post deleted successfully!');
+    }
+}
+
+// Routes
+Route::resource('posts', PostController::class);
+```
+
+**Key Points**:
+- Use Form Requests for validation
+- Eager load relationships to avoid N+1
+- Check authorization before operations
+- Use flash messages for user feedback
+- Automatic model binding via route parameter
+
+---
+
+## API Patterns
+
+### Pattern 1: RESTful JSON API
+```php
+// Routes
+Route::prefix('api/v1')
+    ->middleware(['auth:sanctum'])
+    ->group(function () {
+        Route::apiResource('posts', PostApiController::class);
+    });
+
+// Resource class for consistent responses
+class PostResource extends JsonResource {
+    public function toArray($request): array {
+        return [
+            'id' => $this->id,
+            'title' => $this->title,
+            'slug' => $this->slug,
+            'excerpt' => $this->excerpt,
+            'body' => $this->body,
+            'author' => new UserResource($this->author),
+            'published_at' => $this->published_at?->toIso8601String(),
+            'created_at' => $this->created_at->toIso8601String(),
+        ];
+    }
+}
+
+// API Controller
+class PostApiController extends Controller {
+    public function index(Request $request) {
+        $posts = Post::query()
+            ->with('author')
+            ->when($request->filled('search'), function ($query) use ($request) {
+                $query->where('title', 'like', "%{$request->search}%");
+            })
+            ->when($request->filled('author_id'), function ($query) use ($request) {
+                $query->where('author_id', $request->author_id);
+            })
+            ->paginate($request->get('per_page', 15));
+
+        return PostResource::collection($posts);
+    }
+
+    public function store(Request $request) {
+        $validated = $request->validate([
+            'title' => 'required|string|max:255',
+            'body' => 'required|string',
+        ]);
+
+        $post = auth()->user()->posts()->create($validated);
+
+        return new PostResource($post);
+    }
+
+    public function show(Post $post) {
+        return new PostResource($post->load('author'));
+    }
+
+    public function update(Request $request, Post $post) {
+        $this->authorize('update', $post);
+
+        $validated = $request->validate([
+            'title' => 'sometimes|string|max:255',
+            'body' => 'sometimes|string',
+        ]);
+
+        $post->update($validated);
+
+        return new PostResource($post);
+    }
+
+    public function destroy(Post $post) {
+        $this->authorize('delete', $post);
+        $post->delete();
+
+        return response()->noContent();
+    }
+}
+
+// Response Examples
+// Success: { data: { id, title, ... } }
+// Error: { message: "...", errors: { field: [...] } }
+```
+
+**Key Points**:
+- Use ResourceClasses for consistent API responses
+- Use `->when()` for optional filters
+- Return proper HTTP status codes
+- Use pagination for large datasets
+- Return 204 No Content for DELETE
+
+---
+
+## Performance Patterns
+
+### Pattern 1: Query Optimization
+```php
+// ❌ BAD - N+1 queries
+public function getUsersWithPosts() {
+    $users = User::all();
+    foreach ($users as $user) {
+        echo count($user->posts); // Extra query per user
+    }
+}
+
+// ✅ GOOD - Single queries with eager loading
+public function getUsersWithPostCount() {
+    return User::withCount('posts')->get();
+}
+
+// ✅ BETTER - Multiple relations
+public function getUsersWithPostsAndComments() {
+    return User::with([
+        'posts' => function ($query) {
+            $query->latest()->limit(5);
+        },
+        'posts.comments' => function ($query) {
+            $query->where('approved', true);
+        }
+    ])->get();
+}
+
+// ✅ BEST - Select only needed columns
+public function getUsersWithPostCount() {
+    return User::select('id', 'name', 'email')
+        ->withCount('posts')
+        ->get();
+}
+```
+
+### Pattern 2: Caching Strategy
+```php
+class PostService {
+    public function getTrendingPosts() {
+        // Cache for 1 hour
+        return Cache::remember('trending_posts', 3600, function () {
+            return Post::where('published', true)
+                ->where('created_at', '>', now()->subMonth())
+                ->orderByDesc('views')
+                ->limit(10)
+                ->get();
+        });
+    }
+
+    public function invalidateTrendingCache() {
+        Cache::forget('trending_posts');
+    }
+}
+
+// In model
+class Post extends Model {
+    protected static function booted() {
+        static::created(function ($post) {
+            Cache::forget('trending_posts'); // Clear when new post created
+        });
+    }
+}
+```
+
+**Key Points**:
+- Cache expensive queries
+- Invalidate cache when data changes
+- Monitor cache hit rates
+- Use Redis for production
+
+---
+
+## Error Handling Patterns
+
+### Pattern 1: Custom Exception Handler
+```php
+// Custom Exception
+class PostNotFoundException extends Exception {
+    public function __construct(public int $postId) {
+        parent::__construct("Post {$postId} not found");
+    }
+}
+
+// Exception Handler
+class Handler extends ExceptionHandler {
+    public function register(): void {
+        $this->reportable(function (Throwable $e) {
+            // Log with context
+            if ($this->shouldReport($e)) {
+                Log::error('Exception occurred', [
+                    'message' => $e->getMessage(),
+                    'user_id' => auth()->id(),
+                    'url' => request()->url(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+            }
+        });
+
+        $this->renderable(function (PostNotFoundException $e, Request $request) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => 'Post not found',
+                    'post_id' => $e->postId,
+                ], 404);
+            }
+            return response()->view('errors.404', [], 404);
+        });
+    }
+}
+
+// Usage
+public function show(int $id) {
+    $post = Post::find($id);
+    
+    if (!$post) {
+        throw new PostNotFoundException($id);
+    }
+    
+    return view('posts.show', ['post' => $post]);
+}
+```
+
+**Key Points**:
+- Use custom exceptions for clarity
+- Log errors with context
+- Return appropriate HTTP status codes
+- Handle JSON and HTML responses differently
+
+---
+
+## Testing Patterns
+
+### Pattern 1: Feature Test
+```php
+class PostCreationTest extends TestCase {
+    // Test happy path
+    public function test_authenticated_user_can_create_post() {
+        $user = User::factory()->create();
+        
+        $response = $this->actingAs($user)
+            ->post('/posts', [
+                'title' => 'My First Post',
+                'body' => 'This is the body of my post',
+            ]);
+
+        $response->assertRedirect('/posts/1');
+        $this->assertDatabaseHas('posts', [
+            'title' => 'My First Post',
+            'author_id' => $user->id,
+        ]);
+    }
+
+    // Test validation
+    public function test_post_creation_requires_title() {
+        $response = $this->actingAs(User::factory()->create())
+            ->post('/posts', ['body' => 'No title']);
+
+        $response->assertSessionHasErrors('title');
+    }
+
+    // Test authorization
+    public function test_user_cannot_delete_others_post() {
+        $owner = User::factory()->create();
+        $other = User::factory()->create();
+        $post = Post::factory()->create(['author_id' => $owner->id]);
+
+        $response = $this->actingAs($other)->delete("/posts/{$post->id}");
+        
+        $response->assertStatus(403);
+        $this->assertDatabaseHas('posts', ['id' => $post->id]); // Not deleted
+    }
+
+    // Test unauthenticated access
+    public function test_unauthenticated_user_cannot_create_post() {
+        $response = $this->post('/posts', ['title' => 'Test']);
+        
+        $response->assertRedirect('/login');
+    }
+}
+```
+
+**Key Points**:
+- Test happy path and error cases
+- Test authorization
+- Test validation
+- Use factories for test data
+- Clear test names
+
+---
+
+## Security Patterns
+
+### Pattern 1: Authorization Check
+```php
+// In Policy
+class PostPolicy {
+    public function update(User $user, Post $post): bool {
+        return $user->id === $post->author_id;
+    }
+    
+    public function delete(User $user, Post $post): bool {
+        return $user->id === $post->author_id || $user->is_admin;
+    }
+}
+
+// In Controller
+class PostController extends Controller {
+    public function update(Request $request, Post $post) {
+        $this->authorize('update', $post); // Checks policy
+        
+        $post->update($request->validated());
+        return redirect("/posts/{$post->id}");
+    }
+
+    public function destroy(Post $post) {
+        $this->authorize('delete', $post);
+        $post->delete();
+        return response()->noContent();
+    }
+}
+
+// In Blade
+@can('update', $post)
+    <a href="/posts/{{ $post->id }}/edit">Edit</a>
+@endcan
+
+@cannot('delete', $post)
+    <p>You cannot delete this post</p>
+@endcannot
+```
+
+### Pattern 2: CSRF Protection
+```blade
+<!-- Automatic in Forms -->
+<form method="POST" action="/posts">
+    @csrf
+    <!-- CSRF token automatically included -->
+</form>
+
+<!-- AJAX Requests -->
+<script>
+fetch('/posts', {
+    method: 'POST',
+    headers: {
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+    },
+    body: JSON.stringify(data),
+})
+</script>
+```
+
+**Key Points**:
+- Always check authorization
+- Use policies for complex authorization
+- Include CSRF tokens in all forms
+- Validate input server-side
+
+---
+
+## Database Patterns
+
+### Pattern 1: Safe Schema Changes
+```php
+// Step 1: Add nullable column
+Schema::table('users', function (Blueprint $table) {
+    $table->string('phone')->nullable()->after('email');
+});
+
+// Step 2: Populate data in batches
+User::chunk(1000, function ($users) {
+    foreach ($users as $user) {
+        // Generate phone or get from external source
+        $user->update(['phone' => '1234567890']);
+    }
+});
+
+// Step 3: Add index
+Schema::table('users', function (Blueprint $table) {
+    $table->index('phone');
+});
+
+// Step 4: Make not nullable
+Schema::table('users', function (Blueprint $table) {
+    $table->string('phone')->nullable(false)->change();
+});
+```
+
+### Pattern 2: Relationships with Constraints
+```php
+// One-to-Many with cascade
+Schema::create('posts', function (Blueprint $table) {
+    $table->id();
+    $table->foreignId('user_id')
+        ->constrained('users')
+        ->cascadeOnDelete() // Delete posts when user deleted
+        ->cascadeOnUpdate();
+    $table->timestamps();
+});
+
+// Many-to-Many pivot table
+Schema::create('role_user', function (Blueprint $table) {
+    $table->id();
+    $table->foreignId('user_id')
+        ->constrained()
+        ->cascadeOnDelete();
+    $table->foreignId('role_id')
+        ->constrained()
+        ->cascadeOnDelete();
+    $table->timestamps();
+});
+```
+
+**Key Points**:
+- Plan schema changes carefully
+- Use transactions for atomicity
+- Test migrations with rollback
+- Document data dependencies
+
+---
+
+## Summary
+
+These patterns cover:
+- ✅ Real-world scenarios you'll encounter
+- ✅ Best practices and security
+- ✅ Performance optimization
+- ✅ Error handling
+- ✅ Testing strategies
+- ✅ Common use cases
+
+Use these patterns as templates for your own code!
