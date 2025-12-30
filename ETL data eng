@@ -1,0 +1,4796 @@
+# ETL (Extract, Transform, Load) - Complete Notes & Theory
+
+## Table of Contents
+1. [ETL Fundamentals](#etl-fundamentals)
+2. [Architecture & Patterns](#architecture--patterns)
+3. [Core Components](#core-components)
+4. [ETL vs ELT](#etl-vs-elt)
+5. [Design Patterns](#design-patterns)
+6. [Tools & Technologies](#tools--technologies)
+7. [Best Practices](#best-practices)
+8. [Real-World Scenarios](#real-world-scenarios)
+9. [Performance Optimization](#performance-optimization)
+10. [Data Quality & Validation](#data-quality--validation)
+11. [Practical Applications & Processes](#practical-applications--processes)
+12. [End-to-End Workflow Examples](#end-to-end-workflow-examples)
+13. [Interview Concepts: Basic to Advanced](#interview-concepts-basic-to-advanced)
+14. [Interview Q&A with Practical Examples](#interview-qa-with-practical-examples)
+
+---
+
+## ETL Fundamentals
+
+### What is ETL?
+
+ETL stands for **Extract, Transform, Load** - a data integration process that moves data from source systems to target systems.
+
+```
+Source System → Extract → Transform → Load → Target System (Data Warehouse)
+```
+
+**Key Characteristics:**
+- **Batch-oriented**: Data processed in scheduled batches
+- **Scheduled execution**: Runs at specific times (nightly, hourly, etc.)
+- **Staging area**: Intermediate storage for data transformation
+- **Data cleaning**: Data quality validation during transformation
+- **Error handling**: Rollback mechanisms if failures occur
+- **Audit trails**: Logging of all operations
+
+### ETL vs Data Integration
+
+| Aspect | ETL | Data Integration |
+|--------|-----|------------------|
+| Scope | Extract-Transform-Load | Broader data movement |
+| Processing | Batch-oriented | Batch + Real-time |
+| Target | Data Warehouse | Any system |
+| Complexity | Moderate | Higher |
+| Tools | Talend, SSIS, Informatica | Cloud platforms, APIs |
+
+---
+
+## Architecture & Patterns
+
+### Traditional ETL Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   Source Systems                     │
+│  (Databases, APIs, Files, CRM, ERP, Cloud Apps)    │
+└────────────────┬────────────────────────────────────┘
+                 │
+         ┌───────▼────────┐
+         │    EXTRACT     │
+         │   (Read data)  │
+         └───────┬────────┘
+                 │
+         ┌───────▼──────────────────────┐
+         │   STAGING AREA               │
+         │ (Temporary storage for raw)  │
+         └───────┬──────────────────────┘
+                 │
+         ┌───────▼────────────────────────┐
+         │    TRANSFORM                   │
+         │  (Clean, Validate, Aggregate)  │
+         │  (Business logic application)  │
+         └───────┬────────────────────────┘
+                 │
+         ┌───────▼──────────────────────┐
+         │   STAGING AREA (Cleaned)     │
+         │ (Intermediate clean tables)  │
+         └───────┬──────────────────────┘
+                 │
+         ┌───────▼────────┐
+         │     LOAD       │
+         │  (Write data)  │
+         └───────┬────────┘
+                 │
+┌────────────────▼────────────────────────────────────┐
+│             Target System                            │
+│  (Data Warehouse, Data Lake, BI Platform)           │
+└────────────────────────────────────────────────────┘
+```
+
+### Staging Area Concept
+
+**Purpose of Staging:**
+1. **Isolation**: Separate source systems from transformation logic
+2. **Performance**: Optimize bulk operations
+3. **Debugging**: Store intermediate results for troubleshooting
+4. **Rollback**: Ability to restore from checkpoint
+
+**Staging Layers:**
+```
+Layer 1: Raw Staging
+├─ Exact copy of source data
+├─ No transformations applied
+└─ Used for backup and debugging
+
+Layer 2: Cleaned Staging
+├─ Data validation applied
+├─ Basic transformations
+├─ Duplicate removal
+└─ Format standardization
+
+Layer 3: Business Staging
+├─ Business rules applied
+├─ Aggregations and calculations
+├─ Dimension tables
+└─ Fact tables
+```
+
+---
+
+## Core Components
+
+### 1. Extract Phase
+
+**Objectives:**
+- Read data from source systems
+- Minimize impact on source systems
+- Handle different data formats
+- Validate source data accessibility
+
+**Extraction Strategies:**
+
+**Full Extract:**
+```
+- Read entire dataset from source
+- Used for initial load
+- Resource-intensive
+- Time: O(n) where n = total records
+```
+
+**Incremental Extract:**
+```
+- Read only new/changed records
+- Using timestamps or change data capture
+- Resource-efficient
+- Time: O(m) where m = changed records
+```
+
+**Example: Delta Detection**
+```
+SELECT * FROM source_table
+WHERE last_modified_date > '2025-12-29 00:00:00'
+```
+
+**Change Data Capture (CDC):**
+```
+┌─────────────────────────────────────────┐
+│ Source Database (SQL Server)            │
+│ ├─ Transaction Log (Binary Log)         │
+│ │  └─ Records all DML operations        │
+│ └─ CDC Agents                           │
+│    └─ Read changes in near real-time   │
+└────────────┬────────────────────────────┘
+             │
+        ┌────▼────┐
+        │ Changes │
+        │ Queue   │
+        └────┬────┘
+             │
+    ┌────────▼──────────┐
+    │ Extract Process   │
+    │ (CDC Reader)      │
+    └────────┬──────────┘
+             │
+    ┌────────▼──────────┐
+    │ Staging Area      │
+    └───────────────────┘
+```
+
+### 2. Transform Phase
+
+**Transformation Types:**
+
+**Data Cleansing:**
+```sql
+-- Remove duplicates
+DELETE FROM staging_orders
+WHERE order_id IN (
+  SELECT order_id FROM staging_orders
+  GROUP BY order_id
+  HAVING COUNT(*) > 1
+);
+
+-- Standardize formats
+UPDATE staging_customers
+SET email = LOWER(TRIM(email)),
+    phone = REPLACE(REPLACE(phone, '-', ''), ' ', '');
+
+-- Handle null values
+UPDATE staging_products
+SET category = COALESCE(category, 'Uncategorized'),
+    price = CASE WHEN price IS NULL THEN 0 ELSE price END;
+```
+
+**Data Validation:**
+```
+Null checks: Required fields are populated
+Type checks: Correct data types
+Range checks: Values within acceptable range
+Format checks: Date formats, phone numbers, etc.
+Reference checks: Foreign key relationships exist
+Business rule checks: Custom business logic
+```
+
+**Data Aggregation:**
+```sql
+-- Create fact table from transactions
+INSERT INTO fact_sales (date_key, customer_key, product_key, amount, quantity)
+SELECT 
+  DATE_KEY(t.transaction_date) as date_key,
+  c.customer_key,
+  p.product_key,
+  SUM(t.amount) as amount,
+  COUNT(*) as quantity
+FROM staging_transactions t
+JOIN dim_customer c ON t.customer_id = c.customer_id
+JOIN dim_product p ON t.product_id = p.product_id
+GROUP BY DATE_KEY(t.transaction_date), c.customer_key, p.product_key;
+```
+
+**Data Enrichment:**
+```sql
+-- Add calculated fields
+UPDATE staging_orders
+SET total_amount = order_amount + tax,
+    discount_percentage = (discount / order_amount) * 100,
+    profit_margin = (total_amount - cost) / total_amount;
+
+-- Join with reference data
+UPDATE staging_orders o
+SET region = (SELECT region FROM dim_territory WHERE o.territory_id = territory_id)
+WHERE region IS NULL;
+```
+
+**Data Standardization:**
+```sql
+-- Convert currencies
+UPDATE staging_international_sales
+SET amount_usd = CASE 
+  WHEN currency = 'EUR' THEN amount * 1.10
+  WHEN currency = 'GBP' THEN amount * 1.27
+  WHEN currency = 'JPY' THEN amount / 130
+  ELSE amount
+END;
+
+-- Standardize text fields
+UPDATE staging_products
+SET category = INITCAP(TRIM(category)),
+    description = REPLACE(description, '  ', ' ');
+```
+
+### 3. Load Phase
+
+**Load Strategies:**
+
+**Full Load (Initial Load):**
+```sql
+TRUNCATE TABLE fact_sales;
+
+INSERT INTO fact_sales (date_key, customer_key, product_key, amount, quantity)
+SELECT * FROM staging_fact_sales;
+```
+
+**Incremental Load:**
+```sql
+INSERT INTO fact_sales (date_key, customer_key, product_key, amount, quantity)
+SELECT * FROM staging_fact_sales
+WHERE load_date = CURRENT_DATE;
+```
+
+**Update/Insert (Upsert):**
+```sql
+MERGE INTO dim_customer t
+USING staging_customer s
+ON t.customer_id = s.customer_id
+WHEN MATCHED THEN
+  UPDATE SET 
+    t.customer_name = s.customer_name,
+    t.email = s.email,
+    t.last_modified = GETDATE()
+WHEN NOT MATCHED THEN
+  INSERT (customer_id, customer_name, email, last_modified)
+  VALUES (s.customer_id, s.customer_name, s.email, GETDATE());
+```
+
+**Load Methods:**
+| Method | Pros | Cons |
+|--------|------|------|
+| Direct Insert | Simple, Fast | Risk of corruption |
+| Bulk Load | Very Fast, Efficient | Limited error handling |
+| Row-by-Row | Granular control, Error isolation | Slow |
+| Staging then Insert | Safe, Auditable | Extra processing |
+
+---
+
+## ETL vs ELT
+
+### Comparison
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                        ETL                                   │
+├──────────────────────────────────────────────────────────────┤
+│ Extract → Transform (External) → Load                        │
+│                                                              │
+│ Transform: Staging/ETL Server                              │
+│ Compute: Expensive external server                          │
+│ Storage: Staging area required                              │
+│ Complexity: High                                            │
+│ Cost: Higher (external compute)                            │
+│ Speed: Slower (external transformation)                    │
+│                                                              │
+│ Good for: Legacy systems, limited DW capacity              │
+└──────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────┐
+│                        ELT                                   │
+├──────────────────────────────────────────────────────────────┤
+│ Extract → Load → Transform (Within DW)                      │
+│                                                              │
+│ Transform: Data Warehouse itself                            │
+│ Compute: Built-in DW capacity                              │
+│ Storage: No external staging required                       │
+│ Complexity: Lower                                           │
+│ Cost: Lower (internal compute)                             │
+│ Speed: Faster (parallel processing)                        │
+│                                                              │
+│ Good for: Cloud DW, modern infrastructure                  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### Decision Criteria
+
+**Choose ETL when:**
+- Source systems cannot handle extraction load
+- Transformation requires external compute
+- Legacy data warehouse with limited capabilities
+- Regulatory requirements demand pre-load validation
+
+**Choose ELT when:**
+- Cloud data warehouse (Snowflake, BigQuery, Redshift)
+- Data warehouse has sufficient compute capacity
+- Fast ingestion is priority
+- Flexibility in transformation is needed
+
+### Hybrid Approach
+
+```
+Heavy transformations → ETL (external)
+Light transformations + Loading → ELT (warehouse)
+
+Or:
+
+ETL for initial load (full dataset)
+ELT for ongoing incremental loads (small changes)
+```
+
+---
+
+## Design Patterns
+
+### 1. Slowly Changing Dimensions (SCD)
+
+**SCD Type 0 (No Change):**
+```
+Product_Key | Product_ID | Product_Name | Category
+    1       |    100     |   Widget A   | Hardware
+    
+(Dimension never updated)
+```
+
+**SCD Type 1 (Overwrite):**
+```sql
+-- Update existing record
+MERGE INTO dim_product t
+USING staging_product s
+ON t.product_id = s.product_id
+WHEN MATCHED THEN
+  UPDATE SET t.category = s.category;  -- Overwrites old value
+```
+
+**SCD Type 2 (Add New Record):**
+```sql
+-- Create new version with dates
+Product_Key | Product_ID | Category (Old) | Category (New) | Start_Date | End_Date | Active
+    1       |    100     |   Hardware     |    NULL       | 2024-01-01 | 2024-12-31 | 0
+    2       |    100     |   NULL         |    Software   | 2025-01-01 | NULL       | 1
+
+-- Insert logic
+INSERT INTO dim_product (product_id, category, start_date, end_date, active)
+SELECT @product_id, @new_category, GETDATE(), NULL, 1;
+
+UPDATE dim_product
+SET end_date = GETDATE(), active = 0
+WHERE product_id = @product_id AND active = 1;
+```
+
+**SCD Type 3 (Add Column):**
+```sql
+-- Store both old and new values
+ALTER TABLE dim_product ADD previous_category VARCHAR(100);
+
+UPDATE dim_product
+SET previous_category = category,
+    category = new_category
+WHERE product_id = @product_id;
+```
+
+### 2. Star Schema Loading
+
+```
+                    ┌─────────────┐
+                    │ dim_date    │
+                    └────────┬────┘
+                             │
+        ┌────────────────────┼────────────────────┐
+        │                    │                    │
+    ┌───▼──┐         ┌──────▼──────┐        ┌────▼────┐
+    │      │         │             │        │         │
+┌───┴──────┴──┐  ┌───┴─────────────┴───┐  ┌┴─────────┴────┐
+│ dim_customer│  │   FACT_SALES      │  │ dim_product    │
+└─────────────┘  │ (Central table)   │  └───────────────┘
+                 │ ├─ date_key       │
+                 │ ├─ customer_key   │
+                 │ ├─ product_key    │
+                 │ ├─ amount         │
+                 │ ├─ quantity       │
+                 │ └─ metrics        │
+                 └───────────────────┘
+```
+
+**Loading Order:**
+```
+1. Load dimensions first (dim_date, dim_customer, dim_product)
+2. Load fact table (depends on dimension keys)
+3. Create/refresh aggregations
+
+Why? Referential integrity constraints require dimension keys to exist first
+```
+
+### 3. Dimensional Modeling
+
+**Grain of Fact Table:**
+```
+Fact_Sales grain: One row per transaction
+Fact_DailySales grain: One row per product per day per store
+Fact_MonthlySales grain: One row per product per month per store
+
+More granular = More flexibility, More storage
+Less granular = Better performance, Aggregated metrics only
+```
+
+---
+
+## Tools & Technologies
+
+### Open-Source Tools
+
+**Apache Airflow:**
+```python
+from airflow import DAG
+from airflow.operators.python_operator import PythonOperator
+from datetime import datetime, timedelta
+
+default_args = {
+    'owner': 'data-team',
+    'retries': 2,
+    'retry_delay': timedelta(minutes=5)
+}
+
+dag = DAG('etl_pipeline', 
+    default_args=default_args,
+    schedule_interval='@daily',
+    start_date=datetime(2025, 1, 1))
+
+def extract_data():
+    # Read from source
+    pass
+
+def transform_data():
+    # Process data
+    pass
+
+def load_data():
+    # Write to warehouse
+    pass
+
+extract_task = PythonOperator(
+    task_id='extract',
+    python_callable=extract_data,
+    dag=dag
+)
+
+transform_task = PythonOperator(
+    task_id='transform',
+    python_callable=transform_data,
+    dag=dag
+)
+
+load_task = PythonOperator(
+    task_id='load',
+    python_callable=load_data,
+    dag=dag
+)
+
+extract_task >> transform_task >> load_task
+```
+
+**Apache Kafka + Spark Streaming:**
+```python
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+
+spark = SparkSession.builder.appName("ETL").getOrCreate()
+
+# Read from Kafka
+df = spark.readStream.format("kafka") \
+    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("subscribe", "transactions") \
+    .load()
+
+# Transform
+transformed = df.selectExpr("CAST(value AS STRING)") \
+    .select(from_json(col("value"), schema).alias("data")) \
+    .select("data.*") \
+    .filter(col("amount") > 0) \
+    .withColumn("processed_time", current_timestamp())
+
+# Write to warehouse
+transformed.writeStream \
+    .format("parquet") \
+    .option("path", "/data/warehouse/transactions") \
+    .option("checkpointLocation", "/data/checkpoints/transactions") \
+    .start()
+
+spark.awaitTermination()
+```
+
+### Enterprise Tools
+
+| Tool | Best For | Pros | Cons |
+|------|----------|------|------|
+| **Informatica** | Enterprise ETL | Comprehensive, Fast | Expensive, Steep learning curve |
+| **Talend** | Cloud/Big Data | Flexible, Open | Resource-heavy |
+| **SSIS** | SQL Server ecosystem | Integrated, Powerful | Windows-only, Proprietary |
+| **Pentaho** | Open-source ETL | Cost-effective | Less powerful than Informatica |
+| **AWS Glue** | AWS ecosystem | Serverless, Scalable | AWS-only, Vendor lock-in |
+
+### Cloud-Native Solutions
+
+**Snowflake:**
+```sql
+-- Native ELT in Snowflake
+CREATE OR REPLACE PROCEDURE load_sales_data()
+RETURNS VARCHAR
+LANGUAGE SQL
+EXECUTE AS OWNER
+AS
+BEGIN
+  COPY INTO raw_sales
+  FROM @my_stage/sales/
+  FILE_FORMAT = (FORMAT_NAME = 'CSV_FORMAT')
+  ON_ERROR = SKIP_FILE;
+  
+  INSERT INTO fact_sales
+  SELECT * FROM raw_sales
+  WHERE NOT EXISTS (
+    SELECT 1 FROM fact_sales fs
+    WHERE fs.order_id = raw_sales.order_id
+  );
+END;
+```
+
+**Google BigQuery:**
+```python
+from google.cloud import bigquery
+
+client = bigquery.Client()
+
+# Load data
+job_config = bigquery.LoadJobConfig(
+    source_format=bigquery.SourceFormat.CSV,
+    skip_leading_rows=1,
+    schema=[
+        bigquery.SchemaField("order_id", "INTEGER"),
+        bigquery.SchemaField("amount", "FLOAT"),
+    ]
+)
+
+load_job = client.load_table_from_uri(
+    "gs://my-bucket/sales.csv",
+    "my_dataset.sales",
+    job_config=job_config
+)
+
+load_job.result()
+
+# Transform
+query = """
+SELECT 
+    DATE(order_date) as date,
+    COUNT(*) as order_count,
+    SUM(amount) as total_amount
+FROM `project.dataset.sales`
+GROUP BY date
+"""
+
+job = client.query(query)
+job.result()
+```
+
+---
+
+## Best Practices
+
+### 1. Error Handling & Recovery
+
+**Checkpoint Strategy:**
+```
+┌─────────────────────────────────────────┐
+│ Extract 1000 records                    │
+├─────────────────────────────────────────┤
+│ CHECKPOINT: Record position = 1000      │
+├─────────────────────────────────────────┤
+│ Transform 1000 records                  │
+├─────────────────────────────────────────┤
+│ CHECKPOINT: Staging loaded              │
+├─────────────────────────────────────────┤
+│ Validate 1000 records                   │
+├─────────────────────────────────────────┤
+│ CHECKPOINT: Validation passed           │
+├─────────────────────────────────────────┤
+│ Load 1000 records                       │
+├─────────────────────────────────────────┤
+│ CHECKPOINT: Data warehouse updated      │
+└─────────────────────────────────────────┘
+
+If failure at checkpoint 3:
+→ Restart from checkpoint 2 (no re-extract needed)
+```
+
+**Idempotency:**
+```sql
+-- Always design loads to be idempotent
+-- Safe to re-run without side effects
+
+-- BAD: Non-idempotent
+INSERT INTO sales_total (amount)
+SELECT SUM(amount) FROM transactions;
+-- Running twice doubles the amount!
+
+-- GOOD: Idempotent
+TRUNCATE TABLE sales_total;
+INSERT INTO sales_total (amount)
+SELECT SUM(amount) FROM transactions;
+
+-- Or with MERGE:
+MERGE INTO sales_total t
+USING (SELECT SUM(amount) as amount FROM transactions) s
+ON 1=1
+WHEN MATCHED THEN UPDATE SET t.amount = s.amount
+WHEN NOT MATCHED THEN INSERT VALUES (s.amount);
+```
+
+### 2. Monitoring & Alerting
+
+**Key Metrics to Track:**
+```
+├─ Extraction Metrics
+│  ├─ Records extracted
+│  ├─ Extract duration
+│  ├─ Extraction errors
+│  └─ Source system availability
+│
+├─ Transformation Metrics
+│  ├─ Records transformed
+│  ├─ Transformation duration
+│  ├─ Validation failures
+│  ├─ Data quality issues
+│  └─ Duplicate records detected
+│
+├─ Load Metrics
+│  ├─ Records loaded
+│  ├─ Load duration
+│  ├─ Constraint violations
+│  ├─ Load errors
+│  └─ Data warehouse size
+│
+└─ Overall Metrics
+   ├─ Total pipeline duration
+   ├─ Success/failure rate
+   ├─ SLA adherence
+   └─ Cost per execution
+```
+
+**Alerting Rules:**
+```
+1. If load_duration > 1 hour → Alert
+2. If validation_failure_count > 100 → Alert
+3. If source_availability < 95% → Alert
+4. If duplicate_count > threshold → Alert
+5. If extract_record_count differs > 10% from expected → Alert
+```
+
+### 3. Data Quality Checks
+
+**Pre-Load Validation:**
+```sql
+SELECT 
+    CASE WHEN COUNT(*) = 0 THEN 'FAIL: No data' ELSE 'PASS' END as null_check,
+    CASE WHEN COUNT(DISTINCT order_id) = COUNT(*) THEN 'PASS' ELSE 'FAIL: Duplicates' END as duplicate_check,
+    CASE WHEN MIN(amount) >= 0 THEN 'PASS' ELSE 'FAIL: Negative amounts' END as range_check,
+    CASE WHEN COUNT(DISTINCT order_date) > 0 THEN 'PASS' ELSE 'FAIL: All nulls' END as data_check
+FROM staging_orders;
+```
+
+**Post-Load Validation:**
+```sql
+-- Row count comparison
+SELECT 
+    (SELECT COUNT(*) FROM staging_orders) as source_count,
+    (SELECT COUNT(*) FROM fact_sales WHERE load_date = CURRENT_DATE) as target_count,
+    CASE WHEN source_count = target_count THEN 'PASS' ELSE 'FAIL' END as reconciliation;
+```
+
+### 4. Documentation
+
+**ETL Documentation Template:**
+```markdown
+# ETL Process: Daily Sales Load
+
+## Overview
+- **Purpose**: Load daily sales transactions into data warehouse
+- **Frequency**: Daily at 2:00 AM UTC
+- **Source**: ERP System Sales Module (API)
+- **Target**: fact_sales table in DW
+- **Owner**: Data Engineering Team
+
+## Extract Phase
+- **Source System**: SAP Sales Module API
+- **Extract Type**: Incremental (last 24 hours)
+- **Expected Records**: ~50,000
+- **Extraction Logic**: Pull all transactions modified since last run
+
+## Transform Phase
+- **Cleansing**: Remove nulls, standardize formats
+- **Validation**: Check amount > 0, customer exists
+- **Aggregation**: Group by date and product
+- **Enrichment**: Join with customer master
+
+## Load Phase
+- **Strategy**: UPSERT (update if exists, insert if new)
+- **Load Target**: fact_sales table
+- **Constraints**: Check referential integrity
+
+## Error Handling
+- **Retry Count**: 3 times with 5-min interval
+- **On Failure**: Alert DL team, log to audit table
+- **Rollback**: Restore from checkpoint
+
+## Monitoring
+- **Duration SLA**: < 1 hour
+- **Success Rate**: > 99.5%
+- **Data Quality**: Row count variance < 5%
+```
+
+---
+
+## Real-World Scenarios
+
+### Scenario 1: Retail Sales ETL
+
+**Requirements:**
+- Consolidate sales from 500 retail stores
+- Data arrives from 3 different POS systems
+- Daily load with real-time dashboard
+- Historical data for trend analysis
+
+**Solution Architecture:**
+
+```
+┌─────────────────────────────────────────┐
+│ 500 Retail Stores                       │
+│ ├─ System A: 200 stores (XML files)     │
+│ ├─ System B: 200 stores (REST API)      │
+│ └─ System C: 100 stores (CSV files)     │
+└────────────┬────────────────────────────┘
+             │
+     ┌───────▼────────┐
+     │ EXTRACT Layer  │
+     │ (Parallel)     │
+     └───────┬────────┘
+             │
+     ┌───────▼──────────────────┐
+     │ STAGING: raw_sales       │
+     │ (Unified schema)         │
+     └───────┬──────────────────┘
+             │
+     ┌───────▼──────────────────┐
+     │ TRANSFORM:               │
+     │ ├─ Deduplication         │
+     │ ├─ Validation            │
+     │ ├─ Currency conversion   │
+     │ └─ SKU mapping           │
+     └───────┬──────────────────┘
+             │
+     ┌───────▼──────────────────┐
+     │ STAGING: cleaned_sales   │
+     │ (Quality verified)       │
+     └───────┬──────────────────┘
+             │
+             ├──────┬──────┬──────┐
+             │      │      │      │
+          ┌──▼──┐ ┌─▼─┐ ┌─▼──┐ ┌▼────┐
+          │Load │ │Load │ │Load │ │Load │
+          │     │ │    │ │    │ │    │
+          └──┬──┘ └─┬─┘ └─┬──┘ └┬────┘
+             │     │     │    │
+       ┌─────▼────┬▼───┬─▼────▼────┐
+       │ DW Layer │    │           │
+       ├──────────┼────┼───────────┤
+       │fact_sales│    │dim_store  │
+       │fact_returns    │dim_product│
+       │fact_inventory  │dim_time   │
+       └──────────┴────┴───────────┘
+```
+
+**Python Implementation:**
+```python
+import pandas as pd
+from airflow import DAG
+from airflow.operators.python_operator import PythonOperator
+from datetime import datetime, timedelta
+
+def extract_system_a():
+    """Extract from XML files (System A)"""
+    files = glob.glob('/data/incoming/system_a/*.xml')
+    dfs = [pd.read_xml(f) for f in files]
+    df = pd.concat(dfs, ignore_index=True)
+    df.to_csv('/staging/raw_system_a.csv', index=False)
+
+def extract_system_b():
+    """Extract from REST API (System B)"""
+    response = requests.get('https://api.system-b.com/sales')
+    df = pd.json_normalize(response.json()['data'])
+    df.to_csv('/staging/raw_system_b.csv', index=False)
+
+def extract_system_c():
+    """Extract from CSV files (System C)"""
+    df = pd.read_csv('/data/incoming/system_c/sales.csv')
+    df.to_csv('/staging/raw_system_c.csv', index=False)
+
+def transform_and_load():
+    """Unified transform and load"""
+    dfs = []
+    for file in ['/staging/raw_system_a.csv', 
+                 '/staging/raw_system_b.csv',
+                 '/staging/raw_system_c.csv']:
+        df = pd.read_csv(file)
+        # Standardize columns
+        df = df.rename(columns={'store_code': 'store_id'})
+        dfs.append(df)
+    
+    # Combine and deduplicate
+    df = pd.concat(dfs, ignore_index=True)
+    df = df.drop_duplicates(subset=['transaction_id'])
+    
+    # Validate
+    df = df[df['amount'] > 0]
+    df = df[df['store_id'].notna()]
+    
+    # Currency conversion
+    df['amount_usd'] = df.apply(lambda row: 
+        row['amount'] if row['currency'] == 'USD' 
+        else row['amount'] * get_exchange_rate(row['currency']), axis=1)
+    
+    # Load to database
+    engine = create_engine('postgresql://user:pass@host/warehouse')
+    df.to_sql('fact_sales', engine, if_exists='append', index=False)
+```
+
+### Scenario 2: Real-Time Event Stream ETL
+
+**Requirements:**
+- Process millions of user events daily
+- Stream processing (near real-time)
+- Complex transformations and enrichment
+- Fault tolerance and exactly-once semantics
+
+**Solution: Kafka + Spark Streaming**
+
+```
+Events → Kafka → Spark Streaming → Transform → Load → Data Lake
+         (Queue)  (Processing)                       (Parquet)
+```
+
+```python
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+from pyspark.sql.types import *
+
+spark = SparkSession.builder \
+    .appName("RealTimeEventETL") \
+    .getOrCreate()
+
+# Schema definition
+schema = StructType([
+    StructField("user_id", StringType()),
+    StructField("event_type", StringType()),
+    StructField("timestamp", LongType()),
+    StructField("properties", MapType(StringType(), StringType()))
+])
+
+# Read from Kafka
+df = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "kafka:9092") \
+    .option("subscribe", "user-events") \
+    .option("startingOffsets", "latest") \
+    .load()
+
+# Parse JSON
+events = df.select(
+    from_json(col("value").cast("string"), schema).alias("event")
+).select("event.*")
+
+# Transform
+transformed = events \
+    .withColumn("event_date", from_unixtime(col("timestamp")/1000, "yyyy-MM-dd")) \
+    .withColumn("event_hour", hour(from_unixtime(col("timestamp")/1000))) \
+    .filter(col("event_type").isNotNull())
+
+# Enrich with user data (broadcast join)
+user_df = spark.read.jdbc(url, "dim_user", properties=db_properties)
+enriched = transformed.join(
+    broadcast(user_df),
+    "user_id",
+    "left"
+)
+
+# Aggregation window
+window_agg = enriched \
+    .groupBy(
+        window(col("timestamp"), "10 minutes", "5 minutes"),
+        col("event_type")
+    ) \
+    .agg(
+        count("*").alias("event_count"),
+        countDistinct("user_id").alias("unique_users"),
+        max("properties").alias("latest_properties")
+    )
+
+# Write to Data Lake
+query = transformed.writeStream \
+    .format("parquet") \
+    .option("path", "/data/events/") \
+    .option("checkpointLocation", "/data/checkpoints/events") \
+    .partitionBy("event_date", "event_hour") \
+    .mode("append") \
+    .start()
+
+spark.awaitTermination()
+```
+
+### Scenario 3: Data Lake Medallion Architecture
+
+**Requirements:**
+- Multi-layer data processing
+- Support batch and streaming
+- Data quality improvements across layers
+- Self-service analytics
+
+**Architecture:**
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                    BRONZE LAYER                          │
+│              (Raw data, as-is from sources)              │
+│                                                           │
+│  /raw/source_system/table/year/month/day/data.parquet   │
+├──────────────────────────────────────────────────────────┤
+│ - Minimal transformations                                │
+│ - Preserve historical data                               │
+│ - No validation (raw ingestion)                           │
+│ - Schema: Flexible, matches source                       │
+└────────────────────┬─────────────────────────────────────┘
+                     │
+                     │ ETL: Cleanse & Validate
+                     ▼
+┌──────────────────────────────────────────────────────────┐
+│                    SILVER LAYER                          │
+│            (Cleaned, integrated, validated)              │
+│                                                           │
+│  /processed/conformed_tables/table_name/data.parquet    │
+├──────────────────────────────────────────────────────────┤
+│ - Data quality applied                                   │
+│ - Duplicates removed                                     │
+│ - Nulls standardized                                     │
+│ - Types validated                                        │
+│ - Schema: Strict, business-aligned                       │
+└────────────────────┬─────────────────────────────────────┘
+                     │
+                     │ ELT: Transform & Aggregate
+                     ▼
+┌──────────────────────────────────────────────────────────┐
+│                     GOLD LAYER                           │
+│         (Business-ready, aggregated analytics)           │
+│                                                           │
+│  /analytics/marts/subject_area/metrics.parquet           │
+├──────────────────────────────────────────────────────────┤
+│ - Business calculations applied                          │
+│ - Pre-aggregated for dashboards                          │
+│ - Optimized for queries                                  │
+│ - Schema: Business domain tables                         │
+└────────────────────┬─────────────────────────────────────┘
+                     │
+                     ▼
+        ┌────────────────────────────┐
+        │   BI & Analytics Tools     │
+        │  (Tableau, Power BI, etc)  │
+        └────────────────────────────┘
+```
+
+**Delta Lake Implementation:**
+```python
+from delta import *
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("MedallionArchitecture") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .getOrCreate()
+
+# BRONZE: Ingest raw data
+raw_data = spark.read.json("/incoming/source_data/*.json")
+raw_data.write.format("delta") \
+    .mode("append") \
+    .option("mergeSchema", "true") \
+    .save("/data/bronze/source_table")
+
+# SILVER: Clean and validate
+bronze_df = spark.read.format("delta").load("/data/bronze/source_table")
+
+silver_df = bronze_df \
+    .dropDuplicates(["id"]) \
+    .filter(col("id").isNotNull()) \
+    .filter(col("amount") > 0) \
+    .withColumn("processed_at", current_timestamp())
+
+silver_df.write.format("delta") \
+    .mode("overwrite") \
+    .option("mergeSchema", "true") \
+    .save("/data/silver/source_table")
+
+# GOLD: Create analytics views
+silver_df = spark.read.format("delta").load("/data/silver/source_table")
+
+gold_daily = silver_df \
+    .groupBy(date_trunc("day", col("created_at"))) \
+    .agg(
+        sum("amount").alias("total_amount"),
+        count("*").alias("transaction_count"),
+        avg("amount").alias("avg_amount")
+    ) \
+    .rename({"date_trunc(CAST(HOUR, created_at))": "date"})
+
+gold_daily.write.format("delta") \
+    .mode("overwrite") \
+    .option("mergeSchema", "true") \
+    .save("/data/gold/daily_metrics")
+```
+
+---
+
+## Performance Optimization
+
+### 1. Extraction Optimization
+
+**Parallel Extraction:**
+```python
+# Extract from multiple tables in parallel
+from concurrent.futures import ThreadPoolExecutor
+
+def extract_table(table_name, batch_size=100000):
+    offset = 0
+    while True:
+        df = pd.read_sql(f"""
+            SELECT * FROM {table_name}
+            ORDER BY id
+            LIMIT {batch_size} OFFSET {offset}
+        """, connection)
+        
+        if df.empty:
+            break
+        
+        df.to_parquet(f'/staging/{table_name}_{offset}.parquet')
+        offset += batch_size
+
+tables = ['orders', 'customers', 'products']
+with ThreadPoolExecutor(max_workers=3) as executor:
+    executor.map(extract_table, tables)
+```
+
+**Incremental Extraction with CDC:**
+```sql
+-- Only extract changed records
+SELECT * FROM source_table
+WHERE sys_change_version > @last_sync_version
+AND sys_change_type IN (1, 2)  -- Insert, Update (exclude Delete = 3 for now)
+ORDER BY sys_change_version;
+```
+
+### 2. Transformation Optimization
+
+**Vectorized Operations:**
+```python
+# Slow: Row-by-row processing
+for index, row in df.iterrows():
+    df.at[index, 'new_amount'] = row['amount'] * 1.10
+
+# Fast: Vectorized operation
+df['new_amount'] = df['amount'] * 1.10
+```
+
+**Partition Pruning:**
+```python
+# Slow: Read entire table
+df = spark.read.parquet("/data/sales/*.parquet")
+filtered = df.filter(col("year") == 2024)
+
+# Fast: Read only partitions matching predicate
+df = spark.read.parquet("/data/sales/year=2024/*.parquet")
+```
+
+**Caching Intermediate Results:**
+```python
+# Cache reused dataframes
+processed = df.filter(...).transform(...).cache()
+
+result1 = processed.groupBy("category").agg(...)
+result2 = processed.groupBy("region").agg(...)
+# Cache prevents re-computation for result2
+```
+
+### 3. Load Optimization
+
+**Batch Insert vs. Individual Insert:**
+```python
+# Slow: Individual inserts (N database round trips)
+for index, row in df.iterrows():
+    engine.execute(f"INSERT INTO sales VALUES ({row})")
+
+# Fast: Batch insert (1 database round trip)
+df.to_sql('sales', engine, method='multi', chunksize=1000)
+```
+
+**Bulk Load Tools:**
+```sql
+-- SQL Server BCP (Bulk Copy Program)
+BCP database.dbo.table IN data.csv -S server -U user -P pass -f format.fmt -b 10000
+
+-- PostgreSQL COPY
+COPY table FROM '/data/file.csv' WITH (FORMAT csv, DELIMITER ',');
+
+-- Snowflake COPY
+COPY INTO table FROM @stage/data.csv;
+```
+
+---
+
+## Data Quality & Validation
+
+### Data Quality Dimensions
+
+```
+┌─────────────────────────────────────────────────┐
+│           DATA QUALITY DIMENSIONS                │
+├─────────────────────────────────────────────────┤
+│ Accuracy: Data matches source truth             │
+│ Completeness: All required data is present      │
+│ Consistency: Data is uniform across systems     │
+│ Timeliness: Data is current and available       │
+│ Validity: Data conforms to defined formats      │
+│ Uniqueness: No duplicate records exist          │
+│ Conformity: Data adheres to standards           │
+└─────────────────────────────────────────────────┘
+```
+
+### Validation Rules Framework
+
+```sql
+CREATE TABLE data_quality_rules (
+    rule_id INT PRIMARY KEY,
+    rule_name VARCHAR(100),
+    rule_type VARCHAR(50), -- 'NOT_NULL', 'RANGE', 'PATTERN', 'LOOKUP', 'CUSTOM'
+    table_name VARCHAR(100),
+    column_name VARCHAR(100),
+    condition VARCHAR(500),
+    severity VARCHAR(20), -- 'ERROR', 'WARNING'
+    created_at TIMESTAMP
+);
+
+-- Examples of rules
+INSERT INTO data_quality_rules VALUES
+(1, 'Order Amount Not Null', 'NOT_NULL', 'orders', 'amount', 'amount IS NOT NULL', 'ERROR', NOW()),
+(2, 'Order Amount Positive', 'RANGE', 'orders', 'amount', 'amount > 0 AND amount < 10000000', 'ERROR', NOW()),
+(3, 'Email Format Valid', 'PATTERN', 'customers', 'email', "email LIKE '%@%.%'", 'WARNING', NOW()),
+(4, 'Status Valid Code', 'LOOKUP', 'orders', 'status', 'status IN (''PENDING'', ''COMPLETE'', ''CANCELLED'')', 'ERROR', NOW());
+
+-- Execute validation
+CREATE OR REPLACE PROCEDURE validate_data()
+AS BEGIN
+    DECLARE @rule_count INT = 0;
+    DECLARE @passed INT = 0;
+    
+    SELECT @rule_count = COUNT(*) FROM data_quality_rules WHERE severity = 'ERROR';
+    
+    DECLARE @rule_id INT;
+    DECLARE cur CURSOR FOR SELECT rule_id FROM data_quality_rules WHERE severity = 'ERROR';
+    
+    OPEN cur;
+    FETCH NEXT FROM cur INTO @rule_id;
+    
+    WHILE @@FETCH_STATUS = 0 BEGIN
+        DECLARE @passed_records INT;
+        -- Execute rule (implementation depends on rule type)
+        
+        FETCH NEXT FROM cur INTO @rule_id;
+    END;
+    
+    CLOSE cur;
+    DEALLOCATE cur;
+END;
+```
+
+---
+
+## Summary
+
+**ETL is fundamental for:**
+- Consolidating data from multiple sources
+- Ensuring data quality and consistency
+- Building reliable data warehouses
+- Supporting business intelligence and analytics
+
+**Key Takeaways:**
+1. Design ETL with failure recovery and idempotency in mind
+2. Choose ETL vs ELT based on infrastructure and requirements
+3. Implement comprehensive data quality checks
+4. Monitor pipeline health with key metrics
+5. Document every ETL process thoroughly
+6. Optimize extraction and loading for performance
+7. Use appropriate tools for your data volume and complexity
+8. Plan for scalability and future data growth
+
+---
+
+## Practical Applications & Processes
+
+### Application 1: Customer Data Consolidation
+
+**Business Problem:**
+A retail company has customer data scattered across multiple systems:
+- **CRM System**: Salesforce (Contact information, interaction history)
+- **E-commerce Platform**: Shopify (Order data, browsing behavior)
+- **Loyalty Program**: Internal database (Rewards, spending history)
+- **Support System**: Zendesk (Support tickets, complaints)
+
+**Goal**: Create a unified customer profile for 360-degree customer view.
+
+**Theory: Customer Master Data Management (MDM)**
+
+```
+Single Source of Truth (SSOT) Concept:
+├─ Customer 123 appears in 4 different systems
+│  ├─ Salesforce: John Smith
+│  ├─ Shopify: J. Smith (john@email.com)
+│  ├─ Loyalty: john_smith_123
+│  └─ Zendesk: Smith, John
+│
+├─ ETL reconciles these into ONE profile
+│  └─ Dimension table: dim_customer (master record)
+│
+└─ Benefits:
+   ├─ No duplicate records
+   ├─ Single version of truth
+   ├─ Better analytics
+   └─ Personalized marketing
+```
+
+**Step-by-Step ETL Process:**
+
+**Step 1: Extract from all sources**
+```python
+import requests
+import pandas as pd
+from simple_salesforce import Salesforce
+
+# Extract from Salesforce (SOQL query)
+def extract_salesforce():
+    sf = Salesforce(username='user@company.com', 
+                   password='password',
+                   client_id='client_id',
+                   client_secret='secret')
+    
+    query = """
+    SELECT Id, FirstName, LastName, Email, Phone, 
+           CreatedDate, LastModifiedDate
+    FROM Contact
+    WHERE IsDeleted = false
+    """
+    
+    records = sf.query_all(query)['records']
+    df_sf = pd.DataFrame(records)
+    df_sf['source'] = 'Salesforce'
+    df_sf['extracted_at'] = pd.Timestamp.now()
+    return df_sf
+
+# Extract from Shopify (REST API)
+def extract_shopify():
+    headers = {'X-Shopify-Access-Token': 'your_token'}
+    url = 'https://your-store.myshopify.com/admin/api/2025-01/customers.json'
+    
+    customers = []
+    while url:
+        response = requests.get(url, headers=headers)
+        data = response.json()
+        customers.extend(data['customers'])
+        url = response.links.get('next', {}).get('url')
+    
+    df_shopify = pd.json_normalize(customers)
+    df_shopify['source'] = 'Shopify'
+    df_shopify['extracted_at'] = pd.Timestamp.now()
+    return df_shopify
+
+# Extract from internal database
+def extract_loyalty():
+    from sqlalchemy import create_engine
+    engine = create_engine('postgresql://user:pass@localhost/loyalty_db')
+    query = "SELECT * FROM customers WHERE status = 'ACTIVE'"
+    df_loyalty = pd.read_sql(query, engine)
+    df_loyalty['source'] = 'Loyalty'
+    df_loyalty['extracted_at'] = pd.Timestamp.now()
+    return df_loyalty
+
+# Extract all sources in parallel
+from concurrent.futures import ThreadPoolExecutor
+
+def extract_all_sources():
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        future_sf = executor.submit(extract_salesforce)
+        future_shopify = executor.submit(extract_shopify)
+        future_loyalty = executor.submit(extract_loyalty)
+        
+        df_sf = future_sf.result()
+        df_shopify = future_shopify.result()
+        df_loyalty = future_loyalty.result()
+    
+    # Write to staging area
+    df_sf.to_parquet('/staging/raw_salesforce.parquet')
+    df_shopify.to_parquet('/staging/raw_shopify.parquet')
+    df_loyalty.to_parquet('/staging/raw_loyalty.parquet')
+    
+    print(f"Extracted {len(df_sf)} from Salesforce")
+    print(f"Extracted {len(df_shopify)} from Shopify")
+    print(f"Extracted {len(df_loyalty)} from Loyalty")
+```
+
+**Theory: Why Extract in Parallel?**
+```
+Sequential extraction: 15 + 20 + 10 = 45 minutes
+Parallel extraction: max(15, 20, 10) = 20 minutes
+Performance improvement: 55% faster
+```
+
+**Step 2: Standardize and Prepare Data**
+```python
+def standardize_data(df_raw, source):
+    """
+    Theory: Data Standardization
+    - Align schemas across sources
+    - Fix naming conventions
+    - Standardize data types
+    - Clean text formatting
+    """
+    df = df_raw.copy()
+    
+    # Column mapping for each source
+    column_mapping = {
+        'Salesforce': {
+            'Id': 'source_customer_id',
+            'FirstName': 'first_name',
+            'LastName': 'last_name',
+            'Email': 'email',
+            'Phone': 'phone'
+        },
+        'Shopify': {
+            'id': 'source_customer_id',
+            'first_name': 'first_name',
+            'last_name': 'last_name',
+            'email': 'email',
+            'phone': 'phone'
+        },
+        'Loyalty': {
+            'customer_id': 'source_customer_id',
+            'fname': 'first_name',
+            'lname': 'last_name',
+            'email_address': 'email',
+            'phone_number': 'phone'
+        }
+    }
+    
+    # Apply mapping
+    df = df.rename(columns=column_mapping[source])
+    
+    # Standardize text fields
+    df['first_name'] = df['first_name'].str.title().str.strip()
+    df['last_name'] = df['last_name'].str.title().str.strip()
+    df['email'] = df['email'].str.lower().str.strip()
+    
+    # Standardize phone format (remove special chars)
+    df['phone'] = df['phone'].str.replace(r'[^\d]', '', regex=True)
+    df['phone'] = df['phone'].str[:10]  # Keep only first 10 digits
+    
+    return df[['source_customer_id', 'first_name', 'last_name', 
+               'email', 'phone', 'source', 'extracted_at']]
+
+# Apply standardization
+df_sf_standard = standardize_data(pd.read_parquet('/staging/raw_salesforce.parquet'), 'Salesforce')
+df_shopify_standard = standardize_data(pd.read_parquet('/staging/raw_shopify.parquet'), 'Shopify')
+df_loyalty_standard = standardize_data(pd.read_parquet('/staging/raw_loyalty.parquet'), 'Loyalty')
+
+# Combine all sources
+df_combined = pd.concat([df_sf_standard, df_shopify_standard, df_loyalty_standard], 
+                        ignore_index=True)
+
+df_combined.to_parquet('/staging/standardized_customers.parquet')
+```
+
+**Step 3: Identify and Deduplicate Records**
+
+**Theory: Entity Resolution (Record Matching)**
+```
+Problem: Same customer, different systems
+  John Smith, john@email.com (Salesforce)
+  J. Smith, john@email.com (Shopify)
+  john_smith, john@email.com (Loyalty)
+
+Solution: Match on multiple fields
+├─ Exact Match: Same email → Same customer
+├─ Fuzzy Match: Similar names + Email → Same customer
+└─ Business Logic: Email + Phone → Same customer
+```
+
+```python
+from fuzzywuzzy import fuzz
+import hashlib
+
+def identify_duplicates(df):
+    """
+    Theory: Duplicate Detection Strategy
+    
+    Approach 1: Exact Match (Fast)
+    - Same email → Same customer
+    - Same phone → Same customer
+    
+    Approach 2: Fuzzy Match (Slower but more accurate)
+    - Name similarity > 90% + Email match → Same customer
+    
+    Approach 3: Composite Keys
+    - Hash of (name + email) → Same customer
+    """
+    
+    # Strategy 1: Exact email match
+    email_duplicates = df[df.duplicated(subset=['email'], keep=False)]
+    
+    # Strategy 2: Exact phone match (exclude null)
+    phone_duplicates = df[(df['phone'].notna()) & 
+                         (df.duplicated(subset=['phone'], keep=False))]
+    
+    # Combine known duplicates
+    duplicate_groups = {}
+    group_id = 0
+    
+    for email in df['email'].unique():
+        if pd.isna(email):
+            continue
+        records = df[df['email'] == email]
+        if len(records) > 1:
+            duplicate_groups[email] = group_id
+            group_id += 1
+    
+    # Apply fuzzy matching for unmatched records
+    unmatched = df[~df['email'].isin(duplicate_groups.keys())]
+    
+    for idx, row in unmatched.iterrows():
+        for email in df['email'].unique():
+            if pd.isna(email):
+                continue
+            matching_records = df[df['email'] == email]
+            
+            # Calculate name similarity
+            name_similarity = fuzz.token_sort_ratio(
+                f"{row['first_name']} {row['last_name']}",
+                f"{matching_records['first_name'].iloc[0]} {matching_records['last_name'].iloc[0]}"
+            )
+            
+            # If names are very similar AND emails contain same domain
+            if (name_similarity > 90 and 
+                row['email'].split('@')[1] == email.split('@')[1]):
+                duplicate_groups[row['email']] = duplicate_groups.get(email, group_id)
+                group_id += 1
+                break
+    
+    # Assign duplicate group IDs
+    df['duplicate_group_id'] = df['email'].map(duplicate_groups)
+    
+    return df
+
+df_with_duplicates = identify_duplicates(df_combined)
+
+# Check results
+print("Duplicate groups found:")
+dup_groups = df_with_duplicates[df_with_duplicates['duplicate_group_id'].notna()]
+print(dup_groups.groupby('duplicate_group_id').size())
+```
+
+**Step 4: Create Master Customer Record**
+
+**Theory: Survivorship Rules**
+```
+When merging duplicates, which value survives?
+
+Rule 1: Most Recent
+├─ Use most recently updated value
+└─ Example: Latest email address
+
+Rule 2: Most Complete
+├─ Use record with most non-null fields
+└─ Example: Phone from most complete record
+
+Rule 3: Most Reliable Source
+├─ Prioritize trusted systems
+└─ Example: Salesforce > Shopify > Loyalty
+
+Rule 4: Longest Record
+├─ Use longest/most detailed text
+└─ Example: Most detailed name
+```
+
+```python
+def create_master_record(group_df):
+    """
+    Theory: Master Record Creation
+    - Combine information from multiple sources
+    - Apply survivorship rules
+    - Create single customer profile
+    """
+    
+    # Rule 1: Most recent email
+    most_recent_idx = group_df['extracted_at'].idxmax()
+    master_email = group_df.loc[most_recent_idx, 'email']
+    
+    # Rule 2: Most complete phone (longest non-null)
+    phones = group_df[group_df['phone'].notna()]['phone']
+    master_phone = phones.iloc[0] if len(phones) > 0 else None
+    
+    # Rule 3: Most reliable source (priority order)
+    source_priority = {'Salesforce': 1, 'Shopify': 2, 'Loyalty': 3}
+    best_source = min(group_df['source'].values, 
+                     key=lambda x: source_priority.get(x, 999))
+    
+    # Rule 4: Combine first/last names (use longest)
+    first_names = group_df['first_name'].dropna()
+    master_first = max(first_names, key=len) if len(first_names) > 0 else None
+    
+    last_names = group_df['last_name'].dropna()
+    master_last = max(last_names, key=len) if len(last_names) > 0 else None
+    
+    return {
+        'customer_id': hashlib.md5(f"{master_email}{master_phone}".encode()).hexdigest()[:16],
+        'first_name': master_first,
+        'last_name': master_last,
+        'email': master_email,
+        'phone': master_phone,
+        'source_count': len(group_df),
+        'primary_source': best_source,
+        'customer_since': group_df['extracted_at'].min(),
+        'last_updated': group_df['extracted_at'].max()
+    }
+
+# Create master records
+master_records = []
+
+# Group by duplicate_group_id OR treat non-duplicates as single record
+for group_id in df_with_duplicates['duplicate_group_id'].unique():
+    if pd.isna(group_id):
+        # Single records (no duplicates)
+        single_records = df_with_duplicates[df_with_duplicates['duplicate_group_id'].isna()]
+        for _, row in single_records.iterrows():
+            group_df = pd.DataFrame([row])
+            master_records.append(create_master_record(group_df))
+    else:
+        group_df = df_with_duplicates[df_with_duplicates['duplicate_group_id'] == group_id]
+        master_records.append(create_master_record(group_df))
+
+df_master = pd.DataFrame(master_records)
+print(f"Created {len(df_master)} master customer records from {len(df_with_duplicates)} source records")
+```
+
+**Step 5: Load Master Data**
+
+```python
+def load_master_data(df_master):
+    """
+    Theory: Upsert Loading Pattern
+    
+    Why Upsert?
+    - Insert new customers
+    - Update existing customers (if data changed)
+    - Maintain referential integrity
+    - Support incremental loads
+    
+    Flow:
+    1. Try to match existing customer
+    2. If match found: UPDATE
+    3. If no match: INSERT
+    """
+    
+    from sqlalchemy import create_engine
+    engine = create_engine('postgresql://user:pass@localhost/warehouse')
+    
+    with engine.connect() as conn:
+        # SQL MERGE / UPSERT
+        upsert_sql = """
+        INSERT INTO dim_customer 
+        (customer_id, first_name, last_name, email, phone, 
+         source_count, primary_source, customer_since, last_updated)
+        VALUES 
+        (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (customer_id)
+        DO UPDATE SET
+            first_name = EXCLUDED.first_name,
+            last_name = EXCLUDED.last_name,
+            email = EXCLUDED.email,
+            phone = EXCLUDED.phone,
+            source_count = EXCLUDED.source_count,
+            primary_source = EXCLUDED.primary_source,
+            last_updated = EXCLUDED.last_updated;
+        """
+        
+        for _, row in df_master.iterrows():
+            values = (
+                row['customer_id'],
+                row['first_name'],
+                row['last_name'],
+                row['email'],
+                row['phone'],
+                row['source_count'],
+                row['primary_source'],
+                row['customer_since'],
+                row['last_updated']
+            )
+            conn.execute(upsert_sql, values)
+        
+        conn.commit()
+    
+    print(f"Successfully loaded {len(df_master)} master customer records")
+
+load_master_data(df_master)
+```
+
+**Complete Process Summary:**
+```
+┌─────────────────────────────────────────────────────────┐
+│ EXTRACT (Parallel)                                      │
+│ Salesforce + Shopify + Loyalty  → 3 staging files      │
+│ Time: 20 min                                            │
+└────────────┬────────────────────────────────────────────┘
+             │
+┌────────────▼────────────────────────────────────────────┐
+│ STANDARDIZE                                              │
+│ Align schemas, fix formats, clean text                  │
+│ Time: 5 min                                              │
+└────────────┬────────────────────────────────────────────┘
+             │
+┌────────────▼────────────────────────────────────────────┐
+│ COMBINE & DEDUPLICATE                                    │
+│ Merge sources, identify duplicates (3.2M → 2.8M)       │
+│ Time: 15 min                                             │
+└────────────┬────────────────────────────────────────────┘
+             │
+┌────────────▼────────────────────────────────────────────┐
+│ CREATE MASTER RECORDS                                    │
+│ Apply survivorship rules, create unified profiles       │
+│ Time: 10 min                                             │
+└────────────┬────────────────────────────────────────────┘
+             │
+┌────────────▼────────────────────────────────────────────┐
+│ LOAD (Upsert)                                            │
+│ Insert new + Update existing customers                  │
+│ Time: 25 min                                             │
+└────────────┬────────────────────────────────────────────┘
+             │
+        Total: ~75 minutes for 3.2M records
+        Final: 2.8M unified customer profiles
+```
+
+---
+
+### Application 2: Real-Time Sales Transaction ETL
+
+**Business Problem:**
+E-commerce company needs real-time sales dashboards updated within 5 minutes of order placement.
+
+**Theory: Stream Processing vs Batch**
+```
+Batch ETL:
+├─ Load at 2:00 AM daily
+├─ Latency: 22 hours (for 1:00 PM order)
+└─ Not suitable for real-time dashboards
+
+Stream ETL:
+├─ Process continuously as orders arrive
+├─ Latency: < 5 minutes
+└─ True real-time analytics
+```
+
+**Implementation: Kafka + Python**
+
+```python
+from kafka import KafkaConsumer, KafkaProducer
+import json
+from datetime import datetime
+import psycopg2
+
+# Step 1: Consume events from Kafka
+def consume_sales_events():
+    """
+    Theory: Event Streaming
+    
+    Orders flow through Kafka topic:
+    Order System → Kafka Topic (sales-orders)
+                  ├─ Consumer 1: Transform
+                  ├─ Consumer 2: Validate
+                  └─ Consumer 3: Enrich
+    """
+    
+    consumer = KafkaConsumer(
+        'sales-orders',
+        bootstrap_servers=['kafka:9092'],
+        value_deserializer=lambda m: json.loads(m.decode('utf-8')),
+        group_id='sales-etl-group',
+        auto_offset_reset='earliest'
+    )
+    
+    for message in consumer:
+        order = message.value
+        print(f"Received order: {order['order_id']}")
+        
+        # Step 2: Transform
+        transformed_order = transform_order(order)
+        
+        # Step 3: Validate
+        if validate_order(transformed_order):
+            # Step 4: Enrich
+            enriched_order = enrich_order(transformed_order)
+            
+            # Step 5: Load
+            load_to_warehouse(enriched_order)
+
+def transform_order(order):
+    """
+    Theory: Stream Transformation
+    - Parse incoming data
+    - Standardize formats
+    - Calculate derived fields
+    """
+    
+    return {
+        'order_id': order['id'],
+        'customer_id': order['customer_id'],
+        'product_id': order['product_id'],
+        'quantity': int(order['qty']),
+        'unit_price': float(order['price']),
+        'total_amount': float(order['qty']) * float(order['price']),
+        'order_timestamp': datetime.fromisoformat(order['timestamp']),
+        'order_date': datetime.fromisoformat(order['timestamp']).date(),
+        'order_hour': datetime.fromisoformat(order['timestamp']).hour,
+        'source_system': 'ecommerce_platform',
+        'processed_timestamp': datetime.now()
+    }
+
+def validate_order(order):
+    """
+    Theory: Stream Validation
+    - Check critical business rules
+    - Reject invalid records early
+    - Log for debugging
+    """
+    
+    validations = [
+        ('customer_id', lambda x: x is not None),
+        ('product_id', lambda x: x is not None),
+        ('quantity', lambda x: x > 0),
+        ('unit_price', lambda x: x > 0),
+        ('total_amount', lambda x: x > 0),
+    ]
+    
+    for field, check in validations:
+        if not check(order.get(field)):
+            print(f"VALIDATION FAILED: {field} = {order.get(field)}")
+            return False
+    
+    return True
+
+def enrich_order(order):
+    """
+    Theory: Stream Enrichment
+    - Join with reference data
+    - Add contextual information
+    - Calculate metrics
+    """
+    
+    # Simulate enrichment (in practice, join with master tables)
+    enrichment = {
+        'customer_segment': get_customer_segment(order['customer_id']),
+        'product_category': get_product_category(order['product_id']),
+        'region': get_region(order['customer_id']),
+        'promotion_applied': check_promotion(order['product_id']),
+        'profit_margin': 0.30  # Example: 30% margin
+    }
+    
+    order.update(enrichment)
+    return order
+
+def load_to_warehouse(order):
+    """
+    Theory: Stream Loading with Deduplication
+    - Use idempotent keys (order_id)
+    - Handle late arrivals
+    - Maintain ordering
+    """
+    
+    connection = psycopg2.connect("dbname=warehouse user=etl password=pass")
+    cursor = connection.cursor()
+    
+    insert_sql = """
+    INSERT INTO fact_sales_stream 
+    (order_id, customer_id, product_id, quantity, unit_price, 
+     total_amount, customer_segment, product_category, region,
+     profit_margin, order_timestamp, processed_timestamp)
+    VALUES 
+    (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    ON CONFLICT (order_id) DO NOTHING;  -- Idempotency
+    """
+    
+    cursor.execute(insert_sql, (
+        order['order_id'],
+        order['customer_id'],
+        order['product_id'],
+        order['quantity'],
+        order['unit_price'],
+        order['total_amount'],
+        order['customer_segment'],
+        order['product_category'],
+        order['region'],
+        order['profit_margin'],
+        order['order_timestamp'],
+        order['processed_timestamp']
+    ))
+    
+    connection.commit()
+    cursor.close()
+    connection.close()
+
+# Start consuming
+if __name__ == "__main__":
+    consume_sales_events()
+```
+
+**Real-Time Dashboard Update Logic:**
+
+```sql
+-- Materialized View: Last 1 hour sales metrics
+CREATE MATERIALIZED VIEW sales_last_1h AS
+SELECT 
+    DATE_TRUNC('minute', order_timestamp)::timestamp as minute,
+    product_category,
+    COUNT(*) as order_count,
+    SUM(quantity) as total_quantity,
+    SUM(total_amount) as total_revenue,
+    AVG(unit_price) as avg_price,
+    COUNT(DISTINCT customer_id) as unique_customers
+FROM fact_sales_stream
+WHERE order_timestamp > NOW() - INTERVAL '1 hour'
+GROUP BY minute, product_category;
+
+-- Refresh every 5 minutes
+-- In cron: */5 * * * * psql -c "REFRESH MATERIALIZED VIEW CONCURRENTLY sales_last_1h"
+```
+
+---
+
+## End-to-End Workflow Examples
+
+### Example 1: Product Catalog ETL
+
+**Complete workflow with error handling and monitoring:**
+
+```python
+import logging
+from datetime import datetime
+import json
+
+# Setup logging
+logging.basicConfig(
+    filename=f'/logs/etl_{datetime.now().strftime("%Y%m%d")}.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+class ProductCatalogETL:
+    """
+    Theory: ETL Class Pattern
+    - Encapsulate extract, transform, load logic
+    - Maintain state between stages
+    - Handle errors gracefully
+    - Provide logging and monitoring
+    """
+    
+    def __init__(self):
+        self.start_time = datetime.now()
+        self.stats = {
+            'extracted': 0,
+            'transformed': 0,
+            'loaded': 0,
+            'errors': 0
+        }
+    
+    def run(self):
+        """Main ETL pipeline"""
+        try:
+            logging.info("Starting Product Catalog ETL")
+            
+            # Extract
+            raw_products = self.extract()
+            self.stats['extracted'] = len(raw_products)
+            
+            # Transform
+            transformed_products = self.transform(raw_products)
+            self.stats['transformed'] = len(transformed_products)
+            
+            # Validate
+            validated_products = self.validate(transformed_products)
+            
+            # Load
+            self.load(validated_products)
+            self.stats['loaded'] = len(validated_products)
+            
+            # Success
+            self.log_completion("SUCCESS")
+            
+        except Exception as e:
+            logging.error(f"ETL Failed: {str(e)}", exc_info=True)
+            self.log_completion("FAILED")
+            raise
+    
+    def extract(self):
+        """
+        Theory: Extraction Points
+        - Multiple source systems (B2B, Suppliers, Internal)
+        - Different formats (JSON, CSV, Database)
+        - Handle pagination, rate limits
+        """
+        logging.info("Starting extraction phase")
+        
+        all_products = []
+        
+        # Source 1: Internal database
+        logging.info("Extracting from internal database")
+        products_internal = self._extract_from_db()
+        all_products.extend(products_internal)
+        logging.info(f"  ├─ Extracted {len(products_internal)} products")
+        
+        # Source 2: Supplier API
+        logging.info("Extracting from supplier API")
+        products_supplier = self._extract_from_api()
+        all_products.extend(products_supplier)
+        logging.info(f"  ├─ Extracted {len(products_supplier)} products")
+        
+        # Source 3: B2B Partner
+        logging.info("Extracting from B2B partner")
+        products_b2b = self._extract_from_partner()
+        all_products.extend(products_b2b)
+        logging.info(f"  └─ Extracted {len(products_b2b)} products")
+        
+        return all_products
+    
+    def _extract_from_db(self):
+        """Extract from PostgreSQL database"""
+        import psycopg2
+        conn = psycopg2.connect("dbname=products_db user=etl password=pass")
+        cursor = conn.cursor()
+        
+        query = "SELECT sku, name, price, category, stock FROM products WHERE active = true"
+        cursor.execute(query)
+        
+        products = []
+        for row in cursor.fetchall():
+            products.append({
+                'sku': row[0],
+                'name': row[1],
+                'price': row[2],
+                'category': row[3],
+                'stock': row[4],
+                'source': 'internal_db'
+            })
+        
+        cursor.close()
+        conn.close()
+        return products
+    
+    def _extract_from_api(self):
+        """Extract from supplier REST API with pagination"""
+        import requests
+        
+        products = []
+        page = 1
+        page_size = 100
+        
+        while True:
+            url = f"https://supplier-api.com/products?page={page}&page_size={page_size}"
+            
+            try:
+                response = requests.get(url, timeout=30)
+                response.raise_for_status()
+            except requests.exceptions.RequestException as e:
+                logging.warning(f"API request failed: {e}")
+                break
+            
+            data = response.json()
+            
+            for item in data.get('items', []):
+                products.append({
+                    'sku': item['product_id'],
+                    'name': item['product_name'],
+                    'price': item['price_usd'],
+                    'category': item['category'],
+                    'stock': item['available_qty'],
+                    'source': 'supplier_api'
+                })
+            
+            if not data.get('has_next'):
+                break
+            
+            page += 1
+        
+        return products
+    
+    def _extract_from_partner(self):
+        """Extract from B2B partner (CSV file)"""
+        import pandas as pd
+        
+        try:
+            df = pd.read_csv('/incoming/b2b_products.csv')
+            products = []
+            
+            for _, row in df.iterrows():
+                products.append({
+                    'sku': row['product_code'],
+                    'name': row['product_name'],
+                    'price': float(row['unit_price']),
+                    'category': row['product_category'],
+                    'stock': int(row['qty_available']),
+                    'source': 'b2b_partner'
+                })
+            
+            return products
+        
+        except Exception as e:
+            logging.error(f"B2B extraction failed: {e}")
+            return []
+    
+    def transform(self, raw_products):
+        """
+        Theory: Transformation Pipeline
+        1. Standardization: Align schemas
+        2. Data Cleansing: Fix quality issues
+        3. Enrichment: Add business value
+        4. Aggregation: Prepare for loading
+        """
+        logging.info("Starting transformation phase")
+        
+        transformed = []
+        
+        for product in raw_products:
+            try:
+                # Standardize
+                std_product = {
+                    'product_id': str(product['sku']).strip().upper(),
+                    'product_name': product['name'].strip().title(),
+                    'unit_price': float(product['price']),
+                    'category': product['category'].strip().title(),
+                    'stock_quantity': int(product['stock']),
+                    'source_system': product['source'],
+                    'last_updated': datetime.now()
+                }
+                
+                # Enrich
+                std_product['price_tier'] = self._get_price_tier(std_product['unit_price'])
+                std_product['stock_status'] = self._get_stock_status(std_product['stock_quantity'])
+                std_product['margin_percent'] = self._calculate_margin(std_product['unit_price'])
+                
+                transformed.append(std_product)
+            
+            except ValueError as e:
+                logging.warning(f"Skipping product {product.get('sku')}: {e}")
+                self.stats['errors'] += 1
+                continue
+        
+        logging.info(f"Transformed {len(transformed)} products")
+        return transformed
+    
+    def _get_price_tier(self, price):
+        """Classify price into tiers"""
+        if price < 50:
+            return 'BUDGET'
+        elif price < 150:
+            return 'STANDARD'
+        elif price < 500:
+            return 'PREMIUM'
+        else:
+            return 'LUXURY'
+    
+    def _get_stock_status(self, quantity):
+        """Classify stock status"""
+        if quantity == 0:
+            return 'OUT_OF_STOCK'
+        elif quantity < 10:
+            return 'LOW'
+        elif quantity < 50:
+            return 'MEDIUM'
+        else:
+            return 'HIGH'
+    
+    def _calculate_margin(self, price):
+        """Calculate profit margin"""
+        # Example: 40% margin
+        return 40
+    
+    def validate(self, products):
+        """
+        Theory: Data Validation Gates
+        - Quality checks before load
+        - Reject bad data
+        - Log issues for investigation
+        """
+        logging.info("Starting validation phase")
+        
+        valid_products = []
+        
+        for product in products:
+            errors = []
+            
+            # Validation rules
+            if not product['product_id']:
+                errors.append("Missing product_id")
+            
+            if not product['product_name']:
+                errors.append("Missing product_name")
+            
+            if product['unit_price'] < 0:
+                errors.append("Negative price")
+            
+            if product['stock_quantity'] < 0:
+                errors.append("Negative stock")
+            
+            if not product['category']:
+                errors.append("Missing category")
+            
+            if errors:
+                logging.warning(f"Validation failed for {product.get('product_id')}: {', '.join(errors)}")
+                self.stats['errors'] += 1
+            else:
+                valid_products.append(product)
+        
+        logging.info(f"Validated {len(valid_products)} products ({self.stats['errors']} rejected)")
+        return valid_products
+    
+    def load(self, products):
+        """
+        Theory: UPSERT Loading
+        - Update if product exists (same product_id)
+        - Insert if new product
+        - Idempotent (safe to rerun)
+        """
+        logging.info("Starting load phase")
+        
+        import psycopg2
+        conn = psycopg2.connect("dbname=warehouse user=etl password=pass")
+        cursor = conn.cursor()
+        
+        upsert_sql = """
+        INSERT INTO dim_product 
+        (product_id, product_name, unit_price, category, 
+         stock_quantity, price_tier, stock_status, margin_percent,
+         source_system, last_updated)
+        VALUES 
+        (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (product_id)
+        DO UPDATE SET
+            product_name = EXCLUDED.product_name,
+            unit_price = EXCLUDED.unit_price,
+            category = EXCLUDED.category,
+            stock_quantity = EXCLUDED.stock_quantity,
+            price_tier = EXCLUDED.price_tier,
+            stock_status = EXCLUDED.stock_status,
+            margin_percent = EXCLUDED.margin_percent,
+            last_updated = EXCLUDED.last_updated
+        WHERE EXCLUDED.source_system = 'internal_db';  -- Internal data wins
+        """
+        
+        try:
+            for product in products:
+                cursor.execute(upsert_sql, (
+                    product['product_id'],
+                    product['product_name'],
+                    product['unit_price'],
+                    product['category'],
+                    product['stock_quantity'],
+                    product['price_tier'],
+                    product['stock_status'],
+                    product['margin_percent'],
+                    product['source_system'],
+                    product['last_updated']
+                ))
+            
+            conn.commit()
+            logging.info(f"Successfully loaded {len(products)} products")
+        
+        except Exception as e:
+            conn.rollback()
+            logging.error(f"Load failed: {e}")
+            raise
+        
+        finally:
+            cursor.close()
+            conn.close()
+    
+    def log_completion(self, status):
+        """Log ETL completion with statistics"""
+        duration = (datetime.now() - self.start_time).total_seconds()
+        
+        summary = f"""
+        ╔═════════════════════════════════════════╗
+        ║    ETL COMPLETION REPORT                ║
+        ╠═════════════════════════════════════════╣
+        ║ Status:     {status:<25}║
+        ║ Duration:   {duration:.2f} seconds{' '*15}║
+        ║ Extracted:  {self.stats['extracted']:<25}║
+        ║ Transformed:{self.stats['transformed']:<25}║
+        ║ Loaded:     {self.stats['loaded']:<25}║
+        ║ Errors:     {self.stats['errors']:<25}║
+        ╚═════════════════════════════════════════╝
+        """
+        
+        logging.info(summary)
+        print(summary)
+
+# Execute
+if __name__ == "__main__":
+    etl = ProductCatalogETL()
+    etl.run()
+```
+
+**Example 2: Data Warehouse Incremental Load**
+
+```python
+"""
+Theory: Incremental Loading Pattern
+- Previous load timestamp tracked
+- Only new/changed records extracted
+- Faster, more efficient than full reload
+- Common in data warehouse operations
+"""
+
+class IncrementalDataWarehouseLoad:
+    
+    def __init__(self, source_db, target_dw, table_config):
+        self.source_db = source_db
+        self.target_dw = target_dw
+        self.table_config = table_config  # Table name, key column, timestamp column
+    
+    def execute(self):
+        """Execute incremental load"""
+        
+        # Get last successful load timestamp
+        last_load_time = self.get_last_load_time()
+        print(f"Last load: {last_load_time}")
+        
+        # Extract changed records
+        changed_records = self.extract_changes(last_load_time)
+        print(f"Found {len(changed_records)} changed records")
+        
+        if changed_records:
+            # Transform
+            transformed = self.transform(changed_records)
+            
+            # Load
+            self.load_incremental(transformed)
+            
+            # Update load timestamp
+            self.update_load_metadata()
+    
+    def get_last_load_time(self):
+        """Get timestamp of last successful load"""
+        
+        # Query metadata table
+        query = """
+        SELECT last_load_time
+        FROM etl_metadata
+        WHERE table_name = %s
+        ORDER BY load_date DESC
+        LIMIT 1
+        """
+        
+        result = self.source_db.query(query, (self.table_config['table_name'],))
+        
+        if result:
+            return result[0]['last_load_time']
+        else:
+            # First load: get oldest record
+            return '1900-01-01'
+    
+    def extract_changes(self, since_time):
+        """Extract only changed records since last load"""
+        
+        timestamp_col = self.table_config['timestamp_column']
+        table_name = self.table_config['table_name']
+        
+        query = f"""
+        SELECT *
+        FROM {table_name}
+        WHERE {timestamp_col} > %s
+        ORDER BY {timestamp_col} ASC
+        """
+        
+        records = self.source_db.query(query, (since_time,))
+        return records
+    
+    def transform(self, records):
+        """Apply transformations"""
+        transformed = []
+        
+        for record in records:
+            # Apply business logic
+            record['processed_at'] = datetime.now()
+            record['load_version'] = 1
+            transformed.append(record)
+        
+        return transformed
+    
+    def load_incremental(self, records):
+        """
+        Theory: Incremental Load Strategies
+        
+        Strategy 1: Upsert (Insert or Update)
+        ├─ If key exists: UPDATE
+        └─ If key new: INSERT
+        
+        Strategy 2: Append Only
+        ├─ Always INSERT
+        ├─ Keeps history
+        └─ Good for fact tables
+        
+        Strategy 3: Replace Partition
+        ├─ Delete partition for load_date
+        ├─ Insert new data
+        └─ Atomic operation
+        """
+        
+        # Use Upsert strategy
+        upsert_sql = """
+        INSERT INTO target_table (id, name, value, processed_at)
+        SELECT %s, %s, %s, %s
+        ON CONFLICT (id)
+        DO UPDATE SET
+            name = EXCLUDED.name,
+            value = EXCLUDED.value,
+            processed_at = EXCLUDED.processed_at;
+        """
+        
+        for record in records:
+            self.target_dw.execute(upsert_sql, (
+                record['id'],
+                record['name'],
+                record['value'],
+                record['processed_at']
+            ))
+        
+        self.target_dw.commit()
+    
+    def update_load_metadata(self):
+        """Record load completion for next run"""
+        
+        insert_sql = """
+        INSERT INTO etl_metadata (table_name, last_load_time, load_date, status)
+        VALUES (%s, %s, %s, %s)
+        """
+        
+        self.target_dw.execute(insert_sql, (
+            self.table_config['table_name'],
+            datetime.now(),
+            datetime.now().date(),
+            'SUCCESS'
+        ))
+        
+        self.target_dw.commit()
+```
+
+---
+
+**Summary of Practical Applications:**
+
+| Application | Frequency | Complexity | Key Technique |
+|------------|-----------|-----------|----------------|
+| Customer Consolidation | Daily | High | Entity Resolution |
+| Real-Time Sales | Continuous | Medium | Stream Processing |
+| Product Catalog | Weekly | Medium | Multi-source Extract |
+| Data Warehouse | Nightly | Low | Incremental Load |
+| Financial Reconciliation | Monthly | Very High | Complex Joins |
+
+Each application demonstrates different ETL challenges and solutions, providing templates for real-world implementations.
+
+---
+
+## Interview Concepts: Basic to Advanced
+
+### Level 1: Fundamental Concepts (Entry-Level)
+
+#### 1.1 What is ETL? Why do we need it?
+
+**Theory:**
+ETL is the backbone of data warehousing and business intelligence. It solves the problem of consolidating data from multiple heterogeneous systems into a unified format suitable for analysis.
+
+**Why we need ETL:**
+```
+Real-world data challenges:
+├─ Data Silos: Information scattered across systems
+│  └─ Problem: Can't get complete view
+│
+├─ Data Quality: Inconsistent formats, duplicates, nulls
+│  └─ Problem: Unreliable analytics
+│
+├─ Data Integration: Different schemas, no common keys
+│  └─ Problem: Can't join data from multiple sources
+│
+└─ Business Requirement: Need to analyze combined data
+   └─ Solution: ETL consolidates and cleanses everything
+```
+
+**Example:**
+```
+Airline Company has:
+- Reservation System (SQL Server): Bookings, Customers
+- Loyalty Program (PostgreSQL): Points, Rewards
+- Billing System (Oracle): Invoices, Payments
+- Mobile App (MongoDB): User interactions, preferences
+
+Problem: Can't answer "What's my most valuable customer?" 
+         (Requires data from all 4 systems)
+
+Solution: ETL consolidates all into Data Warehouse
+         → Create unified customer profile
+         → Calculate lifetime value
+         → Answer business questions
+```
+
+#### 1.2 Extract, Transform, Load - What happens in each phase?
+
+**Theory:**
+
+```
+EXTRACT:
+├─ Read data from source systems
+├─ Handle different formats (CSV, JSON, SQL, APIs)
+├─ Deal with connection issues
+└─ Minimize impact on source systems
+
+TRANSFORM:
+├─ Cleanse: Remove/fix bad data
+├─ Validate: Check data quality
+├─ Standardize: Make formats consistent
+├─ Enrich: Add business value
+└─ Aggregate: Combine related data
+
+LOAD:
+├─ Write to target data warehouse
+├─ Ensure data integrity
+├─ Handle duplicates (insert vs update)
+└─ Maintain audit trail
+```
+
+**Practical Example:**
+```python
+# EXTRACT: Get sales data from multiple stores
+extract_store_1_csv = pd.read_csv('store_1_sales.csv')  # File
+extract_store_2_api = requests.get('api.store2.com/sales').json()  # API
+extract_store_3_db = pd.read_sql('SELECT * FROM sales', db_connection)  # Database
+
+# TRANSFORM: Make consistent
+sales_data = pd.concat([extract_store_1_csv, extract_store_2_api, extract_store_3_db])
+sales_data['sale_amount'] = sales_data['sale_amount'].astype(float)  # Standardize
+sales_data['sale_date'] = pd.to_datetime(sales_data['sale_date'])    # Normalize dates
+sales_data = sales_data.dropna(subset=['sale_amount'])               # Remove invalid
+sales_data['profit'] = sales_data['sale_amount'] * 0.30              # Enrich
+
+# LOAD: Write to warehouse
+sales_data.to_sql('fact_sales', warehouse_connection, if_exists='append')
+```
+
+#### 1.3 Batch vs Real-Time ETL
+
+**Theory:**
+```
+BATCH ETL:
+├─ Scheduled at specific times (2 AM, midnight)
+├─ Processes large volume at once
+├─ Lower cost (off-peak compute)
+├─ Higher latency (up to 24 hours)
+└─ Example: Daily sales summary
+
+REAL-TIME ETL:
+├─ Processes events as they happen
+├─ Lower latency (< 5 minutes)
+├─ Higher cost (always-on compute)
+├─ Smaller volume per unit
+└─ Example: Live customer transactions
+```
+
+**Comparison:**
+| Aspect | Batch | Real-Time |
+|--------|-------|-----------|
+| **Frequency** | Scheduled (nightly) | Continuous (24/7) |
+| **Volume** | Large (millions) | Variable (per event) |
+| **Latency** | Hours | Minutes/Seconds |
+| **Cost** | Lower | Higher |
+| **Use Case** | Reports, Analytics | Dashboards, Alerts |
+| **Tools** | Airflow, SSIS | Kafka, Spark Streaming |
+
+**Example Decision:**
+```
+Business need: "What were yesterday's sales?"
+→ Use BATCH ETL (Daily at 2 AM)
+
+Business need: "What are sales RIGHT NOW?"
+→ Use REAL-TIME ETL (Continuous streaming)
+```
+
+#### 1.4 What is Staging Area?
+
+**Theory:**
+A staging area is temporary storage between source and warehouse for:
+1. **Safety**: Validate before loading to production
+2. **Debugging**: Keep intermediate results
+3. **Performance**: Optimize bulk operations
+4. **Rollback**: Restore from checkpoint on failure
+
+```
+Source → Raw Staging → Cleaned Staging → Data Warehouse
+         (Copy)        (Validated)        (Final)
+```
+
+**Example:**
+```sql
+-- Raw Staging (Exact copy from source)
+CREATE TABLE staging_raw_sales (
+    order_id INT,
+    customer_id INT,
+    amount DECIMAL,
+    sale_date VARCHAR(100)  -- Still a string!
+);
+
+-- Load raw data
+COPY staging_raw_sales FROM 'sales.csv' WITH CSV;
+
+-- Validate and transform
+CREATE TABLE staging_clean_sales AS
+SELECT 
+    order_id,
+    customer_id,
+    CAST(amount AS DECIMAL(10,2)) as amount,  -- Convert type
+    TO_DATE(sale_date, 'YYYY-MM-DD') as sale_date,  -- Parse date
+    CURRENT_TIMESTAMP as processed_at
+FROM staging_raw_sales
+WHERE amount > 0 AND customer_id IS NOT NULL;  -- Validate
+
+-- Load to warehouse
+INSERT INTO fact_sales
+SELECT * FROM staging_clean_sales;
+```
+
+#### 1.5 What is Idempotency?
+
+**Theory:**
+An ETL process is idempotent if running it multiple times produces the same result as running it once.
+
+**Why it matters:**
+```
+Scenario: ETL fails after processing 50% of records
+Normal: Re-run extracts all data again
+        → Duplicates in warehouse
+        
+Idempotent: Re-run only affects final state, not intermediate
+        → Safe to retry without side effects
+```
+
+**Non-Idempotent Example (BAD):**
+```python
+# Running this twice adds records twice!
+INSERT INTO sales_summary (total_amount)
+SELECT SUM(amount) FROM transactions;
+
+# First run: total_amount = 100000
+# Second run: total_amount = 200000 (WRONG!)
+```
+
+**Idempotent Example (GOOD):**
+```python
+# Running this twice produces same result
+TRUNCATE TABLE sales_summary;  # Clear first
+INSERT INTO sales_summary (total_amount)
+SELECT SUM(amount) FROM transactions;
+
+# First run: total_amount = 100000
+# Second run: total_amount = 100000 (CORRECT!)
+
+# Or use MERGE
+MERGE INTO sales_summary s
+USING (SELECT SUM(amount) as total FROM transactions) t
+ON 1=1
+WHEN MATCHED THEN UPDATE SET s.total_amount = t.total
+WHEN NOT MATCHED THEN INSERT VALUES (t.total);
+```
+
+---
+
+### Level 2: Intermediate Concepts (Mid-Level)
+
+#### 2.1 Star Schema vs Snowflake Schema
+
+**Theory:**
+Data warehouse schemas optimize for analytical queries:
+
+```
+STAR SCHEMA (Denormalized):
+            ┌─────────────┐
+            │ dim_date    │
+            └────────┬────┘
+                     │
+        ┌────────────┼────────────┐
+        │            │            │
+    ┌───▼──┐    ┌────▼─────┐  ┌──▼───┐
+    │      │    │           │  │      │
+┌───┴──────┴──┐ │FACT_SALES │  └──────┘
+│dim_customer │ │ (Central) │   dim_product
+└─────────────┘ └───────────┘
+    
+Characteristics:
+├─ Single fact table surrounded by dimensions
+├─ Denormalized dimensions (redundant data)
+├─ Faster queries (fewer joins)
+├─ Larger storage (more redundancy)
+└─ Easier for reporting
+
+SNOWFLAKE SCHEMA (Normalized):
+            ┌──────────┐
+            │dim_date  │
+            └────┬─────┘
+                 │
+         ┌───────▼────────┐
+         │ FACT_SALES     │
+         └───────┬────────┘
+                 │
+        ┌────────┼────────┐
+        │        │        │
+    ┌───▼──┐ ┌──▼───┐ ┌──▼──┐
+    │      │ │      │ │     │
+┌───┴──────┴────┐   │ └──────┘
+│ dim_customer  │   │
+├───────────────┤   │
+│ cust_id (FK)  │   │
+│ cust_segment  │   │
+│ segment_id(FK)─── segment
+└───────────────┘   
+
+Characteristics:
+├─ Normalized dimensions
+├─ Less redundancy
+├─ More joins needed
+├─ Smaller storage
+└─ Better for complex queries
+```
+
+**When to use:**
+```
+STAR SCHEMA:
+├─ Simple queries needed
+├─ Limited data volume
+├─ Best query performance priority
+└─ Example: Small retail BI
+
+SNOWFLAKE SCHEMA:
+├─ Complex, large datasets
+├─ Storage cost is concern
+├─ Many different queries
+└─ Example: Enterprise data warehouse
+```
+
+**Example:**
+```sql
+-- STAR SCHEMA
+SELECT 
+    d.month_name,
+    c.region,
+    p.category,
+    SUM(f.amount) as total_sales
+FROM fact_sales f
+JOIN dim_date d ON f.date_key = d.date_key
+JOIN dim_customer c ON f.customer_key = c.customer_key
+JOIN dim_product p ON f.product_key = p.product_key
+GROUP BY d.month_name, c.region, p.category;
+
+-- SNOWFLAKE SCHEMA (More joins)
+SELECT 
+    d.month_name,
+    s.segment_name,
+    p.category,
+    SUM(f.amount) as total_sales
+FROM fact_sales f
+JOIN dim_date d ON f.date_key = d.date_key
+JOIN dim_customer c ON f.customer_key = c.customer_key
+JOIN dim_segment s ON c.segment_id = s.segment_id  -- Extra join
+JOIN dim_product p ON f.product_key = p.product_key
+GROUP BY d.month_name, s.segment_name, p.category;
+```
+
+#### 2.2 Slowly Changing Dimensions (SCD)
+
+**Theory:**
+Dimensions (master data) change over time. SCDs handle dimension history:
+
+```
+PROBLEM:
+Product dimension changes:
+  Product 100: Category = "Electronics"
+  Product 100: Category = "Home & Kitchen" (Changed!)
+  
+How do we track this change in fact table?
+```
+
+**SCD Types:**
+
+```
+TYPE 0: No history (Ignore changes)
+├─ Product 100 = "Electronics" (Always)
+└─ When category changes: Do nothing
+
+TYPE 1: Overwrite (No history)
+├─ Product 100 = "Electronics" → "Home & Kitchen"
+├─ Old value lost
+└─ Good for corrections
+
+TYPE 2: Add new row (Keep history)
+├─ Product 100 v1: "Electronics" (2020-01-01 to 2024-12-31)
+├─ Product 100 v2: "Home & Kitchen" (2025-01-01 to present)
+└─ Historical queries still work
+
+TYPE 3: Add column (Keep one previous)
+├─ Product 100: category = "Home & Kitchen", previous_category = "Electronics"
+└─ Only one historical value
+
+TYPE 4: Separate table (Audit trail)
+├─ Current: Product 100 = "Home & Kitchen"
+├─ History table: All past values
+└─ Detailed audit trail
+```
+
+**Practical Examples:**
+
+```sql
+-- SCD TYPE 1: Update existing (BAD for historical analysis)
+UPDATE dim_product 
+SET category = 'Home & Kitchen'
+WHERE product_id = 100;
+
+-- SCD TYPE 2: Create version record (GOOD for historical analysis)
+UPDATE dim_product 
+SET end_date = GETDATE() - 1, is_current = 0
+WHERE product_id = 100 AND is_current = 1;
+
+INSERT INTO dim_product (product_id, category, start_date, end_date, is_current)
+VALUES (100, 'Home & Kitchen', GETDATE(), NULL, 1);
+
+-- Query still works for historical analysis:
+SELECT p.product_id, p.category, f.amount
+FROM fact_sales f
+JOIN dim_product p ON f.product_key = p.product_key
+WHERE p.start_date <= f.sale_date AND f.sale_date < p.end_date;
+-- Returns correct category for each historical transaction
+```
+
+#### 2.3 Fact Table Types
+
+**Theory:**
+Different types of fact tables serve different purposes:
+
+```
+TRANSACTIONAL FACT TABLE:
+├─ One row per transaction
+├─ Highest granularity
+├─ Largest size
+└─ Example: Each order = 1 row
+
+    order_id | customer_id | product_id | amount
+       1001  |     100     |    50      | 25.99
+
+PERIODIC SNAPSHOT FACT TABLE:
+├─ One row per period (day, month)
+├─ Lower granularity
+├─ Medium size
+└─ Example: Daily sales summary
+
+    date | product_id | total_sales | order_count
+  2025-01-01 |   50    |  10,000     |    400
+
+ACCUMULATING SNAPSHOT FACT TABLE:
+├─ One row per process instance
+├─ Tracks multiple dates
+├─ For processes with stages
+└─ Example: Order from creation to delivery
+
+    order_id | order_date | ship_date | delivery_date | amount
+       1001  | 2025-01-01 | 2025-01-03 | 2025-01-05  | 100.00
+```
+
+**When to use:**
+```
+Transactional:
+├─ Need detailed drilling down
+├─ Storage not a constraint
+└─ Example: Sales transactions
+
+Periodic:
+├─ Summary reports
+├─ Storage optimization needed
+└─ Example: Daily sales dashboard
+
+Accumulating:
+├─ Multi-stage processes
+├─ Track process milestones
+└─ Example: Customer support tickets
+```
+
+#### 2.4 Conformed Dimensions
+
+**Theory:**
+Conformed dimensions are shared across fact tables with consistent values.
+
+```
+PROBLEM:
+fact_sales uses dim_customer (100 rows)
+fact_support uses dim_customer (different data!)
+→ "Customer 1" means different things
+
+SOLUTION: CONFORMED DIMENSION
+├─ Single dim_customer shared by all fact tables
+├─ Consistent customer_id, customer_name, etc.
+└─ Enables cross-fact analysis
+```
+
+**Example:**
+```sql
+-- CONFORMED DIMENSION (shared across fact tables)
+CREATE TABLE dim_customer (
+    customer_key INT PRIMARY KEY,
+    customer_id VARCHAR(50),
+    customer_name VARCHAR(100),
+    region VARCHAR(50),
+    segment VARCHAR(50),
+    start_date DATE,
+    end_date DATE
+);
+
+-- Fact tables reference same dimension
+CREATE TABLE fact_sales (
+    customer_key INT,  -- References dim_customer
+    amount DECIMAL,
+    FOREIGN KEY (customer_key) REFERENCES dim_customer(customer_key)
+);
+
+CREATE TABLE fact_support (
+    customer_key INT,  -- SAME dimension
+    issue_count INT,
+    FOREIGN KEY (customer_key) REFERENCES dim_customer(customer_key)
+);
+
+-- Now can analyze together:
+SELECT 
+    c.customer_name,
+    SUM(s.amount) as total_sales,
+    SUM(sup.issue_count) as total_issues
+FROM dim_customer c
+LEFT JOIN fact_sales s ON c.customer_key = s.customer_key
+LEFT JOIN fact_support sup ON c.customer_key = sup.customer_key
+GROUP BY c.customer_name;
+```
+
+#### 2.5 ETL vs ELT - When to choose?
+
+**Theory:**
+```
+ETL (Traditional):
+├─ Extract → Transform (External) → Load
+├─ Transform on separate server
+├─ Needs staging area
+├─ Higher infrastructure cost
+└─ Good for: Legacy systems, limited DW
+
+ELT (Modern):
+├─ Extract → Load → Transform (In DW)
+├─ Transform inside data warehouse
+├─ No external staging needed
+├─ Lower cost (use DW compute)
+└─ Good for: Cloud DW, modern infrastructure
+```
+
+**Decision Matrix:**
+```
+Choose ETL when:
+├─ Source systems can't handle extraction load
+├─ Data warehouse has limited compute
+├─ Sensitive data (transform before loading)
+└─ Using on-premises traditional DW
+
+Choose ELT when:
+├─ Cloud data warehouse (Snowflake, BigQuery)
+├─ Large data volume
+├─ DW has abundant compute capacity
+└─ Need flexibility in transformations
+```
+
+---
+
+### Level 3: Advanced Concepts (Senior-Level)
+
+#### 3.1 Surrogate Keys vs Natural Keys
+
+**Theory:**
+```
+NATURAL KEY:
+├─ Comes from business data
+├─ Example: customer_id, product_code
+├─ Meaning: Identifies record in real world
+└─ Problem: Can change (merger, ID system change)
+
+SURROGATE KEY:
+├─ Artificial ID generated by system
+├─ Example: customer_key (auto-increment)
+├─ Meaning: Only identifies in this table
+└─ Benefit: Never changes (stable)
+```
+
+**Why Surrogate Keys in Dimensions?**
+
+```
+Problem with Natural Key:
+Customer changes ID during company merger
+├─ Old facts: customer_id = "CUST-100"
+├─ New facts: customer_id = "NEW-500"
+└─ Same physical customer, different IDs!
+
+Solution with Surrogate Key:
+├─ Assign customer_key = 1 to physical customer
+├─ Old facts: customer_key = 1
+├─ New facts: customer_key = 1
+└─ Always same key, regardless of ID change
+```
+
+**Implementation:**
+```sql
+-- Dimension with both keys
+CREATE TABLE dim_customer (
+    customer_key INT PRIMARY KEY,      -- Surrogate (never changes)
+    customer_id VARCHAR(50) UNIQUE,    -- Natural (may change)
+    customer_name VARCHAR(100),
+    region VARCHAR(50),
+    start_date DATE,
+    end_date DATE
+);
+
+-- Fact table uses surrogate key
+CREATE TABLE fact_sales (
+    sale_key INT PRIMARY KEY,
+    customer_key INT,                  -- Surrogate from dimension
+    amount DECIMAL,
+    sale_date DATE,
+    FOREIGN KEY (customer_key) REFERENCES dim_customer
+);
+
+-- Loading process maps natural to surrogate
+INSERT INTO fact_sales (sale_key, customer_key, amount, sale_date)
+SELECT 
+    ROW_NUMBER() OVER (ORDER BY s.sale_id) as sale_key,
+    dc.customer_key,                        -- Get surrogate key
+    s.amount,
+    s.sale_date
+FROM staging_sales s
+JOIN dim_customer dc ON s.customer_id = dc.customer_id;
+```
+
+#### 3.2 Change Data Capture (CDC)
+
+**Theory:**
+CDC identifies and captures only the data that changed since last extraction.
+
+```
+PROBLEM:
+Extract 10M records daily, but only 100K changed
+→ Wasting 99% processing capacity
+
+SOLUTION:
+Use CDC to capture only 100K changes
+→ 100x faster extraction
+```
+
+**CDC Methods:**
+
+```
+1. QUERY-BASED:
+   └─ SELECT * WHERE modified_date > last_run_time
+   ├─ Pros: Simple, no infrastructure change
+   └─ Cons: Still reads large table
+
+2. LOG-BASED:
+   └─ Read from database transaction log
+   ├─ Pros: Captures all changes, efficient
+   └─ Cons: Database-specific, complex setup
+
+3. TRIGGER-BASED:
+   └─ Database triggers write changes to audit table
+   ├─ Pros: Automatic capture
+   └─ Cons: Performance impact on source
+
+4. QUERY NOTIFICATION:
+   └─ Database notifies when table changes
+   ├─ Pros: Real-time, no polling
+   └─ Cons: Limited database support
+```
+
+**Practical Implementation:**
+
+```sql
+-- Step 1: Add tracking columns to source
+ALTER TABLE customers ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE customers ADD COLUMN is_deleted BIT DEFAULT 0;
+
+-- Step 2: Create trigger to update timestamp
+CREATE TRIGGER trg_customer_updated
+AFTER UPDATE ON customers
+FOR EACH ROW
+BEGIN
+    UPDATE customers SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+-- Step 3: Store last extraction time
+CREATE TABLE etl_checkpoint (
+    table_name VARCHAR(100),
+    last_extracted TIMESTAMP
+);
+
+-- Step 4: Extract only changes
+DECLARE @last_run TIMESTAMP = (
+    SELECT last_extracted FROM etl_checkpoint 
+    WHERE table_name = 'customers'
+);
+
+SELECT * FROM customers 
+WHERE updated_at > @last_run OR is_deleted = 1;
+
+-- Step 5: Update checkpoint
+UPDATE etl_checkpoint 
+SET last_extracted = CURRENT_TIMESTAMP 
+WHERE table_name = 'customers';
+```
+
+#### 3.3 Data Lineage & Metadata Management
+
+**Theory:**
+Data lineage tracks where data comes from, how it's transformed, and where it goes.
+
+```
+Benefits:
+├─ Debugging: Trace bad data to source
+├─ Impact Analysis: Understand changes effect
+├─ Compliance: Audit data flow
+├─ Documentation: Auto-generated documentation
+└─ Governance: Enforce data policies
+```
+
+**Tracking Data Lineage:**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ UPSTREAM LINEAGE (Where did this come from?)            │
+│                                                          │
+│ Salesforce Customer Data                                │
+│       ↓                                                   │
+│ Extract to staging_raw_customer                         │
+│       ↓                                                   │
+│ Transform (standardize, deduplicate)                    │
+│       ↓                                                   │
+│ Load to dim_customer                                    │
+│       ↓                                                   │
+├─────────────────────────────────────────────────────────┤
+│ DOWNSTREAM LINEAGE (Where is this data going?)          │
+│                                                          │
+│ dim_customer                                            │
+│       ↓                                                   │
+│ fact_sales, fact_support, dim_customer_analytics       │
+│       ↓                                                   │
+│ Customer 360 Dashboard                                  │
+│ Sales Analytics Report                                  │
+│ Support Ticket Analytics                                │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Implementation:**
+
+```python
+import logging
+import json
+from datetime import datetime
+
+class DataLineageTracker:
+    """Track complete data lineage through ETL"""
+    
+    def __init__(self):
+        self.lineage_log = []
+    
+    def log_source(self, table_name, source_system, record_count):
+        """Log source data extraction"""
+        event = {
+            'timestamp': datetime.now().isoformat(),
+            'event_type': 'EXTRACT',
+            'source': source_system,
+            'table': table_name,
+            'record_count': record_count,
+            'operation': f'Extract {record_count} records from {source_system}'
+        }
+        self.lineage_log.append(event)
+        
+    def log_transformation(self, from_table, to_table, transformation_type, record_count):
+        """Log transformation step"""
+        event = {
+            'timestamp': datetime.now().isoformat(),
+            'event_type': 'TRANSFORM',
+            'from': from_table,
+            'to': to_table,
+            'type': transformation_type,
+            'record_count': record_count,
+            'operation': f'{transformation_type}: {from_table} → {to_table}'
+        }
+        self.lineage_log.append(event)
+    
+    def log_load(self, from_table, to_table, record_count):
+        """Log load to target"""
+        event = {
+            'timestamp': datetime.now().isoformat(),
+            'event_type': 'LOAD',
+            'source': from_table,
+            'target': to_table,
+            'record_count': record_count,
+            'operation': f'Load {record_count} records to {to_table}'
+        }
+        self.lineage_log.append(event)
+    
+    def generate_lineage_graph(self):
+        """Generate visual lineage"""
+        print("\n=== DATA LINEAGE GRAPH ===\n")
+        for event in self.lineage_log:
+            print(f"{event['timestamp']}: {event['operation']}")
+    
+    def generate_lineage_json(self, filename):
+        """Export lineage for tools like Apache Atlas"""
+        with open(filename, 'w') as f:
+            json.dump(self.lineage_log, f, indent=2)
+
+# Usage in ETL
+tracker = DataLineageTracker()
+
+# Extract
+tracker.log_source('customers', 'Salesforce', 10000)
+
+# Transform
+tracker.log_transformation('staging_raw_customer', 'staging_clean_customer', 
+                          'Deduplication + Standardization', 9850)
+
+# Load
+tracker.log_load('staging_clean_customer', 'dim_customer', 9850)
+
+tracker.generate_lineage_graph()
+tracker.generate_lineage_json('lineage.json')
+```
+
+#### 3.4 Handling Schema Evolution
+
+**Theory:**
+Source schemas change over time. ETL must handle gracefully.
+
+```
+Changes:
+├─ New column added to source
+├─ Column deleted from source
+├─ Column type changed
+├─ Column renamed
+└─ Table structure reorganized
+
+Challenge: Don't break pipeline or lose data
+```
+
+**Solutions:**
+
+```python
+# Solution 1: Flexible Schema (Schemaless Loading)
+# Load all data as JSON/MAP, unpack on demand
+
+# Solution 2: Schema Versioning
+# Track schema versions, transform accordingly
+
+# Solution 3: Merge Schema
+# Auto-detect new columns, add to warehouse
+
+# Solution 4: Backward Compatibility
+# Maintain old schemas, deprecate gradually
+```
+
+**Practical Implementation:**
+
+```python
+def load_with_schema_evolution(df_new, df_warehouse_schema):
+    """
+    Theory: Schema Evolution Handling
+    - New columns: Add to warehouse
+    - Deleted columns: Ignore (won't break)
+    - Type changes: Validate and convert
+    - Renamed columns: Use mapping file
+    """
+    
+    # Get current warehouse schema
+    warehouse_columns = set(df_warehouse_schema.columns)
+    new_columns = set(df_new.columns)
+    
+    # New columns in source
+    added_columns = new_columns - warehouse_columns
+    if added_columns:
+        print(f"New columns detected: {added_columns}")
+        # ALTER TABLE to add new columns
+        for col in added_columns:
+            add_column_to_warehouse(col, df_new[col].dtype)
+    
+    # Deleted columns in source
+    removed_columns = warehouse_columns - new_columns
+    if removed_columns:
+        print(f"Deprecated columns: {removed_columns}")
+        # Mark as deprecated (don't error)
+        for col in removed_columns:
+            df_new[col] = None  # Set to null
+    
+    # Type changes
+    for col in warehouse_columns.intersection(new_columns):
+        if df_new[col].dtype != df_warehouse_schema[col].dtype:
+            print(f"Type change detected for {col}")
+            # Try to convert
+            df_new[col] = df_new[col].astype(df_warehouse_schema[col].dtype)
+    
+    return df_new
+```
+
+#### 3.5 Distributed ETL & Spark
+
+**Theory:**
+For large-scale data processing, use distributed computing:
+
+```
+Single Machine ETL:
+├─ Process: Sequential
+├─ Memory: Limited to one machine
+├─ Time: Long
+└─ Good for: < 100GB data
+
+Distributed ETL (Spark):
+├─ Process: Parallel across cluster
+├─ Memory: Combined across nodes
+├─ Time: Fast
+└─ Good for: Terabytes of data
+```
+
+**Spark ETL Example:**
+
+```python
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+
+# Initialize Spark
+spark = SparkSession.builder \
+    .appName("DistributedETL") \
+    .config("spark.executor.memory", "4g") \
+    .config("spark.executor.cores", "4") \
+    .getOrCreate()
+
+# EXTRACT: Read from multiple sources in parallel
+df_sales = spark.read.csv('s3://bucket/sales/*.csv', header=True)
+df_customers = spark.read.parquet('s3://bucket/customers/')
+df_products = spark.read.jdbc('postgresql://host/db', 'products', 
+                              properties={'user': 'etl', 'password': 'pass'})
+
+# TRANSFORM: Distributed operations
+df_enriched = df_sales \
+    .join(df_customers, 'customer_id', 'left') \
+    .join(df_products, 'product_id', 'left') \
+    .withColumn('profit', col('amount') * 0.30) \
+    .filter(col('amount') > 0) \
+    .dropDuplicates(['order_id'])
+
+# Parallel aggregation
+df_summary = df_enriched \
+    .groupBy('product_id', window('order_date', '1 day')) \
+    .agg(
+        sum('amount').alias('daily_revenue'),
+        count('*').alias('order_count'),
+        countDistinct('customer_id').alias('unique_customers')
+    )
+
+# LOAD: Write in parallel
+df_enriched.coalesce(10).write \
+    .parquet('s3://bucket/warehouse/fact_sales/', mode='overwrite')
+
+df_summary.coalesce(5).write \
+    .parquet('s3://bucket/warehouse/daily_summary/', mode='overwrite')
+```
+
+---
+
+## Interview Q&A with Practical Examples
+
+### Q1: Explain your experience with ETL. What tools have you used?
+
+**Good Answer Structure:**
+```
+1. Specific example from previous role
+2. Tool used and why
+3. Challenges faced
+4. Solution implemented
+5. Results/outcome
+```
+
+**Example Answer:**
+```
+"At my previous role, I designed and maintained daily ETL pipelines 
+loading 50M+ transaction records from multiple sources:
+
+SOURCES: 
+├─ E-commerce database (SQL Server)
+├─ Payment gateway (REST API)
+├─ Third-party marketplace (CSV files)
+
+TOOL: Apache Airflow
+├─ Reason: Orchestration flexibility, Python-based, good monitoring
+
+IMPLEMENTATION:
+├─ Extract: Parallel extraction from 3 sources (15 min)
+├─ Transform: Data cleansing, deduplication (30 min)
+├─ Load: UPSERT to warehouse (45 min)
+
+CHALLENGES:
+├─ Payment API rate limiting
+├─ Duplicate transactions from marketplace
+
+SOLUTIONS:
+├─ Implemented exponential backoff with retries
+├─ Added CDC-based incremental loading
+├─ Created data quality checks
+
+RESULTS:
+├─ Reduced ETL time from 2 hours to 1.5 hours
+├─ 99.99% data accuracy maintained
+└─ Pipeline runs successfully 358/365 days
+"
+```
+
+### Q2: How would you design an ETL for 1 Billion records?
+
+**Approach:**
+
+```
+ANALYSIS:
+├─ Volume: 1 Billion = 1,000,000,000 records
+├─ Time: Usually 24 hours extraction window
+├─ Throughput needed: ~11,500 records/second
+
+DESIGN:
+
+1. EXTRACTION STRATEGY:
+   ├─ Parallel extraction (not sequential)
+   ├─ Incremental CDC (only changed records)
+   ├─ Batch size: 100K records per batch
+   └─ Parallel threads: 10
+
+2. TRANSFORMATION:
+   ├─ Use Spark for distributed processing
+   ├─ Partitioning: By date/region
+   ├─ Caching intermediate results
+   └─ Filter early to reduce data
+
+3. LOADING:
+   ├─ Partition elimination (load only updated partitions)
+   ├─ Bulk loading (not row-by-row)
+   ├─ Parallel writers: 20 threads
+   └─ Batch size: 1M records
+
+ARCHITECTURE:
+Source → (CDC)
+    ↓
+Kafka (Queue)
+    ↓
+Spark Cluster (10 executors, 4 cores each)
+    ├─ Extract
+    ├─ Transform
+    └─ Validate
+    ↓
+Staging (Partitioned)
+    ↓
+Data Warehouse (Parallel load)
+```
+
+**Code:**
+```python
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+
+spark = SparkSession.builder \
+    .appName("1BillionRecordETL") \
+    .config("spark.executor.memory", "16g") \
+    .config("spark.executor.cores", "4") \
+    .config("spark.sql.shuffle.partitions", "500") \
+    .getOrCreate()
+
+# EXTRACT: Use CDC for incremental load
+last_sync = spark.sql("SELECT max(sync_timestamp) FROM checkpoint")
+last_sync_time = last_sync.collect()[0][0]
+
+df = spark.readStream \
+    .option("startingoffsets", last_sync_time) \
+    .kafka("kafka:9092", topic="source_changes")
+
+# TRANSFORM: Distributed processing
+df_transformed = df \
+    .select(from_json(col("value"), schema).alias("data")) \
+    .select("data.*") \
+    .filter(col("is_valid") == True) \
+    .dropDuplicates(['record_id']) \
+    .withColumn("processed_at", current_timestamp())
+
+# LOAD: Write to warehouse partitioned
+df_transformed.write \
+    .partitionBy("partition_date") \
+    .mode("append") \
+    .parquet("s3://warehouse/fact_table/")
+```
+
+### Q3: How do you handle data quality issues?
+
+**Answer Framework:**
+
+```
+DATA QUALITY DIMENSIONS:
+├─ Completeness: All required data present
+├─ Accuracy: Data matches source truth
+├─ Consistency: Uniform across systems
+├─ Validity: Correct format/type
+└─ Timeliness: Current and available
+
+HANDLING STRATEGY:
+
+1. PREVENTION:
+   ├─ Data quality checks in TRANSFORM
+   ├─ Reject bad records early
+   └─ Alert on anomalies
+
+2. DETECTION:
+   ├─ Run validations post-load
+   ├─ Compare record counts
+   └─ Check data distributions
+
+3. REMEDIATION:
+   ├─ Log errors with details
+   ├─ Route to data stewards
+   ├─ Quarantine bad records
+   └─ Attempt automatic fixes
+
+4. DOCUMENTATION:
+   ├─ Track quality metrics
+   ├─ Publish quality reports
+   └─ Continuous improvement
+```
+
+**Implementation:**
+```python
+def validate_data_quality(df):
+    """
+    Quality Check Framework
+    """
+    
+    quality_report = {}
+    
+    # Check 1: Completeness
+    null_counts = df.select([
+        count(when(col(c).isNull(), 1)).alias(c) 
+        for c in df.columns
+    ]).collect()[0]
+    
+    quality_report['null_fields'] = dict(null_counts)
+    
+    # Check 2: Duplicates
+    dup_count = df.count() - df.dropDuplicates().count()
+    quality_report['duplicates'] = dup_count
+    
+    # Check 3: Value ranges
+    amount_stats = df.select(
+        min('amount'), max('amount'), avg('amount')
+    ).collect()[0]
+    
+    if amount_stats.max > 1000000:  # Outlier
+        quality_report['outliers'] = 'ALERT: Large amount detected'
+    
+    # Check 4: Freshness
+    max_date = df.select(max('created_date')).collect()[0][0]
+    days_old = (datetime.now() - max_date).days
+    
+    if days_old > 1:
+        quality_report['freshness'] = f'STALE: Data {days_old} days old'
+    
+    # Log results
+    for check, result in quality_report.items():
+        if result:
+            logger.warning(f"QC ALERT - {check}: {result}")
+    
+    # Quarantine bad records
+    bad_records = df.filter(col('amount').isNull())
+    if bad_records.count() > 0:
+        bad_records.write.parquet('s3://quarantine/bad_records/')
+        logger.error(f"Quarantined {bad_records.count()} records")
+    
+    return quality_report
+```
+
+### Q4: Design an ETL that handles late-arriving data
+
+**Scenario:**
+```
+Order System sends order data to warehouse.
+Some orders arrive late (hours/days after event).
+How do you handle without breaking reports?
+```
+
+**Solution:**
+
+```
+APPROACHES:
+
+1. RESTATE TABLE:
+   ├─ Store "as of" timestamp with each fact
+   ├─ When late data arrives: Update all related facts
+   ├─ Reports run against latest version
+   └─ Good for: Small fact tables
+
+2. INSURABLE DIMENSION:
+   ├─ Store fact with order date
+   ├─ If late arrival: Still correct date
+   ├─ Reports already partitioned by date
+   └─ Good for: Large fact tables
+
+3. SEPARATE LATE-ARRIVING TABLE:
+   ├─ Separate table for corrections
+   ├─ Application logic combines both tables
+   └─ Good for: Complex late arrivals
+
+4. IMMUTABLE TABLE WITH VERSIONS:
+   ├─ Add version column
+   ├─ Late arrival = new version
+   ├─ Reports use latest version
+   └─ Good for: Audit trail needed
+```
+
+**Implementation:**
+
+```sql
+-- Approach 2: Insurable Dimension (Most common)
+
+CREATE TABLE fact_orders (
+    order_key INT,
+    order_id VARCHAR(50),
+    customer_key INT,
+    order_date DATE,           -- ORDER DATE (not arrival date)
+    order_amount DECIMAL,
+    load_date DATE,            -- WHEN LOADED
+    inserted_timestamp TIMESTAMP,
+    updated_timestamp TIMESTAMP
+);
+
+-- Late arriving order example:
+-- Order placed: 2025-01-01
+-- Loaded to warehouse: 2025-01-05 (4 days late)
+
+INSERT INTO fact_orders 
+(order_key, order_id, customer_key, order_date, order_amount, 
+ load_date, inserted_timestamp, updated_timestamp)
+VALUES 
+(999, 'ORD-123', 50, '2025-01-01', 100.00, 
+ CAST(GETDATE() AS DATE), GETDATE(), GETDATE());
+
+-- Report uses order_date, not load_date
+-- So order appears in 2025-01-01 reports, not 2025-01-05
+SELECT 
+    DATEPART(YEAR, order_date) as year,
+    DATEPART(MONTH, order_date) as month,
+    SUM(order_amount) as total_sales
+FROM fact_orders
+GROUP BY DATEPART(YEAR, order_date), DATEPART(MONTH, order_date);
+-- Correctly includes late-arriving 2025-01-01 orders
+```
+
+### Q5: Explain your approach to ETL monitoring and alerting
+
+**Answer:**
+
+```
+MONITORING STRATEGY:
+
+1. PIPELINE LEVEL:
+   ├─ Start time, end time, duration
+   ├─ Success/failure status
+   ├─ Overall data volume
+   └─ Alert: If duration > SLA
+
+2. PHASE LEVEL (Extract, Transform, Load):
+   ├─ Records in/out for each phase
+   ├─ Phase-specific errors
+   ├─ Data quality issues
+   └─ Alert: Phase duration anomaly
+
+3. DATA LEVEL:
+   ├─ Record count variance
+   ├─ Data quality metrics
+   ├─ Business rule violations
+   └─ Alert: Count variance > 5%
+
+4. INFRASTRUCTURE LEVEL:
+   ├─ CPU, Memory, Disk usage
+   ├─ Database connection pools
+   ├─ Network latency
+   └─ Alert: Resource exhaustion
+```
+
+**Implementation:**
+
+```python
+import time
+from datetime import datetime
+
+class ETLMonitor:
+    """Monitor ETL pipeline health"""
+    
+    def __init__(self, pipeline_name):
+        self.pipeline_name = pipeline_name
+        self.metrics = {}
+        self.alerts = []
+    
+    def log_extraction(self, source, record_count, duration_sec):
+        """Log extraction metrics"""
+        self.metrics['extraction'] = {
+            'source': source,
+            'record_count': record_count,
+            'duration': duration_sec,
+            'throughput': record_count / duration_sec
+        }
+        
+        # Alert on anomaly
+        if duration_sec > 1800:  # 30 minutes
+            self.alerts.append(f"SLOW EXTRACT: {duration_sec}s")
+        
+        if record_count == 0:
+            self.alerts.append("NO DATA EXTRACTED")
+    
+    def log_transformation(self, input_count, output_count, duration_sec):
+        """Log transformation metrics"""
+        self.metrics['transformation'] = {
+            'input_records': input_count,
+            'output_records': output_count,
+            'rejected': input_count - output_count,
+            'rejection_rate': (input_count - output_count) / input_count * 100,
+            'duration': duration_sec
+        }
+        
+        # Alert on data loss
+        if self.metrics['transformation']['rejection_rate'] > 10:
+            self.alerts.append(
+                f"HIGH REJECTION: {self.metrics['transformation']['rejection_rate']:.2f}%"
+            )
+    
+    def log_load(self, record_count, duration_sec):
+        """Log load metrics"""
+        self.metrics['load'] = {
+            'record_count': record_count,
+            'duration': duration_sec,
+            'throughput': record_count / duration_sec
+        }
+        
+        if duration_sec > 2700:  # 45 minutes
+            self.alerts.append(f"SLOW LOAD: {duration_sec}s")
+    
+    def validate_quality(self, expected_count, actual_count):
+        """Validate data quality"""
+        variance = abs(expected_count - actual_count) / expected_count * 100
+        
+        self.metrics['quality'] = {
+            'expected': expected_count,
+            'actual': actual_count,
+            'variance_percent': variance
+        }
+        
+        if variance > 5:
+            self.alerts.append(f"DATA VARIANCE: {variance:.2f}%")
+    
+    def generate_report(self):
+        """Generate monitoring report"""
+        report = f"""
+╔════════════════════════════════════════════════════════════╗
+║ ETL MONITORING REPORT: {self.pipeline_name}
+╠════════════════════════════════════════════════════════════╣
+║ Timestamp: {datetime.now().isoformat()}
+║
+║ EXTRACTION:
+║   Source: {self.metrics.get('extraction', {}).get('source', 'N/A')}
+║   Records: {self.metrics.get('extraction', {}).get('record_count', 'N/A')}
+║   Duration: {self.metrics.get('extraction', {}).get('duration', 'N/A')}s
+║   Throughput: {self.metrics.get('extraction', {}).get('throughput', 'N/A'):.0f} rec/s
+║
+║ TRANSFORMATION:
+║   Input: {self.metrics.get('transformation', {}).get('input_records', 'N/A')}
+║   Output: {self.metrics.get('transformation', {}).get('output_records', 'N/A')}
+║   Rejected: {self.metrics.get('transformation', {}).get('rejected', 'N/A')}
+║   Rejection Rate: {self.metrics.get('transformation', {}).get('rejection_rate', 'N/A'):.2f}%
+║
+║ LOAD:
+║   Records: {self.metrics.get('load', {}).get('record_count', 'N/A')}
+║   Duration: {self.metrics.get('load', {}).get('duration', 'N/A')}s
+║
+║ QUALITY:
+║   Expected: {self.metrics.get('quality', {}).get('expected', 'N/A')}
+║   Actual: {self.metrics.get('quality', {}).get('actual', 'N/A')}
+║   Variance: {self.metrics.get('quality', {}).get('variance_percent', 'N/A'):.2f}%
+║
+╚════════════════════════════════════════════════════════════╝
+"""
+        
+        if self.alerts:
+            report += "\n⚠️  ALERTS:\n"
+            for alert in self.alerts:
+                report += f"  • {alert}\n"
+        else:
+            report += "\n✅ No Alerts - Pipeline Healthy\n"
+        
+        return report
+
+# Usage
+monitor = ETLMonitor("Daily Sales ETL")
+monitor.log_extraction("Salesforce", 50000, 900)
+monitor.log_transformation(50000, 49500, 1200)
+monitor.log_load(49500, 1800)
+monitor.validate_quality(50000, 49500)
+print(monitor.generate_report())
+```
+
+---
+
+### Q6: How do you implement Change Data Capture (CDC) in your ETL?
+
+**Context:**
+```
+Instead of loading ALL data every time,
+load only CHANGED data (inserts, updates, deletes).
+More efficient, faster ETL.
+```
+
+**Approaches:**
+
+```
+1. TIMESTAMP-BASED CDC:
+   ├─ Each record has: last_modified_timestamp
+   ├─ Query: WHERE last_modified > @last_sync
+   ├─ Simple, works for most cases
+   └─ Issue: Depends on system time accuracy
+
+2. LOG-BASED CDC:
+   ├─ Read database transaction logs
+   ├─ Captures actual DML operations
+   ├─ Real-time capable
+   └─ Tools: Debezium, Oracle LogMiner
+
+3. QUERY-BASED CDC:
+   ├─ Compare source vs target tables
+   ├─ Find differences
+   ├─ Slow, not real-time
+   └─ Fallback option
+
+4. TRIGGER-BASED CDC:
+   ├─ Triggers capture changes to audit table
+   ├─ Custom control
+   ├─ Performance overhead
+   └─ Legacy systems
+```
+
+**Implementation (Timestamp-based):**
+
+```python
+from datetime import datetime, timedelta
+import pandas as pd
+import sqlalchemy
+
+def incremental_etl_with_cdc():
+    """
+    ETL using timestamp-based CDC
+    """
+    # Get last successful load time
+    conn = sqlalchemy.create_engine('mssql+pyodbc://...')
+    
+    last_sync_query = """
+    SELECT MAX(last_modified) as last_sync_time
+    FROM etl_checkpoint
+    WHERE table_name = 'customers'
+    """
+    
+    result = conn.execute(last_sync_query).fetchone()
+    last_sync_time = result[0] if result[0] else datetime(2020, 1, 1)
+    
+    # Extract only changed records
+    extract_query = f"""
+    SELECT 
+        customer_id,
+        customer_name,
+        email,
+        phone,
+        last_modified
+    FROM source.customers
+    WHERE last_modified > '{last_sync_time}'
+    ORDER BY last_modified
+    """
+    
+    df_changes = pd.read_sql(extract_query, conn)
+    
+    print(f"Found {len(df_changes)} changed records since {last_sync_time}")
+    
+    if len(df_changes) == 0:
+        print("No changes, skipping ETL")
+        return
+    
+    # Transform
+    df_changes['processed_at'] = datetime.now()
+    df_changes = df_changes[df_changes['email'].notna()]  # Validate
+    
+    # Load: UPSERT instead of INSERT
+    upsert_sql = """
+    MERGE INTO warehouse.customers AS target
+    USING (VALUES (?, ?, ?, ?, ?)) AS source
+        (customer_id, customer_name, email, phone, processed_at)
+    ON target.customer_id = source.customer_id
+    WHEN MATCHED THEN
+        UPDATE SET 
+            customer_name = source.customer_name,
+            email = source.email,
+            phone = source.phone,
+            processed_at = source.processed_at
+    WHEN NOT MATCHED THEN
+        INSERT (customer_id, customer_name, email, phone, processed_at)
+        VALUES (source.customer_id, source.customer_name, source.email, 
+                source.phone, source.processed_at);
+    """
+    
+    # Execute UPSERT
+    for _, row in df_changes.iterrows():
+        conn.execute(upsert_sql, 
+            row['customer_id'], row['customer_name'], 
+            row['email'], row['phone'], row['processed_at'])
+    
+    # Update checkpoint
+    update_checkpoint = """
+    UPDATE etl_checkpoint
+    SET last_modified = (SELECT MAX(last_modified) FROM source.customers)
+    WHERE table_name = 'customers'
+    """
+    conn.execute(update_checkpoint)
+    conn.commit()
+    
+    print(f"✓ Successfully loaded {len(df_changes)} customer changes")
+
+# Run CDC ETL
+incremental_etl_with_cdc()
+```
+
+---
+
+### Q7: Explain Slowly Changing Dimension (SCD) handling. Which Type do you prefer?
+
+**Background:**
+
+```
+Customer dimensions change over time:
+├─ Address changes
+├─ Phone number changes
+├─ Customer category changes
+
+How to track these changes?
+```
+
+**SCD Types:**
+
+```
+SCD TYPE 0: NO HISTORY
+├─ Overwrite old values
+├─ No history tracking
+└─ Example: If customer moves to new address, old address lost
+
+SCD TYPE 1: OVERWRITE
+├─ Update dimension record
+├─ No history
+├─ Simple, fast
+└─ Customer address: 100 Oak St → 200 Oak St (old address lost)
+
+SCD TYPE 2: VERSIONING
+├─ Create new row for each change
+├─ Track with effective/expiration dates
+├─ Full history available
+└─ Best for business reporting
+
+SCD TYPE 3: CURRENT + PREVIOUS
+├─ Keep current and previous values in same row
+├─ Limited history (last 2 states)
+├─ Good for "year-over-year" comparisons
+└─ Current address + Previous address columns
+
+SCD TYPE 4: HISTORY TABLE
+├─ Keep current in main table
+├─ All history in separate table
+├─ Performance optimized
+└─ Hybrid approach
+```
+
+**Implementation (Type 2 - Most Common):**
+
+```sql
+-- DIMENSION TABLE with SCD Type 2
+CREATE TABLE dim_customers (
+    customer_sk INT IDENTITY(1,1) PRIMARY KEY,      -- Surrogate key
+    customer_id VARCHAR(50) NOT NULL,               -- Natural key
+    customer_name VARCHAR(100),
+    email VARCHAR(100),
+    phone VARCHAR(20),
+    address VARCHAR(200),
+    city VARCHAR(50),
+    state VARCHAR(2),
+    postal_code VARCHAR(10),
+    effective_date DATE NOT NULL,                    -- SCD Type 2
+    expiration_date DATE NOT NULL,                   -- SCD Type 2
+    is_current CHAR(1) DEFAULT 'Y',                  -- Y/N flag
+    inserted_timestamp TIMESTAMP,
+    UNIQUE (customer_id, effective_date)
+);
+
+-- Example Data:
+-- customer_id='C001', address='100 Oak St', effective='2023-01-01', expiration='2023-12-31'
+-- customer_id='C001', address='200 Oak St', effective='2024-01-01', expiration='9999-12-31' (CURRENT)
+
+-- UPSERT Logic with SCD Type 2
+DECLARE @customer_id VARCHAR(50) = 'C001'
+DECLARE @new_address VARCHAR(200) = '300 Oak St'
+DECLARE @today DATE = CAST(GETDATE() AS DATE)
+
+-- Check if customer exists
+IF EXISTS (SELECT 1 FROM dim_customers 
+           WHERE customer_id = @customer_id 
+           AND is_current = 'Y')
+BEGIN
+    -- Check if address changed
+    IF EXISTS (SELECT 1 FROM dim_customers 
+               WHERE customer_id = @customer_id 
+               AND is_current = 'Y'
+               AND address != @new_address)
+    BEGIN
+        -- Close old record
+        UPDATE dim_customers
+        SET is_current = 'N',
+            expiration_date = DATEADD(DAY, -1, @today)
+        WHERE customer_id = @customer_id AND is_current = 'Y'
+        
+        -- Insert new record
+        INSERT INTO dim_customers 
+        (customer_id, address, effective_date, expiration_date, is_current)
+        VALUES (@customer_id, @new_address, @today, '9999-12-31', 'Y')
+    END
+END
+ELSE
+BEGIN
+    -- New customer
+    INSERT INTO dim_customers 
+    (customer_id, address, effective_date, expiration_date, is_current)
+    VALUES (@customer_id, @new_address, @today, '9999-12-31', 'Y')
+END
+```
+
+**Why Type 2?**
+```
+✓ Full audit trail of changes
+✓ Can analyze "as of" any date
+✓ Reports always use current version
+✓ Industry standard
+✗ Slightly more complex
+✗ Slower queries (need to filter by is_current)
+```
+
+---
+
+### Q8: Design an ETL for multi-source customer consolidation
+
+**Scenario:**
+```
+Company has customers in:
+├─ Salesforce CRM
+├─ SAP ERP system
+├─ Marketing automation (Marketo)
+├─ Billing system
+
+Create unified customer view in warehouse.
+Handle duplicates and conflicts.
+```
+
+**Solution:**
+
+```
+ARCHITECTURE:
+
+Sources:
+├─ Salesforce API: 50K customers
+├─ SAP Database: 80K customers
+├─ Marketo API: 120K customers
+└─ Billing DB: 45K customers
+     (Total potential: 295K, actual unique: ~150K due to overlap)
+
+Process:
+     ↓
+Step 1: EXTRACT (Parallel)
+├─ Pull from all 4 sources
+├─ Add source identifier
+└─ Load to staging
+
+     ↓
+Step 2: STANDARDIZE
+├─ Normalize phone (remove formatting)
+├─ Standardize email (lowercase, trim)
+├─ Standardize names (proper case)
+└─ Geographic standardization
+
+     ↓
+Step 3: MATCH & CONSOLIDATE
+├─ Match on email (100% match)
+├─ Match on phone (95% match)
+├─ Fuzzy match on name + address (80% match)
+└─ Assign master customer ID
+
+     ↓
+Step 4: CREATE GOLDEN RECORD
+├─ Select best/most recent data for each field
+├─ Track data lineage (which field from which source)
+└─ Create unified view
+
+     ↓
+Step 5: LOAD
+└─ Load consolidated customer to warehouse
+```
+
+**Python Implementation:**
+
+```python
+import pandas as pd
+import recordlinkage
+import sqlalchemy
+from datetime import datetime
+
+class CustomerConsolidationETL:
+    """
+    Multi-source customer consolidation
+    """
+    
+    def __init__(self):
+        self.engine = sqlalchemy.create_engine('mssql+pyodbc://...')
+        self.staging_data = {}
+        self.matches = {}
+        
+    def extract_from_sources(self):
+        """Extract from all sources in parallel"""
+        sources = {
+            'salesforce': self._extract_salesforce(),
+            'sap': self._extract_sap(),
+            'marketo': self._extract_marketo(),
+            'billing': self._extract_billing()
+        }
+        
+        # Convert to DataFrames and add source column
+        for source_name, data in sources.items():
+            df = pd.DataFrame(data)
+            df['source'] = source_name
+            self.staging_data[source_name] = df
+            
+        return self.staging_data
+    
+    def _extract_salesforce(self):
+        """Extract from Salesforce API"""
+        query = """
+        SELECT Id, Name, Email, Phone, BillingCity, BillingState
+        FROM Account
+        WHERE LastModifiedDate > LAST_N_DAYS:1
+        """
+        # Salesforce API call
+        return [
+            {'customer_id': 'SF001', 'name': 'John Smith', 
+             'email': 'john@example.com', 'phone': '555-1234', 
+             'city': 'New York', 'state': 'NY'},
+            # ... more records
+        ]
+    
+    def _extract_sap(self):
+        """Extract from SAP"""
+        query = "SELECT * FROM SAP_CUSTOMERS WHERE CHANGED = 1"
+        # SAP extraction
+        return []
+    
+    def _extract_marketo(self):
+        """Extract from Marketo"""
+        return []
+    
+    def _extract_billing(self):
+        """Extract from Billing system"""
+        return []
+    
+    def standardize_data(self):
+        """Normalize and standardize all data"""
+        standardized = {}
+        
+        for source_name, df in self.staging_data.items():
+            df_clean = df.copy()
+            
+            # Email: lowercase, trim
+            df_clean['email'] = df_clean['email'] \
+                .str.lower().str.strip()
+            
+            # Phone: remove all non-numeric
+            df_clean['phone'] = df_clean['phone'] \
+                .str.replace(r'\D', '', regex=True)
+            
+            # Name: proper case, trim
+            df_clean['name'] = df_clean['name'] \
+                .str.title().str.strip()
+            
+            # Address: uppercase
+            df_clean['city'] = df_clean['city'].str.upper()
+            df_clean['state'] = df_clean['state'].str.upper()
+            
+            standardized[source_name] = df_clean
+        
+        return standardized
+    
+    def match_customers(self, standardized_data):
+        """Identify duplicate customers across sources"""
+        
+        # Combine all data
+        dfs = list(standardized_data.values())
+        df_combined = pd.concat(dfs, ignore_index=True)
+        
+        # Rule 1: Email exact match (highest confidence)
+        email_groups = df_combined.groupby('email').filter(
+            lambda x: len(x) > 1
+        )
+        
+        # Rule 2: Phone exact match
+        phone_groups = df_combined.groupby('phone').filter(
+            lambda x: len(x) > 1
+        )
+        
+        # Rule 3: Fuzzy matching (name + city)
+        indexer = recordlinkage.Index()
+        indexer.full()
+        candidate_links = indexer.index(df_combined)
+        
+        # Compare candidate records
+        compare = recordlinkage.Compare()
+        compare.string('name', 'name', method='jarowinkler', 
+                       threshold=0.85, label='name_match')
+        compare.string('city', 'city', method='exact', 
+                       label='city_match')
+        features = compare.compute(candidate_links, df_combined)
+        
+        # Find matches (score > 1.5)
+        matches = features[features.sum(axis=1) > 1.5]
+        
+        return matches
+    
+    def create_golden_record(self, matches):
+        """Create consolidated golden record"""
+        
+        # Group matched customers
+        groups = self._create_match_groups(matches)
+        golden_records = []
+        
+        for group_id, customer_indices in groups.items():
+            # Get all records in this group
+            records = [self.staging_data[idx] for idx in customer_indices]
+            
+            # Select best values for each field
+            golden = {
+                'master_customer_id': f'MASTER_{group_id}',
+                'name': self._select_best_value(
+                    records, 'name', prefer_source=['salesforce', 'sap']),
+                'email': self._select_best_value(
+                    records, 'email'),
+                'phone': self._select_best_value(
+                    records, 'phone'),
+                'city': self._select_best_value(
+                    records, 'city'),
+                'state': self._select_best_value(
+                    records, 'state'),
+                'source_list': ','.join(
+                    [r['source'] for r in records]),
+                'consolidation_date': datetime.now(),
+                'is_golden': True
+            }
+            golden_records.append(golden)
+        
+        return pd.DataFrame(golden_records)
+    
+    def _select_best_value(self, records, field, prefer_source=None):
+        """Select best value for field across sources"""
+        
+        # Rule: Prefer specific source, then most recent, then any non-null
+        values = [(r.get(field), r.get('source')) 
+                  for r in records if r.get(field)]
+        
+        if not values:
+            return None
+        
+        if prefer_source:
+            for val, source in values:
+                if source in prefer_source and val:
+                    return val
+        
+        return values[0][0] if values else None
+    
+    def load_golden_records(self, golden_df):
+        """Load consolidated data to warehouse"""
+        
+        golden_df.to_sql('dim_customers_consolidated', 
+                        self.engine, 
+                        if_exists='append',
+                        index=False)
+        
+        print(f"✓ Loaded {len(golden_df)} golden records")
+    
+    def run(self):
+        """Execute full consolidation ETL"""
+        print("Starting customer consolidation ETL...")
+        
+        # Step 1: Extract
+        print("1. Extracting from sources...")
+        self.extract_from_sources()
+        
+        # Step 2: Standardize
+        print("2. Standardizing data...")
+        standardized = self.standardize_data()
+        
+        # Step 3: Match
+        print("3. Matching customers...")
+        matches = self.match_customers(standardized)
+        print(f"   Found {len(matches)} potential matches")
+        
+        # Step 4: Create golden records
+        print("4. Creating golden records...")
+        golden_df = self.create_golden_record(matches)
+        
+        # Step 5: Load
+        print("5. Loading to warehouse...")
+        self.load_golden_records(golden_df)
+        
+        print("✓ Consolidation complete!")
+
+# Run ETL
+etl = CustomerConsolidationETL()
+etl.run()
+```
+
+---
+
+### Q9: How would you handle schema evolution in your ETL?
+
+**Problem:**
+```
+Source system adds new columns.
+Columns change from VARCHAR to INT.
+Columns get dropped.
+
+How to handle without breaking ETL?
+```
+
+**Solutions:**
+
+```
+APPROACH 1: FLEXIBLE STAGING
+├─ Load all source columns as VARCHAR
+├─ Convert to proper types in transform
+├─ Missing columns = NULL
+├─ Added columns = Captured automatically
+└─ Pro: Flexible | Con: Type casting overhead
+
+APPROACH 2: SCHEMA VERSIONING
+├─ Track schema version for each source
+├─ Maintain multiple schema mappings
+├─ Version transformation logic
+└─ Pro: Type safe | Con: Complex
+
+APPROACH 3: ELT (Extract, Load, Transform)
+├─ Load raw data as-is to warehouse
+├─ Transform in SQL using views
+├─ Schema changes are just new columns
+└─ Pro: Flexible | Con: Processing in warehouse
+
+APPROACH 4: AUTO-DISCOVERY
+├─ Introspect source schema
+├─ Compare with previous run
+├─ Alert on changes
+└─ Pro: No manual maintenance | Con: Error prone
+```
+
+**Implementation:**
+
+```python
+import pandas as pd
+import json
+from datetime import datetime
+
+class SchemaEvolutionETL:
+    """
+    Handle schema changes gracefully
+    """
+    
+    def __init__(self):
+        self.schema_history = self._load_schema_history()
+        self.alerts = []
+    
+    def _load_schema_history(self):
+        """Load previously captured schema"""
+        try:
+            with open('schema_history.json', 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+    
+    def detect_schema_changes(self, df, source_name):
+        """Detect schema changes from previous load"""
+        
+        current_schema = {
+            'columns': df.columns.tolist(),
+            'dtypes': df.dtypes.to_dict(),
+            'shape': df.shape,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        if source_name not in self.schema_history:
+            print(f"First load for {source_name}, storing schema...")
+            self.schema_history[source_name] = current_schema
+            return None
+        
+        previous_schema = self.schema_history[source_name]
+        changes = {}
+        
+        # Check for new columns
+        new_cols = set(current_schema['columns']) - \
+                   set(previous_schema['columns'])
+        if new_cols:
+            changes['new_columns'] = list(new_cols)
+            self.alerts.append(
+                f"⚠️  NEW COLUMNS in {source_name}: {new_cols}")
+        
+        # Check for dropped columns
+        dropped_cols = set(previous_schema['columns']) - \
+                       set(current_schema['columns'])
+        if dropped_cols:
+            changes['dropped_columns'] = list(dropped_cols)
+            self.alerts.append(
+                f"⚠️  DROPPED COLUMNS in {source_name}: {dropped_cols}")
+        
+        # Check for type changes
+        for col in previous_schema['columns']:
+            if col in current_schema['columns']:
+                old_type = str(previous_schema['dtypes'][col])
+                new_type = str(current_schema['dtypes'][col])
+                
+                if old_type != new_type:
+                    changes['type_changes'] = changes.get(
+                        'type_changes', {})
+                    changes['type_changes'][col] = {
+                        'old': old_type,
+                        'new': new_type
+                    }
+                    self.alerts.append(
+                        f"⚠️  TYPE CHANGE in {source_name}.{col}: "
+                        f"{old_type} → {new_type}")
+        
+        # Update schema history
+        self.schema_history[source_name] = current_schema
+        
+        return changes if changes else None
+    
+    def handle_schema_changes(self, df, source_name, schema_changes):
+        """Handle detected schema changes"""
+        
+        df_processed = df.copy()
+        
+        if schema_changes is None:
+            return df_processed
+        
+        # Handle new columns: add to expected columns
+        if 'new_columns' in schema_changes:
+            print(f"New columns will be loaded: {schema_changes['new_columns']}")
+            # These are already in df, just log them
+        
+        # Handle dropped columns: remove from expected
+        if 'dropped_columns' in schema_changes:
+            cols_to_drop = [c for c in schema_changes['dropped_columns'] 
+                           if c in df_processed.columns]
+            print(f"Removing dropped columns: {cols_to_drop}")
+        
+        # Handle type changes: safe conversion
+        if 'type_changes' in schema_changes:
+            for col, type_info in schema_changes['type_changes'].items():
+                old_type = type_info['old']
+                new_type = type_info['new']
+                
+                try:
+                    if 'int' in new_type.lower():
+                        df_processed[col] = pd.to_numeric(
+                            df_processed[col], errors='coerce')
+                    elif 'float' in new_type.lower():
+                        df_processed[col] = pd.to_numeric(
+                            df_processed[col], errors='coerce')
+                    elif 'datetime' in new_type.lower():
+                        df_processed[col] = pd.to_datetime(
+                            df_processed[col], errors='coerce')
+                    
+                    print(f"Converted {col}: {old_type} → {new_type}")
+                except Exception as e:
+                    self.alerts.append(
+                        f"ERROR converting {col}: {str(e)}")
+        
+        return df_processed
+    
+    def run_etl_with_schema_evolution(self, df, source_name):
+        """Main ETL with schema evolution handling"""
+        
+        # Detect changes
+        changes = self.detect_schema_changes(df, source_name)
+        
+        # Handle changes
+        df_processed = self.handle_schema_changes(
+            df, source_name, changes)
+        
+        # Log all alerts
+        if self.alerts:
+            print("\n🔔 SCHEMA CHANGE ALERTS:")
+            for alert in self.alerts:
+                print(f"  {alert}")
+            
+            # Send to admin/monitoring
+            self._send_alert_to_admin()
+        
+        # Save updated schema history
+        self._save_schema_history()
+        
+        return df_processed
+    
+    def _save_schema_history(self):
+        """Persist schema history for next run"""
+        with open('schema_history.json', 'w') as f:
+            json.dump(self.schema_history, f, indent=2)
+    
+    def _send_alert_to_admin(self):
+        """Send alerts to data engineering team"""
+        print("📧 Alert sent to data-engineering@company.com")
+
+# Usage
+etl = SchemaEvolutionETL()
+df_new = pd.DataFrame({
+    'id': [1, 2, 3],
+    'name': ['A', 'B', 'C'],
+    'email': ['a@ex.com', 'b@ex.com', 'c@ex.com'],
+    'new_field': ['X', 'Y', 'Z']  # New column added
+})
+
+df_processed = etl.run_etl_with_schema_evolution(df_new, 'customers')
+```
+
+---
+
+### Q10: What are common ETL performance issues and how do you troubleshoot?
+
+**Common Issues & Solutions:**
+
+```
+ISSUE 1: SLOW EXTRACTION
+├─ Problem: Query takes 2 hours
+├─ Causes:
+│   ├─ Missing indexes on source
+│   ├─ Non-selective WHERE clause
+│   └─ Network latency
+├─ Solution:
+│   ├─ Add index on filter columns
+│   ├─ Use PARTITION BY
+│   ├─ Parallel extraction
+│   └─ Move extraction closer to source
+└─ Code:
+    SELECT customer_id, name FROM large_table
+    WHERE created_date BETWEEN @start AND @end  -- Indexed!
+    AND source_id = 1  -- Indexed!
+
+ISSUE 2: TRANSFORMATION BOTTLENECK
+├─ Problem: Data processing very slow
+├─ Causes:
+│   ├─ Processing in wrong tool (row-by-row in Python)
+│   ├─ Joining large tables unnecessarily
+│   ├─ Multiple passes over data
+│   └─ Memory issues
+├─ Solution:
+│   ├─ Use SQL for bulk operations
+│   ├─ Use Spark for large data
+│   ├─ Cache intermediate results
+│   └─ Process in single pass
+└─ Code:
+    # BAD: Row-by-row processing
+    for index, row in df.iterrows():
+        result = complex_calculation(row)
+    
+    # GOOD: Vectorized
+    df['result'] = df.apply(
+        lambda x: complex_calculation(x), axis=1)
+
+ISSUE 3: SLOW LOAD
+├─ Problem: Data warehouse loading takes 3 hours
+├─ Causes:
+│   ├─ Row-by-row inserts
+│   ├─ Too many triggers/constraints
+│   ├─ Lock contention
+│   └─ Insufficient parallel writers
+├─ Solution:
+│   ├─ Use BULK INSERT
+│   ├─ Disable triggers during load
+│   ├─ Batch size optimization
+│   └─ Parallel load processes
+└─ Code:
+    # SLOW: Row-by-row
+    for row in data:
+        INSERT INTO table VALUES(...)
+    
+    # FAST: Bulk insert
+    BULK INSERT table
+    FROM 'data.txt'
+    WITH (BATCHSIZE = 100000)
+
+ISSUE 4: MEMORY EXHAUSTION
+├─ Problem: Process crashes with "Out of Memory"
+├─ Causes:
+│   ├─ Loading entire dataset into RAM
+│   ├─ No chunking/streaming
+│   ├─ Memory leaks in code
+│   └─ 1B records in single query
+├─ Solution:
+│   ├─ Process in chunks/batches
+│   ├─ Use streaming/chunking
+│   ├─ Increase memory allocation
+│   └─ Use external sorting
+└─ Code:
+    # GOOD: Chunked processing
+    chunk_size = 100000
+    chunks = pd.read_sql_query(
+        query, conn, chunksize=chunk_size)
+    
+    for chunk in chunks:
+        process(chunk)
+        load(chunk)
+
+ISSUE 5: DATA QUALITY DEGRADATION
+├─ Problem: More errors over time
+├─ Causes:
+│   ├─ Source data quality decreasing
+│   ├─ Insufficient validation
+│   ├─ Catching errors too late
+│   └─ No early rejection
+├─ Solution:
+│   ├─ Fail fast on bad data
+│   ├─ Validate early (in extract)
+│   ├─ Set quality thresholds
+│   └─ Quarantine bad records
+└─ Code:
+    df = extract()
+    
+    # Validate immediately
+    df = df[df['email'].notna()]
+    df = df[df['amount'] > 0]
+    
+    if len(df) == 0:
+        raise Exception("No valid records!")
+    
+    transform(df)
+    load(df)
+```
+
+**Troubleshooting Steps:**
+
+```
+1. IDENTIFY BOTTLENECK
+   ├─ Add logging to each phase
+   ├─ Measure Extract, Transform, Load times separately
+   ├─ Identify slowest phase
+   └─ Example: "Extract: 10 min, Transform: 45 min, Load: 15 min"
+              → Transform is bottleneck
+
+2. PROFILE THE CODE
+   ├─ Use Python profiler: cProfile
+   ├─ Use database execution plans
+   ├─ Monitor system resources (CPU, RAM, Disk, Network)
+   └─ Identify hotspots
+
+3. OPTIMIZE
+   ├─ Apply performance techniques
+   ├─ Test with subset data first
+   ├─ Measure improvement
+   └─ Deploy
+
+4. MONITOR
+   ├─ Set performance baselines
+   ├─ Alert on regressions
+   ├─ Continuous optimization
+   └─ Document improvements
+```
+
+**Monitoring Script:**
+
+```python
+import time
+import psutil
+from datetime import datetime
+
+class ETLPerformanceMonitor:
+    
+    def __init__(self):
+        self.metrics = {}
+    
+    def monitor_phase(self, phase_name, function, *args):
+        """Monitor a phase and track performance"""
+        
+        # Baseline
+        start_time = time.time()
+        start_mem = psutil.Process().memory_info().rss / 1024 / 1024  # MB
+        
+        # Execute
+        try:
+            result = function(*args)
+            status = 'SUCCESS'
+        except Exception as e:
+            result = None
+            status = f'FAILED: {str(e)}'
+        
+        # Metrics
+        duration = time.time() - start_time
+        end_mem = psutil.Process().memory_info().rss / 1024 / 1024
+        mem_used = end_mem - start_mem
+        
+        self.metrics[phase_name] = {
+            'duration_sec': round(duration, 2),
+            'memory_mb': round(mem_used, 2),
+            'status': status,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        # Log
+        print(f"{phase_name}: {duration:.2f}s, "
+              f"Memory: {mem_used:.2f}MB, Status: {status}")
+        
+        return result
+    
+    def print_summary(self):
+        """Print performance summary"""
+        print("\n" + "="*60)
+        print("ETL PERFORMANCE SUMMARY")
+        print("="*60)
+        
+        total_time = sum(m['duration_sec'] 
+                        for m in self.metrics.values())
+        total_memory = sum(m['memory_mb'] 
+                          for m in self.metrics.values())
+        
+        for phase, metrics in self.metrics.items():
+            print(f"{phase}:")
+            print(f"  Duration: {metrics['duration_sec']}s "
+                  f"({metrics['duration_sec']/total_time*100:.1f}%)")
+            print(f"  Memory: {metrics['memory_mb']:.2f}MB")
+            print(f"  Status: {metrics['status']}")
+        
+        print(f"\nTotal: {total_time:.2f}s, {total_memory:.2f}MB")
+
+# Usage
+monitor = ETLPerformanceMonitor()
+monitor.monitor_phase('Extract', extract_data)
+monitor.monitor_phase('Transform', transform_data)
+monitor.monitor_phase('Load', load_data)
+monitor.print_summary()
+```
+
+---
+
+**Summary: Concepts Coverage**
+
+```
+BASIC (Entry-level interviews):
+✓ What is ETL and why needed
+✓ Extract-Transform-Load phases
+✓ Batch vs Real-time
+✓ Staging area purpose
+✓ Idempotency concept
+
+INTERMEDIATE (Mid-level interviews):
+✓ Star vs Snowflake schema
+✓ Slowly Changing Dimensions
+✓ Fact table types
+✓ Conformed dimensions
+✓ ETL vs ELT decision
+
+ADVANCED (Senior-level interviews):
+✓ Surrogate vs Natural keys
+✓ Change Data Capture
+✓ Data lineage tracking
+✓ Schema evolution
+✓ Distributed ETL with Spark
+
+PRACTICAL APPLICATIONS:
+✓ Customer consolidation ETL
+✓ Real-time sales streaming
+✓ Product catalog loading
+✓ 1B+ record pipelines
+✓ Data quality frameworks
+✓ Late-arriving data handling
+✓ Monitoring & alerting
+
+All with theory explanations, code examples, and real-world context.
+```
+
