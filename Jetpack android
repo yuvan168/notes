@@ -1,0 +1,6918 @@
+# Android Jetpack - Complete Notes & Theory
+
+## Table of Contents
+1. [Introduction to Jetpack](#introduction-to-jetpack)
+2. [Architecture Components](#architecture-components)
+3. [Data Persistence](#data-persistence)
+4. [Behavior Components](#behavior-components)
+5. [UI Components](#ui-components)
+6. [Foundation Libraries](#foundation-libraries)
+7. [MVVM Architecture Pattern](#mvvm-architecture-pattern)
+8. [Best Practices](#best-practices)
+
+---
+
+## Introduction to Jetpack
+
+### What is Android Jetpack?
+
+**Android Jetpack** is a collection of Android libraries and tools that help developers write robust, testable, and maintainable applications. It provides:
+
+- Backward compatibility
+- Reduced boilerplate code
+- Guidance on best practices
+- Lifecycle-aware components
+- Reactive programming support
+
+**Categories:**
+
+```
+Foundation
+├── AppCompat
+├── AndroidX
+└── Multidex
+
+Architecture
+├── LiveData
+├── ViewModel
+├── Room
+├── WorkManager
+└── Navigation
+
+Behavior
+├── Notifications
+├── Permissions
+├── Sharing
+└── Slices
+
+UI
+├── Compose
+├── Fragment
+├── RecyclerView
+└── Paging
+```
+
+**Why Jetpack Matters:**
+
+1. **Lifecycle-Aware**: Components understand app lifecycle
+2. **Testable**: Separates UI from business logic
+3. **Maintainable**: Clear architecture patterns
+4. **Google-Supported**: Regularly updated, best practices
+
+---
+
+## Architecture Components
+
+### 1. ViewModel
+
+**Theory:**
+
+ViewModel holds UI-related data that survives configuration changes (like device rotation). It's designed to:
+- Survive lifecycle changes
+- Store and manage UI-related data
+- Not hold references to Views (prevents memory leaks)
+- Share data between Fragments
+
+**How It Works:**
+
+```
+Activity/Fragment destroyed (rotation)
+         ↓
+ViewModel SURVIVES (in memory)
+         ↓
+New Activity/Fragment created
+         ↓
+ViewModel provides saved data
+```
+
+**Implementation:**
+
+```kotlin
+// Define ViewModel
+class UserViewModel : ViewModel() {
+    private val _user = MutableLiveData<User>()
+    val user: LiveData<User> = _user
+    
+    private val _loading = MutableLiveData<Boolean>()
+    val loading: LiveData<Boolean> = _loading
+    
+    fun loadUser(userId: Int) {
+        _loading.value = true
+        viewModelScope.launch {
+            try {
+                val user = fetchUserFromApi(userId)
+                _user.value = user
+            } catch (e: Exception) {
+                // Handle error
+            } finally {
+                _loading.value = false
+            }
+        }
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        // Clean up resources
+        cancelAllCoroutines()
+    }
+}
+
+// Use in Activity
+class UserActivity : AppCompatActivity() {
+    private val viewModel: UserViewModel by viewModels()
+    
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        
+        // Observe data
+        viewModel.user.observe(this) { user ->
+            displayUser(user)
+        }
+        
+        viewModel.loading.observe(this) { isLoading ->
+            if (isLoading) showProgressBar() else hideProgressBar()
+        }
+        
+        viewModel.loadUser(1)
+    }
+}
+
+// Use in Fragment
+class UserFragment : Fragment() {
+    private val viewModel: UserViewModel by viewModels()
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        
+        viewModel.user.observe(viewLifecycleOwner) { user ->
+            // Update UI
+        }
+    }
+}
+```
+
+**Why ViewModel?**
+
+```kotlin
+// ❌ WITHOUT ViewModel
+class UserActivity : AppCompatActivity() {
+    var users: List<User>? = null  // Lost on rotation!
+    
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (users == null) {
+            users = fetchExpensiveUserList()  // Called again after rotation!
+        }
+    }
+}
+
+// ✅ WITH ViewModel
+class UserActivity : AppCompatActivity() {
+    private val viewModel: UserViewModel by viewModels()
+    
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // ViewModel survives rotation, no re-fetch!
+        viewModel.users.observe(this) { users ->
+            updateUI(users)
+        }
+    }
+}
+```
+
+---
+
+### 2. LiveData
+
+**Theory:**
+
+LiveData is an observable data holder that:
+- Respects app lifecycle (only updates active observers)
+- Prevents memory leaks
+- Automatically unsubscribes when lifecycle ends
+- Holds single value, emits when changed
+
+**Types of LiveData:**
+
+```kotlin
+// MutableLiveData - can be changed from outside
+val mutableUser = MutableLiveData<User>()
+mutableUser.value = user
+
+// Immutable exposure - only internal can change
+private val _user = MutableLiveData<User>()
+val user: LiveData<User> = _user
+
+// Transformations
+val userNameLength = user.map { it.name.length }
+val adultUsers = users.switchMap { userList ->
+    filterByAge(userList, 18)
+}
+
+// Combined data
+val userInfo = Transformations.switchMap(userId) { id ->
+    userRepository.getUser(id)
+}
+```
+
+**Implementation:**
+
+```kotlin
+class UserViewModel : ViewModel() {
+    // Expose as read-only LiveData
+    private val _userList = MutableLiveData<List<User>>()
+    val userList: LiveData<List<User>> = _userList
+    
+    // Transformations
+    val userCount: LiveData<Int> = userList.map { it.size }
+    
+    val adultUsers: LiveData<List<User>> = userList.map { users ->
+        users.filter { it.age >= 18 }
+    }
+    
+    fun loadUsers() {
+        viewModelScope.launch {
+            _userList.value = fetchUsers()
+        }
+    }
+}
+
+// Observe in Activity
+class UserActivity : AppCompatActivity() {
+    private val viewModel: UserViewModel by viewModels()
+    
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        
+        // Only receives updates while activity is at least STARTED
+        viewModel.userList.observe(this) { users ->
+            displayUsers(users)
+        }
+        
+        // Access transformed data
+        viewModel.userCount.observe(this) { count ->
+            showUserCount("Total: $count")
+        }
+    }
+}
+```
+
+**LiveData Lifecycle Behavior:**
+
+```kotlin
+// ✓ Receives updates (active)
+lifecycle state: STARTED, RESUMED
+observer.onChanged(value)
+
+// ✗ Doesn't receive updates (inactive)
+lifecycle state: CREATED, DESTROYED
+// observer not called, but still observing
+
+// Remove observer when lifecycle ends
+// Automatic with lifecycle-aware observe()
+viewModel.data.observe(this) { ... }  // Auto-unsubscribes at onDestroy
+```
+
+---
+
+### 3. Room Database
+
+**Theory:**
+
+Room is an abstraction layer over SQLite that:
+- Provides compile-time checked SQL
+- Reduces boilerplate (no ContentProviders needed)
+- Integrates with LiveData for reactive queries
+- Thread-safe by default
+
+**Architecture:**
+
+```
+Entity (Data Class)
+    ↓
+DAO (Database Access Object)
+    ↓
+Database (Room.databaseBuilder)
+    ↓
+Repository (handles data flow)
+```
+
+**Implementation:**
+
+```kotlin
+// Step 1: Define Entity
+@Entity(tableName = "users")
+data class User(
+    @PrimaryKey
+    val id: Int,
+    val name: String,
+    val email: String,
+    @ColumnInfo(name = "created_at")
+    val createdAt: Long
+)
+
+// Step 2: Create DAO (Data Access Object)
+@Dao
+interface UserDao {
+    @Insert
+    suspend fun insertUser(user: User)
+    
+    @Update
+    suspend fun updateUser(user: User)
+    
+    @Delete
+    suspend fun deleteUser(user: User)
+    
+    @Query("SELECT * FROM users WHERE id = :userId")
+    fun getUserById(userId: Int): LiveData<User>
+    
+    @Query("SELECT * FROM users ORDER BY created_at DESC")
+    fun getAllUsers(): LiveData<List<User>>
+    
+    @Query("SELECT * FROM users WHERE name LIKE :searchQuery")
+    fun searchUsers(searchQuery: String): Flow<List<User>>
+    
+    @Query("DELETE FROM users WHERE created_at < :timestamp")
+    suspend fun deleteOldUsers(timestamp: Long)
+}
+
+// Step 3: Create Room Database
+@Database(entities = [User::class], version = 1)
+abstract class AppDatabase : RoomDatabase() {
+    abstract fun userDao(): UserDao
+    
+    companion object {
+        private var INSTANCE: AppDatabase? = null
+        
+        fun getInstance(context: Context): AppDatabase {
+            return INSTANCE ?: synchronized(this) {
+                Room.databaseBuilder(
+                    context,
+                    AppDatabase::class.java,
+                    "app_database"
+                ).build().also { INSTANCE = it }
+            }
+        }
+    }
+}
+
+// Step 4: Create Repository (abstraction over data sources)
+class UserRepository(private val userDao: UserDao) {
+    fun getUserById(id: Int): LiveData<User> = userDao.getUserById(id)
+    
+    fun getAllUsers(): LiveData<List<User>> = userDao.getAllUsers()
+    
+    suspend fun createUser(user: User) {
+        userDao.insertUser(user)
+    }
+    
+    suspend fun updateUser(user: User) {
+        userDao.updateUser(user)
+    }
+    
+    suspend fun deleteUser(user: User) {
+        userDao.deleteUser(user)
+    }
+}
+
+// Step 5: Use in ViewModel
+class UserViewModel(private val repository: UserRepository) : ViewModel() {
+    val users: LiveData<List<User>> = repository.getAllUsers()
+    
+    fun addUser(name: String, email: String) {
+        viewModelScope.launch {
+            val user = User(
+                id = System.currentTimeMillis().toInt(),
+                name = name,
+                email = email,
+                createdAt = System.currentTimeMillis()
+            )
+            repository.createUser(user)
+        }
+    }
+}
+```
+
+**Query Types:**
+
+```kotlin
+// Simple query - returns Live data (auto-updates)
+@Query("SELECT * FROM users")
+fun getAllUsers(): LiveData<List<User>>
+
+// Flow query - reactive stream
+@Query("SELECT * FROM users")
+fun getUsersFlow(): Flow<List<User>>
+
+// Parameterized query - prevents SQL injection
+@Query("SELECT * FROM users WHERE id = :userId")
+fun getUser(userId: Int): LiveData<User>
+
+// Join query
+@Query("""
+    SELECT users.*, posts.title 
+    FROM users 
+    LEFT JOIN posts ON users.id = posts.user_id 
+    WHERE users.id = :userId
+""")
+fun getUserWithPosts(userId: Int): LiveData<UserWithPosts>
+
+// Transaction
+@Transaction
+@Query("SELECT * FROM users")
+fun getUsersWithPosts(): LiveData<List<UserWithPosts>>
+```
+
+---
+
+### 4. Navigation Component
+
+**Theory:**
+
+Navigation Component simplifies implementing navigation in Android:
+- Single source of truth for navigation state
+- Type-safe argument passing
+- Automatic back stack management
+- Deep linking support
+
+**Implementation:**
+
+```kotlin
+// Step 1: Create navigation graph (res/navigation/nav_graph.xml)
+<navigation>
+    <fragment
+        android:id="@+id/userListFragment"
+        android:name="com.example.UserListFragment"
+        android:label="Users" />
+    
+    <fragment
+        android:id="@+id/userDetailFragment"
+        android:name="com.example.UserDetailFragment"
+        android:label="User Detail">
+        <argument
+            android:name="userId"
+            app:argType="integer" />
+    </fragment>
+    
+    <action
+        android:id="@+id/action_userList_to_detail"
+        app:destination="@+id/userDetailFragment" />
+</navigation>
+
+// Step 2: Define arguments with Safe Args (Plugin)
+plugins {
+    id 'androidx.navigation.safeargs'
+}
+
+// Step 3: Navigate with arguments
+class UserListFragment : Fragment() {
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        
+        // Type-safe navigation (auto-generated)
+        binding.userList.setOnItemClickListener { userId ->
+            val action = UserListFragmentDirections
+                .actionUserListToDetail(userId)
+            findNavController().navigate(action)
+        }
+    }
+}
+
+// Step 4: Receive arguments
+class UserDetailFragment : Fragment() {
+    private val args: UserDetailFragmentArgs by navArgs()
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        
+        val userId = args.userId
+        viewModel.loadUser(userId)
+    }
+}
+
+// Back navigation
+binding.backButton.setOnClickListener {
+    findNavController().navigateUp()
+}
+```
+
+---
+
+## Data Persistence
+
+### 1. Preferences DataStore
+
+**Theory:**
+
+DataStore replaces SharedPreferences with:
+- Type-safe
+- Asynchronous (coroutine-based)
+- Reactive (Flow-based)
+- ACID transactions
+
+**Implementation:**
+
+```kotlin
+// Define schema (proto file)
+syntax = "proto3";
+
+message UserPreferences {
+    string theme = 1;
+    int32 font_size = 2;
+    bool dark_mode = 3;
+}
+
+// Create DataStore
+class UserPreferencesRepository(
+    private val dataStore: DataStore<UserPreferences>
+) {
+    val userPreferencesFlow: Flow<UserPreferences> = dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(UserPreferences.getDefaultInstance())
+            } else {
+                throw exception
+            }
+        }
+    
+    suspend fun updateTheme(theme: String) {
+        dataStore.updateData { currentPreferences ->
+            currentPreferences.toBuilder()
+                .setTheme(theme)
+                .build()
+        }
+    }
+    
+    suspend fun updateDarkMode(isDark: Boolean) {
+        dataStore.updateData { currentPreferences ->
+            currentPreferences.toBuilder()
+                .setDarkMode(isDark)
+                .build()
+        }
+    }
+}
+
+// Use in ViewModel
+class SettingsViewModel(
+    private val prefRepo: UserPreferencesRepository
+) : ViewModel() {
+    val userPreferences = prefRepo.userPreferencesFlow.stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        UserPreferences.getDefaultInstance()
+    )
+    
+    fun setTheme(theme: String) {
+        viewModelScope.launch {
+            prefRepo.updateTheme(theme)
+        }
+    }
+}
+```
+
+---
+
+### 2. WorkManager
+
+**Theory:**
+
+WorkManager schedules deferrable, guaranteed work:
+- Works even if app is closed/device restarted
+- Respects device battery state
+- Automatic retry with backoff
+- Chains multiple tasks
+
+**Use Cases:**
+
+- Syncing data with server
+- Uploading logs
+- Periodic backups
+- Background image processing
+
+**Implementation:**
+
+```kotlin
+// Define Work
+class SyncDataWork(context: Context, params: WorkerParameters) 
+    : CoroutineWorker(context, params) {
+    
+    override suspend fun doWork(): Result {
+        return try {
+            // Do background work
+            val data = fetchFromServer()
+            saveToDatabase(data)
+            
+            Result.success()
+        } catch (exception: Exception) {
+            if (runAttemptCount < 3) {
+                Result.retry()  // Retry with backoff
+            } else {
+                Result.failure()
+            }
+        }
+    }
+}
+
+// Schedule Work
+class SyncWorkScheduler {
+    fun scheduleDataSync(context: Context) {
+        val syncWork = PeriodicWorkRequestBuilder<SyncDataWork>(
+            15, TimeUnit.MINUTES  // Repeat every 15 minutes
+        ).setBackoffCriteria(
+            BackoffPolicy.EXPONENTIAL,
+            WorkRequest.MIN_BACKOFF_MILLIS,
+            TimeUnit.MILLISECONDS
+        ).build()
+        
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            "sync_data",
+            ExistingPeriodicWorkPolicy.KEEP,
+            syncWork
+        )
+    }
+    
+    // One-time work
+    fun syncNow(context: Context) {
+        val syncWork = OneTimeWorkRequestBuilder<SyncDataWork>()
+            .setBackoffCriteria(
+                BackoffPolicy.EXPONENTIAL,
+                10, TimeUnit.SECONDS
+            )
+            .build()
+        
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "sync_now",
+            ExistingWorkPolicy.REPLACE,
+            syncWork
+        )
+    }
+}
+
+// Observe Work Status
+class SyncViewModel : ViewModel() {
+    val syncState = WorkManager.getInstance(context)
+        .getWorkInfosForUniqueWorkLiveData("sync_data")
+        .map { workInfos ->
+            when {
+                workInfos.isEmpty() -> SyncState.Idle
+                workInfos.all { it.state == WorkInfo.State.SUCCEEDED } -> 
+                    SyncState.Success
+                workInfos.any { it.state == WorkInfo.State.RUNNING } -> 
+                    SyncState.Running
+                workInfos.any { it.state == WorkInfo.State.FAILED } -> 
+                    SyncState.Failed
+                else -> SyncState.Idle
+            }
+        }
+}
+
+sealed class SyncState {
+    object Idle : SyncState()
+    object Running : SyncState()
+    object Success : SyncState()
+    object Failed : SyncState()
+}
+```
+
+---
+
+## Behavior Components
+
+### 1. Notifications
+
+**Theory:**
+
+Notifications deliver timely, relevant updates. Jetpack NotificationCompat:
+- Backward compatibility
+- Rich UI support
+- Actions and custom content
+
+**Implementation:**
+
+```kotlin
+class NotificationManager(private val context: Context) {
+    private val channelId = "important_updates"
+    
+    init {
+        createNotificationChannel()
+    }
+    
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                channelId,
+                "Important Updates",
+                android.app.NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Notifications for important events"
+            }
+            
+            context.getSystemService(android.app.NotificationManager::class.java)
+                .createNotificationChannel(channel)
+        }
+    }
+    
+    fun showNotification(title: String, message: String) {
+        val notification = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setAutoCancel(true)
+            .setContentIntent(getPendingIntent())
+            .addAction(
+                R.drawable.ic_reply,
+                "Reply",
+                getReplyPendingIntent()
+            )
+            .build()
+        
+        context.getSystemService(android.app.NotificationManager::class.java)
+            .notify(1, notification)
+    }
+    
+    private fun getPendingIntent(): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java)
+        return PendingIntent.getActivity(
+            context, 0, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or 
+            PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+    
+    private fun getReplyPendingIntent(): PendingIntent {
+        val intent = Intent(context, ReplyReceiver::class.java)
+        return PendingIntent.getBroadcast(
+            context, 0, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or 
+            PendingIntent.FLAG_MUTABLE
+        )
+    }
+}
+
+// Broadcast receiver for notification actions
+class ReplyReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context?, intent: Intent?) {
+        val replyText = RemoteInput.getResultsFromIntent(intent)
+            ?.getCharSequence("reply_text")?.toString()
+        
+        replyText?.let {
+            // Handle reply
+        }
+    }
+}
+```
+
+---
+
+### 2. Permissions (PermissionCompat)
+
+**Theory:**
+
+PermissionCompat simplifies runtime permission handling:
+- Backward compatible
+- Activity result contracts
+- Clear request/grant flows
+
+**Implementation:**
+
+```kotlin
+class PermissionHelper(private val activity: AppCompatActivity) {
+    
+    // Request single permission
+    private val requestPermissionLauncher = activity.registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            onPermissionGranted()
+        } else {
+            onPermissionDenied()
+        }
+    }
+    
+    // Request multiple permissions
+    private val requestMultiplePermissionsLauncher = activity.registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions: Map<String, Boolean> ->
+        when {
+            permissions[Manifest.permission.CAMERA] == true -> {
+                // Camera permission granted
+            }
+            permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true -> {
+                // Location permission granted
+            }
+            else -> {
+                // Permission denied
+            }
+        }
+    }
+    
+    fun requestCameraPermission() {
+        requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+    }
+    
+    fun requestMultiplePermissions() {
+        requestMultiplePermissionsLauncher.launch(
+            arrayOf(
+                Manifest.permission.CAMERA,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.READ_CONTACTS
+            )
+        )
+    }
+    
+    private fun onPermissionGranted() {
+        // Start using camera
+    }
+    
+    private fun onPermissionDenied() {
+        Toast.makeText(activity, "Permission denied", Toast.LENGTH_SHORT).show()
+    }
+}
+```
+
+---
+
+## UI Components
+
+### 1. RecyclerView with ListAdapter
+
+**Theory:**
+
+ListAdapter simplifies list updates:
+- Automatic DiffUtil calculations
+- Smooth item animations
+- ViewHolder pattern
+
+**Implementation:**
+
+```kotlin
+// Data class with stable ID
+data class User(val id: Int, val name: String, val email: String)
+
+// View Holder
+class UserViewHolder(
+    private val binding: ItemUserBinding,
+    private val onItemClick: (User) -> Unit
+) : RecyclerView.ViewHolder(binding.root) {
+    
+    fun bind(user: User) {
+        binding.apply {
+            nameText.text = user.name
+            emailText.text = user.email
+            root.setOnClickListener { onItemClick(user) }
+        }
+    }
+}
+
+// List Adapter with DiffUtil
+class UserListAdapter(
+    private val onItemClick: (User) -> Unit
+) : ListAdapter<User, UserViewHolder>(UserDiffUtil) {
+    
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): UserViewHolder {
+        val binding = ItemUserBinding.inflate(
+            LayoutInflater.from(parent.context),
+            parent,
+            false
+        )
+        return UserViewHolder(binding, onItemClick)
+    }
+    
+    override fun onBindViewHolder(holder: UserViewHolder, position: Int) {
+        holder.bind(getItem(position))
+    }
+}
+
+// DiffUtil callback
+object UserDiffUtil : DiffUtil.ItemCallback<User>() {
+    override fun areItemsTheSame(oldItem: User, newItem: User) =
+        oldItem.id == newItem.id
+    
+    override fun areContentsTheSame(oldItem: User, newItem: User) =
+        oldItem == newItem
+}
+
+// Use in Fragment
+class UserListFragment : Fragment() {
+    private val viewModel: UserViewModel by viewModels()
+    private val adapter = UserListAdapter { user ->
+        // Navigate to detail
+    }
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        
+        binding.recyclerView.adapter = adapter
+        
+        viewModel.users.observe(viewLifecycleOwner) { users ->
+            adapter.submitList(users)
+        }
+    }
+}
+```
+
+---
+
+### 2. Paging3
+
+**Theory:**
+
+Paging3 enables efficient loading of large datasets:
+- Loads data in chunks
+- Smooth scrolling
+- Built-in loading indicators
+- Handles retry logic
+
+**Implementation:**
+
+```kotlin
+// Step 1: Create PagingSource
+class UserPagingSource(private val api: UserApi) : PagingSource<Int, User>() {
+    override suspend fun load(params: LoadParams<Int>): LoadResult<Int, User> {
+        val pageNumber = params.key ?: 1
+        
+        return try {
+            val response = api.getUsers(
+                page = pageNumber,
+                pageSize = params.loadSize
+            )
+            
+            LoadResult.Page(
+                data = response.users,
+                prevKey = if (pageNumber > 1) pageNumber - 1 else null,
+                nextKey = if (response.hasNextPage) pageNumber + 1 else null
+            )
+        } catch (e: Exception) {
+            LoadResult.Error(e)
+        }
+    }
+}
+
+// Step 2: Create Repository
+class UserRepository(private val api: UserApi) {
+    fun getUsersPaged(): Flow<PagingData<User>> {
+        return Pager(
+            config = PagingConfig(
+                pageSize = 20,
+                enablePlaceholders = false
+            ),
+            pagingSourceFactory = { UserPagingSource(api) }
+        ).flow
+    }
+}
+
+// Step 3: Create PagingDataAdapter
+class PagingUserAdapter : PagingDataAdapter<User, UserViewHolder>(UserDiffUtil) {
+    
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): UserViewHolder {
+        // Similar to ListAdapter
+    }
+    
+    override fun onBindViewHolder(holder: UserViewHolder, position: Int) {
+        holder.bind(getItem(position))
+    }
+}
+
+// Step 4: Use in Fragment
+class UserListFragment : Fragment() {
+    private val viewModel: UserViewModel by viewModels()
+    private val adapter = PagingUserAdapter()
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        
+        binding.recyclerView.adapter = adapter.withLoadStateFooter(
+            footer = PagingLoadStateAdapter { adapter.retry() }
+        )
+        
+        viewModel.usersPaged.collectLatest { pagingData ->
+            adapter.submitData(pagingData)
+        }
+    }
+}
+```
+
+---
+
+## Foundation Libraries
+
+### 1. AppCompat
+
+**Theory:**
+
+AppCompat provides backward compatibility:
+- Material Design support
+- Toolbar, ActionBar
+- Vector drawable support
+- Night mode (dark theme)
+
+**Implementation:**
+
+```kotlin
+// Extend AppCompatActivity
+class MainActivity : AppCompatActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        
+        // Use AppCompat toolbar
+        val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
+        setSupportActionBar(toolbar)
+        supportActionBar?.title = "My App"
+    }
+    
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.menu_main, menu)
+        return true
+    }
+    
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_settings -> {
+                startActivity(Intent(this, SettingsActivity::class.java))
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
+    }
+}
+
+// Material Design theme
+<style name="AppTheme" parent="Theme.MaterialComponents.Light">
+    <item name="colorPrimary">@color/primary</item>
+    <item name="colorSecondary">@color/secondary</item>
+    <item name="android:forceDarkAllowed">true</item>
+</style>
+```
+
+---
+
+## MVVM Architecture Pattern
+
+**Complete Example:**
+
+```kotlin
+// 1. MODEL - Data layer
+data class User(val id: Int, val name: String, val email: String)
+
+// 2. REPOSITORY - Data access abstraction
+class UserRepository(
+    private val userDao: UserDao,
+    private val userApi: UserApi
+) {
+    fun getUserById(id: Int): LiveData<User> = userDao.getUserById(id)
+    
+    fun getAllUsers(): LiveData<List<User>> = userDao.getAllUsers()
+    
+    suspend fun syncUsers() {
+        try {
+            val users = userApi.fetchUsers()
+            userDao.insertAll(users)
+        } catch (e: Exception) {
+            Log.e("UserRepository", "Sync failed", e)
+        }
+    }
+}
+
+// 3. VIEW MODEL - Business logic & UI state
+class UserViewModel(private val repository: UserRepository) : ViewModel() {
+    private val _userList = MutableLiveData<List<User>>()
+    val userList: LiveData<List<User>> = _userList
+    
+    private val _isLoading = MutableLiveData<Boolean>()
+    val isLoading: LiveData<Boolean> = _isLoading
+    
+    private val _error = MutableLiveData<String?>()
+    val error: LiveData<String?> = _error
+    
+    fun loadUsers() {
+        _isLoading.value = true
+        viewModelScope.launch {
+            try {
+                repository.syncUsers()
+                _userList.value = // Get from repository
+                _error.value = null
+            } catch (e: Exception) {
+                _error.value = e.message
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+}
+
+// 4. VIEW - UI layer (Activity/Fragment)
+class UserListActivity : AppCompatActivity() {
+    private val viewModel: UserViewModel by viewModels()
+    private val adapter = UserListAdapter { user ->
+        // Navigate
+    }
+    
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_user_list)
+        
+        binding.recyclerView.adapter = adapter
+        
+        // Observe state
+        viewModel.userList.observe(this) { users ->
+            adapter.submitList(users)
+        }
+        
+        viewModel.isLoading.observe(this) { isLoading ->
+            binding.progressBar.visibility = 
+                if (isLoading) View.VISIBLE else View.GONE
+        }
+        
+        viewModel.error.observe(this) { error ->
+            error?.let { showError(it) }
+        }
+        
+        viewModel.loadUsers()
+    }
+}
+```
+
+---
+
+## Best Practices
+
+### 1. Dependency Injection
+
+```kotlin
+// Use Hilt for DI
+@HiltAndroidApp
+class MyApplication : Application()
+
+// Provide dependencies
+@Module
+@InstallIn(SingletonComponent::class)
+object AppModule {
+    
+    @Singleton
+    @Provides
+    fun provideDatabase(context: Context): AppDatabase {
+        return Room.databaseBuilder(context, AppDatabase::class.java, "db").build()
+    }
+    
+    @Singleton
+    @Provides
+    fun provideUserDao(database: AppDatabase): UserDao = database.userDao()
+    
+    @Singleton
+    @Provides
+    fun provideUserRepository(userDao: UserDao): UserRepository {
+        return UserRepository(userDao)
+    }
+}
+
+// Inject into ViewModel
+@HiltViewModel
+class UserViewModel @Inject constructor(
+    private val repository: UserRepository
+) : ViewModel() { }
+
+// Inject into Activity
+@AndroidEntryPoint
+class UserActivity : AppCompatActivity() {
+    private val viewModel: UserViewModel by viewModels()
+}
+```
+
+### 2. Lifecycle-Aware Components
+
+```kotlin
+// Always use lifecycle-aware observers
+lifecycle.addObserver(object : LifecycleObserver {
+    @OnLifecycleEvent(Lifecycle.Event.ON_START)
+    fun onStart() {
+        startTracking()
+    }
+    
+    @OnLifecycleEvent(Lifecycle.Event.ON_STOP)
+    fun onStop() {
+        stopTracking()
+    }
+})
+
+// Use viewLifecycleOwner in Fragments
+viewModel.data.observe(viewLifecycleOwner) { data ->
+    updateUI(data)
+}
+
+// Use this in Activities
+viewModel.data.observe(this) { data ->
+    updateUI(data)
+}
+```
+
+### 3. Error Handling
+
+```kotlin
+sealed class Result<T> {
+    data class Success<T>(val data: T) : Result<T>()
+    data class Error<T>(val exception: Exception) : Result<T>()
+    class Loading<T> : Result<T>()
+}
+
+class SafeViewModel(private val repository: UserRepository) : ViewModel() {
+    private val _state = MutableLiveData<Result<User>>()
+    val state: LiveData<Result<User>> = _state
+    
+    fun loadUser(id: Int) {
+        _state.value = Result.Loading()
+        viewModelScope.launch {
+            try {
+                val user = repository.getUser(id)
+                _state.value = Result.Success(user)
+            } catch (e: Exception) {
+                _state.value = Result.Error(e)
+            }
+        }
+    }
+}
+
+// Observe results
+viewModel.state.observe(this) { result ->
+    when (result) {
+        is Result.Success -> displayUser(result.data)
+        is Result.Error -> showError(result.exception.message)
+        is Result.Loading -> showLoading()
+    }
+}
+```
+
+### 4. Testing with Jetpack
+
+```kotlin
+// ViewModel testing
+@RunWith(AndroidUnit4::class)
+class UserViewModelTest {
+    @get:Rule
+    val instantExecutorRule = InstantTaskExecutorRule()
+    
+    private lateinit var viewModel: UserViewModel
+    
+    @Before
+    fun setup() {
+        val repository = FakeUserRepository()
+        viewModel = UserViewModel(repository)
+    }
+    
+    @Test
+    fun testLoadUsers() {
+        viewModel.loadUsers()
+        
+        val users = viewModel.userList.getOrAwaitValue()
+        assertThat(users).isNotEmpty()
+    }
+}
+
+// LiveData testing helper
+fun <T> LiveData<T>.getOrAwaitValue(
+    time: Long = 2,
+    timeUnit: TimeUnit = TimeUnit.SECONDS
+): T {
+    var data: T? = null
+    val latch = CountDownLatch(1)
+    
+    val observer = object : Observer<T> {
+        override fun onChanged(o: T?) {
+            data = o
+            latch.countDown()
+            this@getOrAwaitValue.removeObserver(this)
+        }
+    }
+    
+    this.observeForever(observer)
+    latch.await(time, timeUnit)
+    
+    @Suppress("UNCHECKED_CAST")
+    return data as T
+}
+```
+
+---
+
+## Summary
+
+**Jetpack provides:**
+
+✅ **Lifecycle Management** - ViewModel, LiveData
+✅ **Data Persistence** - Room, DataStore
+✅ **Background Work** - WorkManager
+✅ **Navigation** - Navigation Component
+✅ **UI Components** - RecyclerView, Paging, Navigation
+✅ **Architecture** - MVVM pattern guidance
+✅ **Testing** - Lifecycle testing utilities
+✅ **Backward Compatibility** - AppCompat
+
+**Best Practices:**
+- Always use ViewModel for UI state
+- Expose LiveData as read-only
+- Use Repository pattern for data
+- Inject dependencies with Hilt
+- Handle lifecycle properly
+- Write lifecycle-aware code
+- Test with lifecycle test rules
+
+Good luck with Jetpack development!
+
+# Android Jetpack - Interview Concepts Master Guide
+
+Complete interview preparation with all concepts, theory, examples, and keypoints.
+
+## Table of Contents
+1. [Android Lifecycle Fundamentals](#android-lifecycle-fundamentals)
+2. [Architecture Components](#architecture-components)
+3. [State Management](#state-management)
+4. [Data Persistence](#data-persistence)
+5. [Asynchronous Programming](#asynchronous-programming)
+6. [Navigation & UI](#navigation--ui)
+7. [Dependency Injection](#dependency-injection)
+8. [Testing](#testing)
+9. [Performance & Best Practices](#performance--best-practices)
+10. [Interview Checklist](#interview-checklist)
+
+---
+
+## Android Lifecycle Fundamentals
+
+### Activity Lifecycle
+
+**Theory:**
+An Activity is a screen in an Android app. It has a well-defined lifecycle with several states.
+
+**Lifecycle States & Callbacks:**
+
+```
+┌─────────────────────────────────────────┐
+│           Activity Lifecycle             │
+├─────────────────────────────────────────┤
+│  onCreate()          - First time setup  │
+│  onStart()           - Becoming visible  │
+│  onResume()          - Getting focus     │
+│  [Running/Paused]                       │
+│  onPause()           - Losing focus      │
+│  onStop()            - No longer visible │
+│  onDestroy()         - Being destroyed   │
+└─────────────────────────────────────────┘
+```
+
+**Example:**
+
+```kotlin
+class MainActivity : AppCompatActivity() {
+    
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        
+        // Initialize views, resources, database connections
+        // Called once, even after rotation
+        Log.d("Lifecycle", "onCreate")
+    }
+    
+    override fun onStart() {
+        super.onStart()
+        // Activity is visible but not interactive
+        Log.d("Lifecycle", "onStart")
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        // Activity has focus, ready to interact
+        startLocationUpdates()  // Resume sensors
+        Log.d("Lifecycle", "onResume")
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        // Activity is partially obscured
+        stopLocationUpdates()  // Pause sensors
+        Log.d("Lifecycle", "onPause")
+    }
+    
+    override fun onStop() {
+        super.onStop()
+        // Activity is not visible
+        Log.d("Lifecycle", "onStop")
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        // Activity is being destroyed
+        // Clean up resources
+        Log.d("Lifecycle", "onDestroy")
+    }
+}
+```
+
+**Key Points:**
+- ✅ `onCreate()` is called only once (survives rotation)
+- ✅ `onResume()`/`onPause()` bracket when app has focus
+- ✅ Always cleanup in `onPause()` or `onDestroy()`
+- ✅ Configuration changes trigger `onDestroy()` → `onCreate()`
+- ✅ `savedInstanceState` Bundle preserves simple data across rotation
+
+---
+
+### Fragment Lifecycle
+
+**Theory:**
+Fragment lifecycle is more complex because fragments live within activities.
+
+```kotlin
+Fragment Lifecycle:
+├── onAttach() - Fragment attached to Activity
+├── onCreate() - Fragment created
+├── onCreateView() - Create fragment view
+├── onViewCreated() - View created, safe to access
+├── onStart() - Fragment visible
+├── onResume() - Fragment interactive
+├── [paused/stopped]
+├── onPause() - Fragment losing focus
+├── onStop() - Fragment not visible
+├── onDestroyView() - Fragment view destroyed
+├── onDestroy() - Fragment destroyed
+└── onDetach() - Fragment detached from Activity
+```
+
+**Example:**
+
+```kotlin
+class UserFragment : Fragment() {
+    
+    private var _binding: FragmentUserBinding? = null
+    private val binding get() = _binding!!
+    private val viewModel: UserViewModel by viewModels()
+    
+    override fun onAttach(context: Context) {
+        super.onAttach(context)
+        // Fragment about to attach to Activity
+    }
+    
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Parse arguments
+        val userId = arguments?.getString("userId")
+    }
+    
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        // Inflate layout - return root view
+        _binding = FragmentUserBinding.inflate(inflater, container, false)
+        return binding.root
+    }
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        
+        // Safe to access views now
+        binding.userButton.setOnClickListener {
+            viewModel.loadUser()
+        }
+        
+        // Always use viewLifecycleOwner!
+        viewModel.user.observe(viewLifecycleOwner) { user ->
+            updateUI(user)
+        }
+    }
+    
+    override fun onStart() {
+        super.onStart()
+        // Fragment visible
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        // Fragment interactive
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        // Clean up resources
+    }
+    
+    override fun onStop() {
+        super.onStop()
+        // Fragment not visible
+    }
+    
+    override fun onDestroyView() {
+        super.onDestroyView()
+        // Clean up view references
+        _binding = null  // Prevent memory leak
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        // Fragment destroyed
+    }
+}
+```
+
+**Key Points:**
+- ✅ Use `viewLifecycleOwner` in Fragments, NOT `this`
+- ✅ Nullify binding in `onDestroyView()` to prevent memory leaks
+- ✅ `onViewCreated()` is safe to access views
+- ✅ Arguments are parsed in `onCreate()` before view inflation
+- ✅ Fragment can outlive its view (rotation example)
+
+---
+
+## Architecture Components
+
+### ViewModel Deep Dive
+
+**Theory:**
+ViewModel is designed to survive configuration changes and hold UI-related data.
+
+**How ViewModel Survives Rotation:**
+
+```
+Device Rotation Event:
+┌─────────────────────────────────────────┐
+│ Activity destroyed (onDestroy called)   │
+│ BUT ViewModel instance persists         │
+│ Framework re-creates Activity           │
+│ ViewModel data still there              │
+└─────────────────────────────────────────┘
+
+Without ViewModel:
+onCreate() → fetch users (AGAIN)
+onCreate() → fetch users (AGAIN)
+onCreate() → fetch users (AGAIN)
+[Wasteful API calls, UI flicker]
+
+With ViewModel:
+onCreate() → fetch users (1st time)
+[Rotation - Activity destroyed]
+onCreate() → get cached users [No API call]
+```
+
+**Implementation:**
+
+```kotlin
+@HiltViewModel
+class UserListViewModel @Inject constructor(
+    private val repository: UserRepository,
+    private val logger: Logger
+) : ViewModel() {
+    
+    // Mutable internally, exposed as immutable
+    private val _users = MutableLiveData<List<User>>()
+    val users: LiveData<List<User>> = _users
+    
+    private val _isLoading = MutableLiveData<Boolean>()
+    val isLoading: LiveData<Boolean> = _isLoading
+    
+    private val _error = MutableLiveData<String?>()
+    val error: LiveData<String?> = _error
+    
+    // Lazy initialization
+    private val userComparator = compareBy<User> { it.name }
+    
+    // Called once when ViewModel created
+    init {
+        loadUsers()
+    }
+    
+    fun loadUsers() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            
+            try {
+                val users = repository.getUsers()
+                _users.value = users.sortedWith(userComparator)
+                _error.value = null
+                logger.log("Users loaded: ${users.size}")
+            } catch (e: Exception) {
+                _error.value = e.message
+                logger.error("Load failed", e)
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+    
+    // Clean up when ViewModel destroyed
+    override fun onCleared() {
+        super.onCleared()
+        logger.log("UserListViewModel cleared")
+        // Cancel long-running operations if needed
+    }
+}
+```
+
+**Usage:**
+
+```kotlin
+class UserListFragment : Fragment() {
+    
+    // ViewModels are tied to Fragment lifecycle
+    private val viewModel: UserListViewModel by viewModels()
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        
+        // Observe with viewLifecycleOwner
+        viewModel.users.observe(viewLifecycleOwner) { users ->
+            adapter.submitList(users)
+        }
+        
+        viewModel.isLoading.observe(viewLifecycleOwner) { isLoading ->
+            binding.progressBar.visibility = 
+                if (isLoading) View.VISIBLE else View.GONE
+        }
+        
+        viewModel.error.observe(viewLifecycleOwner) { error ->
+            error?.let {
+                Snackbar.make(binding.root, it, Snackbar.LENGTH_LONG).show()
+            }
+        }
+    }
+}
+```
+
+**Key Points:**
+- ✅ Survives configuration changes (rotation, locale, etc.)
+- ✅ Tied to Activity/Fragment lifecycle, not View lifecycle
+- ✅ Use `viewModelScope` for coroutines
+- ✅ Expose immutable LiveData, hide mutable implementation
+- ✅ Initialize data in `init` block, not constructor
+- ✅ Clean up resources in `onCleared()`
+
+---
+
+### LiveData & State Management
+
+**Theory:**
+LiveData is an observable data holder that is lifecycle-aware.
+
+**Advantages:**
+
+```
+LiveData Features:
+├── Lifecycle Aware
+│   ├── Automatically unsubscribes when lifecycle ends
+│   └── Won't update destroyed views
+├── No Memory Leaks
+│   ├── Lifecycle binding prevents leaks
+│   └── Auto cleanup
+├── Thread Safe
+│   ├── postValue() from any thread
+│   ├── value from main thread
+├── Configuration Change Safe
+│   ├── Data persists across rotation
+│   └── No redundant updates
+└── One-time Observers
+    └── observeOnce possible
+```
+
+**Implementation Patterns:**
+
+```kotlin
+// Pattern 1: Simple LiveData
+class SimpleViewModel : ViewModel() {
+    private val _counter = MutableLiveData<Int>(0)
+    val counter: LiveData<Int> = _counter
+    
+    fun increment() {
+        _counter.value = (_counter.value ?: 0) + 1
+    }
+}
+
+// Pattern 2: Transformed LiveData
+class TransformedViewModel : ViewModel() {
+    private val _userName = MutableLiveData<String>("")
+    
+    // Transform name to uppercase
+    val userNameUppercase: LiveData<String> = _userName.map { name ->
+        name.uppercase()
+    }
+    
+    // Switch between different LiveData sources
+    private val _userId = MutableLiveData<Int>()
+    val user: LiveData<User> = _userId.switchMap { userId ->
+        repository.getUser(userId)  // Returns LiveData<User>
+    }
+}
+
+// Pattern 3: Merging LiveData
+class MergedViewModel : ViewModel() {
+    private val _firstName = MutableLiveData<String>("")
+    private val _lastName = MutableLiveData<String>("")
+    
+    val fullName: LiveData<String> = mediatorLiveData {
+        val first = _firstName.value ?: ""
+        val last = _lastName.value ?: ""
+        
+        value = "$first $last"
+    }
+    
+    init {
+        // Update whenever either changes
+        addSource(_firstName) {
+            value = "${_firstName.value ?: ""} ${_lastName.value ?: ""}"
+        }
+        addSource(_lastName) {
+            value = "${_firstName.value ?: ""} ${_lastName.value ?: ""}"
+        }
+    }
+}
+
+// Pattern 4: Distinct Until Changed
+class DistinctViewModel : ViewModel() {
+    private val _searchQuery = MutableLiveData<String>()
+    
+    // Only update when value actually changes
+    val results: LiveData<List<SearchResult>> = 
+        _searchQuery
+            .distinctUntilChanged()
+            .switchMap { query ->
+                if (query.length < 3) {
+                    MutableLiveData<List<SearchResult>>(emptyList())
+                } else {
+                    repository.search(query)
+                }
+            }
+}
+```
+
+**Comparison: LiveData vs StateFlow:**
+
+```kotlin
+// LiveData (Lifecycle-aware)
+class LiveDataViewModel : ViewModel() {
+    val state: LiveData<State> = ...
+}
+// Usage:
+viewModel.state.observe(this) { state ->
+    // Automatic lifecycle management
+}
+
+// StateFlow (Coroutine-based)
+class StateFlowViewModel : ViewModel() {
+    val state: StateFlow<State> = ...
+}
+// Usage:
+lifecycleScope.launch {
+    repeatOnLifecycle(Lifecycle.State.STARTED) {
+        viewModel.state.collect { state ->
+            updateUI(state)
+        }
+    }
+}
+```
+
+**Key Points:**
+- ✅ Lifecycle-aware - automatic unsubscribe
+- ✅ Thread-safe with `postValue()`
+- ✅ Use `.map()` for transformations
+- ✅ Use `.switchMap()` for switching data sources
+- ✅ `distinctUntilChanged()` prevents redundant updates
+- ✅ StateFlow more modern, but LiveData still widely used
+
+---
+
+### Flow & Reactive Programming
+
+**Theory:**
+Flow is a Kotlin coroutine-based API for reactive streams.
+
+**Flow vs LiveData:**
+
+```
+LiveData:
+├── Lifecycle-aware
+├── Hot observable
+├── Simple for UI
+└── Android-specific
+
+Flow:
+├── Not lifecycle-aware
+├── Cold observable
+├── Powerful transformations
+└── Pure Kotlin
+```
+
+**Implementation:**
+
+```kotlin
+// Producer
+class UserRepository {
+    fun getUsers(): Flow<List<User>> = flow {
+        try {
+            // Emit initial local data
+            val cached = userDao.getAllUsers()
+            emit(cached)
+            
+            // Fetch fresh data
+            val fresh = userApi.getUsers()
+            userDao.insertAll(fresh)
+            emit(fresh)
+        } catch (e: Exception) {
+            // Handle error
+        }
+    }
+    
+    // Reactive database query
+    fun observeUser(id: String): Flow<User> {
+        return userDao.observeUser(id)
+            .map { entity ->
+                entity.toDomain()
+            }
+    }
+}
+
+// ViewModel
+@HiltViewModel
+class UserViewModel @Inject constructor(
+    private val repository: UserRepository
+) : ViewModel() {
+    
+    // Convert Flow to LiveData
+    val users: LiveData<List<User>> = 
+        repository.getUsers().asLiveData()
+    
+    // Or keep as Flow
+    val userUpdates: Flow<User> = 
+        MutableStateFlow("").switchMap { id ->
+            repository.observeUser(id)
+        }
+}
+
+// UI Layer
+class UserFragment : Fragment() {
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        // Method 1: With LiveData
+        viewModel.users.observe(viewLifecycleOwner) { users ->
+            updateUI(users)
+        }
+        
+        // Method 2: With Flow + lifecycleScope
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.userUpdates.collect { user ->
+                    updateUI(user)
+                }
+            }
+        }
+    }
+}
+```
+
+**Flow Operators:**
+
+```kotlin
+repository.getUsers()
+    // Transformation
+    .map { users ->
+        users.sortedBy { it.name }
+    }
+    // Filtering
+    .filter { users ->
+        users.isNotEmpty()
+    }
+    // Flattening
+    .flatMapLatest { users ->
+        repository.getDetails(users)
+    }
+    // Error handling
+    .catch { error ->
+        emit(emptyList())
+    }
+    // Side effects
+    .onEach { users ->
+        logger.log("Users: ${users.size}")
+    }
+    .collect { users ->
+        updateUI(users)
+    }
+```
+
+**Key Points:**
+- ✅ Cold observable - new instance per collector
+- ✅ Powerful operators: map, filter, flatMap, catch
+- ✅ Coroutine-based, not lifecycle-aware
+- ✅ Convert to LiveData for safe UI updates
+- ✅ Use in repository and ViewModel layers
+
+---
+
+## Data Persistence
+
+### Room Database
+
+**Theory:**
+Room is an abstraction layer over SQLite that provides compile-time SQL verification.
+
+**Three Main Components:**
+
+```
+┌────────────────────┐
+│   Entity (Table)   │  <- Models
+├────────────────────┤
+│      DAO            │  <- Queries
+├────────────────────┤
+│   RoomDatabase      │  <- Container
+└────────────────────┘
+```
+
+**Implementation:**
+
+```kotlin
+// 1. Entity - Represents database table
+@Entity(tableName = "users", indices = [Index("email", unique = true)])
+data class UserEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Int = 0,
+    
+    @ColumnInfo(name = "full_name")
+    val fullName: String,
+    
+    val email: String,
+    
+    @Ignore
+    val isTemporary: Boolean = false  // Not stored in DB
+)
+
+// 2. DAO - Data Access Object
+@Dao
+interface UserDao {
+    
+    // Insert
+    @Insert
+    suspend fun insert(user: UserEntity)
+    
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOrUpdate(user: UserEntity)
+    
+    // Query
+    @Query("SELECT * FROM users WHERE id = :id")
+    suspend fun getUserById(id: Int): UserEntity?
+    
+    @Query("SELECT * FROM users ORDER BY full_name")
+    fun getAllUsers(): LiveData<List<UserEntity>>
+    
+    // Reactive Query (Flow)
+    @Query("SELECT * FROM users WHERE email = :email")
+    fun observeUser(email: String): Flow<UserEntity>
+    
+    // Update
+    @Update
+    suspend fun update(user: UserEntity)
+    
+    // Delete
+    @Delete
+    suspend fun delete(user: UserEntity)
+    
+    @Query("DELETE FROM users WHERE id = :id")
+    suspend fun deleteById(id: Int)
+    
+    // Transaction
+    @Transaction
+    suspend fun insertUserWithPosts(
+        user: UserEntity,
+        posts: List<PostEntity>
+    ) {
+        insert(user)
+        insertPosts(posts)
+    }
+    
+    @Insert
+    suspend fun insertPosts(posts: List<PostEntity>)
+}
+
+// 3. Database
+@Database(
+    entities = [UserEntity::class, PostEntity::class],
+    version = 1,
+    exportSchema = true
+)
+abstract class AppDatabase : RoomDatabase() {
+    
+    abstract fun userDao(): UserDao
+    abstract fun postDao(): PostDao
+    
+    companion object {
+        @Volatile private var instance: AppDatabase? = null
+        
+        fun getInstance(context: Context): AppDatabase =
+            instance ?: synchronized(this) {
+                instance ?: buildDatabase(context).also { instance = it }
+            }
+        
+        private fun buildDatabase(context: Context): AppDatabase {
+            return Room.databaseBuilder(
+                context,
+                AppDatabase::class.java,
+                "app.db"
+            )
+            .addMigrations(MIGRATION_1_2)
+            .build()
+        }
+    }
+}
+
+// 4. Migration
+val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("ALTER TABLE users ADD COLUMN phone TEXT DEFAULT ''")
+    }
+}
+```
+
+**Repository Pattern with Room:**
+
+```kotlin
+class UserRepository(
+    private val userDao: UserDao,
+    private val userApi: UserApi
+) {
+    
+    // Read from local cache
+    fun getAllUsers(): LiveData<List<User>> {
+        return userDao.getAllUsers()
+            .map { entities ->
+                entities.map { it.toDomain() }
+            }
+    }
+    
+    // Offline-first: Local cache + background sync
+    fun getUser(id: Int): Flow<User?> = flow {
+        // Emit cached data first
+        val cached = userDao.getUserById(id)
+        if (cached != null) {
+            emit(cached.toDomain())
+        }
+        
+        try {
+            // Fetch fresh data
+            val fresh = userApi.getUser(id)
+            userDao.insertOrUpdate(fresh.toEntity())
+            emit(fresh)
+        } catch (e: Exception) {
+            if (cached == null) throw e
+        }
+    }
+    
+    // Insert with error handling
+    suspend fun insertUser(user: User): Result<Unit> = runCatching {
+        userDao.insert(user.toEntity())
+    }
+}
+```
+
+**Key Points:**
+- ✅ Compile-time SQL verification
+- ✅ Automatic cursor-to-object mapping
+- ✅ LiveData/Flow support in DAO
+- ✅ Transaction support with @Transaction
+- ✅ Migrations for schema changes
+- ✅ Type-safe queries
+
+---
+
+### DataStore & WorkManager
+
+**Theory:**
+DataStore replaces SharedPreferences with better performance and type safety.
+
+**DataStore vs SharedPreferences:**
+
+```
+SharedPreferences:
+├── Plain text storage
+├── Not type-safe
+├── No transaction support
+└── Deprecated
+
+DataStore:
+├── Protocol Buffer support
+├── Type-safe
+├── ACID transactions
+├── Coroutine-based
+└── Async by default
+```
+
+**Implementation:**
+
+```kotlin
+// Proto DataStore
+data class UserPreferences(
+    val isDarkMode: Boolean = false,
+    val lastUserId: String = "",
+    val fontSize: Float = 14f
+)
+
+val Context.userPreferences: DataStore<UserPreferences> by preferencesDataStore(
+    name = "user_preferences",
+    serializer = UserPreferencesSerializer()
+)
+
+// Custom Serializer
+object UserPreferencesSerializer : Serializer<UserPreferences> {
+    override val defaultValue: UserPreferences = UserPreferences()
+    
+    override suspend fun readFrom(input: InputStream): UserPreferences {
+        return try {
+            JsonFormat.merge(input.readBytes().decodeToString(), UserPreferences())
+        } catch (e: Exception) {
+            defaultValue
+        }
+    }
+    
+    override suspend fun writeTo(
+        t: UserPreferences,
+        output: OutputStream
+    ) {
+        output.write(JsonFormat.printer().print(t).encodeToByteArray())
+    }
+}
+
+// Usage in ViewModel
+@HiltViewModel
+class SettingsViewModel @Inject constructor(
+    private val dataStore: DataStore<UserPreferences>
+) : ViewModel() {
+    
+    val isDarkMode: Flow<Boolean> = dataStore.data
+        .catch { exception ->
+            emit(UserPreferences())
+        }
+        .map { preferences ->
+            preferences.isDarkMode
+        }
+    
+    fun setDarkMode(enabled: Boolean) {
+        viewModelScope.launch {
+            dataStore.updateData { preferences ->
+                preferences.copy(isDarkMode = enabled)
+            }
+        }
+    }
+}
+```
+
+**WorkManager:**
+
+```kotlin
+// Define Worker
+class SyncDataWorker(
+    context: Context,
+    params: WorkerParameters
+) : CoroutineWorker(context, params) {
+    
+    @Inject lateinit var repository: DataRepository
+    
+    override suspend fun doWork(): Result {
+        return try {
+            // Do background work
+            val data = repository.syncData()
+            
+            // Return result
+            Result.success(
+                workDataOf("syncedItems" to data.size)
+            )
+        } catch (e: Exception) {
+            if (runAttemptCount < 3) {
+                Result.retry()  // Retry up to 3 times
+            } else {
+                Result.failure()  // Give up
+            }
+        }
+    }
+}
+
+// Schedule Work
+class MainActivity : AppCompatActivity() {
+    
+    fun scheduleSyncWork() {
+        val syncWork = PeriodicWorkRequestBuilder<SyncDataWorker>(
+            15, TimeUnit.MINUTES
+        )
+        .setConstraints(
+            Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .setRequiresCharging(false)
+                .build()
+        )
+        .setBackoffCriteria(
+            BackoffPolicy.EXPONENTIAL,
+            15,
+            TimeUnit.MINUTES
+        )
+        .build()
+        
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "sync_work",
+            ExistingPeriodicWorkPolicy.KEEP,
+            syncWork
+        )
+    }
+    
+    fun observeSyncProgress() {
+        WorkManager.getInstance(this)
+            .getWorkInfosForTagLiveData("sync")
+            .observe(this) { workInfos ->
+                workInfos.forEach { workInfo ->
+                    when (workInfo.state) {
+                        WorkInfo.State.RUNNING -> {
+                            val syncedItems = workInfo.outputData.getInt("syncedItems", 0)
+                            Log.d("Work", "Syncing... $syncedItems items")
+                        }
+                        WorkInfo.State.SUCCEEDED -> {
+                            Log.d("Work", "Sync completed")
+                        }
+                        else -> {}
+                    }
+                }
+            }
+    }
+}
+```
+
+**Key Points:**
+- ✅ DataStore is async and type-safe
+- ✅ WorkManager survives app death
+- ✅ Set constraints (network, battery, charging)
+- ✅ Exponential backoff for retries
+- ✅ Can observe work progress with LiveData
+- ✅ Unique work prevents duplicates
+
+---
+
+## Asynchronous Programming
+
+### Coroutines & viewModelScope
+
+**Theory:**
+Coroutines are lightweight threads managed by Kotlin runtime.
+
+**Coroutine Scope Hierarchy:**
+
+```
+GlobalScope (App lifetime)
+├── viewModelScope (ViewModel lifetime)
+├── lifecycleScope (Activity/Fragment lifetime)
+│   ├── launchWhenStarted
+│   ├── launchWhenResumed
+│   └── repeatOnLifecycle
+└── Custom Scope
+```
+
+**Implementation:**
+
+```kotlin
+@HiltViewModel
+class DataViewModel @Inject constructor(
+    private val repository: DataRepository
+) : ViewModel() {
+    
+    private val _data = MutableLiveData<Data>()
+    val data: LiveData<Data> = _data
+    
+    private val _error = MutableLiveData<String?>()
+    val error: LiveData<String?> = _error
+    
+    // Launch on ViewModel scope
+    fun loadData() {
+        viewModelScope.launch {
+            try {
+                // Suspend call (won't block UI thread)
+                val result = repository.getData()
+                _data.value = result
+                _error.value = null
+            } catch (e: CancellationException) {
+                // Job was cancelled
+                throw e
+            } catch (e: Exception) {
+                _error.value = e.message
+            }
+        }
+    }
+    
+    // Parallel requests
+    fun loadUserAndPosts(userId: Int) {
+        viewModelScope.launch {
+            try {
+                // Launch parallel
+                val userDeferred = async { repository.getUser(userId) }
+                val postsDeferred = async { repository.getPosts(userId) }
+                
+                // Wait for both
+                val user = userDeferred.await()
+                val posts = postsDeferred.await()
+                
+                // Update UI
+                _user.value = user
+                _posts.value = posts
+            } catch (e: Exception) {
+                _error.value = e.message
+            }
+        }
+    }
+    
+    // Sequential requests
+    fun loadUserThenFollowers(userId: Int) {
+        viewModelScope.launch {
+            try {
+                // Wait for first, then second
+                val user = repository.getUser(userId)
+                val followers = repository.getFollowers(user.id)
+                
+                _user.value = user
+                _followers.value = followers
+            } catch (e: Exception) {
+                _error.value = e.message
+            }
+        }
+    }
+    
+    // Timeout
+    fun loadDataWithTimeout() {
+        viewModelScope.launch {
+            try {
+                withTimeoutOrNull(5000) {
+                    val data = repository.getData()
+                    _data.value = data
+                }
+            } catch (e: TimeoutCancellationException) {
+                _error.value = "Request timeout"
+            }
+        }
+    }
+    
+    // Clean up
+    override fun onCleared() {
+        super.onCleared()
+        // All coroutines in viewModelScope are cancelled automatically
+    }
+}
+```
+
+**Fragment Usage:**
+
+```kotlin
+class UserFragment : Fragment() {
+    
+    private val viewModel: UserViewModel by viewModels()
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        
+        // Method 1: LiveData (Simple)
+        viewModel.user.observe(viewLifecycleOwner) { user ->
+            updateUI(user)
+        }
+        
+        // Method 2: Flow (Advanced)
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.userFlow.collect { user ->
+                    updateUI(user)
+                }
+            }
+        }
+        
+        // Method 3: Launch when started (Deprecated, but still used)
+        viewLifecycleOwner.lifecycleScope.launchWhenStarted {
+            viewModel.userFlow.collect { user ->
+                updateUI(user)
+            }
+        }
+    }
+}
+```
+
+**Common Patterns:**
+
+```kotlin
+// Retry logic
+suspend fun <T> retryIO(
+    times: Int = 3,
+    initialDelay: Long = 100,
+    maxDelay: Long = 1000,
+    factor: Double = 2.0,
+    block: suspend () -> T
+): T {
+    var currentDelay = initialDelay
+    repeat(times - 1) {
+        try {
+            return block()
+        } catch (e: Exception) {
+            delay(currentDelay)
+            currentDelay = (currentDelay * factor).toLong().coerceAtMost(maxDelay)
+        }
+    }
+    return block()
+}
+
+// Usage
+viewModelScope.launch {
+    try {
+        val user = retryIO(times = 3) {
+            repository.getUser(id)
+        }
+        _user.value = user
+    } catch (e: Exception) {
+        _error.value = e.message
+    }
+}
+```
+
+**Key Points:**
+- ✅ `viewModelScope` auto-cancels when ViewModel destroyed
+- ✅ Use `async` for parallel requests
+- ✅ Use `withTimeoutOrNull` for timeouts
+- ✅ Always handle `CancellationException`
+- ✅ Retry logic for network failures
+- ✅ Don't use `GlobalScope`
+
+---
+
+## Navigation & UI
+
+### Navigation Component
+
+**Theory:**
+Navigation Component manages app navigation declaratively via navigation graph.
+
+**Benefits:**
+
+```
+✓ Type-safe arguments
+✓ Automatic back stack
+✓ Deep linking support
+✓ Animation transitions
+✓ Single source of truth
+```
+
+**Implementation:**
+
+```xml
+<!-- Navigation Graph (res/navigation/nav_graph.xml) -->
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/listFragment">
+    
+    <!-- Destination 1 -->
+    <fragment
+        android:id="@+id/listFragment"
+        android:name="com.example.ListFragment"
+        android:label="@string/list" />
+    
+    <!-- Destination 2 with arguments -->
+    <fragment
+        android:id="@+id/detailFragment"
+        android:name="com.example.DetailFragment"
+        android:label="@string/detail">
+        
+        <argument
+            android:name="userId"
+            app:argType="integer"
+            android:defaultValue="0" />
+    </fragment>
+    
+    <!-- Action with animation -->
+    <action
+        android:id="@+id/action_list_to_detail"
+        app:destination="@id/detailFragment"
+        app:enterAnim="@anim/slide_in_right"
+        app:exitAnim="@anim/slide_out_left"
+        app:popEnterAnim="@anim/slide_in_left"
+        app:popExitAnim="@anim/slide_out_right" />
+    
+    <!-- Deep link -->
+    <deepLink
+        app:uri="https://example.com/user/{userId}" />
+</navigation>
+```
+
+**Safe Args (Type-safe):**
+
+```kotlin
+// List Fragment
+class ListFragment : Fragment() {
+    
+    private val adapter = UserAdapter { user ->
+        // Type-safe navigation with generated classes
+        val action = ListFragmentDirections.actionListToDetail(user.id)
+        findNavController().navigate(action)
+    }
+}
+
+// Detail Fragment
+class DetailFragment : Fragment() {
+    
+    // Receive arguments safely
+    private val args: DetailFragmentArgs by navArgs()
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        val userId = args.userId  // Type-safe, not null
+        viewModel.loadUser(userId)
+    }
+}
+```
+
+**Manual Navigation:**
+
+```kotlin
+class ListFragment : Fragment() {
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        binding.addButton.setOnClickListener {
+            // Conditional navigation
+            if (isLoggedIn()) {
+                findNavController().navigate(R.id.action_list_to_new)
+            } else {
+                findNavController().navigate(R.id.action_list_to_login)
+            }
+        }
+        
+        // Back handling
+        binding.backButton.setOnClickListener {
+            findNavController().navigateUp()
+        }
+    }
+    
+    // Clear back stack (e.g., after logout)
+    private fun logout() {
+        findNavController().navigate(
+            R.id.loginFragment,
+            null,
+            NavOptions.Builder()
+                .setPopUpTo(R.id.nav_graph, true)  // Clear all
+                .build()
+        )
+    }
+}
+```
+
+**Key Points:**
+- ✅ Define all routes in navigation graph
+- ✅ Use Safe Args for type-safety
+- ✅ `findNavController().navigate()` for navigation
+- ✅ `navigateUp()` for back navigation
+- ✅ `setPopUpTo()` to clear back stack
+- ✅ Deep linking works automatically
+
+---
+
+## Dependency Injection
+
+### Hilt Framework
+
+**Theory:**
+Hilt simplifies dependency injection with compile-time checks and less boilerplate.
+
+**Setup:**
+
+```gradle
+// build.gradle
+plugins {
+    id 'kotlin-kapt'
+    id 'com.google.dagger.hilt.android'
+}
+
+dependencies {
+    implementation 'com.google.dagger:hilt-android:2.48'
+    kapt 'com.google.dagger:hilt-compiler:2.48'
+    
+    implementation 'androidx.hilt:hilt-lifecycle-viewmodel:1.0.0-alpha03'
+    kapt 'androidx.hilt:hilt-compiler:1.0.0'
+}
+```
+
+**Application-level Injection:**
+
+```kotlin
+// Application class
+@HiltAndroidApp
+class MyApplication : Application() {
+    // Hilt-generated component attached automatically
+}
+
+// Singleton Module
+@Module
+@InstallIn(SingletonComponent::class)
+object RepositoryModule {
+    
+    @Provides
+    @Singleton
+    fun provideUserRepository(
+        userDao: UserDao,
+        userApi: UserApi
+    ): UserRepository {
+        return UserRepository(userDao, userApi)
+    }
+    
+    @Provides
+    @Singleton
+    fun provideDatabase(context: Context): AppDatabase {
+        return Room.databaseBuilder(context, AppDatabase::class.java, "app.db")
+            .build()
+    }
+    
+    @Provides
+    @Singleton
+    fun provideUserDao(database: AppDatabase): UserDao {
+        return database.userDao()
+    }
+}
+
+// Network Module
+@Module
+@InstallIn(SingletonComponent::class)
+object NetworkModule {
+    
+    @Provides
+    @Singleton
+    fun provideUserApi(): UserApi {
+        return Retrofit.Builder()
+            .baseUrl("https://api.example.com/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(UserApi::class.java)
+    }
+}
+```
+
+**ViewModel Injection:**
+
+```kotlin
+@HiltViewModel
+class UserViewModel @Inject constructor(
+    private val repository: UserRepository,
+    private val logger: Logger
+) : ViewModel() {
+    
+    fun loadUser(id: Int) {
+        viewModelScope.launch {
+            try {
+                val user = repository.getUser(id)
+                _user.value = user
+            } catch (e: Exception) {
+                logger.error("Load failed", e)
+            }
+        }
+    }
+}
+
+// Usage - no factory needed!
+class UserFragment : Fragment() {
+    private val viewModel: UserViewModel by viewModels()
+}
+```
+
+**Testing with Hilt:**
+
+```kotlin
+@HiltAndroidTest
+class UserRepositoryTest {
+    
+    @get:Rule
+    val hiltRule = HiltAndroidRule(this)
+    
+    @Inject
+    lateinit var repository: UserRepository
+    
+    @Inject
+    lateinit var database: AppDatabase
+    
+    @Before
+    fun setup() {
+        hiltRule.inject()  // Inject dependencies
+    }
+    
+    @Test
+    fun testLoadUser() {
+        // Use injected repository
+        runBlocking {
+            val user = repository.getUser(1)
+            assertThat(user).isNotNull()
+        }
+    }
+}
+```
+
+**Key Points:**
+- ✅ @HiltAndroidApp on Application
+- ✅ @HiltViewModel for automatic ViewModel creation
+- ✅ @Module to provide dependencies
+- ✅ @Provides for dependency constructors
+- ✅ @Singleton for single instances
+- ✅ Compile-time verification
+
+---
+
+## Testing
+
+### Unit Testing ViewModels
+
+**Theory:**
+ViewModels are easy to test because they're pure Kotlin, no Android framework dependency.
+
+**Setup:**
+
+```gradle
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.mockito:mockito-core:4.0.0'
+    testImplementation 'org.mockito.kotlin:mockito-kotlin:4.0.0'
+    testImplementation 'androidx.arch.core:core-testing:2.1.0'
+}
+```
+
+**Test Helper:**
+
+```kotlin
+// Rule for running LiveData tests synchronously
+@get:Rule
+val instantExecutorRule = InstantTaskExecutorRule()
+
+// Helper to get LiveData value
+fun <T> LiveData<T>.getOrAwaitValue(
+    time: Long = 2,
+    timeUnit: TimeUnit = TimeUnit.SECONDS
+): T {
+    var data: T? = null
+    val latch = CountDownLatch(1)
+    
+    val observer = Observer<T> { o ->
+        data = o
+        latch.countDown()
+    }
+    
+    observeForever(observer)
+    latch.await(time, timeUnit)
+    removeObserver(observer)
+    
+    return data as T
+}
+```
+
+**Test Example:**
+
+```kotlin
+class UserViewModelTest {
+    
+    @get:Rule
+    val instantExecutorRule = InstantTaskExecutorRule()
+    
+    private val mockRepository: UserRepository = mock()
+    private val mockLogger: Logger = mock()
+    
+    private lateinit var viewModel: UserViewModel
+    
+    @Before
+    fun setup() {
+        viewModel = UserViewModel(mockRepository, mockLogger)
+    }
+    
+    @Test
+    fun loadUser_success() = runBlocking {
+        // Arrange
+        val user = User(1, "Alice")
+        `when`(mockRepository.getUser(1)).thenReturn(user)
+        
+        // Act
+        viewModel.loadUser(1)
+        
+        // Assert
+        val result = viewModel.user.getOrAwaitValue()
+        assertThat(result).isEqualTo(user)
+        assertThat(viewModel.error.getOrAwaitValue()).isNull()
+    }
+    
+    @Test
+    fun loadUser_failure() = runBlocking {
+        // Arrange
+        val exception = Exception("Network error")
+        `when`(mockRepository.getUser(1)).thenThrow(exception)
+        
+        // Act
+        viewModel.loadUser(1)
+        
+        // Assert
+        val error = viewModel.error.getOrAwaitValue()
+        assertThat(error).isEqualTo("Network error")
+    }
+}
+```
+
+### Integration Testing
+
+```kotlin
+@RunWith(AndroidUnit4::class)
+class UserDaoTest {
+    
+    @get:Rule
+    val instantExecutorRule = InstantTaskExecutorRule()
+    
+    private lateinit var database: AppDatabase
+    private lateinit var userDao: UserDao
+    
+    @Before
+    fun setup() {
+        database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            AppDatabase::class.java
+        ).build()
+        
+        userDao = database.userDao()
+    }
+    
+    @After
+    fun teardown() {
+        database.close()
+    }
+    
+    @Test
+    fun insertAndGetUser() = runBlocking {
+        // Arrange
+        val user = UserEntity(1, "Alice", "alice@example.com")
+        
+        // Act
+        userDao.insert(user)
+        val result = userDao.getUserById(1)
+        
+        // Assert
+        assertThat(result).isEqualTo(user)
+    }
+}
+```
+
+**Key Points:**
+- ✅ Use `InstantTaskExecutorRule` for LiveData
+- ✅ Mock dependencies with Mockito
+- ✅ `runBlocking` for suspend functions
+- ✅ Test error cases
+- ✅ In-memory database for DAO tests
+- ✅ Verify method calls with `verify()`
+
+---
+
+## Performance & Best Practices
+
+### Memory Leaks
+
+**Common Leaks:**
+
+```kotlin
+// ❌ LEAK 1: ViewModel holding Activity reference
+class BadViewModel : ViewModel() {
+    var activity: Activity? = null  // LEAK!
+    var context: Context? = null    // LEAK!
+}
+
+// ✅ CORRECT: Only hold data
+class GoodViewModel : ViewModel() {
+    val userData: LiveData<User> = ...
+}
+
+// ❌ LEAK 2: Inner class holding outer reference
+class MyFragment : Fragment() {
+    private inner class InnerTask : AsyncTask<...>() {
+        // Holds reference to MyFragment
+    }
+}
+
+// ✅ CORRECT: Use static inner class or separate class
+class MyFragment : Fragment() {
+    companion object {
+        private class InnerTask : AsyncTask<...>() {
+            // No reference to MyFragment
+        }
+    }
+}
+
+// ❌ LEAK 3: Global scope in ViewModel
+class BadViewModel : ViewModel() {
+    fun loadData() {
+        GlobalScope.launch {  // Never cancelled!
+            fetchData()
+        }
+    }
+}
+
+// ✅ CORRECT: Use viewModelScope
+class GoodViewModel : ViewModel() {
+    fun loadData() {
+        viewModelScope.launch {  // Auto-cancelled
+            fetchData()
+        }
+    }
+}
+```
+
+### Performance Best Practices
+
+```kotlin
+// ✅ Load large lists with pagination
+class UserViewModel : ViewModel() {
+    val pagingData: Flow<PagingData<User>> = 
+        Pager(
+            PagingConfig(pageSize = 20),
+            pagingSourceFactory = { UserPagingSource(api) }
+        ).flow
+}
+
+// ✅ Efficient RecyclerView with ListAdapter and DiffUtil
+val adapter = ListAdapter(object : DiffUtil.ItemCallback<User>() {
+    override fun areItemsTheSame(old: User, new: User) = old.id == new.id
+    override fun areContentsTheSame(old: User, new: User) = old == new
+}) { user ->
+    // Bind view
+}
+
+// ✅ Lazy load images with Glide/Coil
+Glide.with(this)
+    .load(imageUrl)
+    .placeholder(R.drawable.placeholder)
+    .error(R.drawable.error)
+    .into(imageView)
+
+// ✅ Batch database operations
+viewModelScope.launch {
+    userDao.insertAll(users)  // Single transaction
+}
+
+// ✅ Debounce search queries
+val searchQuery = MutableLiveData<String>()
+val results = searchQuery
+    .debounce(300)
+    .switchMap { query ->
+        repository.search(query)
+    }
+```
+
+### Offline-First Architecture
+
+```kotlin
+class UserRepository(
+    private val userDao: UserDao,
+    private val userApi: UserApi
+) {
+    
+    fun getUser(id: Int): Flow<User> = flow {
+        // 1. Emit cached data if available
+        val cached = userDao.getUserById(id)
+        if (cached != null) {
+            emit(cached.toDomain())
+        }
+        
+        // 2. Try to fetch fresh data
+        try {
+            val fresh = userApi.getUser(id)
+            userDao.insertOrUpdate(fresh.toEntity())
+            emit(fresh)
+        } catch (e: IOException) {
+            // Network error
+            if (cached == null) throw e  // No fallback, throw error
+            // else silently use cache
+        }
+    }
+    
+    // Background sync
+    suspend fun syncUsers(): Result<Unit> = runCatching {
+        val users = userApi.getAllUsers()
+        userDao.insertAll(users.map { it.toEntity() })
+    }
+}
+```
+
+**Key Points:**
+- ✅ Never hold View/Activity references in ViewModel
+- ✅ Always use `viewModelScope` for coroutines
+- ✅ Use pagination for large lists
+- ✅ Cache network responses locally
+- ✅ Implement offline-first architecture
+- ✅ Monitor memory with Profiler
+
+---
+
+## Interview Checklist
+
+### Must Know Concepts
+
+- [ ] Activity and Fragment lifecycle (know exactly when each callback is called)
+- [ ] ViewModel survival across configuration changes
+- [ ] LiveData lifecycle-awareness
+- [ ] Flow vs LiveData differences
+- [ ] Room database (Entity, DAO, Database)
+- [ ] Repository pattern for data abstraction
+- [ ] Coroutines and viewModelScope
+- [ ] Navigation Component type-safety
+- [ ] Hilt dependency injection
+- [ ] Memory leak prevention
+
+### Code You Should Write
+
+```kotlin
+// Complete MVVM flow
+@HiltViewModel
+class UserViewModel @Inject constructor(
+    private val repository: UserRepository
+) : ViewModel() {
+    
+    // State
+    private val _user = MutableLiveData<User>()
+    val user: LiveData<User> = _user
+    
+    private val _isLoading = MutableLiveData<Boolean>()
+    val isLoading: LiveData<Boolean> = _isLoading
+    
+    private val _error = MutableLiveData<String?>()
+    val error: LiveData<String?> = _error
+    
+    fun loadUser(id: Int) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            
+            try {
+                val user = repository.getUser(id)
+                _user.value = user
+                _error.value = null
+            } catch (e: Exception) {
+                _error.value = e.message
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+}
+```
+
+### Interview Red Flags
+
+❌ "I use GlobalScope"
+❌ "I hold Activity reference in ViewModel"
+❌ "I don't need Repository pattern"
+❌ "I use observe(this) in Fragment"
+❌ "I don't clean up resources"
+❌ "I use raw SQLite instead of Room"
+❌ "I don't understand lifecycle"
+
+### Interview Green Flags
+
+✅ "I use viewModelScope"
+✅ "ViewModel survives rotation"
+✅ "I expose immutable LiveData"
+✅ "I use viewLifecycleOwner in Fragments"
+✅ "I implement Repository pattern"
+✅ "I use Hilt for DI"
+✅ "I handle errors gracefully"
+✅ "I test my ViewModels"
+
+### Sample Interview Answers
+
+**Q: How does ViewModel survive rotation?**
+
+```
+A: The Activity gets destroyed on rotation, but the ViewModelStore 
+is retained by the framework. ViewModel instances are stored in this 
+ViewModelStore and survive the Activity recreation.
+
+When the Activity is recreated, the ViewModel is retrieved from the 
+same ViewModelStore, so the data persists.
+
+This is why we don't fetch data again on rotation - the ViewModel 
+still has the cached data.
+```
+
+**Q: Why should we use Repository pattern?**
+
+```
+A: Repository provides a single source of truth for data access. It abstracts
+away the details of where data comes from (API, database, cache).
+
+Benefits:
+1. Testability - Mock repository in tests
+2. Flexibility - Change data source without changing ViewModel
+3. Offline-first - Can implement local cache with sync
+4. Separation of concerns - ViewModel doesn't know about API/DB
+5. Reusability - Multiple ViewModels can use same Repository
+```
+
+**Q: Explain the difference between suspend and async coroutines.**
+
+```
+A: 
+suspend function: Sequential execution
+- Awaits result before continuing
+- Example: suspend fun getUser(): User
+- Used with viewModelScope.launch { user = getUser() }
+
+async: Parallel execution
+- Starts immediately, returns Deferred
+- Example: async { getUser() }
+- Used when you need to start multiple operations in parallel
+
+Example:
+// Sequential
+val user = repository.getUser(id)      // Wait
+val posts = repository.getPosts(id)    // Then do this
+
+// Parallel
+val userDeferred = async { repository.getUser(id) }
+val postsDeferred = async { repository.getPosts(id) }
+val user = userDeferred.await()        // Wait for both
+val posts = postsDeferred.await()
+```
+
+---
+
+## Quick Reference
+
+### Lifecycle Events Flowchart
+
+```
+Activity/Fragment Created
+         ↓
+    onCreate()
+         ↓
+    onStart()
+         ↓
+    onResume() ← Can interact
+         ↓
+  [User navigates away]
+         ↓
+    onPause()
+         ↓
+    onStop()
+         ↓
+   onDestroy()
+         ↓
+    [Destroyed]
+```
+
+### Data Flow
+
+```
+User Action
+    ↓
+Fragment calls ViewModel.action()
+    ↓
+ViewModel calls Repository
+    ↓
+Repository queries Database OR API
+    ↓
+Data flows back through Flow/LiveData
+    ↓
+Fragment observes and updates UI
+```
+
+### Coroutine Scope Cancellation
+
+```
+App Lifetime:
+  ├─ GlobalScope (Never cancelled) ❌ Avoid
+  │
+  ├─ App Scope
+  │  └─ Activity/Fragment created
+  │     ├─ viewModelScope (Auto-cancelled)
+  │     └─ lifecycleScope (Auto-cancelled)
+```
+
+Good luck with your interviews!
+
+# Android Jetpack - Interview Concepts Master Guide
+
+Complete interview preparation with all concepts, theory, examples, and keypoints.
+
+## Table of Contents
+1. [Android Lifecycle Fundamentals](#android-lifecycle-fundamentals)
+2. [Architecture Components](#architecture-components)
+3. [State Management](#state-management)
+4. [Data Persistence](#data-persistence)
+5. [Asynchronous Programming](#asynchronous-programming)
+6. [Navigation & UI](#navigation--ui)
+7. [Dependency Injection](#dependency-injection)
+8. [Testing](#testing)
+9. [Performance & Best Practices](#performance--best-practices)
+10. [Interview Checklist](#interview-checklist)
+
+---
+
+## Android Lifecycle Fundamentals
+
+### Activity Lifecycle
+
+**Theory:**
+An Activity is a screen in an Android app. It has a well-defined lifecycle with several states.
+
+**Lifecycle States & Callbacks:**
+
+```
+┌─────────────────────────────────────────┐
+│           Activity Lifecycle             │
+├─────────────────────────────────────────┤
+│  onCreate()          - First time setup  │
+│  onStart()           - Becoming visible  │
+│  onResume()          - Getting focus     │
+│  [Running/Paused]                       │
+│  onPause()           - Losing focus      │
+│  onStop()            - No longer visible │
+│  onDestroy()         - Being destroyed   │
+└─────────────────────────────────────────┘
+```
+
+**Example:**
+
+```kotlin
+class MainActivity : AppCompatActivity() {
+    
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        
+        // Initialize views, resources, database connections
+        // Called once, even after rotation
+        Log.d("Lifecycle", "onCreate")
+    }
+    
+    override fun onStart() {
+        super.onStart()
+        // Activity is visible but not interactive
+        Log.d("Lifecycle", "onStart")
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        // Activity has focus, ready to interact
+        startLocationUpdates()  // Resume sensors
+        Log.d("Lifecycle", "onResume")
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        // Activity is partially obscured
+        stopLocationUpdates()  // Pause sensors
+        Log.d("Lifecycle", "onPause")
+    }
+    
+    override fun onStop() {
+        super.onStop()
+        // Activity is not visible
+        Log.d("Lifecycle", "onStop")
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        // Activity is being destroyed
+        // Clean up resources
+        Log.d("Lifecycle", "onDestroy")
+    }
+}
+```
+
+**Key Points:**
+- ✅ `onCreate()` is called only once (survives rotation)
+- ✅ `onResume()`/`onPause()` bracket when app has focus
+- ✅ Always cleanup in `onPause()` or `onDestroy()`
+- ✅ Configuration changes trigger `onDestroy()` → `onCreate()`
+- ✅ `savedInstanceState` Bundle preserves simple data across rotation
+
+---
+
+### Fragment Lifecycle
+
+**Theory:**
+Fragment lifecycle is more complex because fragments live within activities.
+
+```kotlin
+Fragment Lifecycle:
+├── onAttach() - Fragment attached to Activity
+├── onCreate() - Fragment created
+├── onCreateView() - Create fragment view
+├── onViewCreated() - View created, safe to access
+├── onStart() - Fragment visible
+├── onResume() - Fragment interactive
+├── [paused/stopped]
+├── onPause() - Fragment losing focus
+├── onStop() - Fragment not visible
+├── onDestroyView() - Fragment view destroyed
+├── onDestroy() - Fragment destroyed
+└── onDetach() - Fragment detached from Activity
+```
+
+**Example:**
+
+```kotlin
+class UserFragment : Fragment() {
+    
+    private var _binding: FragmentUserBinding? = null
+    private val binding get() = _binding!!
+    private val viewModel: UserViewModel by viewModels()
+    
+    override fun onAttach(context: Context) {
+        super.onAttach(context)
+        // Fragment about to attach to Activity
+    }
+    
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Parse arguments
+        val userId = arguments?.getString("userId")
+    }
+    
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        // Inflate layout - return root view
+        _binding = FragmentUserBinding.inflate(inflater, container, false)
+        return binding.root
+    }
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        
+        // Safe to access views now
+        binding.userButton.setOnClickListener {
+            viewModel.loadUser()
+        }
+        
+        // Always use viewLifecycleOwner!
+        viewModel.user.observe(viewLifecycleOwner) { user ->
+            updateUI(user)
+        }
+    }
+    
+    override fun onStart() {
+        super.onStart()
+        // Fragment visible
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        // Fragment interactive
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        // Clean up resources
+    }
+    
+    override fun onStop() {
+        super.onStop()
+        // Fragment not visible
+    }
+    
+    override fun onDestroyView() {
+        super.onDestroyView()
+        // Clean up view references
+        _binding = null  // Prevent memory leak
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        // Fragment destroyed
+    }
+}
+```
+
+**Key Points:**
+- ✅ Use `viewLifecycleOwner` in Fragments, NOT `this`
+- ✅ Nullify binding in `onDestroyView()` to prevent memory leaks
+- ✅ `onViewCreated()` is safe to access views
+- ✅ Arguments are parsed in `onCreate()` before view inflation
+- ✅ Fragment can outlive its view (rotation example)
+
+---
+
+## Architecture Components
+
+### ViewModel Deep Dive
+
+**Theory:**
+ViewModel is designed to survive configuration changes and hold UI-related data.
+
+**How ViewModel Survives Rotation:**
+
+```
+Device Rotation Event:
+┌─────────────────────────────────────────┐
+│ Activity destroyed (onDestroy called)   │
+│ BUT ViewModel instance persists         │
+│ Framework re-creates Activity           │
+│ ViewModel data still there              │
+└─────────────────────────────────────────┘
+
+Without ViewModel:
+onCreate() → fetch users (AGAIN)
+onCreate() → fetch users (AGAIN)
+onCreate() → fetch users (AGAIN)
+[Wasteful API calls, UI flicker]
+
+With ViewModel:
+onCreate() → fetch users (1st time)
+[Rotation - Activity destroyed]
+onCreate() → get cached users [No API call]
+```
+
+**Implementation:**
+
+```kotlin
+@HiltViewModel
+class UserListViewModel @Inject constructor(
+    private val repository: UserRepository,
+    private val logger: Logger
+) : ViewModel() {
+    
+    // Mutable internally, exposed as immutable
+    private val _users = MutableLiveData<List<User>>()
+    val users: LiveData<List<User>> = _users
+    
+    private val _isLoading = MutableLiveData<Boolean>()
+    val isLoading: LiveData<Boolean> = _isLoading
+    
+    private val _error = MutableLiveData<String?>()
+    val error: LiveData<String?> = _error
+    
+    // Lazy initialization
+    private val userComparator = compareBy<User> { it.name }
+    
+    // Called once when ViewModel created
+    init {
+        loadUsers()
+    }
+    
+    fun loadUsers() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            
+            try {
+                val users = repository.getUsers()
+                _users.value = users.sortedWith(userComparator)
+                _error.value = null
+                logger.log("Users loaded: ${users.size}")
+            } catch (e: Exception) {
+                _error.value = e.message
+                logger.error("Load failed", e)
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+    
+    // Clean up when ViewModel destroyed
+    override fun onCleared() {
+        super.onCleared()
+        logger.log("UserListViewModel cleared")
+        // Cancel long-running operations if needed
+    }
+}
+```
+
+**Usage:**
+
+```kotlin
+class UserListFragment : Fragment() {
+    
+    // ViewModels are tied to Fragment lifecycle
+    private val viewModel: UserListViewModel by viewModels()
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        
+        // Observe with viewLifecycleOwner
+        viewModel.users.observe(viewLifecycleOwner) { users ->
+            adapter.submitList(users)
+        }
+        
+        viewModel.isLoading.observe(viewLifecycleOwner) { isLoading ->
+            binding.progressBar.visibility = 
+                if (isLoading) View.VISIBLE else View.GONE
+        }
+        
+        viewModel.error.observe(viewLifecycleOwner) { error ->
+            error?.let {
+                Snackbar.make(binding.root, it, Snackbar.LENGTH_LONG).show()
+            }
+        }
+    }
+}
+```
+
+**Key Points:**
+- ✅ Survives configuration changes (rotation, locale, etc.)
+- ✅ Tied to Activity/Fragment lifecycle, not View lifecycle
+- ✅ Use `viewModelScope` for coroutines
+- ✅ Expose immutable LiveData, hide mutable implementation
+- ✅ Initialize data in `init` block, not constructor
+- ✅ Clean up resources in `onCleared()`
+
+---
+
+### LiveData & State Management
+
+**Theory:**
+LiveData is an observable data holder that is lifecycle-aware.
+
+**Advantages:**
+
+```
+LiveData Features:
+├── Lifecycle Aware
+│   ├── Automatically unsubscribes when lifecycle ends
+│   └── Won't update destroyed views
+├── No Memory Leaks
+│   ├── Lifecycle binding prevents leaks
+│   └── Auto cleanup
+├── Thread Safe
+│   ├── postValue() from any thread
+│   ├── value from main thread
+├── Configuration Change Safe
+│   ├── Data persists across rotation
+│   └── No redundant updates
+└── One-time Observers
+    └── observeOnce possible
+```
+
+**Implementation Patterns:**
+
+```kotlin
+// Pattern 1: Simple LiveData
+class SimpleViewModel : ViewModel() {
+    private val _counter = MutableLiveData<Int>(0)
+    val counter: LiveData<Int> = _counter
+    
+    fun increment() {
+        _counter.value = (_counter.value ?: 0) + 1
+    }
+}
+
+// Pattern 2: Transformed LiveData
+class TransformedViewModel : ViewModel() {
+    private val _userName = MutableLiveData<String>("")
+    
+    // Transform name to uppercase
+    val userNameUppercase: LiveData<String> = _userName.map { name ->
+        name.uppercase()
+    }
+    
+    // Switch between different LiveData sources
+    private val _userId = MutableLiveData<Int>()
+    val user: LiveData<User> = _userId.switchMap { userId ->
+        repository.getUser(userId)  // Returns LiveData<User>
+    }
+}
+
+// Pattern 3: Merging LiveData
+class MergedViewModel : ViewModel() {
+    private val _firstName = MutableLiveData<String>("")
+    private val _lastName = MutableLiveData<String>("")
+    
+    val fullName: LiveData<String> = mediatorLiveData {
+        val first = _firstName.value ?: ""
+        val last = _lastName.value ?: ""
+        
+        value = "$first $last"
+    }
+    
+    init {
+        // Update whenever either changes
+        addSource(_firstName) {
+            value = "${_firstName.value ?: ""} ${_lastName.value ?: ""}"
+        }
+        addSource(_lastName) {
+            value = "${_firstName.value ?: ""} ${_lastName.value ?: ""}"
+        }
+    }
+}
+
+// Pattern 4: Distinct Until Changed
+class DistinctViewModel : ViewModel() {
+    private val _searchQuery = MutableLiveData<String>()
+    
+    // Only update when value actually changes
+    val results: LiveData<List<SearchResult>> = 
+        _searchQuery
+            .distinctUntilChanged()
+            .switchMap { query ->
+                if (query.length < 3) {
+                    MutableLiveData<List<SearchResult>>(emptyList())
+                } else {
+                    repository.search(query)
+                }
+            }
+}
+```
+
+**Comparison: LiveData vs StateFlow:**
+
+```kotlin
+// LiveData (Lifecycle-aware)
+class LiveDataViewModel : ViewModel() {
+    val state: LiveData<State> = ...
+}
+// Usage:
+viewModel.state.observe(this) { state ->
+    // Automatic lifecycle management
+}
+
+// StateFlow (Coroutine-based)
+class StateFlowViewModel : ViewModel() {
+    val state: StateFlow<State> = ...
+}
+// Usage:
+lifecycleScope.launch {
+    repeatOnLifecycle(Lifecycle.State.STARTED) {
+        viewModel.state.collect { state ->
+            updateUI(state)
+        }
+    }
+}
+```
+
+**Key Points:**
+- ✅ Lifecycle-aware - automatic unsubscribe
+- ✅ Thread-safe with `postValue()`
+- ✅ Use `.map()` for transformations
+- ✅ Use `.switchMap()` for switching data sources
+- ✅ `distinctUntilChanged()` prevents redundant updates
+- ✅ StateFlow more modern, but LiveData still widely used
+
+---
+
+### Flow & Reactive Programming
+
+**Theory:**
+Flow is a Kotlin coroutine-based API for reactive streams.
+
+**Flow vs LiveData:**
+
+```
+LiveData:
+├── Lifecycle-aware
+├── Hot observable
+├── Simple for UI
+└── Android-specific
+
+Flow:
+├── Not lifecycle-aware
+├── Cold observable
+├── Powerful transformations
+└── Pure Kotlin
+```
+
+**Implementation:**
+
+```kotlin
+// Producer
+class UserRepository {
+    fun getUsers(): Flow<List<User>> = flow {
+        try {
+            // Emit initial local data
+            val cached = userDao.getAllUsers()
+            emit(cached)
+            
+            // Fetch fresh data
+            val fresh = userApi.getUsers()
+            userDao.insertAll(fresh)
+            emit(fresh)
+        } catch (e: Exception) {
+            // Handle error
+        }
+    }
+    
+    // Reactive database query
+    fun observeUser(id: String): Flow<User> {
+        return userDao.observeUser(id)
+            .map { entity ->
+                entity.toDomain()
+            }
+    }
+}
+
+// ViewModel
+@HiltViewModel
+class UserViewModel @Inject constructor(
+    private val repository: UserRepository
+) : ViewModel() {
+    
+    // Convert Flow to LiveData
+    val users: LiveData<List<User>> = 
+        repository.getUsers().asLiveData()
+    
+    // Or keep as Flow
+    val userUpdates: Flow<User> = 
+        MutableStateFlow("").switchMap { id ->
+            repository.observeUser(id)
+        }
+}
+
+// UI Layer
+class UserFragment : Fragment() {
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        // Method 1: With LiveData
+        viewModel.users.observe(viewLifecycleOwner) { users ->
+            updateUI(users)
+        }
+        
+        // Method 2: With Flow + lifecycleScope
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.userUpdates.collect { user ->
+                    updateUI(user)
+                }
+            }
+        }
+    }
+}
+```
+
+**Flow Operators:**
+
+```kotlin
+repository.getUsers()
+    // Transformation
+    .map { users ->
+        users.sortedBy { it.name }
+    }
+    // Filtering
+    .filter { users ->
+        users.isNotEmpty()
+    }
+    // Flattening
+    .flatMapLatest { users ->
+        repository.getDetails(users)
+    }
+    // Error handling
+    .catch { error ->
+        emit(emptyList())
+    }
+    // Side effects
+    .onEach { users ->
+        logger.log("Users: ${users.size}")
+    }
+    .collect { users ->
+        updateUI(users)
+    }
+```
+
+**Key Points:**
+- ✅ Cold observable - new instance per collector
+- ✅ Powerful operators: map, filter, flatMap, catch
+- ✅ Coroutine-based, not lifecycle-aware
+- ✅ Convert to LiveData for safe UI updates
+- ✅ Use in repository and ViewModel layers
+
+---
+
+## Data Persistence
+
+### Room Database
+
+**Theory:**
+Room is an abstraction layer over SQLite that provides compile-time SQL verification.
+
+**Three Main Components:**
+
+```
+┌────────────────────┐
+│   Entity (Table)   │  <- Models
+├────────────────────┤
+│      DAO            │  <- Queries
+├────────────────────┤
+│   RoomDatabase      │  <- Container
+└────────────────────┘
+```
+
+**Implementation:**
+
+```kotlin
+// 1. Entity - Represents database table
+@Entity(tableName = "users", indices = [Index("email", unique = true)])
+data class UserEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Int = 0,
+    
+    @ColumnInfo(name = "full_name")
+    val fullName: String,
+    
+    val email: String,
+    
+    @Ignore
+    val isTemporary: Boolean = false  // Not stored in DB
+)
+
+// 2. DAO - Data Access Object
+@Dao
+interface UserDao {
+    
+    // Insert
+    @Insert
+    suspend fun insert(user: UserEntity)
+    
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOrUpdate(user: UserEntity)
+    
+    // Query
+    @Query("SELECT * FROM users WHERE id = :id")
+    suspend fun getUserById(id: Int): UserEntity?
+    
+    @Query("SELECT * FROM users ORDER BY full_name")
+    fun getAllUsers(): LiveData<List<UserEntity>>
+    
+    // Reactive Query (Flow)
+    @Query("SELECT * FROM users WHERE email = :email")
+    fun observeUser(email: String): Flow<UserEntity>
+    
+    // Update
+    @Update
+    suspend fun update(user: UserEntity)
+    
+    // Delete
+    @Delete
+    suspend fun delete(user: UserEntity)
+    
+    @Query("DELETE FROM users WHERE id = :id")
+    suspend fun deleteById(id: Int)
+    
+    // Transaction
+    @Transaction
+    suspend fun insertUserWithPosts(
+        user: UserEntity,
+        posts: List<PostEntity>
+    ) {
+        insert(user)
+        insertPosts(posts)
+    }
+    
+    @Insert
+    suspend fun insertPosts(posts: List<PostEntity>)
+}
+
+// 3. Database
+@Database(
+    entities = [UserEntity::class, PostEntity::class],
+    version = 1,
+    exportSchema = true
+)
+abstract class AppDatabase : RoomDatabase() {
+    
+    abstract fun userDao(): UserDao
+    abstract fun postDao(): PostDao
+    
+    companion object {
+        @Volatile private var instance: AppDatabase? = null
+        
+        fun getInstance(context: Context): AppDatabase =
+            instance ?: synchronized(this) {
+                instance ?: buildDatabase(context).also { instance = it }
+            }
+        
+        private fun buildDatabase(context: Context): AppDatabase {
+            return Room.databaseBuilder(
+                context,
+                AppDatabase::class.java,
+                "app.db"
+            )
+            .addMigrations(MIGRATION_1_2)
+            .build()
+        }
+    }
+}
+
+// 4. Migration
+val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("ALTER TABLE users ADD COLUMN phone TEXT DEFAULT ''")
+    }
+}
+```
+
+**Repository Pattern with Room:**
+
+```kotlin
+class UserRepository(
+    private val userDao: UserDao,
+    private val userApi: UserApi
+) {
+    
+    // Read from local cache
+    fun getAllUsers(): LiveData<List<User>> {
+        return userDao.getAllUsers()
+            .map { entities ->
+                entities.map { it.toDomain() }
+            }
+    }
+    
+    // Offline-first: Local cache + background sync
+    fun getUser(id: Int): Flow<User?> = flow {
+        // Emit cached data first
+        val cached = userDao.getUserById(id)
+        if (cached != null) {
+            emit(cached.toDomain())
+        }
+        
+        try {
+            // Fetch fresh data
+            val fresh = userApi.getUser(id)
+            userDao.insertOrUpdate(fresh.toEntity())
+            emit(fresh)
+        } catch (e: Exception) {
+            if (cached == null) throw e
+        }
+    }
+    
+    // Insert with error handling
+    suspend fun insertUser(user: User): Result<Unit> = runCatching {
+        userDao.insert(user.toEntity())
+    }
+}
+```
+
+**Key Points:**
+- ✅ Compile-time SQL verification
+- ✅ Automatic cursor-to-object mapping
+- ✅ LiveData/Flow support in DAO
+- ✅ Transaction support with @Transaction
+- ✅ Migrations for schema changes
+- ✅ Type-safe queries
+
+---
+
+### DataStore & WorkManager
+
+**Theory:**
+DataStore replaces SharedPreferences with better performance and type safety.
+
+**DataStore vs SharedPreferences:**
+
+```
+SharedPreferences:
+├── Plain text storage
+├── Not type-safe
+├── No transaction support
+└── Deprecated
+
+DataStore:
+├── Protocol Buffer support
+├── Type-safe
+├── ACID transactions
+├── Coroutine-based
+└── Async by default
+```
+
+**Implementation:**
+
+```kotlin
+// Proto DataStore
+data class UserPreferences(
+    val isDarkMode: Boolean = false,
+    val lastUserId: String = "",
+    val fontSize: Float = 14f
+)
+
+val Context.userPreferences: DataStore<UserPreferences> by preferencesDataStore(
+    name = "user_preferences",
+    serializer = UserPreferencesSerializer()
+)
+
+// Custom Serializer
+object UserPreferencesSerializer : Serializer<UserPreferences> {
+    override val defaultValue: UserPreferences = UserPreferences()
+    
+    override suspend fun readFrom(input: InputStream): UserPreferences {
+        return try {
+            JsonFormat.merge(input.readBytes().decodeToString(), UserPreferences())
+        } catch (e: Exception) {
+            defaultValue
+        }
+    }
+    
+    override suspend fun writeTo(
+        t: UserPreferences,
+        output: OutputStream
+    ) {
+        output.write(JsonFormat.printer().print(t).encodeToByteArray())
+    }
+}
+
+// Usage in ViewModel
+@HiltViewModel
+class SettingsViewModel @Inject constructor(
+    private val dataStore: DataStore<UserPreferences>
+) : ViewModel() {
+    
+    val isDarkMode: Flow<Boolean> = dataStore.data
+        .catch { exception ->
+            emit(UserPreferences())
+        }
+        .map { preferences ->
+            preferences.isDarkMode
+        }
+    
+    fun setDarkMode(enabled: Boolean) {
+        viewModelScope.launch {
+            dataStore.updateData { preferences ->
+                preferences.copy(isDarkMode = enabled)
+            }
+        }
+    }
+}
+```
+
+**WorkManager:**
+
+```kotlin
+// Define Worker
+class SyncDataWorker(
+    context: Context,
+    params: WorkerParameters
+) : CoroutineWorker(context, params) {
+    
+    @Inject lateinit var repository: DataRepository
+    
+    override suspend fun doWork(): Result {
+        return try {
+            // Do background work
+            val data = repository.syncData()
+            
+            // Return result
+            Result.success(
+                workDataOf("syncedItems" to data.size)
+            )
+        } catch (e: Exception) {
+            if (runAttemptCount < 3) {
+                Result.retry()  // Retry up to 3 times
+            } else {
+                Result.failure()  // Give up
+            }
+        }
+    }
+}
+
+// Schedule Work
+class MainActivity : AppCompatActivity() {
+    
+    fun scheduleSyncWork() {
+        val syncWork = PeriodicWorkRequestBuilder<SyncDataWorker>(
+            15, TimeUnit.MINUTES
+        )
+        .setConstraints(
+            Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .setRequiresCharging(false)
+                .build()
+        )
+        .setBackoffCriteria(
+            BackoffPolicy.EXPONENTIAL,
+            15,
+            TimeUnit.MINUTES
+        )
+        .build()
+        
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "sync_work",
+            ExistingPeriodicWorkPolicy.KEEP,
+            syncWork
+        )
+    }
+    
+    fun observeSyncProgress() {
+        WorkManager.getInstance(this)
+            .getWorkInfosForTagLiveData("sync")
+            .observe(this) { workInfos ->
+                workInfos.forEach { workInfo ->
+                    when (workInfo.state) {
+                        WorkInfo.State.RUNNING -> {
+                            val syncedItems = workInfo.outputData.getInt("syncedItems", 0)
+                            Log.d("Work", "Syncing... $syncedItems items")
+                        }
+                        WorkInfo.State.SUCCEEDED -> {
+                            Log.d("Work", "Sync completed")
+                        }
+                        else -> {}
+                    }
+                }
+            }
+    }
+}
+```
+
+**Key Points:**
+- ✅ DataStore is async and type-safe
+- ✅ WorkManager survives app death
+- ✅ Set constraints (network, battery, charging)
+- ✅ Exponential backoff for retries
+- ✅ Can observe work progress with LiveData
+- ✅ Unique work prevents duplicates
+
+---
+
+## Asynchronous Programming
+
+### Coroutines & viewModelScope
+
+**Theory:**
+Coroutines are lightweight threads managed by Kotlin runtime.
+
+**Coroutine Scope Hierarchy:**
+
+```
+GlobalScope (App lifetime)
+├── viewModelScope (ViewModel lifetime)
+├── lifecycleScope (Activity/Fragment lifetime)
+│   ├── launchWhenStarted
+│   ├── launchWhenResumed
+│   └── repeatOnLifecycle
+└── Custom Scope
+```
+
+**Implementation:**
+
+```kotlin
+@HiltViewModel
+class DataViewModel @Inject constructor(
+    private val repository: DataRepository
+) : ViewModel() {
+    
+    private val _data = MutableLiveData<Data>()
+    val data: LiveData<Data> = _data
+    
+    private val _error = MutableLiveData<String?>()
+    val error: LiveData<String?> = _error
+    
+    // Launch on ViewModel scope
+    fun loadData() {
+        viewModelScope.launch {
+            try {
+                // Suspend call (won't block UI thread)
+                val result = repository.getData()
+                _data.value = result
+                _error.value = null
+            } catch (e: CancellationException) {
+                // Job was cancelled
+                throw e
+            } catch (e: Exception) {
+                _error.value = e.message
+            }
+        }
+    }
+    
+    // Parallel requests
+    fun loadUserAndPosts(userId: Int) {
+        viewModelScope.launch {
+            try {
+                // Launch parallel
+                val userDeferred = async { repository.getUser(userId) }
+                val postsDeferred = async { repository.getPosts(userId) }
+                
+                // Wait for both
+                val user = userDeferred.await()
+                val posts = postsDeferred.await()
+                
+                // Update UI
+                _user.value = user
+                _posts.value = posts
+            } catch (e: Exception) {
+                _error.value = e.message
+            }
+        }
+    }
+    
+    // Sequential requests
+    fun loadUserThenFollowers(userId: Int) {
+        viewModelScope.launch {
+            try {
+                // Wait for first, then second
+                val user = repository.getUser(userId)
+                val followers = repository.getFollowers(user.id)
+                
+                _user.value = user
+                _followers.value = followers
+            } catch (e: Exception) {
+                _error.value = e.message
+            }
+        }
+    }
+    
+    // Timeout
+    fun loadDataWithTimeout() {
+        viewModelScope.launch {
+            try {
+                withTimeoutOrNull(5000) {
+                    val data = repository.getData()
+                    _data.value = data
+                }
+            } catch (e: TimeoutCancellationException) {
+                _error.value = "Request timeout"
+            }
+        }
+    }
+    
+    // Clean up
+    override fun onCleared() {
+        super.onCleared()
+        // All coroutines in viewModelScope are cancelled automatically
+    }
+}
+```
+
+**Fragment Usage:**
+
+```kotlin
+class UserFragment : Fragment() {
+    
+    private val viewModel: UserViewModel by viewModels()
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        
+        // Method 1: LiveData (Simple)
+        viewModel.user.observe(viewLifecycleOwner) { user ->
+            updateUI(user)
+        }
+        
+        // Method 2: Flow (Advanced)
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.userFlow.collect { user ->
+                    updateUI(user)
+                }
+            }
+        }
+        
+        // Method 3: Launch when started (Deprecated, but still used)
+        viewLifecycleOwner.lifecycleScope.launchWhenStarted {
+            viewModel.userFlow.collect { user ->
+                updateUI(user)
+            }
+        }
+    }
+}
+```
+
+**Common Patterns:**
+
+```kotlin
+// Retry logic
+suspend fun <T> retryIO(
+    times: Int = 3,
+    initialDelay: Long = 100,
+    maxDelay: Long = 1000,
+    factor: Double = 2.0,
+    block: suspend () -> T
+): T {
+    var currentDelay = initialDelay
+    repeat(times - 1) {
+        try {
+            return block()
+        } catch (e: Exception) {
+            delay(currentDelay)
+            currentDelay = (currentDelay * factor).toLong().coerceAtMost(maxDelay)
+        }
+    }
+    return block()
+}
+
+// Usage
+viewModelScope.launch {
+    try {
+        val user = retryIO(times = 3) {
+            repository.getUser(id)
+        }
+        _user.value = user
+    } catch (e: Exception) {
+        _error.value = e.message
+    }
+}
+```
+
+**Key Points:**
+- ✅ `viewModelScope` auto-cancels when ViewModel destroyed
+- ✅ Use `async` for parallel requests
+- ✅ Use `withTimeoutOrNull` for timeouts
+- ✅ Always handle `CancellationException`
+- ✅ Retry logic for network failures
+- ✅ Don't use `GlobalScope`
+
+---
+
+## Navigation & UI
+
+### Navigation Component
+
+**Theory:**
+Navigation Component manages app navigation declaratively via navigation graph.
+
+**Benefits:**
+
+```
+✓ Type-safe arguments
+✓ Automatic back stack
+✓ Deep linking support
+✓ Animation transitions
+✓ Single source of truth
+```
+
+**Implementation:**
+
+```xml
+<!-- Navigation Graph (res/navigation/nav_graph.xml) -->
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/listFragment">
+    
+    <!-- Destination 1 -->
+    <fragment
+        android:id="@+id/listFragment"
+        android:name="com.example.ListFragment"
+        android:label="@string/list" />
+    
+    <!-- Destination 2 with arguments -->
+    <fragment
+        android:id="@+id/detailFragment"
+        android:name="com.example.DetailFragment"
+        android:label="@string/detail">
+        
+        <argument
+            android:name="userId"
+            app:argType="integer"
+            android:defaultValue="0" />
+    </fragment>
+    
+    <!-- Action with animation -->
+    <action
+        android:id="@+id/action_list_to_detail"
+        app:destination="@id/detailFragment"
+        app:enterAnim="@anim/slide_in_right"
+        app:exitAnim="@anim/slide_out_left"
+        app:popEnterAnim="@anim/slide_in_left"
+        app:popExitAnim="@anim/slide_out_right" />
+    
+    <!-- Deep link -->
+    <deepLink
+        app:uri="https://example.com/user/{userId}" />
+</navigation>
+```
+
+**Safe Args (Type-safe):**
+
+```kotlin
+// List Fragment
+class ListFragment : Fragment() {
+    
+    private val adapter = UserAdapter { user ->
+        // Type-safe navigation with generated classes
+        val action = ListFragmentDirections.actionListToDetail(user.id)
+        findNavController().navigate(action)
+    }
+}
+
+// Detail Fragment
+class DetailFragment : Fragment() {
+    
+    // Receive arguments safely
+    private val args: DetailFragmentArgs by navArgs()
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        val userId = args.userId  // Type-safe, not null
+        viewModel.loadUser(userId)
+    }
+}
+```
+
+**Manual Navigation:**
+
+```kotlin
+class ListFragment : Fragment() {
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        binding.addButton.setOnClickListener {
+            // Conditional navigation
+            if (isLoggedIn()) {
+                findNavController().navigate(R.id.action_list_to_new)
+            } else {
+                findNavController().navigate(R.id.action_list_to_login)
+            }
+        }
+        
+        // Back handling
+        binding.backButton.setOnClickListener {
+            findNavController().navigateUp()
+        }
+    }
+    
+    // Clear back stack (e.g., after logout)
+    private fun logout() {
+        findNavController().navigate(
+            R.id.loginFragment,
+            null,
+            NavOptions.Builder()
+                .setPopUpTo(R.id.nav_graph, true)  // Clear all
+                .build()
+        )
+    }
+}
+```
+
+**Key Points:**
+- ✅ Define all routes in navigation graph
+- ✅ Use Safe Args for type-safety
+- ✅ `findNavController().navigate()` for navigation
+- ✅ `navigateUp()` for back navigation
+- ✅ `setPopUpTo()` to clear back stack
+- ✅ Deep linking works automatically
+
+---
+
+## Dependency Injection
+
+### Hilt Framework
+
+**Theory:**
+Hilt simplifies dependency injection with compile-time checks and less boilerplate.
+
+**Setup:**
+
+```gradle
+// build.gradle
+plugins {
+    id 'kotlin-kapt'
+    id 'com.google.dagger.hilt.android'
+}
+
+dependencies {
+    implementation 'com.google.dagger:hilt-android:2.48'
+    kapt 'com.google.dagger:hilt-compiler:2.48'
+    
+    implementation 'androidx.hilt:hilt-lifecycle-viewmodel:1.0.0-alpha03'
+    kapt 'androidx.hilt:hilt-compiler:1.0.0'
+}
+```
+
+**Application-level Injection:**
+
+```kotlin
+// Application class
+@HiltAndroidApp
+class MyApplication : Application() {
+    // Hilt-generated component attached automatically
+}
+
+// Singleton Module
+@Module
+@InstallIn(SingletonComponent::class)
+object RepositoryModule {
+    
+    @Provides
+    @Singleton
+    fun provideUserRepository(
+        userDao: UserDao,
+        userApi: UserApi
+    ): UserRepository {
+        return UserRepository(userDao, userApi)
+    }
+    
+    @Provides
+    @Singleton
+    fun provideDatabase(context: Context): AppDatabase {
+        return Room.databaseBuilder(context, AppDatabase::class.java, "app.db")
+            .build()
+    }
+    
+    @Provides
+    @Singleton
+    fun provideUserDao(database: AppDatabase): UserDao {
+        return database.userDao()
+    }
+}
+
+// Network Module
+@Module
+@InstallIn(SingletonComponent::class)
+object NetworkModule {
+    
+    @Provides
+    @Singleton
+    fun provideUserApi(): UserApi {
+        return Retrofit.Builder()
+            .baseUrl("https://api.example.com/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(UserApi::class.java)
+    }
+}
+```
+
+**ViewModel Injection:**
+
+```kotlin
+@HiltViewModel
+class UserViewModel @Inject constructor(
+    private val repository: UserRepository,
+    private val logger: Logger
+) : ViewModel() {
+    
+    fun loadUser(id: Int) {
+        viewModelScope.launch {
+            try {
+                val user = repository.getUser(id)
+                _user.value = user
+            } catch (e: Exception) {
+                logger.error("Load failed", e)
+            }
+        }
+    }
+}
+
+// Usage - no factory needed!
+class UserFragment : Fragment() {
+    private val viewModel: UserViewModel by viewModels()
+}
+```
+
+**Testing with Hilt:**
+
+```kotlin
+@HiltAndroidTest
+class UserRepositoryTest {
+    
+    @get:Rule
+    val hiltRule = HiltAndroidRule(this)
+    
+    @Inject
+    lateinit var repository: UserRepository
+    
+    @Inject
+    lateinit var database: AppDatabase
+    
+    @Before
+    fun setup() {
+        hiltRule.inject()  // Inject dependencies
+    }
+    
+    @Test
+    fun testLoadUser() {
+        // Use injected repository
+        runBlocking {
+            val user = repository.getUser(1)
+            assertThat(user).isNotNull()
+        }
+    }
+}
+```
+
+**Key Points:**
+- ✅ @HiltAndroidApp on Application
+- ✅ @HiltViewModel for automatic ViewModel creation
+- ✅ @Module to provide dependencies
+- ✅ @Provides for dependency constructors
+- ✅ @Singleton for single instances
+- ✅ Compile-time verification
+
+---
+
+## Testing
+
+### Unit Testing ViewModels
+
+**Theory:**
+ViewModels are easy to test because they're pure Kotlin, no Android framework dependency.
+
+**Setup:**
+
+```gradle
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.mockito:mockito-core:4.0.0'
+    testImplementation 'org.mockito.kotlin:mockito-kotlin:4.0.0'
+    testImplementation 'androidx.arch.core:core-testing:2.1.0'
+}
+```
+
+**Test Helper:**
+
+```kotlin
+// Rule for running LiveData tests synchronously
+@get:Rule
+val instantExecutorRule = InstantTaskExecutorRule()
+
+// Helper to get LiveData value
+fun <T> LiveData<T>.getOrAwaitValue(
+    time: Long = 2,
+    timeUnit: TimeUnit = TimeUnit.SECONDS
+): T {
+    var data: T? = null
+    val latch = CountDownLatch(1)
+    
+    val observer = Observer<T> { o ->
+        data = o
+        latch.countDown()
+    }
+    
+    observeForever(observer)
+    latch.await(time, timeUnit)
+    removeObserver(observer)
+    
+    return data as T
+}
+```
+
+**Test Example:**
+
+```kotlin
+class UserViewModelTest {
+    
+    @get:Rule
+    val instantExecutorRule = InstantTaskExecutorRule()
+    
+    private val mockRepository: UserRepository = mock()
+    private val mockLogger: Logger = mock()
+    
+    private lateinit var viewModel: UserViewModel
+    
+    @Before
+    fun setup() {
+        viewModel = UserViewModel(mockRepository, mockLogger)
+    }
+    
+    @Test
+    fun loadUser_success() = runBlocking {
+        // Arrange
+        val user = User(1, "Alice")
+        `when`(mockRepository.getUser(1)).thenReturn(user)
+        
+        // Act
+        viewModel.loadUser(1)
+        
+        // Assert
+        val result = viewModel.user.getOrAwaitValue()
+        assertThat(result).isEqualTo(user)
+        assertThat(viewModel.error.getOrAwaitValue()).isNull()
+    }
+    
+    @Test
+    fun loadUser_failure() = runBlocking {
+        // Arrange
+        val exception = Exception("Network error")
+        `when`(mockRepository.getUser(1)).thenThrow(exception)
+        
+        // Act
+        viewModel.loadUser(1)
+        
+        // Assert
+        val error = viewModel.error.getOrAwaitValue()
+        assertThat(error).isEqualTo("Network error")
+    }
+}
+```
+
+### Integration Testing
+
+```kotlin
+@RunWith(AndroidUnit4::class)
+class UserDaoTest {
+    
+    @get:Rule
+    val instantExecutorRule = InstantTaskExecutorRule()
+    
+    private lateinit var database: AppDatabase
+    private lateinit var userDao: UserDao
+    
+    @Before
+    fun setup() {
+        database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            AppDatabase::class.java
+        ).build()
+        
+        userDao = database.userDao()
+    }
+    
+    @After
+    fun teardown() {
+        database.close()
+    }
+    
+    @Test
+    fun insertAndGetUser() = runBlocking {
+        // Arrange
+        val user = UserEntity(1, "Alice", "alice@example.com")
+        
+        // Act
+        userDao.insert(user)
+        val result = userDao.getUserById(1)
+        
+        // Assert
+        assertThat(result).isEqualTo(user)
+    }
+}
+```
+
+**Key Points:**
+- ✅ Use `InstantTaskExecutorRule` for LiveData
+- ✅ Mock dependencies with Mockito
+- ✅ `runBlocking` for suspend functions
+- ✅ Test error cases
+- ✅ In-memory database for DAO tests
+- ✅ Verify method calls with `verify()`
+
+---
+
+## Performance & Best Practices
+
+### Memory Leaks
+
+**Common Leaks:**
+
+```kotlin
+// ❌ LEAK 1: ViewModel holding Activity reference
+class BadViewModel : ViewModel() {
+    var activity: Activity? = null  // LEAK!
+    var context: Context? = null    // LEAK!
+}
+
+// ✅ CORRECT: Only hold data
+class GoodViewModel : ViewModel() {
+    val userData: LiveData<User> = ...
+}
+
+// ❌ LEAK 2: Inner class holding outer reference
+class MyFragment : Fragment() {
+    private inner class InnerTask : AsyncTask<...>() {
+        // Holds reference to MyFragment
+    }
+}
+
+// ✅ CORRECT: Use static inner class or separate class
+class MyFragment : Fragment() {
+    companion object {
+        private class InnerTask : AsyncTask<...>() {
+            // No reference to MyFragment
+        }
+    }
+}
+
+// ❌ LEAK 3: Global scope in ViewModel
+class BadViewModel : ViewModel() {
+    fun loadData() {
+        GlobalScope.launch {  // Never cancelled!
+            fetchData()
+        }
+    }
+}
+
+// ✅ CORRECT: Use viewModelScope
+class GoodViewModel : ViewModel() {
+    fun loadData() {
+        viewModelScope.launch {  // Auto-cancelled
+            fetchData()
+        }
+    }
+}
+```
+
+### Performance Best Practices
+
+```kotlin
+// ✅ Load large lists with pagination
+class UserViewModel : ViewModel() {
+    val pagingData: Flow<PagingData<User>> = 
+        Pager(
+            PagingConfig(pageSize = 20),
+            pagingSourceFactory = { UserPagingSource(api) }
+        ).flow
+}
+
+// ✅ Efficient RecyclerView with ListAdapter and DiffUtil
+val adapter = ListAdapter(object : DiffUtil.ItemCallback<User>() {
+    override fun areItemsTheSame(old: User, new: User) = old.id == new.id
+    override fun areContentsTheSame(old: User, new: User) = old == new
+}) { user ->
+    // Bind view
+}
+
+// ✅ Lazy load images with Glide/Coil
+Glide.with(this)
+    .load(imageUrl)
+    .placeholder(R.drawable.placeholder)
+    .error(R.drawable.error)
+    .into(imageView)
+
+// ✅ Batch database operations
+viewModelScope.launch {
+    userDao.insertAll(users)  // Single transaction
+}
+
+// ✅ Debounce search queries
+val searchQuery = MutableLiveData<String>()
+val results = searchQuery
+    .debounce(300)
+    .switchMap { query ->
+        repository.search(query)
+    }
+```
+
+### Offline-First Architecture
+
+```kotlin
+class UserRepository(
+    private val userDao: UserDao,
+    private val userApi: UserApi
+) {
+    
+    fun getUser(id: Int): Flow<User> = flow {
+        // 1. Emit cached data if available
+        val cached = userDao.getUserById(id)
+        if (cached != null) {
+            emit(cached.toDomain())
+        }
+        
+        // 2. Try to fetch fresh data
+        try {
+            val fresh = userApi.getUser(id)
+            userDao.insertOrUpdate(fresh.toEntity())
+            emit(fresh)
+        } catch (e: IOException) {
+            // Network error
+            if (cached == null) throw e  // No fallback, throw error
+            // else silently use cache
+        }
+    }
+    
+    // Background sync
+    suspend fun syncUsers(): Result<Unit> = runCatching {
+        val users = userApi.getAllUsers()
+        userDao.insertAll(users.map { it.toEntity() })
+    }
+}
+```
+
+**Key Points:**
+- ✅ Never hold View/Activity references in ViewModel
+- ✅ Always use `viewModelScope` for coroutines
+- ✅ Use pagination for large lists
+- ✅ Cache network responses locally
+- ✅ Implement offline-first architecture
+- ✅ Monitor memory with Profiler
+
+---
+
+## Interview Checklist
+
+### Must Know Concepts
+
+- [ ] Activity and Fragment lifecycle (know exactly when each callback is called)
+- [ ] ViewModel survival across configuration changes
+- [ ] LiveData lifecycle-awareness
+- [ ] Flow vs LiveData differences
+- [ ] Room database (Entity, DAO, Database)
+- [ ] Repository pattern for data abstraction
+- [ ] Coroutines and viewModelScope
+- [ ] Navigation Component type-safety
+- [ ] Hilt dependency injection
+- [ ] Memory leak prevention
+
+### Code You Should Write
+
+```kotlin
+// Complete MVVM flow
+@HiltViewModel
+class UserViewModel @Inject constructor(
+    private val repository: UserRepository
+) : ViewModel() {
+    
+    // State
+    private val _user = MutableLiveData<User>()
+    val user: LiveData<User> = _user
+    
+    private val _isLoading = MutableLiveData<Boolean>()
+    val isLoading: LiveData<Boolean> = _isLoading
+    
+    private val _error = MutableLiveData<String?>()
+    val error: LiveData<String?> = _error
+    
+    fun loadUser(id: Int) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            
+            try {
+                val user = repository.getUser(id)
+                _user.value = user
+                _error.value = null
+            } catch (e: Exception) {
+                _error.value = e.message
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+}
+```
+
+### Interview Red Flags
+
+❌ "I use GlobalScope"
+❌ "I hold Activity reference in ViewModel"
+❌ "I don't need Repository pattern"
+❌ "I use observe(this) in Fragment"
+❌ "I don't clean up resources"
+❌ "I use raw SQLite instead of Room"
+❌ "I don't understand lifecycle"
+
+### Interview Green Flags
+
+✅ "I use viewModelScope"
+✅ "ViewModel survives rotation"
+✅ "I expose immutable LiveData"
+✅ "I use viewLifecycleOwner in Fragments"
+✅ "I implement Repository pattern"
+✅ "I use Hilt for DI"
+✅ "I handle errors gracefully"
+✅ "I test my ViewModels"
+
+### Sample Interview Answers
+
+**Q: How does ViewModel survive rotation?**
+
+```
+A: The Activity gets destroyed on rotation, but the ViewModelStore 
+is retained by the framework. ViewModel instances are stored in this 
+ViewModelStore and survive the Activity recreation.
+
+When the Activity is recreated, the ViewModel is retrieved from the 
+same ViewModelStore, so the data persists.
+
+This is why we don't fetch data again on rotation - the ViewModel 
+still has the cached data.
+```
+
+**Q: Why should we use Repository pattern?**
+
+```
+A: Repository provides a single source of truth for data access. It abstracts
+away the details of where data comes from (API, database, cache).
+
+Benefits:
+1. Testability - Mock repository in tests
+2. Flexibility - Change data source without changing ViewModel
+3. Offline-first - Can implement local cache with sync
+4. Separation of concerns - ViewModel doesn't know about API/DB
+5. Reusability - Multiple ViewModels can use same Repository
+```
+
+**Q: Explain the difference between suspend and async coroutines.**
+
+```
+A: 
+suspend function: Sequential execution
+- Awaits result before continuing
+- Example: suspend fun getUser(): User
+- Used with viewModelScope.launch { user = getUser() }
+
+async: Parallel execution
+- Starts immediately, returns Deferred
+- Example: async { getUser() }
+- Used when you need to start multiple operations in parallel
+
+Example:
+// Sequential
+val user = repository.getUser(id)      // Wait
+val posts = repository.getPosts(id)    // Then do this
+
+// Parallel
+val userDeferred = async { repository.getUser(id) }
+val postsDeferred = async { repository.getPosts(id) }
+val user = userDeferred.await()        // Wait for both
+val posts = postsDeferred.await()
+```
+
+---
+
+## Quick Reference
+
+### Lifecycle Events Flowchart
+
+```
+Activity/Fragment Created
+         ↓
+    onCreate()
+         ↓
+    onStart()
+         ↓
+    onResume() ← Can interact
+         ↓
+  [User navigates away]
+         ↓
+    onPause()
+         ↓
+    onStop()
+         ↓
+   onDestroy()
+         ↓
+    [Destroyed]
+```
+
+### Data Flow
+
+```
+User Action
+    ↓
+Fragment calls ViewModel.action()
+    ↓
+ViewModel calls Repository
+    ↓
+Repository queries Database OR API
+    ↓
+Data flows back through Flow/LiveData
+    ↓
+Fragment observes and updates UI
+```
+
+### Coroutine Scope Cancellation
+
+```
+App Lifetime:
+  ├─ GlobalScope (Never cancelled) ❌ Avoid
+  │
+  ├─ App Scope
+  │  └─ Activity/Fragment created
+  │     ├─ viewModelScope (Auto-cancelled)
+  │     └─ lifecycleScope (Auto-cancelled)
+```
+
+Good luck with your interviews!
+
+# Android Jetpack - Interview Concepts Master Guide
+
+Complete interview preparation with all concepts, theory, examples, and keypoints.
+
+## Table of Contents
+1. [Android Lifecycle Fundamentals](#android-lifecycle-fundamentals)
+2. [Architecture Components](#architecture-components)
+3. [State Management](#state-management)
+4. [Data Persistence](#data-persistence)
+5. [Asynchronous Programming](#asynchronous-programming)
+6. [Navigation & UI](#navigation--ui)
+7. [Dependency Injection](#dependency-injection)
+8. [Testing](#testing)
+9. [Performance & Best Practices](#performance--best-practices)
+10. [Interview Checklist](#interview-checklist)
+
+---
+
+## Android Lifecycle Fundamentals
+
+### Activity Lifecycle
+
+**Theory:**
+An Activity is a screen in an Android app. It has a well-defined lifecycle with several states.
+
+**Lifecycle States & Callbacks:**
+
+```
+┌─────────────────────────────────────────┐
+│           Activity Lifecycle             │
+├─────────────────────────────────────────┤
+│  onCreate()          - First time setup  │
+│  onStart()           - Becoming visible  │
+│  onResume()          - Getting focus     │
+│  [Running/Paused]                       │
+│  onPause()           - Losing focus      │
+│  onStop()            - No longer visible │
+│  onDestroy()         - Being destroyed   │
+└─────────────────────────────────────────┘
+```
+
+**Example:**
+
+```kotlin
+class MainActivity : AppCompatActivity() {
+    
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        
+        // Initialize views, resources, database connections
+        // Called once, even after rotation
+        Log.d("Lifecycle", "onCreate")
+    }
+    
+    override fun onStart() {
+        super.onStart()
+        // Activity is visible but not interactive
+        Log.d("Lifecycle", "onStart")
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        // Activity has focus, ready to interact
+        startLocationUpdates()  // Resume sensors
+        Log.d("Lifecycle", "onResume")
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        // Activity is partially obscured
+        stopLocationUpdates()  // Pause sensors
+        Log.d("Lifecycle", "onPause")
+    }
+    
+    override fun onStop() {
+        super.onStop()
+        // Activity is not visible
+        Log.d("Lifecycle", "onStop")
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        // Activity is being destroyed
+        // Clean up resources
+        Log.d("Lifecycle", "onDestroy")
+    }
+}
+```
+
+**Key Points:**
+- ✅ `onCreate()` is called only once (survives rotation)
+- ✅ `onResume()`/`onPause()` bracket when app has focus
+- ✅ Always cleanup in `onPause()` or `onDestroy()`
+- ✅ Configuration changes trigger `onDestroy()` → `onCreate()`
+- ✅ `savedInstanceState` Bundle preserves simple data across rotation
+
+---
+
+### Fragment Lifecycle
+
+**Theory:**
+Fragment lifecycle is more complex because fragments live within activities.
+
+```kotlin
+Fragment Lifecycle:
+├── onAttach() - Fragment attached to Activity
+├── onCreate() - Fragment created
+├── onCreateView() - Create fragment view
+├── onViewCreated() - View created, safe to access
+├── onStart() - Fragment visible
+├── onResume() - Fragment interactive
+├── [paused/stopped]
+├── onPause() - Fragment losing focus
+├── onStop() - Fragment not visible
+├── onDestroyView() - Fragment view destroyed
+├── onDestroy() - Fragment destroyed
+└── onDetach() - Fragment detached from Activity
+```
+
+**Example:**
+
+```kotlin
+class UserFragment : Fragment() {
+    
+    private var _binding: FragmentUserBinding? = null
+    private val binding get() = _binding!!
+    private val viewModel: UserViewModel by viewModels()
+    
+    override fun onAttach(context: Context) {
+        super.onAttach(context)
+        // Fragment about to attach to Activity
+    }
+    
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Parse arguments
+        val userId = arguments?.getString("userId")
+    }
+    
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        // Inflate layout - return root view
+        _binding = FragmentUserBinding.inflate(inflater, container, false)
+        return binding.root
+    }
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        
+        // Safe to access views now
+        binding.userButton.setOnClickListener {
+            viewModel.loadUser()
+        }
+        
+        // Always use viewLifecycleOwner!
+        viewModel.user.observe(viewLifecycleOwner) { user ->
+            updateUI(user)
+        }
+    }
+    
+    override fun onStart() {
+        super.onStart()
+        // Fragment visible
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        // Fragment interactive
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        // Clean up resources
+    }
+    
+    override fun onStop() {
+        super.onStop()
+        // Fragment not visible
+    }
+    
+    override fun onDestroyView() {
+        super.onDestroyView()
+        // Clean up view references
+        _binding = null  // Prevent memory leak
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        // Fragment destroyed
+    }
+}
+```
+
+**Key Points:**
+- ✅ Use `viewLifecycleOwner` in Fragments, NOT `this`
+- ✅ Nullify binding in `onDestroyView()` to prevent memory leaks
+- ✅ `onViewCreated()` is safe to access views
+- ✅ Arguments are parsed in `onCreate()` before view inflation
+- ✅ Fragment can outlive its view (rotation example)
+
+---
+
+## Architecture Components
+
+### ViewModel Deep Dive
+
+**Theory:**
+ViewModel is designed to survive configuration changes and hold UI-related data.
+
+**How ViewModel Survives Rotation:**
+
+```
+Device Rotation Event:
+┌─────────────────────────────────────────┐
+│ Activity destroyed (onDestroy called)   │
+│ BUT ViewModel instance persists         │
+│ Framework re-creates Activity           │
+│ ViewModel data still there              │
+└─────────────────────────────────────────┘
+
+Without ViewModel:
+onCreate() → fetch users (AGAIN)
+onCreate() → fetch users (AGAIN)
+onCreate() → fetch users (AGAIN)
+[Wasteful API calls, UI flicker]
+
+With ViewModel:
+onCreate() → fetch users (1st time)
+[Rotation - Activity destroyed]
+onCreate() → get cached users [No API call]
+```
+
+**Implementation:**
+
+```kotlin
+@HiltViewModel
+class UserListViewModel @Inject constructor(
+    private val repository: UserRepository,
+    private val logger: Logger
+) : ViewModel() {
+    
+    // Mutable internally, exposed as immutable
+    private val _users = MutableLiveData<List<User>>()
+    val users: LiveData<List<User>> = _users
+    
+    private val _isLoading = MutableLiveData<Boolean>()
+    val isLoading: LiveData<Boolean> = _isLoading
+    
+    private val _error = MutableLiveData<String?>()
+    val error: LiveData<String?> = _error
+    
+    // Lazy initialization
+    private val userComparator = compareBy<User> { it.name }
+    
+    // Called once when ViewModel created
+    init {
+        loadUsers()
+    }
+    
+    fun loadUsers() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            
+            try {
+                val users = repository.getUsers()
+                _users.value = users.sortedWith(userComparator)
+                _error.value = null
+                logger.log("Users loaded: ${users.size}")
+            } catch (e: Exception) {
+                _error.value = e.message
+                logger.error("Load failed", e)
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+    
+    // Clean up when ViewModel destroyed
+    override fun onCleared() {
+        super.onCleared()
+        logger.log("UserListViewModel cleared")
+        // Cancel long-running operations if needed
+    }
+}
+```
+
+**Usage:**
+
+```kotlin
+class UserListFragment : Fragment() {
+    
+    // ViewModels are tied to Fragment lifecycle
+    private val viewModel: UserListViewModel by viewModels()
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        
+        // Observe with viewLifecycleOwner
+        viewModel.users.observe(viewLifecycleOwner) { users ->
+            adapter.submitList(users)
+        }
+        
+        viewModel.isLoading.observe(viewLifecycleOwner) { isLoading ->
+            binding.progressBar.visibility = 
+                if (isLoading) View.VISIBLE else View.GONE
+        }
+        
+        viewModel.error.observe(viewLifecycleOwner) { error ->
+            error?.let {
+                Snackbar.make(binding.root, it, Snackbar.LENGTH_LONG).show()
+            }
+        }
+    }
+}
+```
+
+**Key Points:**
+- ✅ Survives configuration changes (rotation, locale, etc.)
+- ✅ Tied to Activity/Fragment lifecycle, not View lifecycle
+- ✅ Use `viewModelScope` for coroutines
+- ✅ Expose immutable LiveData, hide mutable implementation
+- ✅ Initialize data in `init` block, not constructor
+- ✅ Clean up resources in `onCleared()`
+
+---
+
+### LiveData & State Management
+
+**Theory:**
+LiveData is an observable data holder that is lifecycle-aware.
+
+**Advantages:**
+
+```
+LiveData Features:
+├── Lifecycle Aware
+│   ├── Automatically unsubscribes when lifecycle ends
+│   └── Won't update destroyed views
+├── No Memory Leaks
+│   ├── Lifecycle binding prevents leaks
+│   └── Auto cleanup
+├── Thread Safe
+│   ├── postValue() from any thread
+│   ├── value from main thread
+├── Configuration Change Safe
+│   ├── Data persists across rotation
+│   └── No redundant updates
+└── One-time Observers
+    └── observeOnce possible
+```
+
+**Implementation Patterns:**
+
+```kotlin
+// Pattern 1: Simple LiveData
+class SimpleViewModel : ViewModel() {
+    private val _counter = MutableLiveData<Int>(0)
+    val counter: LiveData<Int> = _counter
+    
+    fun increment() {
+        _counter.value = (_counter.value ?: 0) + 1
+    }
+}
+
+// Pattern 2: Transformed LiveData
+class TransformedViewModel : ViewModel() {
+    private val _userName = MutableLiveData<String>("")
+    
+    // Transform name to uppercase
+    val userNameUppercase: LiveData<String> = _userName.map { name ->
+        name.uppercase()
+    }
+    
+    // Switch between different LiveData sources
+    private val _userId = MutableLiveData<Int>()
+    val user: LiveData<User> = _userId.switchMap { userId ->
+        repository.getUser(userId)  // Returns LiveData<User>
+    }
+}
+
+// Pattern 3: Merging LiveData
+class MergedViewModel : ViewModel() {
+    private val _firstName = MutableLiveData<String>("")
+    private val _lastName = MutableLiveData<String>("")
+    
+    val fullName: LiveData<String> = mediatorLiveData {
+        val first = _firstName.value ?: ""
+        val last = _lastName.value ?: ""
+        
+        value = "$first $last"
+    }
+    
+    init {
+        // Update whenever either changes
+        addSource(_firstName) {
+            value = "${_firstName.value ?: ""} ${_lastName.value ?: ""}"
+        }
+        addSource(_lastName) {
+            value = "${_firstName.value ?: ""} ${_lastName.value ?: ""}"
+        }
+    }
+}
+
+// Pattern 4: Distinct Until Changed
+class DistinctViewModel : ViewModel() {
+    private val _searchQuery = MutableLiveData<String>()
+    
+    // Only update when value actually changes
+    val results: LiveData<List<SearchResult>> = 
+        _searchQuery
+            .distinctUntilChanged()
+            .switchMap { query ->
+                if (query.length < 3) {
+                    MutableLiveData<List<SearchResult>>(emptyList())
+                } else {
+                    repository.search(query)
+                }
+            }
+}
+```
+
+**Comparison: LiveData vs StateFlow:**
+
+```kotlin
+// LiveData (Lifecycle-aware)
+class LiveDataViewModel : ViewModel() {
+    val state: LiveData<State> = ...
+}
+// Usage:
+viewModel.state.observe(this) { state ->
+    // Automatic lifecycle management
+}
+
+// StateFlow (Coroutine-based)
+class StateFlowViewModel : ViewModel() {
+    val state: StateFlow<State> = ...
+}
+// Usage:
+lifecycleScope.launch {
+    repeatOnLifecycle(Lifecycle.State.STARTED) {
+        viewModel.state.collect { state ->
+            updateUI(state)
+        }
+    }
+}
+```
+
+**Key Points:**
+- ✅ Lifecycle-aware - automatic unsubscribe
+- ✅ Thread-safe with `postValue()`
+- ✅ Use `.map()` for transformations
+- ✅ Use `.switchMap()` for switching data sources
+- ✅ `distinctUntilChanged()` prevents redundant updates
+- ✅ StateFlow more modern, but LiveData still widely used
+
+---
+
+### Flow & Reactive Programming
+
+**Theory:**
+Flow is a Kotlin coroutine-based API for reactive streams.
+
+**Flow vs LiveData:**
+
+```
+LiveData:
+├── Lifecycle-aware
+├── Hot observable
+├── Simple for UI
+└── Android-specific
+
+Flow:
+├── Not lifecycle-aware
+├── Cold observable
+├── Powerful transformations
+└── Pure Kotlin
+```
+
+**Implementation:**
+
+```kotlin
+// Producer
+class UserRepository {
+    fun getUsers(): Flow<List<User>> = flow {
+        try {
+            // Emit initial local data
+            val cached = userDao.getAllUsers()
+            emit(cached)
+            
+            // Fetch fresh data
+            val fresh = userApi.getUsers()
+            userDao.insertAll(fresh)
+            emit(fresh)
+        } catch (e: Exception) {
+            // Handle error
+        }
+    }
+    
+    // Reactive database query
+    fun observeUser(id: String): Flow<User> {
+        return userDao.observeUser(id)
+            .map { entity ->
+                entity.toDomain()
+            }
+    }
+}
+
+// ViewModel
+@HiltViewModel
+class UserViewModel @Inject constructor(
+    private val repository: UserRepository
+) : ViewModel() {
+    
+    // Convert Flow to LiveData
+    val users: LiveData<List<User>> = 
+        repository.getUsers().asLiveData()
+    
+    // Or keep as Flow
+    val userUpdates: Flow<User> = 
+        MutableStateFlow("").switchMap { id ->
+            repository.observeUser(id)
+        }
+}
+
+// UI Layer
+class UserFragment : Fragment() {
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        // Method 1: With LiveData
+        viewModel.users.observe(viewLifecycleOwner) { users ->
+            updateUI(users)
+        }
+        
+        // Method 2: With Flow + lifecycleScope
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.userUpdates.collect { user ->
+                    updateUI(user)
+                }
+            }
+        }
+    }
+}
+```
+
+**Flow Operators:**
+
+```kotlin
+repository.getUsers()
+    // Transformation
+    .map { users ->
+        users.sortedBy { it.name }
+    }
+    // Filtering
+    .filter { users ->
+        users.isNotEmpty()
+    }
+    // Flattening
+    .flatMapLatest { users ->
+        repository.getDetails(users)
+    }
+    // Error handling
+    .catch { error ->
+        emit(emptyList())
+    }
+    // Side effects
+    .onEach { users ->
+        logger.log("Users: ${users.size}")
+    }
+    .collect { users ->
+        updateUI(users)
+    }
+```
+
+**Key Points:**
+- ✅ Cold observable - new instance per collector
+- ✅ Powerful operators: map, filter, flatMap, catch
+- ✅ Coroutine-based, not lifecycle-aware
+- ✅ Convert to LiveData for safe UI updates
+- ✅ Use in repository and ViewModel layers
+
+---
+
+## Data Persistence
+
+### Room Database
+
+**Theory:**
+Room is an abstraction layer over SQLite that provides compile-time SQL verification.
+
+**Three Main Components:**
+
+```
+┌────────────────────┐
+│   Entity (Table)   │  <- Models
+├────────────────────┤
+│      DAO            │  <- Queries
+├────────────────────┤
+│   RoomDatabase      │  <- Container
+└────────────────────┘
+```
+
+**Implementation:**
+
+```kotlin
+// 1. Entity - Represents database table
+@Entity(tableName = "users", indices = [Index("email", unique = true)])
+data class UserEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Int = 0,
+    
+    @ColumnInfo(name = "full_name")
+    val fullName: String,
+    
+    val email: String,
+    
+    @Ignore
+    val isTemporary: Boolean = false  // Not stored in DB
+)
+
+// 2. DAO - Data Access Object
+@Dao
+interface UserDao {
+    
+    // Insert
+    @Insert
+    suspend fun insert(user: UserEntity)
+    
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOrUpdate(user: UserEntity)
+    
+    // Query
+    @Query("SELECT * FROM users WHERE id = :id")
+    suspend fun getUserById(id: Int): UserEntity?
+    
+    @Query("SELECT * FROM users ORDER BY full_name")
+    fun getAllUsers(): LiveData<List<UserEntity>>
+    
+    // Reactive Query (Flow)
+    @Query("SELECT * FROM users WHERE email = :email")
+    fun observeUser(email: String): Flow<UserEntity>
+    
+    // Update
+    @Update
+    suspend fun update(user: UserEntity)
+    
+    // Delete
+    @Delete
+    suspend fun delete(user: UserEntity)
+    
+    @Query("DELETE FROM users WHERE id = :id")
+    suspend fun deleteById(id: Int)
+    
+    // Transaction
+    @Transaction
+    suspend fun insertUserWithPosts(
+        user: UserEntity,
+        posts: List<PostEntity>
+    ) {
+        insert(user)
+        insertPosts(posts)
+    }
+    
+    @Insert
+    suspend fun insertPosts(posts: List<PostEntity>)
+}
+
+// 3. Database
+@Database(
+    entities = [UserEntity::class, PostEntity::class],
+    version = 1,
+    exportSchema = true
+)
+abstract class AppDatabase : RoomDatabase() {
+    
+    abstract fun userDao(): UserDao
+    abstract fun postDao(): PostDao
+    
+    companion object {
+        @Volatile private var instance: AppDatabase? = null
+        
+        fun getInstance(context: Context): AppDatabase =
+            instance ?: synchronized(this) {
+                instance ?: buildDatabase(context).also { instance = it }
+            }
+        
+        private fun buildDatabase(context: Context): AppDatabase {
+            return Room.databaseBuilder(
+                context,
+                AppDatabase::class.java,
+                "app.db"
+            )
+            .addMigrations(MIGRATION_1_2)
+            .build()
+        }
+    }
+}
+
+// 4. Migration
+val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("ALTER TABLE users ADD COLUMN phone TEXT DEFAULT ''")
+    }
+}
+```
+
+**Repository Pattern with Room:**
+
+```kotlin
+class UserRepository(
+    private val userDao: UserDao,
+    private val userApi: UserApi
+) {
+    
+    // Read from local cache
+    fun getAllUsers(): LiveData<List<User>> {
+        return userDao.getAllUsers()
+            .map { entities ->
+                entities.map { it.toDomain() }
+            }
+    }
+    
+    // Offline-first: Local cache + background sync
+    fun getUser(id: Int): Flow<User?> = flow {
+        // Emit cached data first
+        val cached = userDao.getUserById(id)
+        if (cached != null) {
+            emit(cached.toDomain())
+        }
+        
+        try {
+            // Fetch fresh data
+            val fresh = userApi.getUser(id)
+            userDao.insertOrUpdate(fresh.toEntity())
+            emit(fresh)
+        } catch (e: Exception) {
+            if (cached == null) throw e
+        }
+    }
+    
+    // Insert with error handling
+    suspend fun insertUser(user: User): Result<Unit> = runCatching {
+        userDao.insert(user.toEntity())
+    }
+}
+```
+
+**Key Points:**
+- ✅ Compile-time SQL verification
+- ✅ Automatic cursor-to-object mapping
+- ✅ LiveData/Flow support in DAO
+- ✅ Transaction support with @Transaction
+- ✅ Migrations for schema changes
+- ✅ Type-safe queries
+
+---
+
+### DataStore & WorkManager
+
+**Theory:**
+DataStore replaces SharedPreferences with better performance and type safety.
+
+**DataStore vs SharedPreferences:**
+
+```
+SharedPreferences:
+├── Plain text storage
+├── Not type-safe
+├── No transaction support
+└── Deprecated
+
+DataStore:
+├── Protocol Buffer support
+├── Type-safe
+├── ACID transactions
+├── Coroutine-based
+└── Async by default
+```
+
+**Implementation:**
+
+```kotlin
+// Proto DataStore
+data class UserPreferences(
+    val isDarkMode: Boolean = false,
+    val lastUserId: String = "",
+    val fontSize: Float = 14f
+)
+
+val Context.userPreferences: DataStore<UserPreferences> by preferencesDataStore(
+    name = "user_preferences",
+    serializer = UserPreferencesSerializer()
+)
+
+// Custom Serializer
+object UserPreferencesSerializer : Serializer<UserPreferences> {
+    override val defaultValue: UserPreferences = UserPreferences()
+    
+    override suspend fun readFrom(input: InputStream): UserPreferences {
+        return try {
+            JsonFormat.merge(input.readBytes().decodeToString(), UserPreferences())
+        } catch (e: Exception) {
+            defaultValue
+        }
+    }
+    
+    override suspend fun writeTo(
+        t: UserPreferences,
+        output: OutputStream
+    ) {
+        output.write(JsonFormat.printer().print(t).encodeToByteArray())
+    }
+}
+
+// Usage in ViewModel
+@HiltViewModel
+class SettingsViewModel @Inject constructor(
+    private val dataStore: DataStore<UserPreferences>
+) : ViewModel() {
+    
+    val isDarkMode: Flow<Boolean> = dataStore.data
+        .catch { exception ->
+            emit(UserPreferences())
+        }
+        .map { preferences ->
+            preferences.isDarkMode
+        }
+    
+    fun setDarkMode(enabled: Boolean) {
+        viewModelScope.launch {
+            dataStore.updateData { preferences ->
+                preferences.copy(isDarkMode = enabled)
+            }
+        }
+    }
+}
+```
+
+**WorkManager:**
+
+```kotlin
+// Define Worker
+class SyncDataWorker(
+    context: Context,
+    params: WorkerParameters
+) : CoroutineWorker(context, params) {
+    
+    @Inject lateinit var repository: DataRepository
+    
+    override suspend fun doWork(): Result {
+        return try {
+            // Do background work
+            val data = repository.syncData()
+            
+            // Return result
+            Result.success(
+                workDataOf("syncedItems" to data.size)
+            )
+        } catch (e: Exception) {
+            if (runAttemptCount < 3) {
+                Result.retry()  // Retry up to 3 times
+            } else {
+                Result.failure()  // Give up
+            }
+        }
+    }
+}
+
+// Schedule Work
+class MainActivity : AppCompatActivity() {
+    
+    fun scheduleSyncWork() {
+        val syncWork = PeriodicWorkRequestBuilder<SyncDataWorker>(
+            15, TimeUnit.MINUTES
+        )
+        .setConstraints(
+            Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .setRequiresCharging(false)
+                .build()
+        )
+        .setBackoffCriteria(
+            BackoffPolicy.EXPONENTIAL,
+            15,
+            TimeUnit.MINUTES
+        )
+        .build()
+        
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "sync_work",
+            ExistingPeriodicWorkPolicy.KEEP,
+            syncWork
+        )
+    }
+    
+    fun observeSyncProgress() {
+        WorkManager.getInstance(this)
+            .getWorkInfosForTagLiveData("sync")
+            .observe(this) { workInfos ->
+                workInfos.forEach { workInfo ->
+                    when (workInfo.state) {
+                        WorkInfo.State.RUNNING -> {
+                            val syncedItems = workInfo.outputData.getInt("syncedItems", 0)
+                            Log.d("Work", "Syncing... $syncedItems items")
+                        }
+                        WorkInfo.State.SUCCEEDED -> {
+                            Log.d("Work", "Sync completed")
+                        }
+                        else -> {}
+                    }
+                }
+            }
+    }
+}
+```
+
+**Key Points:**
+- ✅ DataStore is async and type-safe
+- ✅ WorkManager survives app death
+- ✅ Set constraints (network, battery, charging)
+- ✅ Exponential backoff for retries
+- ✅ Can observe work progress with LiveData
+- ✅ Unique work prevents duplicates
+
+---
+
+## Asynchronous Programming
+
+### Coroutines & viewModelScope
+
+**Theory:**
+Coroutines are lightweight threads managed by Kotlin runtime.
+
+**Coroutine Scope Hierarchy:**
+
+```
+GlobalScope (App lifetime)
+├── viewModelScope (ViewModel lifetime)
+├── lifecycleScope (Activity/Fragment lifetime)
+│   ├── launchWhenStarted
+│   ├── launchWhenResumed
+│   └── repeatOnLifecycle
+└── Custom Scope
+```
+
+**Implementation:**
+
+```kotlin
+@HiltViewModel
+class DataViewModel @Inject constructor(
+    private val repository: DataRepository
+) : ViewModel() {
+    
+    private val _data = MutableLiveData<Data>()
+    val data: LiveData<Data> = _data
+    
+    private val _error = MutableLiveData<String?>()
+    val error: LiveData<String?> = _error
+    
+    // Launch on ViewModel scope
+    fun loadData() {
+        viewModelScope.launch {
+            try {
+                // Suspend call (won't block UI thread)
+                val result = repository.getData()
+                _data.value = result
+                _error.value = null
+            } catch (e: CancellationException) {
+                // Job was cancelled
+                throw e
+            } catch (e: Exception) {
+                _error.value = e.message
+            }
+        }
+    }
+    
+    // Parallel requests
+    fun loadUserAndPosts(userId: Int) {
+        viewModelScope.launch {
+            try {
+                // Launch parallel
+                val userDeferred = async { repository.getUser(userId) }
+                val postsDeferred = async { repository.getPosts(userId) }
+                
+                // Wait for both
+                val user = userDeferred.await()
+                val posts = postsDeferred.await()
+                
+                // Update UI
+                _user.value = user
+                _posts.value = posts
+            } catch (e: Exception) {
+                _error.value = e.message
+            }
+        }
+    }
+    
+    // Sequential requests
+    fun loadUserThenFollowers(userId: Int) {
+        viewModelScope.launch {
+            try {
+                // Wait for first, then second
+                val user = repository.getUser(userId)
+                val followers = repository.getFollowers(user.id)
+                
+                _user.value = user
+                _followers.value = followers
+            } catch (e: Exception) {
+                _error.value = e.message
+            }
+        }
+    }
+    
+    // Timeout
+    fun loadDataWithTimeout() {
+        viewModelScope.launch {
+            try {
+                withTimeoutOrNull(5000) {
+                    val data = repository.getData()
+                    _data.value = data
+                }
+            } catch (e: TimeoutCancellationException) {
+                _error.value = "Request timeout"
+            }
+        }
+    }
+    
+    // Clean up
+    override fun onCleared() {
+        super.onCleared()
+        // All coroutines in viewModelScope are cancelled automatically
+    }
+}
+```
+
+**Fragment Usage:**
+
+```kotlin
+class UserFragment : Fragment() {
+    
+    private val viewModel: UserViewModel by viewModels()
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        
+        // Method 1: LiveData (Simple)
+        viewModel.user.observe(viewLifecycleOwner) { user ->
+            updateUI(user)
+        }
+        
+        // Method 2: Flow (Advanced)
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.userFlow.collect { user ->
+                    updateUI(user)
+                }
+            }
+        }
+        
+        // Method 3: Launch when started (Deprecated, but still used)
+        viewLifecycleOwner.lifecycleScope.launchWhenStarted {
+            viewModel.userFlow.collect { user ->
+                updateUI(user)
+            }
+        }
+    }
+}
+```
+
+**Common Patterns:**
+
+```kotlin
+// Retry logic
+suspend fun <T> retryIO(
+    times: Int = 3,
+    initialDelay: Long = 100,
+    maxDelay: Long = 1000,
+    factor: Double = 2.0,
+    block: suspend () -> T
+): T {
+    var currentDelay = initialDelay
+    repeat(times - 1) {
+        try {
+            return block()
+        } catch (e: Exception) {
+            delay(currentDelay)
+            currentDelay = (currentDelay * factor).toLong().coerceAtMost(maxDelay)
+        }
+    }
+    return block()
+}
+
+// Usage
+viewModelScope.launch {
+    try {
+        val user = retryIO(times = 3) {
+            repository.getUser(id)
+        }
+        _user.value = user
+    } catch (e: Exception) {
+        _error.value = e.message
+    }
+}
+```
+
+**Key Points:**
+- ✅ `viewModelScope` auto-cancels when ViewModel destroyed
+- ✅ Use `async` for parallel requests
+- ✅ Use `withTimeoutOrNull` for timeouts
+- ✅ Always handle `CancellationException`
+- ✅ Retry logic for network failures
+- ✅ Don't use `GlobalScope`
+
+---
+
+## Navigation & UI
+
+### Navigation Component
+
+**Theory:**
+Navigation Component manages app navigation declaratively via navigation graph.
+
+**Benefits:**
+
+```
+✓ Type-safe arguments
+✓ Automatic back stack
+✓ Deep linking support
+✓ Animation transitions
+✓ Single source of truth
+```
+
+**Implementation:**
+
+```xml
+<!-- Navigation Graph (res/navigation/nav_graph.xml) -->
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/listFragment">
+    
+    <!-- Destination 1 -->
+    <fragment
+        android:id="@+id/listFragment"
+        android:name="com.example.ListFragment"
+        android:label="@string/list" />
+    
+    <!-- Destination 2 with arguments -->
+    <fragment
+        android:id="@+id/detailFragment"
+        android:name="com.example.DetailFragment"
+        android:label="@string/detail">
+        
+        <argument
+            android:name="userId"
+            app:argType="integer"
+            android:defaultValue="0" />
+    </fragment>
+    
+    <!-- Action with animation -->
+    <action
+        android:id="@+id/action_list_to_detail"
+        app:destination="@id/detailFragment"
+        app:enterAnim="@anim/slide_in_right"
+        app:exitAnim="@anim/slide_out_left"
+        app:popEnterAnim="@anim/slide_in_left"
+        app:popExitAnim="@anim/slide_out_right" />
+    
+    <!-- Deep link -->
+    <deepLink
+        app:uri="https://example.com/user/{userId}" />
+</navigation>
+```
+
+**Safe Args (Type-safe):**
+
+```kotlin
+// List Fragment
+class ListFragment : Fragment() {
+    
+    private val adapter = UserAdapter { user ->
+        // Type-safe navigation with generated classes
+        val action = ListFragmentDirections.actionListToDetail(user.id)
+        findNavController().navigate(action)
+    }
+}
+
+// Detail Fragment
+class DetailFragment : Fragment() {
+    
+    // Receive arguments safely
+    private val args: DetailFragmentArgs by navArgs()
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        val userId = args.userId  // Type-safe, not null
+        viewModel.loadUser(userId)
+    }
+}
+```
+
+**Manual Navigation:**
+
+```kotlin
+class ListFragment : Fragment() {
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        binding.addButton.setOnClickListener {
+            // Conditional navigation
+            if (isLoggedIn()) {
+                findNavController().navigate(R.id.action_list_to_new)
+            } else {
+                findNavController().navigate(R.id.action_list_to_login)
+            }
+        }
+        
+        // Back handling
+        binding.backButton.setOnClickListener {
+            findNavController().navigateUp()
+        }
+    }
+    
+    // Clear back stack (e.g., after logout)
+    private fun logout() {
+        findNavController().navigate(
+            R.id.loginFragment,
+            null,
+            NavOptions.Builder()
+                .setPopUpTo(R.id.nav_graph, true)  // Clear all
+                .build()
+        )
+    }
+}
+```
+
+**Key Points:**
+- ✅ Define all routes in navigation graph
+- ✅ Use Safe Args for type-safety
+- ✅ `findNavController().navigate()` for navigation
+- ✅ `navigateUp()` for back navigation
+- ✅ `setPopUpTo()` to clear back stack
+- ✅ Deep linking works automatically
+
+---
+
+## Dependency Injection
+
+### Hilt Framework
+
+**Theory:**
+Hilt simplifies dependency injection with compile-time checks and less boilerplate.
+
+**Setup:**
+
+```gradle
+// build.gradle
+plugins {
+    id 'kotlin-kapt'
+    id 'com.google.dagger.hilt.android'
+}
+
+dependencies {
+    implementation 'com.google.dagger:hilt-android:2.48'
+    kapt 'com.google.dagger:hilt-compiler:2.48'
+    
+    implementation 'androidx.hilt:hilt-lifecycle-viewmodel:1.0.0-alpha03'
+    kapt 'androidx.hilt:hilt-compiler:1.0.0'
+}
+```
+
+**Application-level Injection:**
+
+```kotlin
+// Application class
+@HiltAndroidApp
+class MyApplication : Application() {
+    // Hilt-generated component attached automatically
+}
+
+// Singleton Module
+@Module
+@InstallIn(SingletonComponent::class)
+object RepositoryModule {
+    
+    @Provides
+    @Singleton
+    fun provideUserRepository(
+        userDao: UserDao,
+        userApi: UserApi
+    ): UserRepository {
+        return UserRepository(userDao, userApi)
+    }
+    
+    @Provides
+    @Singleton
+    fun provideDatabase(context: Context): AppDatabase {
+        return Room.databaseBuilder(context, AppDatabase::class.java, "app.db")
+            .build()
+    }
+    
+    @Provides
+    @Singleton
+    fun provideUserDao(database: AppDatabase): UserDao {
+        return database.userDao()
+    }
+}
+
+// Network Module
+@Module
+@InstallIn(SingletonComponent::class)
+object NetworkModule {
+    
+    @Provides
+    @Singleton
+    fun provideUserApi(): UserApi {
+        return Retrofit.Builder()
+            .baseUrl("https://api.example.com/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(UserApi::class.java)
+    }
+}
+```
+
+**ViewModel Injection:**
+
+```kotlin
+@HiltViewModel
+class UserViewModel @Inject constructor(
+    private val repository: UserRepository,
+    private val logger: Logger
+) : ViewModel() {
+    
+    fun loadUser(id: Int) {
+        viewModelScope.launch {
+            try {
+                val user = repository.getUser(id)
+                _user.value = user
+            } catch (e: Exception) {
+                logger.error("Load failed", e)
+            }
+        }
+    }
+}
+
+// Usage - no factory needed!
+class UserFragment : Fragment() {
+    private val viewModel: UserViewModel by viewModels()
+}
+```
+
+**Testing with Hilt:**
+
+```kotlin
+@HiltAndroidTest
+class UserRepositoryTest {
+    
+    @get:Rule
+    val hiltRule = HiltAndroidRule(this)
+    
+    @Inject
+    lateinit var repository: UserRepository
+    
+    @Inject
+    lateinit var database: AppDatabase
+    
+    @Before
+    fun setup() {
+        hiltRule.inject()  // Inject dependencies
+    }
+    
+    @Test
+    fun testLoadUser() {
+        // Use injected repository
+        runBlocking {
+            val user = repository.getUser(1)
+            assertThat(user).isNotNull()
+        }
+    }
+}
+```
+
+**Key Points:**
+- ✅ @HiltAndroidApp on Application
+- ✅ @HiltViewModel for automatic ViewModel creation
+- ✅ @Module to provide dependencies
+- ✅ @Provides for dependency constructors
+- ✅ @Singleton for single instances
+- ✅ Compile-time verification
+
+---
+
+## Testing
+
+### Unit Testing ViewModels
+
+**Theory:**
+ViewModels are easy to test because they're pure Kotlin, no Android framework dependency.
+
+**Setup:**
+
+```gradle
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.mockito:mockito-core:4.0.0'
+    testImplementation 'org.mockito.kotlin:mockito-kotlin:4.0.0'
+    testImplementation 'androidx.arch.core:core-testing:2.1.0'
+}
+```
+
+**Test Helper:**
+
+```kotlin
+// Rule for running LiveData tests synchronously
+@get:Rule
+val instantExecutorRule = InstantTaskExecutorRule()
+
+// Helper to get LiveData value
+fun <T> LiveData<T>.getOrAwaitValue(
+    time: Long = 2,
+    timeUnit: TimeUnit = TimeUnit.SECONDS
+): T {
+    var data: T? = null
+    val latch = CountDownLatch(1)
+    
+    val observer = Observer<T> { o ->
+        data = o
+        latch.countDown()
+    }
+    
+    observeForever(observer)
+    latch.await(time, timeUnit)
+    removeObserver(observer)
+    
+    return data as T
+}
+```
+
+**Test Example:**
+
+```kotlin
+class UserViewModelTest {
+    
+    @get:Rule
+    val instantExecutorRule = InstantTaskExecutorRule()
+    
+    private val mockRepository: UserRepository = mock()
+    private val mockLogger: Logger = mock()
+    
+    private lateinit var viewModel: UserViewModel
+    
+    @Before
+    fun setup() {
+        viewModel = UserViewModel(mockRepository, mockLogger)
+    }
+    
+    @Test
+    fun loadUser_success() = runBlocking {
+        // Arrange
+        val user = User(1, "Alice")
+        `when`(mockRepository.getUser(1)).thenReturn(user)
+        
+        // Act
+        viewModel.loadUser(1)
+        
+        // Assert
+        val result = viewModel.user.getOrAwaitValue()
+        assertThat(result).isEqualTo(user)
+        assertThat(viewModel.error.getOrAwaitValue()).isNull()
+    }
+    
+    @Test
+    fun loadUser_failure() = runBlocking {
+        // Arrange
+        val exception = Exception("Network error")
+        `when`(mockRepository.getUser(1)).thenThrow(exception)
+        
+        // Act
+        viewModel.loadUser(1)
+        
+        // Assert
+        val error = viewModel.error.getOrAwaitValue()
+        assertThat(error).isEqualTo("Network error")
+    }
+}
+```
+
+### Integration Testing
+
+```kotlin
+@RunWith(AndroidUnit4::class)
+class UserDaoTest {
+    
+    @get:Rule
+    val instantExecutorRule = InstantTaskExecutorRule()
+    
+    private lateinit var database: AppDatabase
+    private lateinit var userDao: UserDao
+    
+    @Before
+    fun setup() {
+        database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            AppDatabase::class.java
+        ).build()
+        
+        userDao = database.userDao()
+    }
+    
+    @After
+    fun teardown() {
+        database.close()
+    }
+    
+    @Test
+    fun insertAndGetUser() = runBlocking {
+        // Arrange
+        val user = UserEntity(1, "Alice", "alice@example.com")
+        
+        // Act
+        userDao.insert(user)
+        val result = userDao.getUserById(1)
+        
+        // Assert
+        assertThat(result).isEqualTo(user)
+    }
+}
+```
+
+**Key Points:**
+- ✅ Use `InstantTaskExecutorRule` for LiveData
+- ✅ Mock dependencies with Mockito
+- ✅ `runBlocking` for suspend functions
+- ✅ Test error cases
+- ✅ In-memory database for DAO tests
+- ✅ Verify method calls with `verify()`
+
+---
+
+## Performance & Best Practices
+
+### Memory Leaks
+
+**Common Leaks:**
+
+```kotlin
+// ❌ LEAK 1: ViewModel holding Activity reference
+class BadViewModel : ViewModel() {
+    var activity: Activity? = null  // LEAK!
+    var context: Context? = null    // LEAK!
+}
+
+// ✅ CORRECT: Only hold data
+class GoodViewModel : ViewModel() {
+    val userData: LiveData<User> = ...
+}
+
+// ❌ LEAK 2: Inner class holding outer reference
+class MyFragment : Fragment() {
+    private inner class InnerTask : AsyncTask<...>() {
+        // Holds reference to MyFragment
+    }
+}
+
+// ✅ CORRECT: Use static inner class or separate class
+class MyFragment : Fragment() {
+    companion object {
+        private class InnerTask : AsyncTask<...>() {
+            // No reference to MyFragment
+        }
+    }
+}
+
+// ❌ LEAK 3: Global scope in ViewModel
+class BadViewModel : ViewModel() {
+    fun loadData() {
+        GlobalScope.launch {  // Never cancelled!
+            fetchData()
+        }
+    }
+}
+
+// ✅ CORRECT: Use viewModelScope
+class GoodViewModel : ViewModel() {
+    fun loadData() {
+        viewModelScope.launch {  // Auto-cancelled
+            fetchData()
+        }
+    }
+}
+```
+
+### Performance Best Practices
+
+```kotlin
+// ✅ Load large lists with pagination
+class UserViewModel : ViewModel() {
+    val pagingData: Flow<PagingData<User>> = 
+        Pager(
+            PagingConfig(pageSize = 20),
+            pagingSourceFactory = { UserPagingSource(api) }
+        ).flow
+}
+
+// ✅ Efficient RecyclerView with ListAdapter and DiffUtil
+val adapter = ListAdapter(object : DiffUtil.ItemCallback<User>() {
+    override fun areItemsTheSame(old: User, new: User) = old.id == new.id
+    override fun areContentsTheSame(old: User, new: User) = old == new
+}) { user ->
+    // Bind view
+}
+
+// ✅ Lazy load images with Glide/Coil
+Glide.with(this)
+    .load(imageUrl)
+    .placeholder(R.drawable.placeholder)
+    .error(R.drawable.error)
+    .into(imageView)
+
+// ✅ Batch database operations
+viewModelScope.launch {
+    userDao.insertAll(users)  // Single transaction
+}
+
+// ✅ Debounce search queries
+val searchQuery = MutableLiveData<String>()
+val results = searchQuery
+    .debounce(300)
+    .switchMap { query ->
+        repository.search(query)
+    }
+```
+
+### Offline-First Architecture
+
+```kotlin
+class UserRepository(
+    private val userDao: UserDao,
+    private val userApi: UserApi
+) {
+    
+    fun getUser(id: Int): Flow<User> = flow {
+        // 1. Emit cached data if available
+        val cached = userDao.getUserById(id)
+        if (cached != null) {
+            emit(cached.toDomain())
+        }
+        
+        // 2. Try to fetch fresh data
+        try {
+            val fresh = userApi.getUser(id)
+            userDao.insertOrUpdate(fresh.toEntity())
+            emit(fresh)
+        } catch (e: IOException) {
+            // Network error
+            if (cached == null) throw e  // No fallback, throw error
+            // else silently use cache
+        }
+    }
+    
+    // Background sync
+    suspend fun syncUsers(): Result<Unit> = runCatching {
+        val users = userApi.getAllUsers()
+        userDao.insertAll(users.map { it.toEntity() })
+    }
+}
+```
+
+**Key Points:**
+- ✅ Never hold View/Activity references in ViewModel
+- ✅ Always use `viewModelScope` for coroutines
+- ✅ Use pagination for large lists
+- ✅ Cache network responses locally
+- ✅ Implement offline-first architecture
+- ✅ Monitor memory with Profiler
+
+---
+
+## Interview Checklist
+
+### Must Know Concepts
+
+- [ ] Activity and Fragment lifecycle (know exactly when each callback is called)
+- [ ] ViewModel survival across configuration changes
+- [ ] LiveData lifecycle-awareness
+- [ ] Flow vs LiveData differences
+- [ ] Room database (Entity, DAO, Database)
+- [ ] Repository pattern for data abstraction
+- [ ] Coroutines and viewModelScope
+- [ ] Navigation Component type-safety
+- [ ] Hilt dependency injection
+- [ ] Memory leak prevention
+
+### Code You Should Write
+
+```kotlin
+// Complete MVVM flow
+@HiltViewModel
+class UserViewModel @Inject constructor(
+    private val repository: UserRepository
+) : ViewModel() {
+    
+    // State
+    private val _user = MutableLiveData<User>()
+    val user: LiveData<User> = _user
+    
+    private val _isLoading = MutableLiveData<Boolean>()
+    val isLoading: LiveData<Boolean> = _isLoading
+    
+    private val _error = MutableLiveData<String?>()
+    val error: LiveData<String?> = _error
+    
+    fun loadUser(id: Int) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            
+            try {
+                val user = repository.getUser(id)
+                _user.value = user
+                _error.value = null
+            } catch (e: Exception) {
+                _error.value = e.message
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+}
+```
+
+### Interview Red Flags
+
+❌ "I use GlobalScope"
+❌ "I hold Activity reference in ViewModel"
+❌ "I don't need Repository pattern"
+❌ "I use observe(this) in Fragment"
+❌ "I don't clean up resources"
+❌ "I use raw SQLite instead of Room"
+❌ "I don't understand lifecycle"
+
+### Interview Green Flags
+
+✅ "I use viewModelScope"
+✅ "ViewModel survives rotation"
+✅ "I expose immutable LiveData"
+✅ "I use viewLifecycleOwner in Fragments"
+✅ "I implement Repository pattern"
+✅ "I use Hilt for DI"
+✅ "I handle errors gracefully"
+✅ "I test my ViewModels"
+
+### Sample Interview Answers
+
+**Q: How does ViewModel survive rotation?**
+
+```
+A: The Activity gets destroyed on rotation, but the ViewModelStore 
+is retained by the framework. ViewModel instances are stored in this 
+ViewModelStore and survive the Activity recreation.
+
+When the Activity is recreated, the ViewModel is retrieved from the 
+same ViewModelStore, so the data persists.
+
+This is why we don't fetch data again on rotation - the ViewModel 
+still has the cached data.
+```
+
+**Q: Why should we use Repository pattern?**
+
+```
+A: Repository provides a single source of truth for data access. It abstracts
+away the details of where data comes from (API, database, cache).
+
+Benefits:
+1. Testability - Mock repository in tests
+2. Flexibility - Change data source without changing ViewModel
+3. Offline-first - Can implement local cache with sync
+4. Separation of concerns - ViewModel doesn't know about API/DB
+5. Reusability - Multiple ViewModels can use same Repository
+```
+
+**Q: Explain the difference between suspend and async coroutines.**
+
+```
+A: 
+suspend function: Sequential execution
+- Awaits result before continuing
+- Example: suspend fun getUser(): User
+- Used with viewModelScope.launch { user = getUser() }
+
+async: Parallel execution
+- Starts immediately, returns Deferred
+- Example: async { getUser() }
+- Used when you need to start multiple operations in parallel
+
+Example:
+// Sequential
+val user = repository.getUser(id)      // Wait
+val posts = repository.getPosts(id)    // Then do this
+
+// Parallel
+val userDeferred = async { repository.getUser(id) }
+val postsDeferred = async { repository.getPosts(id) }
+val user = userDeferred.await()        // Wait for both
+val posts = postsDeferred.await()
+```
+
+---
+
+## Quick Reference
+
+### Lifecycle Events Flowchart
+
+```
+Activity/Fragment Created
+         ↓
+    onCreate()
+         ↓
+    onStart()
+         ↓
+    onResume() ← Can interact
+         ↓
+  [User navigates away]
+         ↓
+    onPause()
+         ↓
+    onStop()
+         ↓
+   onDestroy()
+         ↓
+    [Destroyed]
+```
+
+### Data Flow
+
+```
+User Action
+    ↓
+Fragment calls ViewModel.action()
+    ↓
+ViewModel calls Repository
+    ↓
+Repository queries Database OR API
+    ↓
+Data flows back through Flow/LiveData
+    ↓
+Fragment observes and updates UI
+```
+
+### Coroutine Scope Cancellation
+
+```
+App Lifetime:
+  ├─ GlobalScope (Never cancelled) ❌ Avoid
+  │
+  ├─ App Scope
+  │  └─ Activity/Fragment created
+  │     ├─ viewModelScope (Auto-cancelled)
+  │     └─ lifecycleScope (Auto-cancelled)
+```
+
+Good luck with your interviews!
+
