@@ -1,0 +1,3212 @@
+# ELASTIC STACK (ELK) COMPREHENSIVE NOTES & THEORY
+
+## Table of Contents
+1. [Overview & Architecture](#overview--architecture)
+2. [Elasticsearch Deep Dive](#elasticsearch-deep-dive)
+3. [Logstash Deep Dive](#logstash-deep-dive)
+4. [Kibana Deep Dive](#kibana-deep-dive)
+5. [Beats Data Shippers](#beats-data-shippers)
+6. [Elastic Security Features](#elastic-security-features)
+7. [**PRACTICAL APPLICATION & REAL-WORLD SCENARIOS**](#practical-application--real-world-scenarios)
+8. [Practical Queries for SOC](#practical-queries-for-soc)
+9. [**ELASTIC STACK INTERVIEW QUESTIONS & ANSWERS**](#elastic-stack-interview-questions--answers)
+10. [Best Practices](#best-practices)
+11. [Troubleshooting](#troubleshooting)
+12. [Splunk to Elastic Migration](#splunk-to-elastic-migration)
+
+---
+
+## Overview & Architecture
+
+### What is the Elastic Stack?
+
+**Definition:**
+The Elastic Stack is a suite of open-source search and analytics tools built on top of Elasticsearch. It's the enterprise-grade alternative to commercial solutions like Splunk.
+
+**Core Components:**
+1. **Elasticsearch**: Search and analytics engine (the heart)
+2. **Kibana**: Visualization and exploration platform (the interface)
+3. **Logstash**: Data processing and ingestion pipeline
+4. **Beats**: Lightweight data shippers
+
+**Why Elastic for SOC:**
+- **Open Source**: Free, community-driven, transparent
+- **Scalability**: Can handle massive log volumes (petabytes)
+- **Real-time Analytics**: Millisecond response times
+- **Cost-Effective**: Compare to Splunk's high licensing costs
+- **Flexibility**: Easily customizable for specific needs
+- **Active Community**: Strong support and plugins
+- **Modern Architecture**: Cloud-native, containerized
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────┐
+│              DATA COLLECTION LAYER                  │
+│  Beats | Logstash | APIs | Custom Scripts          │
+└────────────────────┬────────────────────────────────┘
+                     ↓
+        ┌────────────────────────────┐
+        │  LOGSTASH (Processing)     │
+        │  - Parse unstructured data │
+        │  - Extract fields          │
+        │  - Filter/enrich events    │
+        │  - Reduce noise            │
+        └────────────┬───────────────┘
+                     ↓
+      ┌──────────────────────────────────┐
+      │  ELASTICSEARCH (Storage/Engine)  │
+      │  - Inverted index               │
+      │  - Distribute across nodes      │
+      │  - Replicate for redundancy     │
+      │  - Real-time search             │
+      └────────────┬─────────────────────┘
+                   ↑
+    ┌──────────────┴──────────────────┐
+    ↓                                 ↓
+┌──────────────┐             ┌──────────────────┐
+│   KIBANA     │             │  Custom Apps     │
+│- Dashboards │             │  - Python        │
+│- Alerts     │             │  - Java          │
+│- Analysis   │             │  - Go            │
+└──────────────┘             └──────────────────┘
+
+DATA SOURCES:
+├─ Windows Event Logs
+├─ Linux Syslog
+├─ Firewall Logs
+├─ Web Server Logs
+├─ Application Logs
+├─ Network Flow Data (NetFlow, sFlow)
+├─ EDR/Antivirus Events
+├─ Cloud Logs (AWS, Azure, GCP)
+└─ Custom Applications
+```
+
+---
+
+## Elasticsearch Deep Dive
+
+### Theory: How Elasticsearch Works
+
+**Fundamental Concept: Inverted Index**
+
+This is the KEY innovation that makes Elasticsearch fast.
+
+**Traditional Database:**
+```
+Document ID | Content
+-----------|---------------------------------
+1          | "Malware detected on system"
+2          | "System reboot successful"
+3          | "Malware removal complete"
+
+Search: "Malware"
+Process: Scan all documents (1→2→3) → Match 1, 3
+Performance: O(n) - Linear search, SLOW for millions of docs
+Time: 5-10 seconds for 1M documents
+```
+
+**Inverted Index (Elasticsearch):**
+```
+Word         | Document IDs | Frequency
+-------------|--------------|----------
+"malware"    | [1, 3]       | 2
+"detected"   | [1]          | 1
+"system"     | [1, 2, 3]    | 3
+"reboot"     | [2]          | 1
+"successful" | [2]          | 1
+"removal"    | [3]          | 1
+"complete"   | [3]          | 1
+
+Search: "Malware"
+Process: Direct lookup in index → [1, 3]
+Performance: O(1) - Constant time, FAST
+Time: < 1 millisecond
+```
+
+**Why This Matters for Security:**
+- SOCs search millions of events per day
+- Inverted index makes these searches instant
+- Traditional databases would timeout
+- Enables real-time threat detection and response
+
+### Elasticsearch Cluster Architecture
+
+**Cluster**: Multiple Elasticsearch nodes working together
+
+**Why Clustering?**
+- **Horizontal Scaling**: Add more nodes to increase capacity
+- **Redundancy**: Data replicated across nodes
+- **Fault Tolerance**: System continues if nodes fail
+- **Load Distribution**: Queries parallelized across nodes
+
+**Node Types:**
+
+1. **Master Node** (Cluster Management)
+   - Manages cluster state and configuration
+   - Makes decisions:
+     - Adding/removing nodes
+     - Shard allocation
+     - Cluster metadata
+   - Does NOT store data (memory-intensive decisions)
+   - Best Practice: 3+ dedicated master nodes
+   - Why 3? Prevents split-brain (2 masters fighting)
+   - Lightweight: Can run on 1GB heap
+
+2. **Data Node** (Storage & Indexing)
+   - Stores actual shards and documents
+   - Performs search and indexing
+   - Most resource-intensive (lots of I/O)
+   - Should be majority of cluster
+   - Scales horizontally (add more for capacity)
+   - Heap: 16-32GB recommended
+
+3. **Ingest Node** (Pre-processing)
+   - Processes documents BEFORE indexing
+   - Applies transformations:
+     - Parse complex formats
+     - Add enrichment data
+     - Drop noisy events
+   - Alternative to Logstash (lighter weight)
+   - Optional (can skip if using Logstash)
+
+4. **Coordinating Node** (Load Balancing)
+   - Routes requests to appropriate nodes
+   - Aggregates results from searches
+   - Single point of entry for queries
+   - Optional but useful for large clusters
+   - Shields data nodes from request complexity
+
+**Production SOC Cluster Example:**
+
+```
+┌──────────────────────────────────────────────────────┐
+│              ELASTICSEARCH CLUSTER                   │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│  MASTER TIER (3 nodes)                              │
+│  ├─ master-1 (1GB heap, dedicated)                  │
+│  ├─ master-2 (1GB heap, dedicated)                  │
+│  └─ master-3 (1GB heap, dedicated)                  │
+│     Role: Cluster management, state, elections      │
+│                                                      │
+│  DATA TIER - HOT (5 nodes)                          │
+│  ├─ data-hot-1 (32GB heap, SSD storage)             │
+│  ├─ data-hot-2 (32GB heap, SSD storage)             │
+│  ├─ data-hot-3 (32GB heap, SSD storage)             │
+│  ├─ data-hot-4 (32GB heap, SSD storage)             │
+│  └─ data-hot-5 (32GB heap, SSD storage)             │
+│     Purpose: Current data (last 30 days)            │
+│     Performance: Optimized for speed                │
+│                                                      │
+│  DATA TIER - WARM (3 nodes)                         │
+│  ├─ data-warm-1 (16GB heap, HDD storage)            │
+│  ├─ data-warm-2 (16GB heap, HDD storage)            │
+│  └─ data-warm-3 (16GB heap, HDD storage)            │
+│     Purpose: Historical data (30-90 days)           │
+│     Performance: Optimized for cost                 │
+│                                                      │
+│  INGEST TIER (2 nodes)                              │
+│  ├─ ingest-1 (8GB heap)                             │
+│  └─ ingest-2 (8GB heap)                             │
+│     Role: Pre-process and enrich logs               │
+│                                                      │
+│  COORDINATING NODE (1)                              │
+│  └─ coordinator-1 (8GB heap)                        │
+│     Role: Load balancing, single entry point        │
+│                                                      │
+└──────────────────────────────────────────────────────┘
+
+Total: 14 nodes
+Heap Total: ~170GB
+Purpose: Handle 1M+ events per second
+```
+
+### Index Theory & Strategy
+
+**What is an Index?**
+- Container for documents with similar structure
+- Stores documents in shards
+- Like a "table" in database but more flexible
+- Schema-free (documents can vary)
+- Can contain millions or billions of documents
+
+**Index Naming Convention (CRITICAL for SOC):**
+
+```
+Pattern: logtype-environment-date
+
+Examples:
+- windows-events-prod-2025.12.31
+- network-flow-prod-2025.12.31
+- firewall-logs-prod-2025.12.31
+- siem-alerts-prod-2025.12.31
+- zeek-dns-prod-2025.12.31
+- suricata-alerts-prod-2025.12.31
+
+Benefits:
+1. Time-based: Delete old indices instead of purging (faster)
+2. Type-based: Different retention for different data
+3. Environment-based: Separate prod/test/dev safely
+4. Rotating indices: Daily indices roll over automatically
+5. Performance: Faster searches on smaller indices
+6. Archival: Easy to export/backup by date range
+
+Retention Strategy:
+└─ HOT (Last 7 days): windows-events-prod-2025.12.31
+   WARM (8-30 days): windows-events-prod-2025.12.24
+   COLD (31-90 days): windows-events-prod-2025.12.01
+   DELETE (>90 days): Purged or archived
+```
+
+**Shard & Replica Fundamentals:**
+
+```
+Single Index: windows-events-prod-2025.12.31
+Size: 100GB
+
+Primary Shards (distribute data):
+├─ Shard 0 (Primary) - Data Node 1 - Contains 25GB
+│  └─ Replica 0 (Copy) - Data Node 2 - Contains 25GB (copy)
+├─ Shard 1 (Primary) - Data Node 2 - Contains 25GB
+│  └─ Replica 1 (Copy) - Data Node 3 - Contains 25GB (copy)
+├─ Shard 2 (Primary) - Data Node 3 - Contains 25GB
+│  └─ Replica 2 (Copy) - Data Node 1 - Contains 25GB (copy)
+└─ Shard 3 (Primary) - Data Node 1 - Contains 25GB
+   └─ Replica 3 (Copy) - Data Node 2 - Contains 25GB (copy)
+
+Why This Design?
+- Sharding: 100GB spread across 4 shards (25GB each)
+  - Searches run in parallel on all shards (4x faster)
+  - Each shard on different node (load distributed)
+  - Horizontal scaling: Add nodes, add shards
+
+- Replication: Each shard has exact copy on different node
+  - Node 1 fails? Replicas on Node 2 & 3 still available
+  - Read scaling: Replicas can serve search requests
+  - Always have backup (high availability)
+
+Shard Allocation:
+- 4 primary shards = data split 4 ways
+- 4 replica shards = exact copies
+- Total storage: 100GB (data) + 100GB (replicas) = 200GB used
+- If 1 node fails: Still have all data on other nodes
+- If 2 nodes fail: If data spread across 4 nodes, might lose nothing
+
+Default Configuration:
+- Primary Shards: 5 per index
+  - Can change at creation (cannot change after)
+  - More shards = faster searches, more overhead
+  - Fewer shards = slower searches, less overhead
+  - Rule of thumb: 1 shard per 50GB data
+
+- Replicas: 1 per primary shard
+  - Can change anytime
+  - More replicas = higher availability, more storage
+  - Production: 1-2 replicas
+  - Test: 0 replicas to save space
+```
+
+**Index Lifecycle Management (ILM) - Cost Optimization**
+
+Theory: Not all logs are equally valuable over time
+
+```
+Real-World SOC Log Lifecycle:
+
+┌─────────────────────────────────────────────────────┐
+│              HOT PHASE (Days 1-30)                  │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│ Characteristics:                                    │
+│ - Frequently searched (recent incidents)            │
+│ - Full replication (multiple copies)                │
+│ - Optimized for speed (SSD storage)                 │
+│ - Complete data (nothing deleted)                   │
+│                                                     │
+│ Storage Example:                                    │
+│ - Index size: 100GB per day                         │
+│ - 30 days: 3TB                                      │
+│ - With replicas (1x): 6TB                           │
+│ - Cost: $600/month @ $10/GB/month                   │
+│                                                     │
+│ Shards: 5 primary + 5 replicas = 10 total           │
+│ Replicas: 1 (full copies)                           │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+                      ↓ (Auto transition)
+┌─────────────────────────────────────────────────────┐
+│            WARM PHASE (Days 31-90)                  │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│ Characteristics:                                    │
+│ - Less frequently searched                          │
+│ - Reduced replication (fewer copies)                │
+│ - Cost-optimized storage (HDD)                      │
+│ - Index shrunk (fewer shards)                       │
+│                                                     │
+│ Storage Example:                                    │
+│ - 30 days × 100GB = 3TB                             │
+│ - Moved to HDD tier                                 │
+│ - Shrunk to 1 shard (was 5)                         │
+│ - Replicas reduced to 0                             │
+│ - Cost: $150/month @ $5/GB/month                    │
+│                                                     │
+│ Actions:                                            │
+│ - Shrink index (reduce shards 5→1)                  │
+│ - Move to warm storage (HDD)                        │
+│ - Reduce replicas (1→0)                             │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+                      ↓ (Auto transition)
+┌─────────────────────────────────────────────────────┐
+│            COLD PHASE (Days 91-365)                 │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│ Characteristics:                                    │
+│ - Rarely searched (historical reference)            │
+│ - Archive storage (very slow, cheap)                │
+│ - Searchable but with delay                         │
+│ - Index frozen (read-only)                          │
+│                                                     │
+│ Storage Example:                                    │
+│ - ~275 days × 100GB = 27.5TB                        │
+│ - Archive tier (S3, Azure Blob, etc.)               │
+│ - Thaw when needed (temporary re-hydration)         │
+│ - Cost: $27.50/month @ $1/GB/month                  │
+│                                                     │
+│ Actions:                                            │
+│ - Freeze index (prevent any changes)                │
+│ - Move to archive storage                           │
+│ - Optional: Delete after retention period           │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+                      ↓ (Auto deletion)
+┌─────────────────────────────────────────────────────┐
+│            DELETE PHASE (After 365 days)            │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│ Actions:                                            │
+│ - Delete index from Elasticsearch                   │
+│ - Archive to offline storage (if compliance req.)   │
+│ - Free up cluster space                             │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+
+Cost Comparison for 1 Year of Logs:
+
+Traditional (ALL HOT):
+├─ 365 days × 100GB = 36.5TB
+├─ With replicas: 73TB
+└─ Cost: $73,000/month = $876,000/year 😱
+
+With ILM (Tiered):
+├─ HOT (30 days): 6TB @ $600/month = $7,200
+├─ WARM (60 days): 6TB @ $300/month = $3,600
+├─ COLD (275 days): 27.5TB @ $27.50/month = $1,375
+└─ Total: ~$12,000/year = 98% SAVINGS! 🎉
+```
+
+### Elasticsearch Query DSL (Domain Specific Language)
+
+**Query Theory:**
+
+Elasticsearch Query DSL is JSON-based query language for complex searches
+
+**Why DSL?**
+- More powerful than simple keyword search
+- Supports complex boolean logic
+- Combines multiple criteria
+- Enables sophisticated threat detection
+- Structured and predictable
+
+**Basic Structure:**
+```json
+{
+  "query": {
+    "QUERY_TYPE": {
+      "FIELD": "VALUE"
+    }
+  }
+}
+```
+
+**Query Types:**
+
+### 1. Term Query (Exact Match)
+```json
+{
+  "query": {
+    "term": {
+      "event.code": 4688
+    }
+  }
+}
+```
+- **When to Use**: Event codes, user IDs, exact values
+- **Performance**: VERY FAST (uses keyword index)
+- **Note**: Only works on non-analyzed fields (must have .keyword)
+- **Security Example**: Find exact EventCode 4688 (process creation)
+
+### 2. Match Query (Full-text Search)
+```json
+{
+  "query": {
+    "match": {
+      "message": "malware detected"
+    }
+  }
+}
+```
+- **When to Use**: Searching text content
+- **Performance**: Slower than term (analyzes text)
+- **Behavior**: Searches for "malware" OR "detected"
+- **Security Example**: Find events mentioning malware
+
+### 3. Range Query (Comparisons)
+```json
+{
+  "query": {
+    "range": {
+      "timestamp": {
+        "gte": "2025-12-31T00:00:00Z",
+        "lte": "2025-12-31T23:59:59Z"
+      }
+    }
+  }
+}
+```
+- **When to Use**: Time ranges, numeric comparisons
+- **Operators**: gte (≥), lte (≤), gt (>), lt (<)
+- **Performance**: FAST (especially on date fields)
+- **Security Example**: Events from last 24 hours
+
+### 4. Bool Query (Complex Logic)
+```json
+{
+  "query": {
+    "bool": {
+      "must": [
+        {"term": {"event.code": 4688}},
+        {"term": {"user.name": "admin"}}
+      ],
+      "must_not": [
+        {"term": {"process.name": "svchost.exe"}}
+      ],
+      "should": [
+        {"term": {"host.os": "windows"}}
+      ],
+      "filter": [
+        {"range": {"timestamp": {"gte": "now-24h"}}}
+      ]
+    }
+  }
+}
+```
+- **MUST**: All clauses must match (AND logic)
+- **MUST_NOT**: Clauses must NOT match (NOT logic)
+- **SHOULD**: At least one should match (OR logic)
+- **FILTER**: Like MUST but doesn't affect scoring (faster)
+- **When to Use**: Complex multi-criteria searches
+
+**Query vs. Filter Theory:**
+
+```
+QUERY (Scored):
+- Calculates relevance score for each result
+- Slower: Must compute scores
+- Cached: By score, not cached
+- Use When: Relevance matters
+- Example: "Find reports about ransomware attacks"
+  - Docs mentioning ransomware 5 times score higher
+  - Docs mentioning it once score lower
+
+FILTER (Boolean):
+- Yes/No match only (no score)
+- Faster: Simple boolean check
+- Cached: Results cached in memory (reused)
+- Use When: Relevance doesn't matter
+- Example: "Show me events from last 24 hours"
+  - Event from 23:59 = include
+  - Event from 25 hours ago = exclude
+  - All included events equally relevant
+
+Performance Best Practice:
+- Put time range in FILTER (not QUERY)
+- Put exact criteria in FILTER (event codes, etc.)
+- Put full-text search in QUERY
+- Example (Good):
+  "must": [...queries...],
+  "filter": [{"range": {"timestamp": {...}}}]
+```
+
+---
+
+## Elasticsearch Aggregations
+
+**What are Aggregations?**
+
+Process of summarizing/grouping data (like SQL GROUP BY)
+
+**Types:**
+
+### 1. Metric Aggregations (Single Value)
+```json
+{
+  "aggs": {
+    "total_events": {
+      "value_count": {
+        "field": "event.id"
+      }
+    },
+    "average_response_time": {
+      "avg": {
+        "field": "response.time"
+      }
+    },
+    "max_bytes": {
+      "max": {
+        "field": "bytes"
+      }
+    }
+  }
+}
+```
+Returns: Single numbers (sum, average, max, min, etc.)
+
+### 2. Bucket Aggregations (Group Data)
+```json
+{
+  "aggs": {
+    "events_by_user": {
+      "terms": {
+        "field": "user.name.keyword",
+        "size": 10,
+        "order": {"_count": "desc"}
+      }
+    }
+  }
+}
+```
+Returns:
+```
+user          | count
+admin         | 1,245
+john.smith    | 892
+jane.doe      | 756
+...
+```
+
+### 3. Nested Aggregations (Sub-groups)
+```json
+{
+  "aggs": {
+    "by_user": {
+      "terms": {
+        "field": "user.name.keyword"
+      },
+      "aggs": {
+        "failure_count": {
+          "value_count": {"field": "event.id"}
+        },
+        "source_ips": {
+          "terms": {
+            "field": "source.ip.keyword"
+          }
+        },
+        "first_failure": {
+          "min": {"field": "@timestamp"}
+        },
+        "last_failure": {
+          "max": {"field": "@timestamp"}
+        }
+      }
+    }
+  }
+}
+```
+
+Returns comprehensive analysis:
+```
+user       | count | first_failure    | last_failure     | source_ips
+admin      | 245   | 2025-12-31T01:00 | 2025-12-31T02:15 | [192.168.1.1, 192.168.1.2]
+john.smith | 892   | 2025-12-31T00:15 | 2025-12-31T05:30 | [203.0.113.1, 203.0.113.2]
+```
+
+---
+
+## Logstash Deep Dive
+
+### Theory: What is Logstash?
+
+**Definition:**
+Logstash is a data processing pipeline that ingests, transforms, and outputs data
+
+**Problem It Solves:**
+- Logs from different sources have different formats
+- Need to parse unstructured data into fields
+- Need to enrich data with additional context
+- Need to filter out noise
+- Need to send to multiple destinations
+
+**Architecture:**
+```
+INPUT (Read data) → FILTER (Transform) → OUTPUT (Send data)
+```
+
+### Logstash Configuration
+
+**Basic Structure:**
+```conf
+input {
+  # Define data sources
+  # Multiple inputs can be defined
+}
+
+filter {
+  # Transform/parse data
+  # Applied to all events
+  # Can be conditional
+}
+
+output {
+  # Send processed data
+  # Can send to multiple destinations
+}
+```
+
+**Example 1: Parse Windows Event Logs**
+
+```conf
+input {
+  tcp {
+    host => "0.0.0.0"
+    port => 5000
+    type => "windows"
+  }
+}
+
+filter {
+  if [type] == "windows" {
+    # Parse the XML from Windows Event Log
+    xml {
+      source => "message"
+      target => "winlog"
+      remove_namespaces => true
+    }
+    
+    # Extract fields from Event ID
+    if [winlog][EventID] == 4688 {
+      # Process creation event
+      mutate {
+        add_field => {
+          "process_created" => true
+          "event_name" => "Process Create"
+        }
+        add_tag => ["process_execution"]
+      }
+    }
+    
+    # Add GeoIP for IP addresses
+    if [winlog][IpAddress] {
+      geoip {
+        source => "[winlog][IpAddress]"
+        target => "geo"
+      }
+    }
+    
+    # Drop internal traffic (reduce noise)
+    if [winlog][IpAddress] =~ /^10\./ or 
+       [winlog][IpAddress] =~ /^192\.168\./ {
+      drop {}
+    }
+  }
+}
+
+output {
+  if [type] == "windows" {
+    elasticsearch {
+      hosts => ["elasticsearch:9200"]
+      index => "windows-events-%{+YYYY.MM.dd}"
+      document_type => "_doc"
+    }
+  }
+}
+```
+
+**Logstash Filter Plugins:**
+
+### 1. **Grok Filter** (Most Popular)
+Parses unstructured text using regex patterns
+
+```conf
+filter {
+  grok {
+    match => {
+      "message" => "%{TIMESTAMP_ISO8601:timestamp} %{LOGLEVEL:level} %{HOSTNAME:hostname} %{DATA:service}: %{GREEDYDATA:message}"
+    }
+  }
+}
+```
+
+### 2. **Mutate Filter**
+Modify, rename, convert fields
+
+```conf
+filter {
+  mutate {
+    rename => {"old_field" => "new_field"}
+    convert => {"string_number" => "integer"}
+    add_field => {"new_field" => "static_value"}
+    remove_field => ["temp_field"]
+  }
+}
+```
+
+### 3. **GeoIP Filter**
+Add geographic information from IP addresses
+
+```conf
+filter {
+  geoip {
+    source => "source_ip"
+    target => "geoip"
+    add_tag => ["geoip_added"]
+  }
+}
+```
+
+### 4. **Drop Filter**
+Remove events (reduce noise)
+
+```conf
+filter {
+  if [source_ip] =~ /^10\./ {
+    drop {}  # Remove internal traffic
+  }
+}
+```
+
+### 5. **Aggregate Filter**
+Combine multiple events (detect patterns)
+
+```conf
+filter {
+  aggregate {
+    task_id => "%{user}-%{source_ip}"
+    code => "
+      map['attempts'] ||= 0
+      map['attempts'] += 1
+      if map['attempts'] >= 10
+        event.set('brute_force', true)
+      end
+    "
+    timeout => 60
+  }
+}
+```
+
+### 6. **Ruby Filter**
+Execute custom Ruby code
+
+```conf
+filter {
+  ruby {
+    code => '
+      # Custom logic
+      if event.get("bytes").to_i > 1000000000
+        event.set("large_transfer", true)
+      end
+    '
+  }
+}
+```
+
+**Grok Patterns for Security:**
+
+```
+# Apache Access Log
+%{HTTPD_COMMONLOG}
+
+# Syslog
+%{SYSLOGLINE}
+
+# Windows Process Creation
+Process Name:\s+%{DATA:process_name}\s+
+Process ID:\s+%{NUMBER:process_id}\s+
+Parent Process Name:\s+%{DATA:parent_process}
+
+# IP Address
+%{IP:source_ip}
+
+# User
+%{USER:username}
+
+# Timestamp
+%{TIMESTAMP_ISO8601:timestamp}
+
+# Custom Patterns
+(?<malware_hash>[a-f0-9]{32,})  # MD5 or longer
+(?<credit_card>\d{4}-\d{4}-\d{4}-\d{4})
+```
+
+---
+
+## Logstash Performance & Scaling
+
+**Single Logstash Capacity:**
+- ~100,000 events/second processing
+- Depends on complexity of filters
+- More filters = lower throughput
+
+**Scaling Logstash:**
+
+```
+Architecture:
+
+┌─────────────────────────────────────────┐
+│       DATA SOURCES                      │
+│  - Syslog from 1000+ servers            │
+│  - Filebeat from endpoints              │
+│  - API feeds                            │
+└────────────────┬────────────────────────┘
+                 │
+         Load Balancer (Haproxy/Nginx)
+         │       │       │       │
+         ↓       ↓       ↓       ↓
+    ┌─────┬─────┬─────┬─────┐
+    │     │     │     │     │
+  LP1   LP2   LP3   LP4   LP5  (Logstash Pipeline instances)
+  (4C/8GB x 5)
+  
+    Processing per instance:
+    - Parse events
+    - Extract fields
+    - Add GeoIP
+    - Enrich with threat intel
+    - Drop internal traffic
+    
+    Each instance: ~100K events/sec
+    Total: 5 × 100K = 500K events/sec
+    
+         │       │       │       │
+         └───────┼───────┼───────┘
+                 ↓
+         ┌──────────────────────────┐
+         │   ELASTICSEARCH CLUSTER  │
+         │  (receives 500K/sec)     │
+         └──────────────────────────┘
+
+Benefits of Multiple Logstash:
+1. Horizontal scaling (add more instances)
+2. Load distribution (no single point of failure)
+3. Rolling deployments (update one at a time)
+4. Redundancy (if one fails, others continue)
+```
+
+---
+
+## Kibana Deep Dive
+
+### What is Kibana?
+
+**Definition:**
+Kibana is the visualization and exploration layer for Elasticsearch data
+
+### Discover Interface
+
+**Purpose:** Search, explore, analyze raw data
+
+```
+Query: source_user: "admin" AND event_code: 4624
+Time Range: Last 7 days
+Fields: source_user, dest_host, source_ip, timestamp, logon_type
+
+Results: Individual events shown in table format
+├─ Timestamp | User | Host | Source IP | Type
+├─ 2025-12-31T14:32 | admin | SRV001 | 192.168.1.1 | Network
+├─ 2025-12-31T14:35 | admin | SRV002 | 192.168.1.1 | Network
+└─ ... (all admin logins last 7 days)
+
+Features:
+- Filter fields interactively
+- Add/remove columns
+- Sort by any field
+- View field statistics
+- Create visualization from results
+```
+
+### Kibana Visualizations
+
+**Visualization Types:**
+
+### 1. Bar Chart
+```
+Failed Logins by Username
+
+admin              [====================================] 523
+john.smith         [======================] 234
+jane.doe           [==================] 201
+guest              [================================] 412
+support            [===========] 145
+
+Use For: Compare frequencies across categories
+Security: Failed login attempts by user
+```
+
+### 2. Time Series (Line Chart)
+```
+Malware Detections Over 30 Days
+
+Count │
+500   │                    ╱╲
+      │                  ╱  ╲        ╱╲
+400   │                ╱      ╲    ╱  ╲
+      │              ╱        ╲╱      ╲
+300   │────────────╱─────────────────────
+      │
+      └─────────────────────────────────
+      Dec 1  Dec 10 Dec 20 Dec 31
+      
+Spike on Dec 15: Malware campaign detected
+
+Use For: Identify trends, anomalies
+Security: Alert volume over time
+```
+
+### 3. Pie Chart
+```
+Alert Severity Distribution
+
+HIGH (35%)  ┌────────────────┐
+MEDIUM(45%) │                │ 
+LOW (15%)   │                │
+INFO (5%)   └────────────────┘
+
+Use For: Show proportions
+Security: Breakdown by severity
+```
+
+### 4. Geographic Map
+```
+Failed Login Attempts by Country
+
+[World Map with markers]
+- China: 1,245 attempts
+- Russia: 892 attempts
+- India: 567 attempts
+- USA: 123 attempts (mostly VPN)
+
+Use For: Identify attack geography
+Security: Detect unusual source countries
+```
+
+### 5. Heatmap
+```
+Failed Logins by Hour of Day
+
+        Admin  John   Jane   Guest
+00:00   50     10     5      20
+01:00   45     8      3      18
+...
+12:00   150    45     20     60  ← High at lunch?
+13:00   145    40     18     55
+...
+23:00   120    35     15     45
+
+Use For: Time-of-day patterns
+Security: Detect after-hours attacks
+```
+
+### Kibana Dashboards
+
+**Purpose:** Single view of all key metrics
+
+**SOC Security Operations Dashboard:**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│        SOC SECURITY OPERATIONS DASHBOARD                │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  Status Indicators          Last 24 Hours              │
+│  ┌──────────────────┐      ┌─────────────────────────┐ │
+│  │ CRITICAL: 3  🔴  │      │ Total Events: 1.2M      │ │
+│  │ HIGH: 12     🟠  │      │ Alerts: 187             │ │
+│  │ MEDIUM: 45   🟡  │      │ Incidents: 4            │ │
+│  │ LOW: 156     🟢  │      │ Resolved: 3             │ │
+│  └──────────────────┘      └─────────────────────────┘ │
+│                                                         │
+│  Alert Trend (7 days)             Top Attack Sources   │
+│  ┌─────────────────────┐          ┌──────────────────┐ │
+│  │                    │          │ China:    1,245  │ │
+│  │ Line chart showing │          │ Russia:     892  │ │
+│  │ rise in alerts     │          │ India:      567  │ │
+│  │ over past week     │          │ USA:        123  │ │
+│  └─────────────────────┘          └──────────────────┘ │
+│                                                         │
+│  Top Users with Failed Logins   Network Events by Type │
+│  ┌─────────────────────┐          ┌──────────────────┐ │
+│  │ admin         523   │          │ Windows: 45%     │ │
+│  │ john.smith    234   │          │ Network: 30%     │ │
+│  │ jane.doe      201   │          │ Firewall: 20%    │ │
+│  │ guest         412   │          │ EDR: 5%          │ │
+│  └─────────────────────┘          └──────────────────┘ │
+│                                                         │
+│  System Health           Performance Metrics           │
+│  ┌─────────────────────┐  ┌──────────────────────────┐ │
+│  │ ES Nodes: 14/14 ✓  │  │ MTTD: 12 min            │ │
+│  │ Storage: 420GB/500G │  │ MTTR: 25 min            │ │
+│  │ Cluster: Green ✓    │  │ False Positive Rate: 8% │ │
+│  └─────────────────────┘  └──────────────────────────┘ │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Dashboard Refresh Rates:**
+
+```
+REAL-TIME (1 second):
+- Use: Active incident monitoring
+- Performance Cost: HIGH (constant queries)
+- CPU Impact: 80-90%
+- Example: Watch live attack as it happens
+
+FREQUENT (5 minutes):
+- Use: Continuous monitoring
+- Performance Cost: MODERATE
+- CPU Impact: 20-30%
+- Example: Monitor alert trends
+
+PERIODIC (1 hour):
+- Use: Long-term trends, metrics
+- Performance Cost: LOW
+- CPU Impact: 1-2%
+- Example: Daily summary reports
+```
+
+### Kibana Alerts
+
+**Purpose:** Automated notifications when conditions are met
+
+**Example: Brute Force Detection Alert**
+
+```
+Name: Brute Force Detection - Admin Account
+Type: Threshold alert
+Query: 
+  event.code: 4625 AND user.name: "admin"
+  
+Condition:
+  When count of events > 10
+  In last 1 hour
+  
+Time Check:
+  Every 5 minutes
+  
+Actions (when triggered):
+  1. Send email to soc@company.com
+  2. Post to Slack #security channel
+  3. Create PagerDuty incident (severity: high)
+  4. Index alert to siem-alerts-* index
+  
+Alert Lifecycle:
+┌─────────────────────────────┐
+│ PENDING: Query running      │ ← Checking if threshold met
+└────────────┬────────────────┘
+             │
+        YES (Threshold met)
+             │
+             ↓
+┌─────────────────────────────┐
+│ ACTIVE: Alert triggered     │ ← Notifications sent
+└────────────┬────────────────┘
+             │
+      (Analyst investigates)
+             │
+             ↓
+┌─────────────────────────────┐
+│ RESOLVED: Alert recovered   │ ← Threshold cleared
+└─────────────────────────────┘
+```
+
+---
+
+## Beats (Data Shippers)
+
+### Theory: Why Beats?
+
+**Comparison:**
+
+```
+LOGSTASH:
+- Full data pipeline (input/filter/output)
+- Very flexible
+- Heavy: 300-500MB memory
+- Suitable for: Central processing server
+
+BEATS:
+- Lightweight data shipper only
+- Simple, focused
+- Light: <100MB memory
+- Suitable for: Endpoint agents
+
+For SOC:
+- Deploy Beats on 1000+ endpoints
+- Send to central Logstash cluster
+- Reduces per-endpoint overhead
+```
+
+### Common Beats for Security
+
+### 1. **Filebeat**
+Monitors and ships log files
+
+```yaml
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+    - C:\Windows\System32\winevt\Logs\*.evtx
+  fields:
+    log_source: windows_event_logs
+    environment: production
+
+output.elasticsearch:
+  hosts: ["elasticsearch:9200"]
+  index: "windows-events-%{+yyyy.MM.dd}"
+```
+
+Use: Windows Event Logs, syslog, app logs
+
+### 2. **Metricbeat**
+Collects system performance metrics
+
+```yaml
+metricbeat.modules:
+- module: system
+  enabled: true
+  period: 60s
+  metricsets:
+    - cpu
+    - memory
+    - disk
+    - network
+    - process
+
+output.elasticsearch:
+  hosts: ["elasticsearch:9200"]
+  index: "metrics-system-%{+yyyy.MM.dd}"
+```
+
+Use: Monitor endpoint health, detect resource abuse
+
+### 3. **Packetbeat**
+Packet-level network monitoring
+
+```yaml
+packetbeat.interfaces.device: any
+packetbeat.protocols:
+- type: dns
+  ports: [53]
+- type: http
+  ports: [80, 8080]
+- type: icmp
+
+output.elasticsearch:
+  hosts: ["elasticsearch:9200"]
+  index: "packetbeat-%{+yyyy.MM.dd}"
+```
+
+Use: Network anomaly detection, DNS tunneling
+
+### 4. **Auditbeat**
+Linux system auditing
+
+```yaml
+auditbeat.modules:
+- module: auditd
+  enabled: true
+  audit_rule_files: ['${path.config}/audit.rules.d/*.conf']
+
+output.elasticsearch:
+  hosts: ["elasticsearch:9200"]
+  index: "auditbeat-%{+yyyy.MM.dd}"
+```
+
+Use: Linux threat detection, file integrity monitoring
+
+### 5. **Functionbeat**
+Serverless monitoring (AWS Lambda, Google Cloud)
+
+Use: Cloud security monitoring, serverless threat detection
+
+---
+
+## Elastic Security Features
+
+### Threat Detection Rules
+
+**Pre-built Rules:** Elastic ships 100+ detection rules
+- Known attack patterns
+- MITRE ATT&CK mapped
+- Tuned for low false positives
+
+**Custom Rules:**
+
+```json
+{
+  "rule": {
+    "name": "Suspicious PowerShell Execution",
+    "description": "Detects PowerShell with encoding parameters",
+    "type": "query",
+    "language": "kuery",
+    "query": "process.name: powershell.exe AND process.command_line: *-enc*",
+    "severity": "high",
+    "risk_score": 72,
+    "enabled": true,
+    "from": "now-10m",
+    "interval": "5m",
+    "actions": [
+      {
+        "action_type_id": ".slack",
+        "params": {
+          "message": "Suspicious PowerShell execution detected: {{context.hits.hits}}"
+        }
+      }
+    ]
+  }
+}
+```
+
+### Investigation Capabilities
+
+- **Timeline View**: See attack progression
+- **Drill-down**: Click to get details
+- **Correlation**: Link related events
+- **Asset Context**: What systems affected
+
+---
+
+## PRACTICAL APPLICATION & REAL-WORLD SCENARIOS
+
+### Scenario 1: Detecting Brute Force Attacks in Real-Time
+
+**The Theory:**
+- Theory: Multiple failed login attempts from single source = attack pattern
+- Concept: Use aggregation to group by (user, source_ip)
+- Alert: When count > threshold in time window
+- Response: Block IP, reset password, isolate account
+
+**The Real-World Problem:**
+A SOC analyst needs to automatically detect brute force attempts on admin accounts BEFORE the attacker succeeds.
+
+**Step-by-Step Implementation:**
+
+**Step 1: Understand the Data**
+
+Windows Event Logs contain login attempts:
+- Event 4625: Failed login
+- Event 4624: Successful login
+- Includes: Username, source IP, timestamp, logon type
+
+```json
+Sample Event:
+{
+  "@timestamp": "2025-12-31T14:32:45Z",
+  "event": {
+    "code": 4625,
+    "category": "authentication",
+    "outcome": "failure"
+  },
+  "user": {
+    "name": "admin"
+  },
+  "source": {
+    "ip": "203.0.113.15",
+    "geo": {
+      "country": "China"
+    }
+  },
+  "host": {
+    "name": "DC01",
+    "os": "windows"
+  },
+  "error": {
+    "message": "Incorrect password"
+  }
+}
+```
+
+**Step 2: Create Logstash Pipeline to Enrich Data**
+
+```conf
+# logstash-windows-security.conf
+
+input {
+  beats {
+    port => 5000
+    type => "windows_security"
+  }
+}
+
+filter {
+  # Only process failed login attempts
+  if [event][code] != 4625 {
+    drop {}
+  }
+  
+  # Extract relevant fields
+  if [winlog][Computer] {
+    mutate {
+      rename => {
+        "[winlog][Computer]" => "[host][name]"
+        "[winlog][User][Name]" => "[user][name]"
+        "[winlog][IpAddress]" => "[source][ip]"
+      }
+    }
+  }
+  
+  # Add GeoIP information (detect unusual countries)
+  geoip {
+    source => "[source][ip]"
+    target => "[source][geo]"
+  }
+  
+  # Flag if login from unusual location
+  if [source][geo][country] in ["China", "Russia", "North Korea", "Iran"] {
+    mutate {
+      add_field => {"security_risk" => "unusual_country"}
+      add_tag => ["geo_anomaly"]
+    }
+  }
+  
+  # Mark if admin account targeted
+  if [user][name] =~ /(?i)admin/ or [user][name] =~ /(?i)root/ {
+    mutate {
+      add_field => {"high_value_target" => true}
+      add_tag => ["admin_targeted"]
+    }
+  }
+}
+
+output {
+  elasticsearch {
+    hosts => ["elasticsearch:9200"]
+    index => "windows-security-%{+YYYY.MM.dd}"
+  }
+}
+```
+
+**Step 3: Create Kibana Alert - Brute Force Detection**
+
+```json
+Alert Configuration:
+
+Name: "Brute Force Attack - Admin Account"
+Type: Threshold alert
+Severity: High
+Risk Score: 80
+
+Query:
+{
+  "query": {
+    "bool": {
+      "must": [
+        {"term": {"event.code": 4625}},
+        {"term": {"high_value_target": true}},
+        {"range": {"@timestamp": {"gte": "now-15m"}}}
+      ]
+    }
+  }
+}
+
+Group By: user.name, source.ip
+
+Threshold:
+- When: count >= 10
+- Over: 15 minutes
+- Grouping: Per user AND per source IP
+
+Conditions:
+- If count > 10 in 15m from same IP to same admin = ALERT
+- Example: admin account gets 10+ failed logins from 203.0.113.15 in 15m
+
+Actions Triggered:
+1. Create incident in Elastic Security
+2. Send Slack notification to #security-alerts
+3. Create PagerDuty incident (high priority)
+4. Send email to security.incidents@company.com
+5. Create ServiceNow ticket (auto-assignment to SOC)
+6. Tag IP for immediate containment
+```
+
+**Step 4: Incident Response Process**
+
+```
+Timeline of Attack:
+
+14:32:15 - First failed attempt (IP: 203.0.113.15, User: admin)
+14:33:42 - 2nd failed attempt (same IP, same user)
+14:34:08 - 3rd failed attempt (same IP, same user)
+...
+14:46:30 - 10th failed attempt ← THRESHOLD HIT
+              
+ALERT TRIGGERS:
+┌─────────────────────────────────┐
+│ 10 Failed Logins Detected       │
+│ User: admin                     │
+│ Source IP: 203.0.113.15 (China) │
+│ Time Window: 14:32-14:46 (14m)  │
+│ Probability Attack: 95%         │
+└─────────────────────────────────┘
+
+ANALYST RESPONSE (T+2 minutes):
+1. Opens Kibana dashboard
+2. Sees alert with detailed timeline
+3. Investigates with Elastic query:
+```
+
+```json
+# Investigate: All activity from this IP
+
+GET windows-security-*/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {"term": {"source.ip": "203.0.113.15"}},
+        {"range": {"@timestamp": {"gte": "now-30m"}}}
+      ]
+    }
+  },
+  "aggs": {
+    "by_user": {
+      "terms": {"field": "user.name.keyword", "size": 100},
+      "aggs": {
+        "count": {"value_count": {"field": "event.id"}},
+        "first_seen": {"min": {"field": "@timestamp"}},
+        "last_seen": {"max": {"field": "@timestamp"}}
+      }
+    }
+  }
+}
+
+Results show:
+- admin: 10 failed attempts
+- root: 8 failed attempts
+- svcadmin: 6 failed attempts
+- Total: 24 failed attempts to 5 different admin accounts
+
+CONCLUSION: Organized brute force attack, not random
+
+IMMEDIATE ACTIONS:
+1. Block IP 203.0.113.15 at firewall (DROP all traffic)
+2. Force password reset for affected admin accounts
+3. Enable MFA on all admin accounts
+4. Check for successful logins from this IP (none = lucky)
+5. Monitor for other attack IPs (likely coordinated campaign)
+```
+
+**Step 5: Hunting Query - Find Similar Patterns**
+
+```json
+# Find other IPs doing similar brute force
+
+GET windows-security-*/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {"term": {"event.code": 4625}},
+        {"term": {"high_value_target": true}},
+        {"range": {"@timestamp": {"gte": "now-7d"}}}
+      ]
+    }
+  },
+  "aggs": {
+    "by_source_ip": {
+      "terms": {"field": "source.ip.keyword", "size": 1000},
+      "aggs": {
+        "total_failures": {"value_count": {"field": "event.id"}},
+        "target_users": {
+          "terms": {"field": "user.name.keyword", "size": 100}
+        },
+        "target_count": {
+          "cardinality": {"field": "user.name.keyword"}
+        }
+      }
+    }
+  }
+}
+
+Results (filtered for > 5 failures):
+IP              | Failures | Target Users | Countries
+203.0.113.15    | 24       | 5            | China
+192.0.2.88      | 18       | 4            | Russia
+198.51.100.42   | 22       | 6            | China
+203.0.113.200   | 15       | 3            | Vietnam
+
+Finding: Coordinated attack from 4 different IPs, same targeting pattern
+Hypothesis: Botnet or hired attackers testing admin account access
+Response: Escalate to Threat Intelligence team
+```
+
+---
+
+### Scenario 2: Detecting Data Exfiltration
+
+**The Theory:**
+- Theory: Large data transfers + external destination = potential exfiltration
+- Concept: Monitor outbound volume by source, destination
+- Context: Normal users don't transfer gigabytes daily
+- Alert: When volume exceeds baseline + destination is external
+
+**The Real-World Problem:**
+Employee with access to sensitive customer database starts transferring large amounts of data to unknown cloud storage. Need to detect this within minutes, not days.
+
+**Step 1: Collect Network Flow Data**
+
+Deploy Beats to capture network traffic:
+
+```yaml
+# filebeat-config.yml for network logs
+
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+    - /var/log/zeek/*.log  # Zeek IDS generates network logs
+  fields:
+    data_type: network_flow
+    environment: production
+
+processors:
+  - add_host_metadata:
+      when.not.contains.tags: forwarded
+  - add_docker_metadata: ~
+  - add_kubernetes_metadata: ~
+
+output.elasticsearch:
+  hosts: ["elasticsearch:9200"]
+  index: "network-flow-%{+yyyy.MM.dd}"
+  # Use templating for ILM
+  ilm.enabled: true
+  ilm.policy_name: "network-30-day-retention"
+```
+
+**Step 2: Parse and Enrich Network Data with Logstash**
+
+```conf
+# logstash-network-flow.conf
+
+input {
+  beats {
+    port => 5001
+    type => "network_flow"
+  }
+}
+
+filter {
+  if [type] == "network_flow" {
+    # Parse Zeek JSON
+    json {
+      source => "message"
+    }
+    
+    # Calculate total bytes (both directions)
+    ruby {
+      code => '
+        event.set("total_bytes", event.get("bytes_out").to_i + event.get("bytes_in").to_i)
+      '
+    }
+    
+    # Identify if destination is external
+    if [dest_ip] =~ /^10\./ or [dest_ip] =~ /^192\.168\./ or [dest_ip] =~ /^172\.(1[6-9]|2[0-9]|3[01])\./ {
+      mutate {
+        add_field => {"destination.type" => "internal"}
+      }
+    } else {
+      mutate {
+        add_field => {"destination.type" => "external"}
+      }
+    }
+    
+    # Add GeoIP for external destinations
+    if [destination.type] == "external" {
+      geoip {
+        source => "dest_ip"
+        target => "destination.geo"
+      }
+    }
+    
+    # Flag if large transfer
+    if [total_bytes] > 1000000000 {  # > 1GB
+      mutate {
+        add_field => {"large_transfer" => true}
+        add_tag => ["potential_exfil"]
+      }
+    }
+    
+    # Flag if to known suspicious provider
+    if [destination.geo][country] in ["Russia", "China", "Iran", "North Korea"] {
+      mutate {
+        add_field => {"suspicious_destination" => true}
+        add_tag => ["suspicious_geo"]
+      }
+    }
+    
+    # Check for known data exfil destinations (cloud storage, paste sites, etc.)
+    if [dest_hostname] =~ /\.s3\.amazonaws\.com|\.azure\.com|\.dropbox\.com|\.mediafire\.com|pastebin\.com/ {
+      mutate {
+        add_field => {"exfil_indicator" => "file_sharing_service"}
+        add_tag => ["data_exfil_risk"]
+      }
+    }
+  }
+}
+
+output {
+  elasticsearch {
+    hosts => ["elasticsearch:9200"]
+    index => "network-flow-%{+YYYY.MM.dd}"
+  }
+  
+  # Also send high-risk flows to separate index for faster alerting
+  if "data_exfil_risk" in [tags] or "potential_exfil" in [tags] {
+    elasticsearch {
+      hosts => ["elasticsearch:9200"]
+      index => "security-alerts-network-%{+YYYY.MM.dd}"
+    }
+  }
+}
+```
+
+**Step 3: Create Kibana Alert - Data Exfiltration**
+
+```json
+Alert: "Potential Data Exfiltration"
+
+Query:
+{
+  "query": {
+    "bool": {
+      "must": [
+        {"term": {"destination.type": "external"}},
+        {"range": {"total_bytes": {"gte": 1000000000}}},
+        {"range": {"@timestamp": {"gte": "now-5m"}}}
+      ]
+    }
+  }
+}
+
+Grouping: By source IP
+
+Threshold:
+- When: total_bytes > 1GB
+- OR: destination.country in [suspicious list]
+- OR: destination in [known C2 IPs]
+
+Actions:
+1. Alert security team
+2. Create incident
+3. Block destination IP (at firewall)
+4. Isolate source endpoint
+
+Example Incident:
+┌─────────────────────────────────────┐
+│ ALERT: Potential Data Exfiltration  │
+├─────────────────────────────────────┤
+│ Source IP: 192.168.1.105            │
+│ Source Host: WORKSTATION-42         │
+│ Source User: john.employee          │
+│                                     │
+│ Destination IP: 203.0.113.55        │
+│ Destination: s3-upload.example.com  │
+│ Country: Unknown (suspicious)       │
+│                                     │
+│ Data Transferred: 2.3 GB            │
+│ Duration: 12 minutes                │
+│ Confidence: HIGH (92%)              │
+│                                     │
+│ Action: [BLOCK] [INVESTIGATE]      │
+└─────────────────────────────────────┘
+```
+
+**Step 4: Comprehensive Investigation Query**
+
+```json
+# Find all activity from suspicious workstation
+
+GET network-flow-*/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {"term": {"source.ip": "192.168.1.105"}},
+        {"range": {"@timestamp": {"gte": "now-7d"}}}
+      ]
+    }
+  },
+  "aggs": {
+    "by_destination": {
+      "terms": {"field": "destination.ip.keyword", "size": 100},
+      "aggs": {
+        "total_bytes_sent": {"sum": {"field": "bytes_out"}},
+        "connections_count": {"value_count": {"field": "connection_id"}},
+        "hostnames": {
+          "terms": {"field": "destination.hostname.keyword", "size": 10}
+        },
+        "countries": {
+          "terms": {"field": "destination.geo.country.keyword"}
+        }
+      }
+    }
+  }
+}
+
+Results:
+Destination    | Bytes      | Connections | Hostname
+203.0.113.55   | 2.3 GB     | 45          | s3-upload.example.com
+8.8.8.8        | 150 MB     | 1200        | dns.google.com
+1.1.1.1        | 120 MB     | 950         | dns.cloudflare.com
+203.0.113.200  | 5.2 GB     | 80          | cloud-backup-sync.xyz
+
+Finding: 2.3 GB + 5.2 GB = 7.5 GB out in 7 days (highly suspicious)
+Normal user: ~50-100 MB per week
+This user: 7.5 GB in 7 days = 75x normal
+
+Correlation with user activity:
+- John normally: Email, web browsing, occasional file downloads
+- John past 7 days: Heavy database access, large file transfers
+- Conclusion: Data theft likely - escalate to Investigation team + Legal
+```
+
+---
+
+### Scenario 3: Detecting Lateral Movement in Real-Time
+
+**The Theory:**
+- Theory: Attacker gets initial access, then spreads to other systems
+- Concept: Single user logging into 5+ different systems in 1 hour = suspicious
+- Context: Normal users use 1-2 systems
+- Pattern: Admin account spreading across servers = compromise indicator
+
+**Step 1: Collect Authentication Events**
+
+Deploy Filebeat to all Windows domain controllers:
+
+```yaml
+# filebeat-windows-auth.yml
+
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+    - C:\Windows\System32\winevt\Logs\Security.evtx
+  fields:
+    log_type: windows_auth
+    environment: production
+
+output.elasticsearch:
+  hosts: ["elasticsearch:9200"]
+  index: "windows-auth-%{+yyyy.MM.dd}"
+```
+
+**Step 2: Parse Authentication Events with Logstash**
+
+```conf
+# logstash-windows-auth.conf
+
+input {
+  beats {
+    port => 5002
+    type => "windows_auth"
+  }
+}
+
+filter {
+  # Only interested in successful logins (4624)
+  if [event][code] != 4624 {
+    drop {}
+  }
+  
+  # Extract key fields
+  mutate {
+    rename => {
+      "[winlog][Computer]" => "[host][name]"
+      "[winlog][User][Name]" => "[user][name]"
+      "[winlog][IpAddress]" => "[source][ip]"
+    }
+  }
+  
+  # Logon type 3 = network logon (lateral movement)
+  if [winlog][LogonType] == 3 {
+    mutate {
+      add_field => {"logon_type_desc" => "network"}
+      add_tag => ["network_logon"]
+    }
+  } else if [winlog][LogonType] == 2 {
+    mutate {
+      add_field => {"logon_type_desc" => "interactive"}
+      add_tag => ["interactive_logon"]
+    }
+  }
+  
+  # Add enrichment: check if service account
+  if [user][name] =~ /(?i)svc|service|admin|root/ {
+    mutate {
+      add_field => {"account_type" => "privileged"}
+      add_tag => ["privileged_account"]
+    }
+  }
+}
+
+output {
+  elasticsearch {
+    hosts => ["elasticsearch:9200"]
+    index => "windows-auth-%{+YYYY.MM.dd}"
+  }
+}
+```
+
+**Step 3: Create Lateral Movement Detection Alert**
+
+```json
+Alert: "Suspicious Lateral Movement"
+
+Concept: Admin account logging into many systems quickly = spreading
+
+Query:
+{
+  "query": {
+    "bool": {
+      "must": [
+        {"term": {"event.code": 4624}},
+        {"term": {"logon_type_desc": "network"}},
+        {"term": {"account_type": "privileged"}},
+        {"range": {"@timestamp": {"gte": "now-1h"}}}
+      ]
+    }
+  }
+}
+
+Group By: user.name
+
+Aggregation:
+- Count unique hosts accessed per user
+- Get source IPs per user
+- Get time range per user
+
+Threshold:
+- When: cardinality(host.name) > 5
+- In: 1 hour
+- User: admin account
+
+Actions:
+1. Alert: "Admin account accessed 5+ systems in 1 hour"
+2. Create high-priority incident
+3. Block all outbound connections from source IP
+4. Force user logout from all systems
+5. Reset user password
+```
+
+**Step 4: Attack Timeline Visualization**
+
+```
+REAL ATTACK SCENARIO:
+
+14:32:15 - Attacker gains access to WORKSTATION-05 (user's laptop, phishing)
+           └─ Admin credentials stolen/phished
+
+14:33:00 - Admin login to FILESHARE-01 (network logon)
+           └─ Source: WORKSTATION-05, 192.168.1.50
+
+14:34:10 - Admin login to DATABASE-01 (network logon)
+           └─ Source: FILESHARE-01, 192.168.1.100
+
+14:35:45 - Admin login to DC02 (Domain Controller) ← CRITICAL
+           └─ Source: DATABASE-01, 192.168.1.101
+
+14:36:30 - Admin login to DC01 (Domain Controller) ← CRITICAL
+           └─ Source: DC02, 192.168.1.102
+
+14:38:00 - Admin login to VAULT-SERVER (sensitive data) ← CRITICAL
+           └─ Source: DC02, 192.168.1.103
+
+14:39:15 - ALERT TRIGGERED (6 systems in 7 minutes) 🚨
+
+ATTACK CHAIN VISUALIZATION:
+┌──────────────────┐
+│ WORKSTATION-05   │ ← Initial compromise (phishing)
+│ (attacker)       │
+└────────┬─────────┘
+         │ Admin creds
+         ↓
+    ┌──────────────────┐
+    │ FILESHARE-01     │ ← Data theft possible
+    └────────┬─────────┘
+             │ Network logon
+             ↓
+        ┌──────────────────┐
+        │ DATABASE-01      │ ← Sensitive data access
+        └────────┬─────────┘
+                 │ Network logon
+                 ↓
+            ┌──────────────────┐
+            │ DC02 (CRITICAL)  │ ← Can now grant any access
+            │ Domain Controller│
+            └────────┬─────────┘
+                     │
+              ┌──────┴──────┐
+              ↓             ↓
+         ┌────────┐   ┌───────────┐
+         │ DC01   │   │VAULT-SRV  │
+         └────────┘   └───────────┘
+         
+ATTACKER'S GOAL: Get Domain Admin access, then access sensitive vault
+
+RESPONSE TIME CRITICAL: < 5 minutes to prevent domain compromise
+```
+
+**Step 5: Investigation Queries**
+
+```json
+# Query 1: Trace the attack chain
+
+GET windows-auth-*/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {"term": {"user.name": "admin"}},
+        {"range": {"@timestamp": {"gte": "now-30m", "lte": "now"}}}
+      ]
+    }
+  },
+  "aggs": {
+    "timeline": {
+      "date_histogram": {
+        "field": "@timestamp",
+        "interval": "1m"
+      },
+      "aggs": {
+        "systems_accessed": {
+          "terms": {"field": "host.name.keyword", "size": 100}
+        }
+      }
+    }
+  }
+}
+
+# Query 2: Find all systems accessed from WORKSTATION-05
+
+GET windows-auth-*/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {"term": {"source.ip": "192.168.1.50"}},
+        {"range": {"@timestamp": {"gte": "now-24h"}}}
+      ]
+    }
+  },
+  "aggs": {
+    "by_system": {
+      "terms": {"field": "host.name.keyword", "size": 100},
+      "aggs": {
+        "by_user": {
+          "terms": {"field": "user.name.keyword", "size": 100}
+        }
+      }
+    }
+  }
+}
+
+Results show: admin access across entire infrastructure from one workstation
+Conclusion: Workstation completely compromised, attacker has domain admin access
+```
+
+---
+
+### Scenario 4: Incident Response Workflow with Elastic
+
+**The Incident:**
+"We detected a suspicious file on a server. Need to determine if there was a breach."
+
+**Step 1: Initial Alert Triage (2 minutes)**
+
+```
+Alert: "Suspicious File Downloaded"
+Source: EDR system (Elastic SIEM)
+Time: 2025-12-31 15:45:30 UTC
+
+Initial Information:
+- Hostname: WORKSTATION-12
+- User: jane.employee
+- File: mimikatz.exe (credential dumping tool)
+- Location: C:\Users\jane.employee\Downloads
+- Hash: a1b2c3d4e5f6... (known malware)
+
+Analyst Action:
+1. Open incident in Elastic
+2. Query related events within 1 hour
+3. Determine scope and impact
+```
+
+**Step 2: Deep Investigation**
+
+```json
+# Query: All activity from jane.employee in past 24 hours
+
+GET windows-*,network-flow-*/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {"term": {"user.name": "jane.employee"}},
+        {"range": {"@timestamp": {"gte": "now-24h"}}}
+      ]
+    }
+  },
+  "aggs": {
+    "event_types": {
+      "terms": {"field": "event.category.keyword"}
+    },
+    "systems": {
+      "terms": {"field": "host.name.keyword", "size": 50}
+    },
+    "files_accessed": {
+      "terms": {"field": "file.name.keyword", "size": 100}
+    },
+    "network_connections": {
+      "terms": {"field": "destination.ip.keyword", "size": 100}
+    }
+  }
+}
+```
+
+**Step 3: Analysis Result**
+
+```
+INVESTIGATION FINDINGS:
+
+Timeline:
+14:32:00 - Jane receives email from "noreply@company.com"
+          Subject: "Holiday Bonus Payment"
+          
+14:34:15 - Email link clicked (from email tracking)
+          Redirected to: malicious-site.ru/download.html
+          
+14:35:00 - File downloaded: setup.exe → mimikatz.exe
+          Location: C:\Users\jane.employee\Downloads
+          
+14:35:30 - File executed (Event: Process Creation)
+          Process name: mimikatz.exe
+          Command line: (empty - no args detected)
+          
+14:36:00 - Credentials dumped from local machine
+          Event: Suspicious LSASS.exe access
+          
+14:36:15 - Lateral movement attempt detected
+          Outbound connection to: DC01 (192.168.1.102)
+          Using: Admin credentials
+          
+14:37:00 - Blocked by EDR (malware behavior detected)
+          Action: Quarantine + Alert
+
+BREACH ASSESSMENT:
+✓ Initial Compromise: YES (malware on workstation)
+✓ Lateral Movement: ATTEMPTED (blocked)
+✓ Credential Theft: YES (local admin creds dumped)
+✓ Domain Compromise: NO (EDR blocked lateral movement)
+✓ Data Theft: No evidence of data exfiltration
+
+SEVERITY: HIGH
+Reason: Credentials compromised, but lateral movement blocked quickly
+```
+
+**Step 4: Incident Response Actions**
+
+```
+IMMEDIATE ACTIONS (< 5 minutes):
+1. Isolate WORKSTATION-12 from network
+2. Force password reset for jane.employee
+3. Scan entire workstation for malware
+4. Check for related emails in organization
+5. Send phishing alert to all users
+
+SHORT-TERM ACTIONS (< 1 hour):
+1. Force MFA re-authentication for all users
+2. Check for similar malware on other endpoints
+3. Investigate email source
+4. Add malware hash to company-wide block list
+5. Create phishing case for incident tracking
+
+LONG-TERM ACTIONS (< 1 day):
+1. Security awareness training (phishing)
+2. Implement email filtering enhancement
+3. EDR agent tuning (improve detection)
+4. Conduct forensic analysis (if needed)
+5. After-action review with team
+```
+
+---
+
+### Scenario 5: Compliance Reporting with Elastic
+
+**The Requirement:**
+Monthly compliance report showing all security events for audit purposes
+
+**Theory in Action:**
+- Aggregating data to show trends
+- Proving monitoring is active
+- Demonstrating incident response
+- Meeting regulatory requirements (SOC 2, ISO 27001, PCI-DSS)
+
+**Step 1: Create Compliance Dashboard**
+
+```
+┌────────────────────────────────────────────────────────┐
+│    DECEMBER 2025 COMPLIANCE REPORT - SECURITY EVENTS   │
+├────────────────────────────────────────────────────────┤
+│                                                        │
+│ EXECUTIVE SUMMARY                                      │
+│ ├─ Total Events Logged: 47.2 Million                  │
+│ ├─ Total Alerts Generated: 2,341                      │
+│ ├─ Incidents Created: 18                              │
+│ ├─ Incidents Resolved: 17                             │
+│ ├─ Mean Time to Detect (MTTD): 15 minutes            │
+│ └─ Mean Time to Respond (MTTR): 42 minutes           │
+│                                                        │
+│ SECURITY MONITORING STATUS                            │
+│ ├─ Elasticsearch Cluster: HEALTHY ✓                  │
+│ ├─ Logstash Pipelines: ALL RUNNING ✓                 │
+│ ├─ Beats Agents: 847/850 ACTIVE ✓                    │
+│ ├─ Data Retention: 90 days ✓                         │
+│ └─ Backup Status: DAILY ✓                            │
+│                                                        │
+│ ALERTS BY CATEGORY                                    │
+│ ├─ Authentication Failures: 1,245 (53%)               │
+│ ├─ Malware Detection: 342 (15%)                       │
+│ ├─ Network Anomalies: 478 (20%)                       │
+│ ├─ System Changes: 156 (7%)                           │
+│ ├─ Policy Violations: 89 (4%)                         │
+│ └─ Other: 51 (1%)                                     │
+│                                                        │
+│ INCIDENT DETAILS                                      │
+│ ┌────────────────────────────────────────────┐        │
+│ │ Date      | Type              | Severity | │        │
+│ │-----------|-------------------|----------|        │
+│ │ 12/15     | Brute Force       | HIGH    | │        │
+│ │ 12/18     | Malware           | CRITICAL| │        │
+│ │ 12/22     | Data Exfiltration | HIGH    | │        │
+│ │ 12/28     | Lateral Movement  | MEDIUM  | │        │
+│ └────────────────────────────────────────────┘        │
+│                                                        │
+│ COMPLIANCE CHECKLIST                                  │
+│ ├─ [✓] Continuous monitoring active                   │
+│ ├─ [✓] All events logged and retained                 │
+│ ├─ [✓] Incident response procedures tested            │
+│ ├─ [✓] No unauthorized access detected                │
+│ ├─ [✓] All systems patched and updated                │
+│ └─ [✓] Backup and recovery tested                     │
+│                                                        │
+└────────────────────────────────────────────────────────┘
+```
+
+**Step 2: Compliance Queries**
+
+```json
+# Query: Generate monthly alert report
+
+GET siem-alerts-*/_search
+{
+  "size": 0,
+  "query": {
+    "range": {
+      "@timestamp": {
+        "gte": "2025-12-01",
+        "lte": "2025-12-31"
+      }
+    }
+  },
+  "aggs": {
+    "alerts_by_severity": {
+      "terms": {"field": "severity.keyword"},
+      "aggs": {
+        "alert_count": {"value_count": {"field": "alert.id"}}
+      }
+    },
+    "alerts_by_category": {
+      "terms": {"field": "event.category.keyword"},
+      "aggs": {
+        "count": {"value_count": {"field": "alert.id"}}
+      }
+    },
+    "incidents_created": {
+      "filter": {
+        "exists": {"field": "incident.id"}
+      }
+    },
+    "response_metrics": {
+      "stats": {"field": "incident.response_time_minutes"}
+    }
+  }
+}
+
+Results for Monthly Report:
+- HIGH severity alerts: 1,245
+- CRITICAL alerts: 42
+- Average response time: 42 minutes
+- 100% of incidents resolved within 24 hours
+```
+
+---
+
+*Practical Application Summary:*
+
+**Concept → Implementation → Detection → Response**
+
+Each scenario demonstrates how Elastic Stack theory translates to:
+1. **Data Collection**: Beats/Logstash gather logs from all sources
+2. **Processing**: Logstash enriches and normalizes data
+3. **Storage**: Elasticsearch indexes for fast searching
+4. **Visualization**: Kibana shows trends and anomalies
+5. **Alerting**: Automated detection triggers human response
+6. **Investigation**: Aggregations and queries reveal attack context
+7. **Response**: Teams take action within minutes
+
+---
+
+## Practical Elastic Queries for SOC
+
+### Query 1: Brute Force Detection
+
+```json
+GET windows-events-*/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {"term": {"event.code": 4625}},
+        {"range": {"@timestamp": {"gte": "now-5m"}}}
+      ]
+    }
+  },
+  "aggs": {
+    "by_user": {
+      "terms": {"field": "user.name.keyword", "size": 100},
+      "aggs": {
+        "failure_count": {
+          "value_count": {"field": "event.id"}
+        },
+        "source_ips": {
+          "terms": {"field": "source.ip.keyword", "size": 10}
+        }
+      }
+    }
+  }
+}
+```
+
+### Query 2: Lateral Movement
+
+```json
+GET windows-events-*/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {"term": {"event.code": 4624}},
+        {"term": {"logon.type": 3}},
+        {"range": {"@timestamp": {"gte": "now-1h"}}}
+      ]
+    }
+  },
+  "aggs": {
+    "by_user": {
+      "terms": {"field": "user.name.keyword"},
+      "aggs": {
+        "systems_accessed": {
+          "cardinality": {"field": "host.name.keyword"}
+        },
+        "systems_list": {
+          "terms": {"field": "host.name.keyword", "size": 100}
+        }
+      }
+    }
+  }
+}
+```
+
+Alert: If `systems_accessed > 10` in 1 hour
+
+### Query 3: Data Exfiltration
+
+```json
+GET network-*/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {"range": {"bytes_out": {"gte": 1000000000}}},
+        {"term": {"destination.geo.country": "external"}}
+      ]
+    }
+  },
+  "aggs": {
+    "by_source": {
+      "terms": {"field": "source.ip.keyword"},
+      "aggs": {
+        "total_bytes": {"sum": {"field": "bytes_out"}},
+        "destinations": {
+          "terms": {"field": "destination.ip.keyword"}
+        }
+      }
+    }
+  }
+}
+```
+
+### Query 4: Malware Execution
+
+```json
+GET syslog-*/_search
+{
+  "query": {
+    "bool": {
+      "should": [
+        {"term": {"process.name": "psexec.exe"}},
+        {"term": {"process.name": "mimikatz.exe"}},
+        {"match": {"process.command_line": "*-enc*"}},
+        {"match": {"process.command_line": "*obfusc*"}}
+      ],
+      "minimum_should_match": 1
+    }
+  }
+}
+```
+
+---
+
+## ELASTIC STACK INTERVIEW QUESTIONS & ANSWERS
+
+### ENTRY-LEVEL QUESTIONS
+
+**Q1: What is Elasticsearch and why would you use it for security monitoring?**
+
+Answer:
+Elasticsearch is a distributed search and analytics engine built on top of Lucene. For security monitoring:
+
+- **Log Centralization**: Collects logs from thousands of systems
+- **Real-time Search**: Finds events within milliseconds (vs. minutes with databases)
+- **Scalability**: Handles petabytes of data
+- **Cost-Effective**: Open source alternative to Splunk
+- **Pattern Detection**: Quickly identifies suspicious activity
+
+Example: A SOC needs to search 1 billion security events. Elasticsearch can find all failed logins from a specific IP in <1 second.
+
+---
+
+**Q2: Explain the difference between Elasticsearch, Logstash, and Kibana.**
+
+Answer:
+
+| Component | Purpose | Role in Pipeline |
+|-----------|---------|------------------|
+| **Logstash** | Data Processing | INPUT → FILTER → OUTPUT |
+| **Elasticsearch** | Search & Storage | Stores indexed data |
+| **Kibana** | Visualization | Displays data to analysts |
+| **Beats** | Data Collection | Lightweight shippers |
+
+Example Flow:
+Log file → Filebeat → Logstash (parse) → Elasticsearch (store) → Kibana (view)
+
+---
+
+**Q3: What is an inverted index and why is it important?**
+
+Answer:
+
+Traditional Database (SLOW):
+```
+Doc 1: "malware detected on server"
+Doc 2: "server restarted successfully"
+Search "malware": Scan all docs → Find Doc 1 = O(n) = SLOW
+```
+
+Inverted Index (FAST):
+```
+Word       → Document IDs
+malware    → [1]
+detected   → [1]
+server     → [1, 2]
+
+Search "malware": Direct lookup → [1] = O(1) = FAST
+```
+
+**Why It Matters**: Security analysts search millions of events/day. Inverted index makes this instant.
+
+---
+
+**Q4: What are the main components of an Elasticsearch cluster?**
+
+Answer:
+
+1. **Master Node**: Manages cluster state and shard allocation
+   - Lightweight, decision-making
+   - 3+ for production (prevents split-brain)
+
+2. **Data Node**: Stores data and performs searches
+   - CPU/Memory intensive
+   - Scales horizontally
+
+3. **Ingest Node** (optional): Pre-processes data
+   - Lightweight alternative to Logstash
+   - Applies transformations
+
+4. **Coordinating Node** (optional): Load balancer
+   - Routes requests intelligently
+   - Aggregates results
+
+---
+
+**Q5: What is a shard and why do we need replicas?**
+
+Answer:
+
+**Shards**: Divide large indices into smaller chunks for parallel processing
+- 100GB index split into 5 shards = 20GB each
+- Search runs on all 5 shards simultaneously = 5x faster
+- Can be on different nodes
+
+**Replicas**: Backup copies of shards for fault tolerance
+- Each shard has replicas on different nodes
+- If node fails, replicas ensure no data loss
+- Also improves read performance (can query replicas)
+
+Example:
+```
+Index: windows-events (100GB)
+├─ Shard 1 (Primary): Node 1
+│  └─ Replica: Node 2
+├─ Shard 2 (Primary): Node 2
+│  └─ Replica: Node 3
+└─ Shard 3 (Primary): Node 3
+   └─ Replica: Node 1
+
+If Node 1 fails: Shard 1 Primary gone, but Replica on Node 2 available
+Data NOT lost, system continues
+```
+
+---
+
+### MID-LEVEL QUESTIONS
+
+**Q6: Design a log ingestion pipeline for a SOC handling 1M events/second.**
+
+Answer:
+
+Architecture:
+```
+┌───────────────────────────────────────────────────────┐
+│   DATA SOURCES (1M/sec)                              │
+│  - Windows logs: 400k/sec                             │
+│  - Network flows: 300k/sec                            │
+│  - Firewalls: 200k/sec                                │
+│  - EDR alerts: 100k/sec                               │
+└───────────────────────┬─────────────────────────────┘
+         │
+      Load Balancer (Nginx/HAProxy)
+      │      │      │      │
+      ↓      ↓      ↓      ↓
+   ┌──┬──┬──┬──┐
+   │LP1│LP2│LP3│LP4│ (4 Logstash instances)
+   └──┴──┴──┴──┘
+   Each: 250k/sec capacity
+      │      │      │      │
+      ↓      ↓      ↓      ↓
+   ┌─────────────────────────────────┐
+   │  ELASTICSEARCH CLUSTER          │
+   │  14 data nodes (hot/warm)       │
+   │  3 master nodes                 │
+   └─────────────────────────────────┘
+
+Key Design Decisions:
+1. Multiple Logstash: Horizontal scaling + redundancy
+2. Load balancing: Distribute ingestion evenly
+3. Data enrichment: GeoIP, threat intel lookup
+4. Filtering: Drop internal traffic (reduce noise)
+5. Index rotation: Daily indices for easy management
+6. ILM: Hot (7d) → Warm (60d) → Cold (90d)
+
+Logstash Configuration:
+- 4 cores, 8GB RAM each
+- Parse complex formats (XML, JSON, syslog)
+- Drop 30% of events (internal traffic)
+- Add GeoIP enrichment
+- ~250k events/sec per instance
+```
+
+---
+
+**Q7: Write a Kibana alert that detects credential theft activity.**
+
+Answer:
+
+```json
+{
+  "alert_rule": {
+    "name": "Credential Theft Detection",
+    "type": "query",
+    "severity": "critical",
+    
+    "query": {
+      "bool": {
+        "must": [
+          {"term": {"event.category": "credential_access"}},
+          {"range": {"@timestamp": {"gte": "now-5m"}}}
+        ]
+      }
+    },
+    
+    "group_by": ["host.name", "user.name"],
+    
+    "conditions": [
+      {
+        "name": "High-risk process execution",
+        "when": "count() > 0",
+        "risk_score": 80
+      },
+      {
+        "name": "LSASS.exe accessed",
+        "when": "any event contains process.target.name: lsass.exe",
+        "risk_score": 90
+      },
+      {
+        "name": "Credentials dumped",
+        "when": "event.action: credential_dump",
+        "risk_score": 95
+      }
+    ],
+    
+    "actions": [
+      {"type": "email", "target": "security@company.com"},
+      {"type": "slack", "channel": "#security-alerts"},
+      {"type": "pagerduty", "severity": "critical"},
+      {"type": "isolation", "action": "isolate_host"}
+    ],
+    
+    "throttle": "1h"
+  }
+}
+```
+
+Key Points:
+- Aggregates by host and user (finds patterns)
+- Triggers on multiple risk factors
+- Integrates with incident response tools
+- Prevents alert fatigue (1 hour throttle)
+
+---
+
+**Q8: Compare query performance: Term vs. Match vs. Range queries. When use each?**
+
+Answer:
+
+| Query Type | Performance | Use Case | Example |
+|-----------|------------|----------|---------|
+| **Term** | FASTEST | Exact matches on keywords | `event.code: 4625` |
+| **Range** | FAST | Numeric/date comparisons | `bytes > 1GB` |
+| **Match** | SLOWER | Full-text search | Message contains "malware" |
+| **Bool** | VARIES | Complex logic | Combined criteria |
+| **Filter** | FASTEST (cached) | Boolean checks | Don't affect scoring |
+
+Optimization Rules:
+```
+GOOD (Fast):
+{
+  "query": {
+    "bool": {
+      "must": [{"match": {"message": "error"}}],
+      "filter": [{"range": {"@timestamp": {...}}},
+                 {"term": {"host.os": "windows"}}]
+    }
+  }
+}
+
+BAD (Slow):
+{
+  "query": {
+    "bool": {
+      "must": [{"match": {"message": "error"}},
+               {"range": {"@timestamp": {...}}},
+               {"match": {"host.os": "windows"}}]
+    }
+  }
+}
+
+Difference: Filters don't calculate scores (2-3x faster)
+```
+
+---
+
+**Q9: Explain Index Lifecycle Management (ILM) and its cost benefits.**
+
+Answer:
+
+ILM moves indices through phases based on age:
+
+```
+Days 1-7: HOT Phase
+├─ Storage: SSD (fastest, expensive)
+├─ Replicas: 1 (full copies)
+├─ Use Case: Recent incidents (most searched)
+├─ Size: 7 days × 100GB = 700GB
+├─ With replicas: 1,400GB
+└─ Cost: $1,400/month @ $10/GB/month
+
+    ↓ Auto-transition ↓
+
+Days 8-60: WARM Phase
+├─ Storage: HDD (slower, cheaper)
+├─ Action: Shrink index (reduce shards 5→1)
+├─ Replicas: 0 (reduced)
+├─ Use Case: Historical search (less frequent)
+├─ Size: ~500GB
+└─ Cost: $250/month @ $5/GB/month
+
+    ↓ Auto-transition ↓
+
+Days 61+: COLD Phase
+├─ Storage: Archive (slowest, cheapest)
+├─ Action: Freeze index (read-only)
+├─ Use Case: Compliance/audit (rarely searched)
+├─ Size: ~500GB
+└─ Cost: $50/month @ $1/GB/month
+
+Total Annual Cost:
+└─ Traditional (all HOT): 73TB × $10 = $876,000/year
+└─ With ILM: $1,650/year
+└─ SAVINGS: 99.8% 🎉
+```
+
+---
+
+**Q10: What Logstash filters would you use to parse Windows Event XML logs?**
+
+Answer:
+
+```conf
+filter {
+  # 1. Parse XML structure
+  xml {
+    source => "message"
+    target => "event_data"
+    remove_namespaces => true
+  }
+  
+  # 2. Extract key fields
+  mutate {
+    rename => {
+      "[event_data][Computer]" => "[host][name]"
+      "[event_data][EventID]" => "[event][code]"
+      "[event_data][SubjectUserName]" => "[user][name]"
+      "[event_data][IpAddress]" => "[source][ip]"
+    }
+    convert => {"[event][code]" => "integer"}
+  }
+  
+  # 3. Add enrichment (GeoIP)
+  geoip {
+    source => "[source][ip]"
+    target => "[source][geo]"
+  }
+  
+  # 4. Conditional processing by event type
+  if [event][code] == 4688 {
+    # Process creation event
+    mutate {
+      add_field => {"event_type" => "process_create"}
+      add_tag => ["process_execution"]
+    }
+  } else if [event][code] == 4625 {
+    # Failed login
+    mutate {
+      add_field => {"event_type" => "failed_login"}
+      add_tag => ["auth_failure"]
+    }
+  }
+  
+  # 5. Filter noise (drop internal traffic)
+  if [source][ip] =~ /^10\./ or 
+     [source][ip] =~ /^192\.168\./ {
+    drop {}
+  }
+}
+```
+
+---
+
+### SENIOR-LEVEL QUESTIONS
+
+**Q11: Design a high-availability Elasticsearch cluster for a multi-region SOC. Address failover, data loss, and compliance.**
+
+Answer:
+
+```
+MULTI-REGION HA ARCHITECTURE:
+
+REGION 1 (Primary US-East)
+┌──────────────────────────────────────────────────┐
+│ Master Tier (3 nodes)                            │
+│ - us-east-1a, 1b, 1c (3 nodes)                  │
+│ - Heap: 1GB each                                 │
+│ - Election leader handles                        │
+└──────────────────────────────────────────────────┘
+         ↕ (Cluster state sync)
+┌──────────────────────────────────────────────────┐
+│ Data Tier (10 nodes HOT)                         │
+│ - us-east-1a, 1b, 1c (mixed)                    │
+│ - SSD storage, 32GB heap                         │
+│ - Replica factor: 2                              │
+│ - 100% data redundancy                           │
+└──────────────────────────────────────────────────┘
+         ↕ (Cross-region replication)
+REGION 2 (Secondary US-West)
+┌──────────────────────────────────────────────────┐
+│ Master Tier (3 nodes)                            │
+│ - us-west-1a, 1b, 1c (3 nodes)                  │
+│ - Voting members (not leaders)                   │
+└──────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│ Data Tier (5 nodes WARM)                         │
+│ - us-west-1a, 1b, 1c (mixed)                    │
+│ - HDD storage, 16GB heap                         │
+│ - Read-replica of us-east data                   │
+└──────────────────────────────────────────────────┘
+
+FAILOVER SCENARIOS:
+
+1. Single node fails (region 1):
+   - Shards rebalance automatically
+   - Replicas promote to primary
+   - Recovery time: < 1 minute
+   - Data loss: ZERO
+
+2. Entire region fails (region 1 down):
+   - Region 2 masters elect new leader
+   - Region 2 data nodes serve all queries
+   - Data loss: ZERO (replicated)
+   - Recovery time: 5-10 minutes
+   - RTO: 10 minutes, RPO: 0 minutes
+
+3. Network partition (regions split):
+   - Cluster detects split-brain
+   - Minority partition automatically stops
+   - Majority partition continues
+   - Data consistency maintained
+
+COMPLIANCE FEATURES:
+
+1. Encryption in Transit:
+   - TLS 1.3 between all nodes
+   - TLS between regions
+   - Certificate pinning
+
+2. Encryption at Rest:
+   - AES-256 on all data
+   - Separate key management per region
+
+3. Audit Logging:
+   - All access logged
+   - API calls tracked
+   - Changes tracked with timestamps
+
+4. Data Retention:
+   - HOT: 7 days (all data)
+   - WARM: 30 days
+   - COLD: 90 days
+   - After: Archived to S3 (compliance)
+
+5. Backup Strategy:
+   - Snapshot every 1 hour
+   - Cross-region backup storage
+   - Monthly restore test
+   - RPO: 1 hour, RTO: 4 hours
+```
+
+---
+
+**Q12: Write complex aggregation to detect data exfiltration. Include nested aggregations and percentile detection.**
+
+Answer:
+
+```json
+{
+  "size": 0,
+  "query": {
+    "bool": {
+      "must": [
+        {"term": {"destination.type": "external"}},
+        {"range": {"@timestamp": {"gte": "now-24h"}}}
+      ]
+    }
+  },
+  "aggs": {
+    "by_source_user": {
+      "terms": {"field": "user.name.keyword", "size": 100},
+      "aggs": {
+        "total_bytes_transferred": {
+          "sum": {"field": "bytes_out"}
+        },
+        
+        "baseline_calculation": {
+          "percentiles": {
+            "field": "bytes_out",
+            "percents": [50, 90, 95, 99]
+          }
+        },
+        
+        "by_destination": {
+          "terms": {"field": "destination.ip.keyword", "size": 50},
+          "aggs": {
+            "bytes_per_dest": {
+              "sum": {"field": "bytes_out"}
+            },
+            
+            "destination_risk": {
+              "bucket_selector": {
+                "buckets_path": {"totalBytes": "bytes_per_dest"},
+                "script": "params.totalBytes > 1000000000"
+              }
+            },
+            
+            "by_hour": {
+              "date_histogram": {
+                "field": "@timestamp",
+                "interval": "1h"
+              },
+              "aggs": {
+                "hourly_bytes": {
+                  "sum": {"field": "bytes_out"}
+                }
+              }
+            }
+          }
+        },
+        
+        "exfil_score": {
+          "bucket_script": {
+            "buckets_path": {
+              "total": "total_bytes_transferred",
+              "p99": "baseline_calculation[99]"
+            },
+            "script": "(params.total / params.p99) * 100"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+This detects:
+- Users transferring >1GB externally
+- Spike patterns
+- Deviation from baseline (user transferring 500% more than normal)
+- Multiple destination analysis (coordinated data theft)
+
+---
+
+**Q13: You have 100 TB of logs but can only store 20 TB. Design optimization strategy without losing security value.**
+
+Answer:
+
+Strategy: Tiered Storage + Intelligent Filtering
+
+```
+Incoming Data: 100TB/month raw logs
+
+STEP 1: FILTER NOISE (Reduce 30%)
+├─ Drop internal traffic (10.0.0.0/8): -10TB
+├─ Drop successful internal connections: -5TB
+├─ Drop routine health checks: -5TB
+└─ Result: 70TB remaining
+
+STEP 2: COMPRESSION & DEDUPLICATION (Reduce 20%)
+├─ Gzip compression: -10TB
+├─ Deduplicate identical events: -4TB
+└─ Result: 56TB remaining
+
+STEP 3: SAMPLING & ROLLUP
+├─ Full detail (24 hours): 10TB
+│  └─ All high-security events
+│  └─ Last 24 hours complete
+├─ Hourly rollup (7 days): 8TB
+│  └─ Summary statistics
+│  └─ Aggregate counts
+├─ Daily rollup (30 days): 6TB
+│  └─ Trend data only
+│  └─ No individual events
+└─ Result: 24TB with full security coverage
+
+STEP 4: INDEXING STRATEGY
+├─ HOT (1 day, 8TB, all fields): SSD
+├─ WARM (6 days, 10TB, 50% fields): HDD
+├─ COLD (30 days, 6TB, 10% fields): Archive
+└─ After 30 days: Delete/Archive
+
+Result:
+- Store 20TB (not 100TB): 80% reduction
+- Keep all security-critical data: Full fidelity
+- Maintain trend analysis: Can see patterns over 30 days
+- Retrieve details: If incident detected, enable retroactive collection
+```
+
+---
+
+**Q14: A Kibana query is running in 30 seconds (unacceptable). Debug and optimize it.**
+
+Answer:
+
+The solution involves profiling, then optimizing with filters, keyword fields, reduced time ranges, and simpler aggregations to achieve <1 second response time (30x improvement).
+
+---
+
+**Q15: How would you implement threat intelligence enrichment for IPs and hashes in your Logstash pipeline?**
+
+Answer:
+
+```conf
+# logstash-threat-intel-enrichment.conf
+
+input { beats { port => 5000 } }
+
+filter {
+  # Enrichment 1: IP Reputation via HTTP API
+  if [source][ip] {
+    http {
+      url => "http://threat-api:8080/reputation?ip=%{[source][ip]}"
+      verb => "GET"
+      timeout => 2
+    }
+  }
+  
+  # Enrichment 2: File Hash Lookup (Virus Total)
+  if [file][hash][md5] {
+    # Check Redis cache first
+    redis {
+      host => "redis-cache:6379"
+      data_type => "string"
+      key => "hash:%{[file][hash][md5]}"
+    }
+    
+    # Query VirusTotal if not cached
+    http {
+      url => "https://www.virustotal.com/api/v3/files/%{[file][hash][md5]}"
+      timeout => 1
+    }
+  }
+  
+  # Enrichment 3: Domain Reputation
+  if [destination][domain] {
+    translate {
+      field => "[destination][domain]"
+      destination => "c2_known"
+      dictionary_path => "/etc/logstash/c2-domains.yml"
+    }
+  }
+  
+  # Final scoring
+  ruby {
+    code => '
+      score = 0
+      score += 30 if event.get("threat_level") == "critical"
+      event.set("enrichment_score", score)
+    '
+  }
+}
+
+output {
+  if "high_priority_incident" in [tags] {
+    elasticsearch {
+      index => "security-incidents-%{+YYYY.MM.dd}"
+    }
+  }
+}
+```
+
+Key Features:
+- **Caching**: Redis prevents repeated API calls
+- **Timeouts**: Don't block pipeline if APIs slow
+- **Scoring**: Combines multiple threat signals
+- **Routing**: High-risk events go to separate index
+
+---
+
+## Elastic vs. Splunk
+
+| Feature | Elastic | Splunk |
+|---------|---------|--------|
+| **Cost** | Free + optional support | $$$$ (Expensive) |
+| **License** | Open source | Commercial |
+| **Query Language** | KQL, Lucene, DSL | SPL |
+| **Scalability** | Excellent | Excellent |
+| **Learning Curve** | Moderate | Moderate |
+| **Out-of-box Rules** | 100+ rules | More extensive |
+| **Community** | Growing rapidly | Large, mature |
+| **Setup Complexity** | Moderate | Easy (cloud option) |
+| **Machine Learning** | Available | Better/more mature |
+| **Best For** | Cost-conscious orgs | Enterprise with budget |
+| **SIEM Focus** | Strong (Elastic SIEM) | Strong |
+
+---
+
+## Elastic Best Practices
+
+### Performance Optimization
+
+```
+1. INDEX TUNING
+   - Set appropriate shard count (not too many)
+   - Use proper replica count (usually 1)
+   - Implement ILM for retention
+   - Delete old indices instead of purging
+
+2. QUERY OPTIMIZATION
+   - Use filters instead of queries (faster)
+   - Use term query, not match (when possible)
+   - Limit time range (latest 7 days, not all time)
+   - Use aggregation instead of sorting
+
+3. HARDWARE ALLOCATION
+   Master Nodes: 1GB heap minimum
+   Data Nodes: 16-32GB heap (50% of system RAM max)
+   Rule: Never set >50% system RAM as heap
+   
+4. STORAGE
+   - SSD for HOT data (recent)
+   - HDD for WARM data (30-90 days)
+   - Archive for COLD data (>90 days)
+```
+
+### Security Best Practices
+
+```
+1. ACCESS CONTROL
+   - Enable X-Pack Security
+   - Use role-based access control (RBAC)
+   - Restrict index access by role
+   - Audit all authentication attempts
+
+2. DATA PROTECTION
+   - TLS/SSL encryption in transit
+   - Encryption at rest (AES-256)
+   - Regular backups (daily)
+   - Test recovery procedures (monthly)
+
+3. MONITORING
+   - Monitor cluster health (green/yellow/red)
+   - Alert on node failures
+   - Track disk space usage
+   - Monitor query performance
+   - Review security logs monthly
+```
+
+---
+
+## Troubleshooting
+
+### Cluster Status Red
+
+```
+Symptom: Some indices unavailable
+Cause: Unassigned shards
+
+Diagnosis:
+GET _cluster/health
+GET _cat/shards
+
+Solution:
+PUT _cluster/settings
+{
+  "transient": {
+    "cluster.routing.allocation.enable": "all"
+  }
+}
+```
+
+### Slow Queries
+
+```
+Symptom: Searches taking >5 seconds
+
+Causes:
+1. Complex query logic
+2. Large result set
+3. Low memory/CPU
+4. Many shards to search
+
+Solutions:
+1. Profile query: GET _search/profile
+2. Add time filters
+3. Increase heap memory
+4. Add data nodes
+5. Shrink indices (reduce shards)
+```
+
+### High Memory Usage
+
+```
+Symptom: Out of memory errors
+Causes: Large heaps, many concurrent queries
+
+Solutions:
+1. Increase heap (up to 31GB max)
+2. Close unused indices
+3. Reduce query complexity
+4. Add circuit breaker settings
+5. Scale horizontally (more nodes)
+```
+
+---
+
+## Migration from Splunk to Elastic
+
+**Query Translation:**
+
+**Splunk SPL:**
+```
+index=windows_events source="WinEventLog:Security"
+EventCode=4688
+| stats count by user
+| sort - count
+```
+
+**Elastic KQL:**
+```
+event.code: 4688 and source: "WinEventLog:Security"
+```
+
+**Elastic DSL:**
+```json
+GET windows-events-*/_search
+{
+  "query": {
+    "term": {"event.code": 4688}
+  },
+  "aggs": {
+    "by_user": {
+      "terms": {"field": "user.name.keyword"}
+    }
+  }
+}
+```
+
+---
+
+*Last Updated: December 2025*
+*Comprehensive guide to Elastic Stack covering theory, architecture, practical implementation, queries, and production SOC deployment.*
