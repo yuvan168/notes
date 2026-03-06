@@ -1,0 +1,3086 @@
+# LOW-LEVEL DESIGN (LLD) — COMPLETE GUIDE
+
+## Table of Contents
+
+1. [What is LLD?](#1-what-is-lld)
+2. [HLD vs LLD](#2-hld-vs-lld)
+3. [Object-Oriented Design Principles](#3-object-oriented-design-principles)
+4. [SOLID Principles](#4-solid-principles)
+5. [Design Patterns — Creational](#5-design-patterns--creational)
+6. [Design Patterns — Structural](#6-design-patterns--structural)
+7. [Design Patterns — Behavioral](#7-design-patterns--behavioral)
+8. [UML Diagrams](#8-uml-diagrams)
+9. [Class Design & Relationships](#9-class-design--relationships)
+10. [Concurrency & Thread Safety](#10-concurrency--thread-safety)
+11. [Clean Code Principles](#11-clean-code-principles)
+12. [LLD Interview Approach](#12-lld-interview-approach)
+13. [LLD Case Study: Parking Lot](#13-lld-case-study-parking-lot)
+14. [LLD Case Study: Library Management System](#14-lld-case-study-library-management-system)
+15. [LLD Case Study: Chess Game](#15-lld-case-study-chess-game)
+16. [LLD Case Study: Elevator System](#16-lld-case-study-elevator-system)
+17. [LLD Case Study: ATM System](#17-lld-case-study-atm-system)
+18. [LLD Case Study: Online Booking System](#18-lld-case-study-online-booking-system)
+19. [LLD Case Study: Ride-Sharing App (Uber/Ola)](#19-lld-case-study-ride-sharing-app-uberola)
+20. [LLD Case Study: Snake and Ladder Game](#20-lld-case-study-snake-and-ladder-game)
+21. [LLD Case Study: Vending Machine](#21-lld-case-study-vending-machine)
+22. [LLD Case Study: Logger System](#22-lld-case-study-logger-system)
+23. [LLD Case Study: Rate Limiter](#23-lld-case-study-rate-limiter)
+24. [Interview Questions & Answers](#24-interview-questions--answers)
+25. [Quick Reference Cheat Sheet](#25-quick-reference-cheat-sheet)
+
+---
+
+## 1. What is LLD?
+
+**Low-Level Design (LLD)** is the detailed design of individual components, classes, methods, and algorithms that make up a system. It translates the HLD architecture into concrete, code-ready blueprints.
+
+### Purpose of LLD
+
+| Aspect | Detail |
+|--------|--------|
+| **Class Design** | Define classes, attributes, and methods |
+| **Relationships** | Inheritance, composition, association |
+| **Algorithm Design** | Step-by-step logic for each operation |
+| **Data Structures** | Exact data structures used internally |
+| **API Contracts** | Method signatures and return types |
+| **Error Handling** | Exception handling strategies |
+| **Thread Safety** | Concurrency handling at code level |
+
+### LLD Deliverables
+
+- Class diagrams
+- Sequence diagrams
+- ER diagrams (for DB schema)
+- Pseudocode / actual code
+- Method signatures and contracts
+- Design pattern usage documentation
+- Exception handling strategy
+
+---
+
+## 2. HLD vs LLD
+
+| Aspect | HLD | LLD |
+|--------|-----|-----|
+| **Scope** | System-wide architecture | Module / class / method level |
+| **Audience** | Architects, managers, stakeholders | Developers |
+| **Detail Level** | Abstract, high-level boxes | Concrete, code-level detail |
+| **Focus** | Components, data flow, tech choices | Classes, methods, algorithms |
+| **Diagrams** | Block diagrams, deployment diagrams | Class diagrams, sequence diagrams |
+| **Output** | Architecture document | Code-ready design document |
+| **Example** | "User service stores data in PostgreSQL" | "`UserRepository.findById(Long id): User`" |
+| **Timing** | Before implementation begins | After HLD is approved |
+| **Design Patterns** | Architectural patterns (CQRS, Saga) | GoF patterns (Singleton, Factory) |
+
+---
+
+## 3. Object-Oriented Design Principles
+
+### The Four Pillars of OOP
+
+#### 1. Encapsulation
+- Bundle data (attributes) and behavior (methods) into a single unit (class)
+- Hide internal state; expose only what is necessary via public methods
+- Prevents unintended interference and misuse
+
+```java
+public class BankAccount {
+    private double balance;  // hidden
+
+    public void deposit(double amount) {
+        if (amount > 0) balance += amount;
+    }
+
+    public double getBalance() {
+        return balance;
+    }
+}
+```
+
+#### 2. Abstraction
+- Expose only essential features; hide complexity
+- Achieved via abstract classes and interfaces
+
+```java
+public interface Shape {
+    double area();
+    double perimeter();
+}
+
+public class Circle implements Shape {
+    private double radius;
+
+    @Override
+    public double area() { return Math.PI * radius * radius; }
+
+    @Override
+    public double perimeter() { return 2 * Math.PI * radius; }
+}
+```
+
+#### 3. Inheritance
+- Allows a class to inherit properties and behavior from another
+- Promotes code reuse
+- Use carefully — prefer composition over inheritance
+
+```java
+public class Animal {
+    public void eat() { System.out.println("Eating"); }
+}
+
+public class Dog extends Animal {
+    public void bark() { System.out.println("Barking"); }
+}
+```
+
+#### 4. Polymorphism
+- Same interface, different implementations
+- Runtime polymorphism via method overriding
+- Compile-time polymorphism via method overloading
+
+```java
+// Runtime polymorphism
+Shape s1 = new Circle(5);
+Shape s2 = new Rectangle(4, 3);
+System.out.println(s1.area());  // 78.5
+System.out.println(s2.area());  // 12.0
+```
+
+### GRASP Principles
+
+| Principle | Description |
+|-----------|-------------|
+| **Information Expert** | Assign responsibility to the class that has the most information |
+| **Creator** | Class B should create objects of class A if B contains or uses A |
+| **Controller** | Assign system-event handling to a non-UI class |
+| **Low Coupling** | Minimize dependencies between classes |
+| **High Cohesion** | Keep related responsibilities in one class |
+| **Polymorphism** | Use polymorphism for type-based variations |
+| **Pure Fabrication** | Create artificial classes to achieve low coupling |
+| **Indirection** | Introduce mediator to reduce direct coupling |
+| **Protected Variations** | Shield elements from variations using stable interfaces |
+
+---
+
+## 4. SOLID Principles
+
+SOLID is the foundation of clean object-oriented design.
+
+---
+
+### S — Single Responsibility Principle (SRP)
+
+> **"A class should have only one reason to change."**
+
+**Wrong:**
+```java
+public class Invoice {
+    public void calculateTotal() { ... }
+    public void printInvoice() { ... }       // UI concern
+    public void saveToDatabase() { ... }    // DB concern
+}
+```
+
+**Right:**
+```java
+public class Invoice {
+    public void calculateTotal() { ... }
+}
+
+public class InvoicePrinter {
+    public void print(Invoice invoice) { ... }
+}
+
+public class InvoiceRepository {
+    public void save(Invoice invoice) { ... }
+}
+```
+
+---
+
+### O — Open/Closed Principle (OCP)
+
+> **"Open for extension, closed for modification."**
+
+**Wrong:** Adding new shapes requires modifying the existing class.
+
+```java
+public class AreaCalculator {
+    public double calculate(Object shape) {
+        if (shape instanceof Circle) { ... }
+        else if (shape instanceof Rectangle) { ... }
+        // must modify this class for every new shape
+    }
+}
+```
+
+**Right:** Extend via polymorphism.
+
+```java
+public interface Shape {
+    double area();
+}
+
+public class Circle implements Shape {
+    public double area() { return Math.PI * r * r; }
+}
+
+public class AreaCalculator {
+    public double calculate(Shape shape) {
+        return shape.area(); // no modification needed for new shapes
+    }
+}
+```
+
+---
+
+### L — Liskov Substitution Principle (LSP)
+
+> **"Subtypes must be substitutable for their base types."**
+
+**Violation:**
+```java
+public class Rectangle {
+    public void setWidth(int w) { this.width = w; }
+    public void setHeight(int h) { this.height = h; }
+}
+
+public class Square extends Rectangle {
+    @Override
+    public void setWidth(int w) { this.width = w; this.height = w; } // breaks Rectangle contract
+}
+```
+
+**Fix:** Don't force Square to extend Rectangle; use a common interface.
+
+```java
+public interface Shape {
+    double area();
+}
+public class Rectangle implements Shape { ... }
+public class Square implements Shape { ... }
+```
+
+---
+
+### I — Interface Segregation Principle (ISP)
+
+> **"Clients should not be forced to depend on methods they don't use."**
+
+**Wrong:**
+```java
+public interface Worker {
+    void work();
+    void eat();   // robots don't eat!
+}
+```
+
+**Right:**
+```java
+public interface Workable { void work(); }
+public interface Eatable   { void eat(); }
+
+public class Human implements Workable, Eatable { ... }
+public class Robot implements Workable { ... }
+```
+
+---
+
+### D — Dependency Inversion Principle (DIP)
+
+> **"Depend on abstractions, not on concretions."**
+
+**Wrong:**
+```java
+public class OrderService {
+    private MySQLDatabase db = new MySQLDatabase(); // tightly coupled
+}
+```
+
+**Right:**
+```java
+public interface Database {
+    void save(Order order);
+}
+
+public class OrderService {
+    private Database db;
+    public OrderService(Database db) { this.db = db; } // inject abstraction
+}
+```
+
+---
+
+## 5. Design Patterns — Creational
+
+Creational patterns deal with **object creation mechanisms**.
+
+---
+
+### 5.1 Singleton Pattern
+
+**Intent:** Ensure only one instance of a class exists; provide global access to it.
+
+**Use Cases:** Logger, Config, Thread Pool, Database Connection Pool
+
+```java
+public class Logger {
+    private static volatile Logger instance;
+
+    private Logger() {}  // private constructor
+
+    public static Logger getInstance() {
+        if (instance == null) {
+            synchronized (Logger.class) {
+                if (instance == null) {
+                    instance = new Logger();
+                }
+            }
+        }
+        return instance;
+    }
+
+    public void log(String message) {
+        System.out.println("[LOG] " + message);
+    }
+}
+
+// Usage
+Logger.getInstance().log("Application started");
+```
+
+**Double-Checked Locking** ensures thread safety without locking every call.
+
+---
+
+### 5.2 Factory Method Pattern
+
+**Intent:** Define an interface for creating objects, but let subclasses decide which class to instantiate.
+
+```java
+public interface Notification {
+    void send(String message);
+}
+
+public class SMSNotification implements Notification {
+    public void send(String message) { System.out.println("SMS: " + message); }
+}
+
+public class EmailNotification implements Notification {
+    public void send(String message) { System.out.println("Email: " + message); }
+}
+
+public class NotificationFactory {
+    public static Notification create(String type) {
+        return switch (type.toUpperCase()) {
+            case "SMS"   -> new SMSNotification();
+            case "EMAIL" -> new EmailNotification();
+            default      -> throw new IllegalArgumentException("Unknown type: " + type);
+        };
+    }
+}
+
+// Usage
+Notification n = NotificationFactory.create("EMAIL");
+n.send("Welcome!");
+```
+
+---
+
+### 5.3 Abstract Factory Pattern
+
+**Intent:** Create families of related objects without specifying concrete classes.
+
+```java
+public interface Button  { void render(); }
+public interface Checkbox { void render(); }
+
+// Windows family
+public class WindowsButton  implements Button  { public void render() { System.out.println("Windows Button");  } }
+public class WindowsCheckbox implements Checkbox { public void render() { System.out.println("Windows Checkbox"); } }
+
+// Mac family
+public class MacButton   implements Button  { public void render() { System.out.println("Mac Button");  } }
+public class MacCheckbox implements Checkbox { public void render() { System.out.println("Mac Checkbox"); } }
+
+public interface GUIFactory {
+    Button  createButton();
+    Checkbox createCheckbox();
+}
+
+public class WindowsFactory implements GUIFactory {
+    public Button   createButton()   { return new WindowsButton();  }
+    public Checkbox createCheckbox() { return new WindowsCheckbox(); }
+}
+
+public class MacFactory implements GUIFactory {
+    public Button   createButton()   { return new MacButton();  }
+    public Checkbox createCheckbox() { return new MacCheckbox(); }
+}
+```
+
+---
+
+### 5.4 Builder Pattern
+
+**Intent:** Construct complex objects step by step. Separate object construction from its representation.
+
+**Use Cases:** Building complex queries, HTTP requests, config objects, test objects.
+
+```java
+public class Pizza {
+    private String size;
+    private String crust;
+    private List<String> toppings;
+
+    private Pizza(Builder builder) {
+        this.size     = builder.size;
+        this.crust    = builder.crust;
+        this.toppings = builder.toppings;
+    }
+
+    public static class Builder {
+        private String size;
+        private String crust   = "THIN";
+        private List<String> toppings = new ArrayList<>();
+
+        public Builder(String size) { this.size = size; }
+        public Builder crust(String crust) { this.crust = crust; return this; }
+        public Builder topping(String t)   { this.toppings.add(t); return this; }
+        public Pizza build()               { return new Pizza(this); }
+    }
+}
+
+// Usage
+Pizza pizza = new Pizza.Builder("LARGE")
+    .crust("THICK")
+    .topping("CHEESE")
+    .topping("OLIVES")
+    .build();
+```
+
+---
+
+### 5.5 Prototype Pattern
+
+**Intent:** Clone existing objects instead of creating new ones from scratch.
+
+```java
+public abstract class Shape implements Cloneable {
+    public abstract double area();
+
+    @Override
+    public Object clone() {
+        try { return super.clone(); }
+        catch (CloneNotSupportedException e) { throw new RuntimeException(e); }
+    }
+}
+
+public class Circle extends Shape {
+    private double radius;
+    public Circle(double r) { this.radius = r; }
+    public double area() { return Math.PI * radius * radius; }
+}
+
+// Usage
+Circle original = new Circle(5);
+Circle copy     = (Circle) original.clone();
+```
+
+---
+
+## 6. Design Patterns — Structural
+
+Structural patterns deal with **object composition** and relationships.
+
+---
+
+### 6.1 Adapter Pattern
+
+**Intent:** Convert one interface into another that a client expects. Bridge incompatible interfaces.
+
+```java
+// Existing legacy class
+public class LegacyPayment {
+    public void makePayment(int amountInPaise) { ... }
+}
+
+// New interface
+public interface PaymentGateway {
+    void pay(double amountInRupees);
+}
+
+// Adapter bridges the gap
+public class PaymentAdapter implements PaymentGateway {
+    private LegacyPayment legacy;
+    public PaymentAdapter(LegacyPayment legacy) { this.legacy = legacy; }
+
+    @Override
+    public void pay(double amountInRupees) {
+        int paise = (int)(amountInRupees * 100);
+        legacy.makePayment(paise);
+    }
+}
+```
+
+---
+
+### 6.2 Decorator Pattern
+
+**Intent:** Dynamically add responsibilities to an object without modifying its class.
+
+```java
+public interface Coffee {
+    String getDescription();
+    double getCost();
+}
+
+public class SimpleCoffee implements Coffee {
+    public String getDescription() { return "Coffee"; }
+    public double getCost()        { return 5.0; }
+}
+
+public abstract class CoffeeDecorator implements Coffee {
+    protected Coffee coffee;
+    public CoffeeDecorator(Coffee c) { this.coffee = c; }
+}
+
+public class MilkDecorator extends CoffeeDecorator {
+    public MilkDecorator(Coffee c) { super(c); }
+    public String getDescription() { return coffee.getDescription() + ", Milk"; }
+    public double getCost()        { return coffee.getCost() + 1.5; }
+}
+
+public class SugarDecorator extends CoffeeDecorator {
+    public SugarDecorator(Coffee c) { super(c); }
+    public String getDescription() { return coffee.getDescription() + ", Sugar"; }
+    public double getCost()        { return coffee.getCost() + 0.5; }
+}
+
+// Usage
+Coffee c = new SugarDecorator(new MilkDecorator(new SimpleCoffee()));
+System.out.println(c.getDescription()); // Coffee, Milk, Sugar
+System.out.println(c.getCost());        // 7.0
+```
+
+---
+
+### 6.3 Façade Pattern
+
+**Intent:** Provide a simplified interface to a complex subsystem.
+
+```java
+// Complex subsystems
+class DVDPlayer    { void on() {} void play(String movie) {} }
+class Amplifier    { void on() {} void setVolume(int v) {} }
+class Projector    { void on() {} void wideScreenMode() {} }
+
+// Facade
+public class HomeTheaterFacade {
+    private DVDPlayer  dvd;
+    private Amplifier  amp;
+    private Projector  proj;
+
+    public HomeTheaterFacade(DVDPlayer d, Amplifier a, Projector p) {
+        dvd = d; amp = a; proj = p;
+    }
+
+    public void watchMovie(String movie) {
+        amp.on();
+        amp.setVolume(10);
+        proj.on();
+        proj.wideScreenMode();
+        dvd.on();
+        dvd.play(movie);
+    }
+}
+```
+
+---
+
+### 6.4 Composite Pattern
+
+**Intent:** Treat individual objects and compositions uniformly. Build tree structures.
+
+```java
+public interface FileSystemItem {
+    void display(String indent);
+}
+
+public class File implements FileSystemItem {
+    private String name;
+    public File(String name) { this.name = name; }
+    public void display(String indent) { System.out.println(indent + name); }
+}
+
+public class Directory implements FileSystemItem {
+    private String name;
+    private List<FileSystemItem> children = new ArrayList<>();
+
+    public Directory(String name) { this.name = name; }
+    public void add(FileSystemItem item) { children.add(item); }
+
+    public void display(String indent) {
+        System.out.println(indent + name + "/");
+        for (FileSystemItem item : children) item.display(indent + "  ");
+    }
+}
+```
+
+---
+
+### 6.5 Proxy Pattern
+
+**Intent:** Provide a surrogate/placeholder to control access to another object.
+
+**Types:** Virtual Proxy (lazy init), Protection Proxy (access control), Remote Proxy, Caching Proxy
+
+```java
+public interface Image {
+    void display();
+}
+
+public class RealImage implements Image {
+    private String filename;
+    public RealImage(String f) { this.filename = f; loadFromDisk(); }
+    private void loadFromDisk() { System.out.println("Loading " + filename); }
+    public void display() { System.out.println("Displaying " + filename); }
+}
+
+public class ProxyImage implements Image {
+    private RealImage realImage;
+    private String filename;
+
+    public ProxyImage(String f) { this.filename = f; }
+
+    public void display() {
+        if (realImage == null) realImage = new RealImage(filename); // lazy init
+        realImage.display();
+    }
+}
+```
+
+---
+
+### 6.6 Bridge Pattern
+
+**Intent:** Decouple abstraction from its implementation so both can vary independently.
+
+```java
+// Implementation side
+public interface DrawingAPI {
+    void drawCircle(double x, double y, double radius);
+}
+
+public class DrawingAPI1 implements DrawingAPI {
+    public void drawCircle(double x, double y, double r) {
+        System.out.printf("API1: circle at (%.1f, %.1f) r=%.1f%n", x, y, r);
+    }
+}
+
+// Abstraction side
+public abstract class Shape {
+    protected DrawingAPI drawingAPI;
+    public Shape(DrawingAPI api) { this.drawingAPI = api; }
+    public abstract void draw();
+}
+
+public class Circle extends Shape {
+    private double x, y, radius;
+    public Circle(double x, double y, double r, DrawingAPI api) {
+        super(api); this.x = x; this.y = y; this.radius = r;
+    }
+    public void draw() { drawingAPI.drawCircle(x, y, radius); }
+}
+```
+
+---
+
+## 7. Design Patterns — Behavioral
+
+Behavioral patterns deal with **algorithms and communication** between objects.
+
+---
+
+### 7.1 Observer Pattern
+
+**Intent:** Define a one-to-many dependency; when one object changes state, its dependents are notified automatically.
+
+**Use Cases:** Event systems, UI callbacks, stock ticker, pub/sub
+
+```java
+public interface Observer {
+    void update(String event, Object data);
+}
+
+public interface Subject {
+    void addObserver(Observer o);
+    void removeObserver(Observer o);
+    void notifyObservers(String event, Object data);
+}
+
+public class EventManager implements Subject {
+    private Map<String, List<Observer>> listeners = new HashMap<>();
+
+    public void subscribe(String eventType, Observer o) {
+        listeners.computeIfAbsent(eventType, k -> new ArrayList<>()).add(o);
+    }
+
+    public void addObserver(Observer o)    { /* simplified */ }
+    public void removeObserver(Observer o) { /* simplified */ }
+
+    public void notifyObservers(String event, Object data) {
+        List<Observer> users = listeners.getOrDefault(event, Collections.emptyList());
+        for (Observer o : users) o.update(event, data);
+    }
+}
+
+public class EmailNotifier implements Observer {
+    public void update(String event, Object data) {
+        System.out.println("Email sent for: " + event + " | " + data);
+    }
+}
+```
+
+---
+
+### 7.2 Strategy Pattern
+
+**Intent:** Define a family of algorithms, encapsulate each one, and make them interchangeable.
+
+**Use Cases:** Sorting algorithms, payment strategies, compression algorithms, routing
+
+```java
+public interface SortStrategy {
+    void sort(int[] arr);
+}
+
+public class BubbleSort implements SortStrategy {
+    public void sort(int[] arr) { /* bubble sort */ }
+}
+
+public class QuickSort implements SortStrategy {
+    public void sort(int[] arr) { /* quick sort */ }
+}
+
+public class Sorter {
+    private SortStrategy strategy;
+    public Sorter(SortStrategy s) { this.strategy = s; }
+    public void setStrategy(SortStrategy s) { this.strategy = s; }
+    public void sort(int[] arr) { strategy.sort(arr); }
+}
+
+// Usage
+Sorter sorter = new Sorter(new QuickSort());
+sorter.sort(new int[]{5, 2, 8, 1});
+sorter.setStrategy(new BubbleSort());
+sorter.sort(new int[]{3, 1, 4, 1, 5});
+```
+
+---
+
+### 7.3 Command Pattern
+
+**Intent:** Encapsulate a request as an object, allowing parameterization, queuing, logging, and undo/redo.
+
+```java
+public interface Command {
+    void execute();
+    void undo();
+}
+
+public class Light {
+    public void turnOn()  { System.out.println("Light ON");  }
+    public void turnOff() { System.out.println("Light OFF"); }
+}
+
+public class TurnOnCommand implements Command {
+    private Light light;
+    public TurnOnCommand(Light l) { this.light = l; }
+    public void execute() { light.turnOn(); }
+    public void undo()    { light.turnOff(); }
+}
+
+public class RemoteControl {
+    private Deque<Command> history = new ArrayDeque<>();
+
+    public void pressButton(Command cmd) {
+        cmd.execute();
+        history.push(cmd);
+    }
+
+    public void pressUndo() {
+        if (!history.isEmpty()) history.pop().undo();
+    }
+}
+```
+
+---
+
+### 7.4 State Pattern
+
+**Intent:** Allow an object to alter its behavior when its internal state changes. The object will appear to change its class.
+
+```java
+public interface TrafficLightState {
+    void handle(TrafficLight context);
+    String getColor();
+}
+
+public class RedState implements TrafficLightState {
+    public void handle(TrafficLight ctx) { ctx.setState(new GreenState()); }
+    public String getColor() { return "RED"; }
+}
+
+public class GreenState implements TrafficLightState {
+    public void handle(TrafficLight ctx) { ctx.setState(new YellowState()); }
+    public String getColor() { return "GREEN"; }
+}
+
+public class YellowState implements TrafficLightState {
+    public void handle(TrafficLight ctx) { ctx.setState(new RedState()); }
+    public String getColor() { return "YELLOW"; }
+}
+
+public class TrafficLight {
+    private TrafficLightState state = new RedState();
+
+    public void setState(TrafficLightState s) { this.state = s; }
+    public void change() { state.handle(this); }
+    public String getColor() { return state.getColor(); }
+}
+```
+
+---
+
+### 7.5 Template Method Pattern
+
+**Intent:** Define the skeleton of an algorithm in a base class; let subclasses fill in the details.
+
+```java
+public abstract class DataProcessor {
+    // Template method — skeleton
+    public final void process() {
+        readData();
+        processData();
+        writeData();
+    }
+
+    protected abstract void readData();
+    protected abstract void processData();
+
+    protected void writeData() {
+        System.out.println("Writing data to output...");  // default
+    }
+}
+
+public class CSVProcessor extends DataProcessor {
+    protected void readData()    { System.out.println("Reading CSV"); }
+    protected void processData() { System.out.println("Processing CSV rows"); }
+}
+
+public class JSONProcessor extends DataProcessor {
+    protected void readData()    { System.out.println("Reading JSON"); }
+    protected void processData() { System.out.println("Parsing JSON objects"); }
+}
+```
+
+---
+
+### 7.6 Chain of Responsibility Pattern
+
+**Intent:** Pass a request along a chain of handlers; each handler decides to process or pass it on.
+
+```java
+public abstract class AuthHandler {
+    protected AuthHandler next;
+    public AuthHandler setNext(AuthHandler next) { this.next = next; return next; }
+    public abstract void handle(Request request);
+}
+
+public class AuthenticationHandler extends AuthHandler {
+    public void handle(Request request) {
+        if (!request.isAuthenticated()) {
+            System.out.println("Authentication failed!");
+        } else if (next != null) {
+            next.handle(request);
+        }
+    }
+}
+
+public class AuthorizationHandler extends AuthHandler {
+    public void handle(Request request) {
+        if (!request.hasPermission()) {
+            System.out.println("Authorization failed!");
+        } else if (next != null) {
+            next.handle(request);
+        }
+    }
+}
+
+public class RateLimitHandler extends AuthHandler {
+    public void handle(Request request) {
+        if (request.isRateLimited()) {
+            System.out.println("Rate limit exceeded!");
+        } else if (next != null) {
+            next.handle(request);
+        }
+    }
+}
+
+// Chain: Auth -> Authz -> RateLimit
+AuthHandler auth = new AuthenticationHandler();
+auth.setNext(new AuthorizationHandler()).setNext(new RateLimitHandler());
+auth.handle(request);
+```
+
+---
+
+### 7.7 Iterator Pattern
+
+**Intent:** Provide a way to sequentially access elements of a collection without exposing its underlying structure.
+
+```java
+public interface Iterator<T> {
+    boolean hasNext();
+    T next();
+}
+
+public class NumberIterator implements Iterator<Integer> {
+    private int[] numbers;
+    private int index = 0;
+
+    public NumberIterator(int[] numbers) { this.numbers = numbers; }
+    public boolean hasNext() { return index < numbers.length; }
+    public Integer next()    { return numbers[index++]; }
+}
+```
+
+---
+
+### 7.8 Mediator Pattern
+
+**Intent:** Define an object that encapsulates how a set of objects interact; promotes loose coupling.
+
+```java
+public interface ChatMediator {
+    void sendMessage(String message, User sender);
+    void addUser(User user);
+}
+
+public class ChatRoom implements ChatMediator {
+    private List<User> users = new ArrayList<>();
+
+    public void addUser(User user) { users.add(user); }
+
+    public void sendMessage(String msg, User sender) {
+        for (User u : users) {
+            if (u != sender) u.receive(msg);
+        }
+    }
+}
+
+public class User {
+    private String name;
+    private ChatMediator mediator;
+
+    public User(String name, ChatMediator m) { this.name = name; this.mediator = m; }
+    public void send(String msg)    { mediator.sendMessage(msg, this); }
+    public void receive(String msg) { System.out.println(name + " received: " + msg); }
+}
+```
+
+---
+
+## 8. UML Diagrams
+
+### 8.1 Class Diagram Notations
+
+```
++------------------+
+|    ClassName     |   <-- Class Name
++------------------+
+| - privateField   |   <-- Attributes (- private, + public, # protected)
+| + publicField    |
++------------------+
+| + publicMethod() |   <-- Methods
+| - privateMethod()|
++------------------+
+```
+
+### 8.2 Relationships
+
+| Relationship | Symbol | Meaning | Example |
+|--------------|--------|---------|---------|
+| **Association** | `——>` | A uses B | Student uses Library |
+| **Aggregation** | `◇——>` | Weak has-a | Department has Employees |
+| **Composition** | `◆——>` | Strong has-a (lifecycle) | House has Rooms |
+| **Inheritance** | `——▷` | Is-a | Dog is an Animal |
+| **Realization** | `- -▷` | Implements interface | List implements Iterable |
+| **Dependency** | `- ->` | Uses temporarily | Order depends on Tax |
+
+### 8.3 Cardinality
+
+| Notation | Meaning |
+|----------|---------|
+| `1` | Exactly one |
+| `0..1` | Zero or one |
+| `*` or `0..*` | Zero or many |
+| `1..*` | One or many |
+| `2..5` | Between 2 and 5 |
+
+### 8.4 Sequence Diagram Elements
+
+```
+Actor    Object1    Object2    Object3
+  |          |          |          |
+  |--msg1--> |          |          |   -- Synchronous call
+  |          |--msg2--> |          |
+  |          |          |--msg3--> |
+  |          |          |<--ret3---|   -- Return
+  |          |<--ret2---|          |
+  |<--ret1---|          |          |
+```
+
+---
+
+## 9. Class Design & Relationships
+
+### Composition vs Aggregation vs Association
+
+| | Association | Aggregation | Composition |
+|-|-------------|-------------|-------------|
+| **Relationship** | Uses | Has-a (weak) | Has-a (strong) |
+| **Lifecycle** | Independent | Independent | Dependent |
+| **Example** | Student borrows Book | Department has Employee | House has Room |
+| **If parent deleted** | Child survives | Child survives | Child is deleted |
+
+```java
+// Association
+class Student {
+    void borrow(Library library) { ... }  // uses library temporarily
+}
+
+// Aggregation
+class Department {
+    List<Employee> employees;  // employees can exist without department
+}
+
+// Composition
+class House {
+    private final List<Room> rooms;
+    public House() { rooms = new ArrayList<>(); rooms.add(new Room()); }
+    // rooms cannot exist without House
+}
+```
+
+### Inheritance vs Composition
+
+> **"Favor composition over inheritance"**
+
+| | Inheritance | Composition |
+|-|-------------|-------------|
+| **Coupling** | Tight | Loose |
+| **Flexibility** | Low | High |
+| **Reusability** | Limited | High |
+| **Change impact** | High | Low |
+
+```java
+// Bad: Inheritance
+class Stack extends ArrayList<Integer> {
+    // Stack inherits all ArrayList methods (add, remove, etc.) — breaks abstraction
+}
+
+// Good: Composition
+class Stack {
+    private List<Integer> storage = new ArrayList<>();
+    public void push(int x)   { storage.add(x); }
+    public int  pop()         { return storage.remove(storage.size() - 1); }
+    public int  peek()        { return storage.get(storage.size() - 1); }
+    public boolean isEmpty()  { return storage.isEmpty(); }
+}
+```
+
+---
+
+## 10. Concurrency & Thread Safety
+
+### Key Concurrency Concepts
+
+| Term | Meaning |
+|------|---------|
+| **Race Condition** | Two threads access shared data concurrently with at least one write |
+| **Deadlock** | Two or more threads wait forever for each other to release locks |
+| **Starvation** | A thread never gets CPU time |
+| **Livelock** | Threads keep responding to each other but make no progress |
+| **Visibility** | Changes by one thread not visible to another without synchronization |
+
+### Thread-Safe Singleton
+
+```java
+// Option 1: Double-checked locking
+public class Singleton {
+    private static volatile Singleton instance;
+
+    private Singleton() {}
+
+    public static Singleton getInstance() {
+        if (instance == null) {
+            synchronized (Singleton.class) {
+                if (instance == null) {
+                    instance = new Singleton();
+                }
+            }
+        }
+        return instance;
+    }
+}
+
+// Option 2: Initialization-on-demand holder (best practice)
+public class Singleton {
+    private Singleton() {}
+
+    private static class Holder {
+        private static final Singleton INSTANCE = new Singleton();
+    }
+
+    public static Singleton getInstance() {
+        return Holder.INSTANCE;
+    }
+}
+
+// Option 3: Enum (most concise, serialization-safe)
+public enum Singleton {
+    INSTANCE;
+    public void doSomething() { ... }
+}
+```
+
+### Synchronized Methods & Blocks
+
+```java
+public class Counter {
+    private int count = 0;
+
+    // Synchronized method — locks on 'this'
+    public synchronized void increment() { count++; }
+
+    // Synchronized block — finer granularity
+    public void decrement() {
+        synchronized (this) { count--; }
+    }
+
+    // Atomic alternative
+    private AtomicInteger atomicCount = new AtomicInteger(0);
+    public void atomicIncrement() { atomicCount.incrementAndGet(); }
+}
+```
+
+### ReentrantLock
+
+```java
+import java.util.concurrent.locks.ReentrantLock;
+
+public class SafeCounter {
+    private int count = 0;
+    private final ReentrantLock lock = new ReentrantLock();
+
+    public void increment() {
+        lock.lock();
+        try {
+            count++;
+        } finally {
+            lock.unlock();  // always unlock in finally
+        }
+    }
+}
+```
+
+### Producer-Consumer Pattern
+
+```java
+public class ProducerConsumer {
+    private final BlockingQueue<Integer> queue = new LinkedBlockingQueue<>(10);
+
+    class Producer implements Runnable {
+        public void run() {
+            try {
+                for (int i = 0; i < 100; i++) {
+                    queue.put(i);  // blocks if full
+                    System.out.println("Produced: " + i);
+                }
+            } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        }
+    }
+
+    class Consumer implements Runnable {
+        public void run() {
+            try {
+                while (true) {
+                    int val = queue.take();  // blocks if empty
+                    System.out.println("Consumed: " + val);
+                }
+            } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        }
+    }
+}
+```
+
+---
+
+## 11. Clean Code Principles
+
+### Naming Conventions
+
+| Rule | Bad | Good |
+|------|-----|------|
+| Meaningful names | `int d;` | `int elapsedDays;` |
+| Pronounceable | `genymdhms` | `generationTimestamp` |
+| Avoid encodings | `strName` | `name` |
+| Class = Noun | `DoPayment` | `PaymentProcessor` |
+| Method = Verb | `data()` | `getData()` |
+| Boolean = question | `flag` | `isActive`, `hasPermission` |
+
+### Function Design
+
+```java
+// Bad: Does too much, no clear abstraction
+public void processUser(User u) {
+    // validate
+    if (u.getName() == null || u.getEmail() == null) throw new Exception(...);
+    // save to DB
+    db.save(u);
+    // send email
+    emailService.send(u.getEmail(), "Welcome!");
+    // log
+    logger.info("User created: " + u.getId());
+}
+
+// Good: Single Responsibility, clear abstraction levels
+public void registerUser(User user) {
+    validateUser(user);
+    saveUser(user);
+    onboardUser(user);
+}
+```
+
+### DRY — Don't Repeat Yourself
+
+Extract duplicate code into a single abstraction.
+
+### YAGNI — You Aren't Gonna Need It
+
+Don't implement features until they are actually needed.
+
+### KISS — Keep It Simple, Stupid
+
+Prefer the simplest solution that works.
+
+### Law of Demeter (Principle of Least Knowledge)
+
+> A method should only call methods on:
+> - itself
+> - its parameters
+> - objects it created
+> - its direct fields
+
+```java
+// Bad: train wreck, violates LoD
+user.getAddress().getCity().getName();
+
+// Good: hide navigation
+user.getCityName();
+```
+
+---
+
+## 12. LLD Interview Approach
+
+### Step-by-Step Framework (45-minute interview)
+
+#### Step 1: Clarify Requirements (3–5 min)
+
+- What are the core entities/objects?
+- What operations are needed?
+- What are the constraints (concurrency, scale)?
+- Any special behaviors (undo, notifications)?
+
+#### Step 2: Identify Entities & Classes (5–7 min)
+
+- List all nouns → candidate classes
+- List all verbs → candidate methods
+- Identify relationships
+
+#### Step 3: Define Interfaces & Abstractions (5 min)
+
+- What behaviors are shared across types? → Interfaces
+- What state and behavior is shared? → Abstract classes
+
+#### Step 4: Draw Class Diagram (10 min)
+
+- Show classes, attributes, methods
+- Show relationships (inheritance, composition, association)
+- Indicate cardinalities
+
+#### Step 5: Deep Dive Into Key Classes (10 min)
+
+- Write out method signatures
+- Discuss algorithms for complex operations
+- Discuss data structures used internally
+
+#### Step 6: Design Patterns (5 min)
+
+- Identify which patterns apply
+- Explain why you chose them
+
+#### Step 7: Handle Edge Cases & Concurrency (5 min)
+
+- Concurrent access issues
+- Error scenarios
+- Validation rules
+
+### Common Mistakes to Avoid
+
+| Mistake | Fix |
+|---------|-----|
+| Jumping to code without understanding requirements | Always ask clarifying questions first |
+| Making everything public | Apply encapsulation; expose minimal interface |
+| Using only inheritance | Prefer composition; use interfaces |
+| Not using design patterns | Identify patterns naturally |
+| Ignoring concurrency | Discuss thread safety for shared state |
+| Over-engineering | Keep it simple; add complexity only when needed |
+| Not validating inputs | Add input validation at boundaries |
+
+---
+
+## 13. LLD Case Study: Parking Lot
+
+### Requirements
+
+- Multiple levels, each with multiple spots
+- Spot types: Compact, Large, Handicapped, Motorcycle
+- Vehicle types: Car, Truck, Motorcycle
+- Assign closest available spot
+- Calculate parking fee
+- Handle entry/exit
+
+### Class Design
+
+```
+ParkingLot
+├── List<Level>
+└── ParkingTicket getTicket(Vehicle)
+
+Level
+├── int levelNumber
+├── List<ParkingSpot> spots
+└── ParkingSpot findAvailableSpot(VehicleType)
+
+ParkingSpot
+├── int spotNumber
+├── SpotType type
+├── boolean isAvailable
+├── Vehicle currentVehicle
+└── void assign(Vehicle) / void release()
+
+Vehicle (abstract)
+├── String licensePlate
+├── VehicleType type
+└── Car / Truck / Motorcycle (subclasses)
+
+ParkingTicket
+├── Vehicle vehicle
+├── ParkingSpot spot
+├── LocalDateTime entryTime
+└── LocalDateTime exitTime
+
+ParkingFeeCalculator
+└── double calculate(ParkingTicket)
+```
+
+### Implementation
+
+```java
+public enum SpotType    { COMPACT, LARGE, HANDICAPPED, MOTORCYCLE }
+public enum VehicleType { CAR, TRUCK, MOTORCYCLE }
+
+public abstract class Vehicle {
+    protected String licensePlate;
+    protected VehicleType type;
+    public Vehicle(String plate, VehicleType type) {
+        this.licensePlate = plate; this.type = type;
+    }
+    public VehicleType getType() { return type; }
+    public String getLicensePlate() { return licensePlate; }
+}
+
+public class Car extends Vehicle {
+    public Car(String plate) { super(plate, VehicleType.CAR); }
+}
+
+public class Truck extends Vehicle {
+    public Truck(String plate) { super(plate, VehicleType.TRUCK); }
+}
+
+public class ParkingSpot {
+    private int spotId;
+    private SpotType type;
+    private boolean available = true;
+    private Vehicle currentVehicle;
+
+    public ParkingSpot(int id, SpotType type) { this.spotId = id; this.type = type; }
+
+    public boolean canFit(VehicleType vType) {
+        return switch (vType) {
+            case MOTORCYCLE  -> type == SpotType.MOTORCYCLE || type == SpotType.COMPACT;
+            case CAR         -> type == SpotType.COMPACT || type == SpotType.LARGE;
+            case TRUCK       -> type == SpotType.LARGE;
+        };
+    }
+
+    public synchronized boolean assign(Vehicle v) {
+        if (!available || !canFit(v.getType())) return false;
+        currentVehicle = v;
+        available = false;
+        return true;
+    }
+
+    public synchronized void release() {
+        currentVehicle = null;
+        available = true;
+    }
+
+    public boolean isAvailable() { return available; }
+    public SpotType getType()    { return type; }
+    public int getSpotId()       { return spotId; }
+}
+
+public class ParkingTicket {
+    private static final AtomicLong counter = new AtomicLong(0);
+    private final long ticketId;
+    private final Vehicle vehicle;
+    private final ParkingSpot spot;
+    private final LocalDateTime entryTime;
+    private LocalDateTime exitTime;
+
+    public ParkingTicket(Vehicle v, ParkingSpot s) {
+        this.ticketId  = counter.incrementAndGet();
+        this.vehicle   = v;
+        this.spot      = s;
+        this.entryTime = LocalDateTime.now();
+    }
+
+    public void setExitTime(LocalDateTime t) { this.exitTime = t; }
+    public long getDurationMinutes() {
+        return ChronoUnit.MINUTES.between(entryTime, exitTime);
+    }
+    // getters...
+}
+
+public class ParkingFeeCalculator {
+    private static final double RATE_PER_HOUR = 20.0;
+
+    public double calculate(ParkingTicket ticket) {
+        long minutes = ticket.getDurationMinutes();
+        return Math.ceil(minutes / 60.0) * RATE_PER_HOUR;
+    }
+}
+
+public class Level {
+    private int levelNumber;
+    private List<ParkingSpot> spots;
+
+    public Level(int num, int totalSpots) {
+        this.levelNumber = num;
+        spots = new ArrayList<>();
+        // distribute spot types
+        for (int i = 0; i < totalSpots * 0.2; i++) spots.add(new ParkingSpot(i, SpotType.MOTORCYCLE));
+        for (int i = 0; i < totalSpots * 0.5; i++) spots.add(new ParkingSpot(i, SpotType.COMPACT));
+        for (int i = 0; i < totalSpots * 0.3; i++) spots.add(new ParkingSpot(i, SpotType.LARGE));
+    }
+
+    public Optional<ParkingSpot> findAvailableSpot(VehicleType type) {
+        return spots.stream()
+                    .filter(s -> s.isAvailable() && s.canFit(type))
+                    .findFirst();
+    }
+}
+
+public class ParkingLot {
+    private static ParkingLot instance;
+    private List<Level> levels;
+    private Map<Long, ParkingTicket> activeTickets = new ConcurrentHashMap<>();
+
+    private ParkingLot(int numLevels, int spotsPerLevel) {
+        levels = new ArrayList<>();
+        for (int i = 0; i < numLevels; i++) levels.add(new Level(i, spotsPerLevel));
+    }
+
+    public static ParkingLot getInstance(int levels, int spots) {
+        if (instance == null) instance = new ParkingLot(levels, spots);
+        return instance;
+    }
+
+    public ParkingTicket park(Vehicle vehicle) {
+        for (Level level : levels) {
+            Optional<ParkingSpot> spot = level.findAvailableSpot(vehicle.getType());
+            if (spot.isPresent()) {
+                spot.get().assign(vehicle);
+                ParkingTicket ticket = new ParkingTicket(vehicle, spot.get());
+                activeTickets.put(ticket.getTicketId(), ticket);
+                return ticket;
+            }
+        }
+        throw new RuntimeException("Parking lot is full!");
+    }
+
+    public double exit(long ticketId) {
+        ParkingTicket ticket = activeTickets.remove(ticketId);
+        if (ticket == null) throw new IllegalArgumentException("Invalid ticket");
+        ticket.setExitTime(LocalDateTime.now());
+        ticket.getSpot().release();
+        return new ParkingFeeCalculator().calculate(ticket);
+    }
+}
+```
+
+---
+
+## 14. LLD Case Study: Library Management System
+
+### Requirements
+
+- Books with multiple copies
+- Members can borrow/return books
+- Search books by title, author, genre
+- Reservation/waiting list
+- Fine calculation for late returns
+- Librarian operations
+
+### Class Design
+
+```
+Library
+├── Catalog (search, add, remove books)
+├── MemberManager (register, manage members)
+└── LoanManager (borrow, return, reserve)
+
+Book
+├── String isbn
+├── String title
+├── Author author
+└── List<BookItem> copies
+
+BookItem
+├── String barcode
+├── BookStatus status (AVAILABLE, LOANED, RESERVED)
+└── Book book
+
+Member
+├── String memberId
+├── String name
+├── List<Loan> activeLoans
+└── List<Reservation> reservations
+
+Loan
+├── BookItem item
+├── Member member
+├── LocalDate borrowDate
+├── LocalDate dueDate
+└── LocalDate returnDate
+
+FineCalculator
+└── double calculate(Loan)
+```
+
+### Key Implementation
+
+```java
+public enum BookStatus { AVAILABLE, LOANED, RESERVED, LOST }
+
+public class BookItem {
+    private String barcode;
+    private Book book;
+    private BookStatus status = BookStatus.AVAILABLE;
+
+    public synchronized boolean checkout(Member member) {
+        if (status != BookStatus.AVAILABLE) return false;
+        status = BookStatus.LOANED;
+        return true;
+    }
+
+    public synchronized void returnBook() {
+        status = BookStatus.AVAILABLE;
+    }
+}
+
+public class LoanManager {
+    private Map<String, Loan> activeLoans    = new HashMap<>();
+    private Map<String, Queue<Member>> reservations = new HashMap<>();
+    private static final int LOAN_DAYS = 14;
+    private static final double FINE_PER_DAY = 5.0;
+
+    public Loan borrowBook(Member member, BookItem item) {
+        if (!item.checkout(member)) throw new RuntimeException("Book not available");
+        Loan loan = new Loan(item, member, LocalDate.now(), LocalDate.now().plusDays(LOAN_DAYS));
+        activeLoans.put(item.getBarcode(), loan);
+        return loan;
+    }
+
+    public double returnBook(String barcode) {
+        Loan loan = activeLoans.remove(barcode);
+        if (loan == null) throw new IllegalArgumentException("No active loan for " + barcode);
+        loan.setReturnDate(LocalDate.now());
+        loan.getItem().returnBook();
+
+        // notify next in queue
+        Queue<Member> queue = reservations.get(barcode);
+        if (queue != null && !queue.isEmpty()) {
+            Member nextMember = queue.poll();
+            // notify nextMember that book is available
+        }
+
+        return calculateFine(loan);
+    }
+
+    private double calculateFine(Loan loan) {
+        long overdueDays = ChronoUnit.DAYS.between(loan.getDueDate(), loan.getReturnDate());
+        return overdueDays > 0 ? overdueDays * FINE_PER_DAY : 0.0;
+    }
+
+    public void reserveBook(Member member, String isbn) {
+        reservations.computeIfAbsent(isbn, k -> new LinkedList<>()).offer(member);
+    }
+}
+
+public class Catalog {
+    private Map<String, Book> booksByISBN        = new HashMap<>();
+    private Map<String, List<Book>> booksByTitle  = new HashMap<>();
+    private Map<String, List<Book>> booksByAuthor = new HashMap<>();
+
+    public void addBook(Book book) {
+        booksByISBN.put(book.getIsbn(), book);
+        booksByTitle.computeIfAbsent(book.getTitle().toLowerCase(), k -> new ArrayList<>()).add(book);
+        booksByAuthor.computeIfAbsent(book.getAuthor().toLowerCase(), k -> new ArrayList<>()).add(book);
+    }
+
+    public List<Book> searchByTitle(String title) {
+        return booksByTitle.getOrDefault(title.toLowerCase(), Collections.emptyList());
+    }
+
+    public Optional<BookItem> findAvailableCopy(String isbn) {
+        Book book = booksByISBN.get(isbn);
+        if (book == null) return Optional.empty();
+        return book.getCopies().stream()
+                   .filter(item -> item.getStatus() == BookStatus.AVAILABLE)
+                   .findFirst();
+    }
+}
+```
+
+---
+
+## 15. LLD Case Study: Chess Game
+
+### Requirements
+
+- 8x8 board
+- All piece types: King, Queen, Rook, Bishop, Knight, Pawn
+- Move validation per piece rules
+- Check and checkmate detection
+- Turn management (White/Black)
+- Special moves: castling, en passant, pawn promotion
+
+### Class Design
+
+```
+ChessGame
+├── Board
+├── Player white
+├── Player black
+└── GameStatus (ACTIVE, CHECK, CHECKMATE, STALEMATE)
+
+Board
+├── Piece[][] grid (8x8)
+├── boolean isValidMove(Move)
+└── void executeMove(Move)
+
+Piece (abstract)
+├── Color color
+├── Position position
+└── List<Position> getValidMoves(Board) — abstract
+
+King / Queen / Rook / Bishop / Knight / Pawn
+└── override getValidMoves()
+
+Move
+├── Piece piece
+├── Position from
+└── Position to
+```
+
+### Implementation
+
+```java
+public enum Color { WHITE, BLACK }
+
+public class Position {
+    private final int row, col;
+    public Position(int row, int col) { this.row = row; this.col = col; }
+    public boolean isValid() { return row >= 0 && row < 8 && col >= 0 && col < 8; }
+    // equals, hashCode, getters...
+}
+
+public abstract class Piece {
+    protected Color color;
+    protected Position position;
+    protected boolean hasMoved = false;
+
+    public Piece(Color color, Position position) {
+        this.color = color; this.position = position;
+    }
+
+    public abstract List<Position> getValidMoves(Board board);
+
+    public Color getColor() { return color; }
+    public Position getPosition() { return position; }
+    public void setPosition(Position p) { this.position = p; hasMoved = true; }
+}
+
+public class Rook extends Piece {
+    public Rook(Color color, Position position) { super(color, position); }
+
+    @Override
+    public List<Position> getValidMoves(Board board) {
+        List<Position> moves = new ArrayList<>();
+        int[][] directions = {{1,0},{-1,0},{0,1},{0,-1}};
+        for (int[] dir : directions) {
+            int r = position.getRow() + dir[0];
+            int c = position.getCol() + dir[1];
+            while (new Position(r, c).isValid()) {
+                Piece p = board.getPieceAt(r, c);
+                if (p == null) {
+                    moves.add(new Position(r, c));
+                } else {
+                    if (p.getColor() != this.color) moves.add(new Position(r, c));
+                    break;
+                }
+                r += dir[0]; c += dir[1];
+            }
+        }
+        return moves;
+    }
+}
+
+public class Knight extends Piece {
+    public Knight(Color color, Position position) { super(color, position); }
+
+    @Override
+    public List<Position> getValidMoves(Board board) {
+        List<Position> moves = new ArrayList<>();
+        int[][] offsets = {{2,1},{2,-1},{-2,1},{-2,-1},{1,2},{1,-2},{-1,2},{-1,-2}};
+        for (int[] off : offsets) {
+            Position target = new Position(position.getRow() + off[0], position.getCol() + off[1]);
+            if (target.isValid()) {
+                Piece p = board.getPieceAt(target);
+                if (p == null || p.getColor() != this.color) moves.add(target);
+            }
+        }
+        return moves;
+    }
+}
+
+public class Board {
+    private Piece[][] grid = new Piece[8][8];
+
+    public Board() { initializeBoard(); }
+
+    private void initializeBoard() {
+        // Place pieces...
+        grid[0][0] = new Rook(Color.WHITE, new Position(0, 0));
+        grid[0][1] = new Knight(Color.WHITE, new Position(0, 1));
+        // ... etc
+    }
+
+    public Piece getPieceAt(int row, int col) { return grid[row][col]; }
+    public Piece getPieceAt(Position p) { return grid[p.getRow()][p.getCol()]; }
+
+    public boolean executeMove(Move move) {
+        Piece piece = move.getPiece();
+        if (!piece.getValidMoves(this).contains(move.getTo())) return false;
+
+        grid[move.getFrom().getRow()][move.getFrom().getCol()] = null;
+        grid[move.getTo().getRow()][move.getTo().getCol()] = piece;
+        piece.setPosition(move.getTo());
+        return true;
+    }
+
+    public boolean isInCheck(Color color) {
+        Position kingPos = findKing(color);
+        return getAllPieces(color.opposite()).stream()
+               .anyMatch(p -> p.getValidMoves(this).contains(kingPos));
+    }
+}
+
+public class ChessGame {
+    private Board board;
+    private Player[] players = new Player[2];
+    private int currentPlayerIndex = 0;
+    private GameStatus status = GameStatus.ACTIVE;
+
+    public ChessGame(Player white, Player black) {
+        this.board = new Board();
+        this.players[0] = white;  // WHITE first
+        this.players[1] = black;
+    }
+
+    public boolean makeMove(Move move) {
+        Player current = players[currentPlayerIndex];
+        if (move.getPiece().getColor() != current.getColor()) return false;
+
+        if (!board.executeMove(move)) return false;
+
+        // Check for check/checkmate
+        Color opponent = current.getColor() == Color.WHITE ? Color.BLACK : Color.WHITE;
+        if (board.isInCheck(opponent)) {
+            status = board.isCheckmate(opponent) ? GameStatus.CHECKMATE : GameStatus.CHECK;
+        }
+
+        currentPlayerIndex = 1 - currentPlayerIndex;
+        return true;
+    }
+}
+```
+
+---
+
+## 16. LLD Case Study: Elevator System
+
+### Requirements
+
+- Multiple elevators in a building
+- Each elevator can move UP, DOWN, or stay IDLE
+- Requests can come from inside the elevator (cabin request) or outside (floor request)
+- Elevator scheduling algorithm (SCAN / LOOK)
+- Door open/close mechanism
+
+### Class Design
+
+```
+ElevatorSystem
+├── List<Elevator>
+├── Scheduler
+└── void requestElevator(int floor, Direction)
+
+Elevator
+├── int id
+├── int currentFloor
+├── Direction direction
+├── ElevatorStatus status
+├── PriorityQueue<Integer> upQueue
+├── PriorityQueue<Integer> downQueue
+└── void processRequests()
+
+ElevatorScheduler
+└── Elevator selectBestElevator(int floor, Direction, List<Elevator>)
+```
+
+### Key Implementation
+
+```java
+public enum Direction { UP, DOWN, IDLE }
+public enum ElevatorStatus { MOVING, STOPPED, MAINTENANCE }
+
+public class Elevator {
+    private final int id;
+    private int currentFloor = 1;
+    private Direction direction = Direction.IDLE;
+    private ElevatorStatus status = ElevatorStatus.STOPPED;
+    private PriorityQueue<Integer> upRequests   = new PriorityQueue<>();
+    private PriorityQueue<Integer> downRequests = new PriorityQueue<>(Collections.reverseOrder());
+
+    public Elevator(int id) { this.id = id; }
+
+    public synchronized void addRequest(int floor) {
+        if (floor > currentFloor) upRequests.offer(floor);
+        else                      downRequests.offer(floor);
+        if (direction == Direction.IDLE) processNext();
+    }
+
+    private void processNext() {
+        if (!upRequests.isEmpty()) {
+            direction = Direction.UP;
+            status    = ElevatorStatus.MOVING;
+            moveToFloor(upRequests.poll());
+        } else if (!downRequests.isEmpty()) {
+            direction = Direction.DOWN;
+            status    = ElevatorStatus.MOVING;
+            moveToFloor(downRequests.poll());
+        } else {
+            direction = Direction.IDLE;
+            status    = ElevatorStatus.STOPPED;
+        }
+    }
+
+    private void moveToFloor(int floor) {
+        System.out.printf("Elevator %d moving from %d to %d (%s)%n",
+                           id, currentFloor, floor, direction);
+        currentFloor = floor;
+        openDoor();
+        closeDoor();
+        processNext();
+    }
+
+    private void openDoor()  { System.out.println("Door OPEN  at floor " + currentFloor); }
+    private void closeDoor() { System.out.println("Door CLOSE at floor " + currentFloor); }
+
+    public int  getCurrentFloor() { return currentFloor; }
+    public Direction getDirection() { return direction; }
+    public int  getId() { return id; }
+}
+
+public class ElevatorScheduler {
+    public Elevator selectBestElevator(int requestedFloor, Direction requestedDir,
+                                       List<Elevator> elevators) {
+        return elevators.stream()
+            .filter(e -> e.getStatus() != ElevatorStatus.MAINTENANCE)
+            .min(Comparator.comparingInt(e ->
+                Math.abs(e.getCurrentFloor() - requestedFloor)))
+            .orElseThrow(() -> new RuntimeException("No elevator available"));
+    }
+}
+
+public class ElevatorSystem {
+    private List<Elevator> elevators;
+    private ElevatorScheduler scheduler = new ElevatorScheduler();
+
+    public ElevatorSystem(int count) {
+        elevators = new ArrayList<>();
+        for (int i = 1; i <= count; i++) elevators.add(new Elevator(i));
+    }
+
+    public void requestElevator(int floor, Direction direction) {
+        Elevator e = scheduler.selectBestElevator(floor, direction, elevators);
+        e.addRequest(floor);
+    }
+}
+```
+
+---
+
+## 17. LLD Case Study: ATM System
+
+### Requirements
+
+- Card insertion + PIN validation
+- Account operations: withdraw, deposit, check balance, transfer
+- Cash dispensing mechanism
+- Transaction history/receipt
+- Multiple accounts and banks
+
+### Class Design
+
+```
+ATM
+├── CardReader
+├── PINValidator
+├── CashDispenser
+├── ReceiptPrinter
+└── Screen
+
+BankingService (interface)
+├── boolean validatePIN(String cardNum, String PIN)
+├── double getBalance(String accountId)
+├── void withdraw(String accountId, double amount)
+└── void deposit(String accountId, double amount)
+
+Account
+├── String accountId
+├── double balance
+└── List<Transaction> history
+
+Transaction
+├── TransactionType type
+├── double amount
+└── LocalDateTime timestamp
+```
+
+### Key Implementation
+
+```java
+public enum TransactionType { WITHDRAW, DEPOSIT, BALANCE_CHECK, TRANSFER }
+public enum ATMState         { IDLE, CARD_INSERTED, PIN_ENTERED, TRANSACTION, DISPENSING }
+
+public class ATM {
+    private ATMState state = ATMState.IDLE;
+    private String   currentCardNumber;
+    private String   currentAccountId;
+    private CashDispenser  cashDispenser;
+    private BankingService bankingService;
+
+    public ATM(int initialCash, BankingService svc) {
+        this.cashDispenser  = new CashDispenser(initialCash);
+        this.bankingService = svc;
+    }
+
+    public void insertCard(String cardNumber) {
+        if (state != ATMState.IDLE) throw new IllegalStateException("ATM busy");
+        this.currentCardNumber = cardNumber;
+        state = ATMState.CARD_INSERTED;
+        System.out.println("Card inserted. Please enter PIN.");
+    }
+
+    public boolean enterPIN(String pin) {
+        if (state != ATMState.CARD_INSERTED) throw new IllegalStateException("Insert card first");
+        boolean valid = bankingService.validatePIN(currentCardNumber, pin);
+        if (valid) {
+            currentAccountId = bankingService.getAccountId(currentCardNumber);
+            state = ATMState.PIN_ENTERED;
+        } else {
+            System.out.println("Invalid PIN!");
+        }
+        return valid;
+    }
+
+    public double checkBalance() {
+        ensureAuthenticated();
+        double balance = bankingService.getBalance(currentAccountId);
+        System.out.println("Balance: " + balance);
+        return balance;
+    }
+
+    public void withdraw(double amount) {
+        ensureAuthenticated();
+        if (!cashDispenser.hasCash(amount)) throw new RuntimeException("Insufficient cash in ATM");
+        bankingService.withdraw(currentAccountId, amount);
+        cashDispenser.dispense(amount);
+        System.out.println("Dispensing: " + amount);
+    }
+
+    public void ejectCard() {
+        currentCardNumber = null;
+        currentAccountId  = null;
+        state = ATMState.IDLE;
+        System.out.println("Card ejected. Thank you!");
+    }
+
+    private void ensureAuthenticated() {
+        if (state != ATMState.PIN_ENTERED) throw new IllegalStateException("Not authenticated");
+    }
+}
+
+public class CashDispenser {
+    private double availableCash;
+    public CashDispenser(double initial) { this.availableCash = initial; }
+    public boolean hasCash(double amount) { return availableCash >= amount; }
+    public void dispense(double amount) {
+        if (!hasCash(amount)) throw new RuntimeException("Not enough cash");
+        availableCash -= amount;
+    }
+}
+```
+
+---
+
+## 18. LLD Case Study: Online Booking System
+
+### Requirements (Movie Ticket Booking)
+
+- Browse movies, shows, theaters
+- Select seats
+- Lock seats to prevent double-booking
+- Payment processing
+- Booking confirmation
+- Cancellation with refund policy
+
+### Class Design
+
+```
+BookingSystem
+├── MovieService
+├── ShowService
+├── SeatService
+└── BookingService
+
+Movie       — id, title, duration, genre
+Theater     — id, name, location, List<Screen>
+Screen      — id, List<Seat>, List<Show>
+Show        — id, Movie, Screen, LocalDateTime startTime, price
+Seat        — id, rowNum, colNum, SeatType, SeatStatus
+Booking     — id, User, Show, List<Seat>, BookingStatus, totalAmount
+Payment     — id, Booking, PaymentMethod, status
+```
+
+### Key Implementation
+
+```java
+public enum SeatStatus  { AVAILABLE, LOCKED, BOOKED }
+public enum BookingStatus { PENDING, CONFIRMED, CANCELLED }
+
+public class Seat {
+    private String seatId;
+    private String row;
+    private int    col;
+    private SeatType   type;
+    private SeatStatus status = SeatStatus.AVAILABLE;
+    private String     lockedBy;  // userId who locked
+    private LocalDateTime lockExpiry;
+
+    // Seat locking with expiry to handle payment timeouts
+    public synchronized boolean lock(String userId, int expiryMinutes) {
+        if (status != SeatStatus.AVAILABLE) return false;
+        status     = SeatStatus.LOCKED;
+        lockedBy   = userId;
+        lockExpiry = LocalDateTime.now().plusMinutes(expiryMinutes);
+        return true;
+    }
+
+    public synchronized void confirm(String userId) {
+        if (!userId.equals(lockedBy)) throw new IllegalArgumentException("Lock mismatch");
+        status = SeatStatus.BOOKED;
+    }
+
+    public synchronized void release() {
+        status     = SeatStatus.AVAILABLE;
+        lockedBy   = null;
+        lockExpiry = null;
+    }
+
+    public synchronized boolean isLockExpired() {
+        return status == SeatStatus.LOCKED &&
+               lockExpiry != null &&
+               LocalDateTime.now().isAfter(lockExpiry);
+    }
+}
+
+public class BookingService {
+    private final Map<String, Booking> bookings = new ConcurrentHashMap<>();
+    private final SeatService  seatService;
+    private final PaymentService paymentService;
+    private static final int LOCK_MINUTES = 10;
+
+    public Booking initiateBooking(User user, Show show, List<String> seatIds) {
+        // Lock seats atomically
+        List<Seat> seats = seatService.getSeats(seatIds);
+        List<Seat> locked = new ArrayList<>();
+        for (Seat seat : seats) {
+            if (!seat.lock(user.getId(), LOCK_MINUTES)) {
+                // Rollback all locked seats
+                locked.forEach(Seat::release);
+                throw new RuntimeException("Seat " + seat.getSeatId() + " not available");
+            }
+            locked.add(seat);
+        }
+
+        double total = show.getPrice() * seats.size();
+        Booking booking = new Booking(user, show, locked, total);
+        bookings.put(booking.getId(), booking);
+        return booking;
+    }
+
+    public Booking confirmBooking(String bookingId, PaymentDetails paymentDetails) {
+        Booking booking = bookings.get(bookingId);
+        if (booking == null) throw new IllegalArgumentException("Booking not found");
+
+        Payment payment = paymentService.process(paymentDetails, booking.getTotalAmount());
+        if (payment.isSuccessful()) {
+            booking.getSeats().forEach(s -> s.confirm(booking.getUser().getId()));
+            booking.setStatus(BookingStatus.CONFIRMED);
+        } else {
+            booking.getSeats().forEach(Seat::release);
+            booking.setStatus(BookingStatus.CANCELLED);
+        }
+        return booking;
+    }
+}
+```
+
+---
+
+## 19. LLD Case Study: Ride-Sharing App (Uber/Ola)
+
+### Requirements
+
+- Rider requests a ride
+- Match with nearby available driver
+- Real-time location tracking
+- Multiple vehicle types
+- Dynamic pricing (surge)
+- Rating system
+- Trip history
+
+### Class Design
+
+```
+RideService
+├── DriverMatchingService
+├── PricingService
+├── TripService
+└── NotificationService
+
+Driver  — id, name, location, status (AVAILABLE, ON_TRIP, OFFLINE), vehicleType, rating
+Rider   — id, name, location, rating, paymentMethods
+Trip    — id, Rider, Driver, startLocation, endLocation, status, fare
+Location — latitude, longitude
+```
+
+### Key Implementation
+
+```java
+public enum DriverStatus { AVAILABLE, ON_TRIP, OFFLINE }
+public enum TripStatus   { REQUESTED, ACCEPTED, IN_PROGRESS, COMPLETED, CANCELLED }
+public enum VehicleType  { MINI, SEDAN, SUV, AUTO }
+
+public class Location {
+    private double lat, lng;
+    public Location(double lat, double lng) { this.lat = lat; this.lng = lng; }
+
+    public double distanceTo(Location other) {
+        // Haversine formula (simplified)
+        double dlat = Math.abs(this.lat - other.lat);
+        double dlng = Math.abs(this.lng - other.lng);
+        return Math.sqrt(dlat * dlat + dlng * dlng) * 111; // approx km
+    }
+}
+
+public class DriverMatchingService {
+    private Map<String, Driver> availableDrivers = new ConcurrentHashMap<>();
+
+    public void updateDriverLocation(String driverId, Location location) {
+        Driver driver = availableDrivers.get(driverId);
+        if (driver != null) driver.setLocation(location);
+    }
+
+    public Optional<Driver> findNearestDriver(Location riderLocation, VehicleType type) {
+        return availableDrivers.values().stream()
+            .filter(d -> d.getStatus() == DriverStatus.AVAILABLE)
+            .filter(d -> d.getVehicleType() == type)
+            .min(Comparator.comparingDouble(
+                d -> d.getLocation().distanceTo(riderLocation)));
+    }
+}
+
+public class PricingService {
+    private static final double BASE_FARE   = 30.0;
+    private static final double RATE_PER_KM = 12.0;
+    private static final double SURGE_MULTIPLIER = 1.5;
+
+    public double calculateFare(Location from, Location to, VehicleType type, boolean isSurge) {
+        double distance    = from.distanceTo(to);
+        double typeMultiplier = switch (type) {
+            case MINI  -> 1.0;
+            case SEDAN -> 1.2;
+            case SUV   -> 1.5;
+            case AUTO  -> 0.8;
+        };
+        double fare = (BASE_FARE + RATE_PER_KM * distance) * typeMultiplier;
+        return isSurge ? fare * SURGE_MULTIPLIER : fare;
+    }
+}
+
+public class TripService {
+    private final DriverMatchingService matchingService;
+    private final PricingService pricingService;
+    private final Map<String, Trip> activeTrips = new ConcurrentHashMap<>();
+
+    public Trip requestRide(Rider rider, Location destination, VehicleType type) {
+        Driver driver = matchingService.findNearestDriver(rider.getLocation(), type)
+            .orElseThrow(() -> new RuntimeException("No driver available"));
+
+        double estimatedFare = pricingService.calculateFare(
+            rider.getLocation(), destination, type, isSurge());
+
+        Trip trip = new Trip(rider, driver, rider.getLocation(), destination, estimatedFare);
+        driver.setStatus(DriverStatus.ON_TRIP);
+        activeTrips.put(trip.getId(), trip);
+        return trip;
+    }
+
+    public Trip completeTrip(String tripId) {
+        Trip trip = activeTrips.remove(tripId);
+        trip.setStatus(TripStatus.COMPLETED);
+        trip.getDriver().setStatus(DriverStatus.AVAILABLE);
+        return trip;
+    }
+
+    private boolean isSurge() {
+        // Logic based on demand/supply ratio
+        return activeTrips.size() > 100;
+    }
+}
+```
+
+---
+
+## 20. LLD Case Study: Snake and Ladder Game
+
+### Requirements
+
+- N players, configurable board size
+- Configurable snakes and ladders
+- Dice rolling
+- Win condition
+- Multiple game rounds
+
+### Class Design
+
+```
+Game
+├── Board
+├── List<Player>
+├── Dice
+└── play()
+
+Board
+├── int size
+├── Map<Integer, Integer> snakes   // head -> tail
+├── Map<Integer, Integer> ladders  // bottom -> top
+└── int getNextPosition(int current, int roll)
+
+Player
+├── String name
+└── int currentPosition
+
+Dice
+└── int roll()
+```
+
+### Implementation
+
+```java
+public class Dice {
+    private final Random random = new Random();
+    private final int sides;
+    public Dice(int sides) { this.sides = sides; }
+    public int roll() { return random.nextInt(sides) + 1; }
+}
+
+public class Board {
+    private final int size;
+    private final Map<Integer, Integer> snakes  = new HashMap<>();
+    private final Map<Integer, Integer> ladders = new HashMap<>();
+
+    public Board(int size) { this.size = size; }
+
+    public void addSnake(int head, int tail) {
+        if (head <= tail) throw new IllegalArgumentException("Snake head must be > tail");
+        snakes.put(head, tail);
+    }
+
+    public void addLadder(int bottom, int top) {
+        if (bottom >= top) throw new IllegalArgumentException("Ladder bottom must be < top");
+        ladders.put(bottom, top);
+    }
+
+    public int getNextPosition(int current, int roll) {
+        int next = current + roll;
+        if (next > size) return current;  // can't overshoot
+        if (snakes.containsKey(next)) {
+            System.out.printf("  Snake! %d -> %d%n", next, snakes.get(next));
+            return snakes.get(next);
+        }
+        if (ladders.containsKey(next)) {
+            System.out.printf("  Ladder! %d -> %d%n", next, ladders.get(next));
+            return ladders.get(next);
+        }
+        return next;
+    }
+
+    public boolean isWinningPosition(int pos) { return pos == size; }
+}
+
+public class Player {
+    private String name;
+    private int position = 0;
+    public Player(String name) { this.name = name; }
+    public void moveTo(int pos) { this.position = pos; }
+    public int getPosition()   { return position; }
+    public String getName()    { return name; }
+}
+
+public class SnakeAndLadderGame {
+    private Board board;
+    private Dice  dice;
+    private List<Player> players;
+    private int currentPlayerIndex = 0;
+
+    public SnakeAndLadderGame(int boardSize, List<String> playerNames) {
+        this.board   = new Board(boardSize);
+        this.dice    = new Dice(6);
+        this.players = playerNames.stream().map(Player::new).collect(Collectors.toList());
+        setupDefaultBoard();
+    }
+
+    private void setupDefaultBoard() {
+        board.addSnake(99, 2); board.addSnake(50, 30); board.addSnake(70, 25);
+        board.addLadder(10, 40); board.addLadder(20, 60); board.addLadder(80, 99);
+    }
+
+    public Player play() {
+        while (true) {
+            Player current = players.get(currentPlayerIndex);
+            int roll = dice.roll();
+            int next = board.getNextPosition(current.getPosition(), roll);
+            current.moveTo(next);
+            System.out.printf("%s rolled %d -> position %d%n", current.getName(), roll, next);
+
+            if (board.isWinningPosition(next)) {
+                System.out.println(current.getName() + " WINS!");
+                return current;
+            }
+            currentPlayerIndex = (currentPlayerIndex + 1) % players.size();
+        }
+    }
+}
+```
+
+---
+
+## 21. LLD Case Study: Vending Machine
+
+### Requirements
+
+- Multiple products with inventory
+- Multiple payment methods (coins, notes, card)
+- Change dispensing
+- Admin operations (restock, collect money)
+- State machine approach
+
+### State Machine
+
+```
+IDLE --> ITEM_SELECTED --> PAYMENT_PROCESSING --> DISPENSING --> IDLE
+                                    |
+                              (cancel/refund)
+                                    |
+                                  IDLE
+```
+
+### Implementation
+
+```java
+public enum VendingState { IDLE, ITEM_SELECTED, PAYMENT_RECEIVED, DISPENSING }
+
+public class Product {
+    private String id, name;
+    private double price;
+    private int    quantity;
+
+    public Product(String id, String name, double price, int qty) {
+        this.id = id; this.name = name; this.price = price; this.quantity = qty;
+    }
+
+    public boolean isAvailable() { return quantity > 0; }
+    public void dispense()       { if (quantity == 0) throw new RuntimeException("Out of stock"); quantity--; }
+    // getters...
+}
+
+public class VendingMachine {
+    private Map<String, Product> inventory = new HashMap<>();
+    private VendingState state = VendingState.IDLE;
+    private String selectedProductId;
+    private double insertedAmount = 0.0;
+
+    public void addProduct(Product p) { inventory.put(p.getId(), p); }
+
+    public void selectProduct(String productId) {
+        if (state != VendingState.IDLE) throw new IllegalStateException("Invalid state");
+        Product p = inventory.get(productId);
+        if (p == null || !p.isAvailable()) throw new RuntimeException("Product not available");
+        selectedProductId = productId;
+        state = VendingState.ITEM_SELECTED;
+        System.out.println("Selected: " + p.getName() + " | Price: " + p.getPrice());
+    }
+
+    public void insertMoney(double amount) {
+        if (state != VendingState.ITEM_SELECTED) throw new IllegalStateException("Select item first");
+        insertedAmount += amount;
+        System.out.printf("Inserted: %.2f | Total: %.2f%n", amount, insertedAmount);
+
+        Product p = inventory.get(selectedProductId);
+        if (insertedAmount >= p.getPrice()) {
+            state = VendingState.PAYMENT_RECEIVED;
+        }
+    }
+
+    public double dispenseProduct() {
+        if (state != VendingState.PAYMENT_RECEIVED) throw new IllegalStateException("Insufficient payment");
+        Product p = inventory.get(selectedProductId);
+        p.dispense();
+        double change = insertedAmount - p.getPrice();
+        reset();
+        System.out.println("Dispensing: " + p.getName() + " | Change: " + change);
+        return change;
+    }
+
+    public double cancel() {
+        double refund = insertedAmount;
+        reset();
+        System.out.println("Cancelled. Refund: " + refund);
+        return refund;
+    }
+
+    private void reset() {
+        selectedProductId = null;
+        insertedAmount    = 0.0;
+        state             = VendingState.IDLE;
+    }
+}
+```
+
+---
+
+## 22. LLD Case Study: Logger System
+
+### Requirements
+
+- Multiple log levels: DEBUG, INFO, WARN, ERROR, FATAL
+- Multiple output destinations: Console, File, Database
+- Filtering by log level
+- Asynchronous logging
+- Log rotation
+- Singleton logger
+
+### Design Pattern: Singleton + Chain of Responsibility + Observer
+
+```java
+public enum LogLevel { DEBUG, INFO, WARN, ERROR, FATAL }
+
+public class LogMessage {
+    private final LogLevel   level;
+    private final String     message;
+    private final LocalDateTime timestamp = LocalDateTime.now();
+    private final String     className;
+
+    public LogMessage(LogLevel level, String message, String className) {
+        this.level = level; this.message = message; this.className = className;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("[%s] [%s] [%s] %s",
+            timestamp, level, className, message);
+    }
+    // getters...
+}
+
+public abstract class LogHandler {
+    protected LogHandler next;
+    protected LogLevel   minLevel;
+
+    public LogHandler(LogLevel minLevel) { this.minLevel = minLevel; }
+
+    public LogHandler setNext(LogHandler next) { this.next = next; return next; }
+
+    public void handle(LogMessage msg) {
+        if (msg.getLevel().ordinal() >= minLevel.ordinal()) {
+            write(msg);
+        }
+        if (next != null) next.handle(msg);
+    }
+
+    protected abstract void write(LogMessage msg);
+}
+
+public class ConsoleLogHandler extends LogHandler {
+    public ConsoleLogHandler(LogLevel level) { super(level); }
+    protected void write(LogMessage msg) {
+        System.out.println(msg);
+    }
+}
+
+public class FileLogHandler extends LogHandler {
+    private final String filePath;
+
+    public FileLogHandler(LogLevel level, String filePath) {
+        super(level);
+        this.filePath = filePath;
+    }
+
+    protected void write(LogMessage msg) {
+        try (FileWriter fw = new FileWriter(filePath, true)) {
+            fw.write(msg + "\n");
+        } catch (IOException e) {
+            System.err.println("Failed to write log: " + e.getMessage());
+        }
+    }
+}
+
+public class Logger {
+    private static volatile Logger instance;
+    private LogHandler handlerChain;
+    private BlockingQueue<LogMessage> queue = new LinkedBlockingQueue<>();
+    private ExecutorService executor = Executors.newSingleThreadExecutor();
+
+    private Logger() {
+        // Set up chain: Console(DEBUG) -> File(WARN)
+        LogHandler console = new ConsoleLogHandler(LogLevel.DEBUG);
+        LogHandler file    = new FileLogHandler(LogLevel.WARN, "app.log");
+        console.setNext(file);
+        handlerChain = console;
+
+        // Async processing
+        executor.submit(() -> {
+            while (!Thread.currentThread().isInterrupted()) {
+                try {
+                    LogMessage msg = queue.take();
+                    handlerChain.handle(msg);
+                } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            }
+        });
+    }
+
+    public static Logger getInstance() {
+        if (instance == null) {
+            synchronized (Logger.class) {
+                if (instance == null) instance = new Logger();
+            }
+        }
+        return instance;
+    }
+
+    private void log(LogLevel level, String message) {
+        String caller = Thread.currentThread().getStackTrace()[3].getClassName();
+        queue.offer(new LogMessage(level, message, caller));
+    }
+
+    public void debug(String msg) { log(LogLevel.DEBUG, msg); }
+    public void info(String msg)  { log(LogLevel.INFO,  msg); }
+    public void warn(String msg)  { log(LogLevel.WARN,  msg); }
+    public void error(String msg) { log(LogLevel.ERROR, msg); }
+    public void fatal(String msg) { log(LogLevel.FATAL, msg); }
+}
+
+// Usage
+Logger.getInstance().info("Application started");
+Logger.getInstance().error("Database connection failed");
+```
+
+---
+
+## 23. LLD Case Study: Rate Limiter
+
+### Requirements
+
+- Limit API requests per user per time window
+- Multiple algorithms: Token Bucket, Sliding Window, Fixed Window
+- Thread-safe
+- Configurable limits
+
+### Algorithm 1: Token Bucket
+
+```java
+public class TokenBucketRateLimiter {
+    private final int    maxTokens;
+    private final double refillRate;   // tokens per second
+    private double       tokens;
+    private long         lastRefillTime;
+
+    public TokenBucketRateLimiter(int maxTokens, double refillRate) {
+        this.maxTokens      = maxTokens;
+        this.refillRate     = refillRate;
+        this.tokens         = maxTokens;
+        this.lastRefillTime = System.currentTimeMillis();
+    }
+
+    public synchronized boolean allow() {
+        refill();
+        if (tokens >= 1) {
+            tokens--;
+            return true;
+        }
+        return false;
+    }
+
+    private void refill() {
+        long now     = System.currentTimeMillis();
+        double delta = (now - lastRefillTime) / 1000.0 * refillRate;
+        tokens       = Math.min(maxTokens, tokens + delta);
+        lastRefillTime = now;
+    }
+}
+```
+
+### Algorithm 2: Sliding Window Counter
+
+```java
+public class SlidingWindowRateLimiter {
+    private final int    limit;
+    private final long   windowMs;
+    private final Deque<Long> requestTimestamps = new ArrayDeque<>();
+
+    public SlidingWindowRateLimiter(int limit, long windowMs) {
+        this.limit    = limit;
+        this.windowMs = windowMs;
+    }
+
+    public synchronized boolean allow() {
+        long now     = System.currentTimeMillis();
+        long cutoff  = now - windowMs;
+
+        // Remove timestamps outside the window
+        while (!requestTimestamps.isEmpty() && requestTimestamps.peekFirst() < cutoff) {
+            requestTimestamps.pollFirst();
+        }
+
+        if (requestTimestamps.size() < limit) {
+            requestTimestamps.addLast(now);
+            return true;
+        }
+        return false;
+    }
+}
+```
+
+### Algorithm 3: Fixed Window Counter
+
+```java
+public class FixedWindowRateLimiter {
+    private final int limit;
+    private final long windowMs;
+    private int  count = 0;
+    private long windowStart = System.currentTimeMillis();
+
+    public FixedWindowRateLimiter(int limit, long windowMs) {
+        this.limit    = limit;
+        this.windowMs = windowMs;
+    }
+
+    public synchronized boolean allow() {
+        long now = System.currentTimeMillis();
+        if (now - windowStart >= windowMs) {
+            count       = 0;
+            windowStart = now;
+        }
+        if (count < limit) {
+            count++;
+            return true;
+        }
+        return false;
+    }
+}
+```
+
+### Per-User Rate Limiter
+
+```java
+public class UserRateLimiter {
+    private final Map<String, TokenBucketRateLimiter> userLimiters = new ConcurrentHashMap<>();
+    private final int    maxTokens;
+    private final double refillRate;
+
+    public UserRateLimiter(int maxTokens, double refillRate) {
+        this.maxTokens  = maxTokens;
+        this.refillRate = refillRate;
+    }
+
+    public boolean allow(String userId) {
+        userLimiters.computeIfAbsent(userId,
+            k -> new TokenBucketRateLimiter(maxTokens, refillRate));
+        return userLimiters.get(userId).allow();
+    }
+}
+```
+
+---
+
+## 24. Interview Questions & Answers
+
+### Conceptual Questions
+
+---
+
+**Q1. What is the difference between abstract class and interface?**
+
+| Feature | Abstract Class | Interface |
+|---------|----------------|-----------|
+| **Instantiation** | Cannot instantiate | Cannot instantiate |
+| **Methods** | Abstract + concrete methods | Abstract + default/static methods |
+| **Variables** | Instance variables allowed | Only public static final |
+| **Constructors** | Yes | No |
+| **Multiple inheritance** | No (single) | Yes (multiple) |
+| **When to use** | Shared base implementation | Contract / capability |
+
+---
+
+**Q2. When to use Composition over Inheritance?**
+
+Use **composition** when:
+- You need runtime flexibility to change behavior
+- The "is-a" relationship doesn't hold (Square is not always a Rectangle)
+- You want to avoid tight coupling
+- You need to combine behaviors from multiple sources
+
+Use **inheritance** when:
+- True "is-a" relationship (Dog is an Animal)
+- Subclass is a complete substitute for parent (LSP holds)
+- Sharing substantial common implementation
+
+---
+
+**Q3. Explain Strategy vs State pattern.**
+
+| | Strategy | State |
+|-|----------|-------|
+| **Purpose** | Different algorithms for same task | Different behavior based on object state |
+| **Who changes?** | Client changes strategy | State transitions internally |
+| **Context** | Context delegates to strategy | Context transitions between states |
+| **Example** | Sort algorithms | Traffic light, ATM modes |
+
+---
+
+**Q4. How do you handle concurrency in a Singleton?**
+
+Options in increasing order of preference:
+1. Synchronized `getInstance()` — simple but slow
+2. Double-checked locking with `volatile` — performant
+3. Initialization-on-demand holder idiom — best for lazy init
+4. Enum — simplest, serialization-safe, reflection-safe
+
+---
+
+**Q5. What is the difference between Factory Method and Abstract Factory?**
+
+| | Factory Method | Abstract Factory |
+|-|----------------|-----------------|
+| **Creates** | One product type | Families of related products |
+| **How** | Through inheritance | Through composition |
+| **Example** | `NotificationFactory.create("SMS")` | `GUIFactory` creates both Button and Checkbox |
+
+---
+
+**Q6. What design patterns would you use for a pub/sub event system?**
+
+- **Observer** for basic event notification
+- **Mediator** for reducing direct coupling between publishers and subscribers
+- **Command** to encapsulate events as objects (for replay/undo)
+- **Singleton** for the event manager
+
+---
+
+**Q7. How would you design a thread-safe cache?**
+
+```java
+public class Cache<K, V> {
+    private final int maxSize;
+    private final Map<K, V> storage;
+
+    public Cache(int maxSize) {
+        this.maxSize = maxSize;
+        // LinkedHashMap with access order for LRU eviction
+        this.storage = Collections.synchronizedMap(
+            new LinkedHashMap<K, V>(maxSize, 0.75f, true) {
+                protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
+                    return size() > maxSize;
+                }
+            }
+        );
+        // Or use ConcurrentHashMap with explicit locking for finer control
+    }
+
+    public V get(K key) { return storage.get(key); }
+    public void put(K key, V value) { storage.put(key, value); }
+    public boolean containsKey(K key) { return storage.containsKey(key); }
+}
+```
+
+---
+
+**Q8. How do you prevent a Builder from creating an invalid object?**
+
+- Validate all required fields in the `build()` method
+- Mark required fields with constructor parameter of Builder
+- Throw `IllegalStateException` if invariants are violated
+
+```java
+public User build() {
+    if (name == null || email == null) throw new IllegalStateException("Name and email are required");
+    if (!email.contains("@"))         throw new IllegalArgumentException("Invalid email");
+    return new User(this);
+}
+```
+
+---
+
+### LLD Problem Questions
+
+**Q9. Design a Pub/Sub message queue.**
+
+Key classes:
+- `Topic` — stores subscribers, holds messages
+- `Subscriber` — processes messages, maintains offset
+- `Publisher` — publishes to topics
+- `MessageBroker` — manages topics, singleton
+
+**Q10. Design a HashMap from scratch.**
+
+```java
+public class HashMap<K, V> {
+    private static final int DEFAULT_CAPACITY = 16;
+    private static final double LOAD_FACTOR    = 0.75;
+
+    private Node<K, V>[] table;
+    private int size;
+
+    @SuppressWarnings("unchecked")
+    public HashMap() { table = new Node[DEFAULT_CAPACITY]; }
+
+    static class Node<K, V> {
+        final K key; V value; Node<K, V> next;
+        Node(K key, V value) { this.key = key; this.value = value; }
+    }
+
+    private int hash(K key) {
+        return Math.abs(key.hashCode() % table.length);
+    }
+
+    public void put(K key, V value) {
+        int index = hash(key);
+        Node<K, V> node = table[index];
+        while (node != null) {
+            if (node.key.equals(key)) { node.value = value; return; }
+            node = node.next;
+        }
+        Node<K, V> newNode = new Node<>(key, value);
+        newNode.next = table[index];
+        table[index] = newNode;
+        size++;
+        if ((double) size / table.length > LOAD_FACTOR) resize();
+    }
+
+    public V get(K key) {
+        int index = hash(key);
+        Node<K, V> node = table[index];
+        while (node != null) {
+            if (node.key.equals(key)) return node.value;
+            node = node.next;
+        }
+        return null;
+    }
+
+    private void resize() {
+        Node<K, V>[] old = table;
+        table = new Node[old.length * 2];
+        size  = 0;
+        for (Node<K, V> head : old) {
+            Node<K, V> node = head;
+            while (node != null) { put(node.key, node.value); node = node.next; }
+        }
+    }
+}
+```
+
+---
+
+## 25. Quick Reference Cheat Sheet
+
+### SOLID — One-Liner Summary
+
+| Principle | One-Liner |
+|-----------|-----------|
+| **S** — SRP | One class = one reason to change |
+| **O** — OCP | Extend behavior, don't edit existing code |
+| **L** — LSP | Subtypes must be fully substitutable |
+| **I** — ISP | Fine-grained interfaces over fat ones |
+| **D** — DIP | Depend on abstractions, not concretions |
+
+---
+
+### Design Patterns — Cheat Sheet
+
+| Pattern | Category | Intent | When to Use |
+|---------|----------|--------|-------------|
+| **Singleton** | Creational | One instance | Logger, Config, Pool |
+| **Factory Method** | Creational | Delegate creation to subclasses | Notification types |
+| **Abstract Factory** | Creational | Families of objects | UI toolkit, DB drivers |
+| **Builder** | Creational | Step-by-step complex object | Pizza, Query, HTTP request |
+| **Prototype** | Creational | Clone instead of creating | Config copies, game objects |
+| **Adapter** | Structural | Bridge incompatible interfaces | Legacy integration |
+| **Decorator** | Structural | Add behavior dynamically | Streams, middleware |
+| **Façade** | Structural | Simplify complex subsystem | Library API |
+| **Composite** | Structural | Uniform tree treatment | File system, UI components |
+| **Proxy** | Structural | Control access | Lazy load, caching, security |
+| **Bridge** | Structural | Decouple abstraction/impl | Cross-platform rendering |
+| **Observer** | Behavioral | Notify on state change | Events, UI, streams |
+| **Strategy** | Behavioral | Swap algorithms | Sort, payment, validation |
+| **Command** | Behavioral | Encapsulate requests | Undo/redo, queue, transactions |
+| **State** | Behavioral | Behavior changes with state | ATM, vending machine, traffic light |
+| **Template Method** | Behavioral | Fixed algorithm skeleton | Data processing pipelines |
+| **Chain of Responsibility** | Behavioral | Pass request along handlers | Auth, middleware, logging |
+| **Iterator** | Behavioral | Sequential access | Collections, streams |
+| **Mediator** | Behavioral | Central communication hub | Chat, air traffic control |
+
+---
+
+### LLD Problem Mapping
+
+| Problem | Key Patterns | Key Classes |
+|---------|-------------|-------------|
+| **Parking Lot** | Singleton, Strategy | ParkingLot, Level, ParkingSpot, Vehicle, Ticket |
+| **Library System** | Singleton, Observer | Library, Book, BookItem, Member, Loan, Catalog |
+| **Chess** | State, Command | Board, Piece (polymorphism), Move, Player |
+| **Elevator** | State, Strategy | Elevator, Scheduler, Direction |
+| **ATM** | State, Proxy | ATM, Account, CashDispenser, PINValidator |
+| **Movie Booking** | Strategy, Observer | Booking, Show, Seat (locking), Payment |
+| **Ride Sharing** | Strategy, Observer | Trip, Driver, Rider, PricingService |
+| **Snake & Ladder** | Template Method | Game, Board, Player, Dice |
+| **Vending Machine** | State | VendingMachine, Product, PaymentProcessor |
+| **Logger** | Singleton, Chain of Resp. | Logger, LogHandler, LogMessage |
+| **Rate Limiter** | Strategy | TokenBucket, SlidingWindow, FixedWindow |
+
+---
+
+### Class Diagram Quick Reference
+
+```
+[Abstract]         — italicized class name
+<<interface>>      — interface stereotype
+- private field    — minus sign
++ public field     — plus sign
+# protected field  — hash sign
+A ——> B            — A has association with B
+A ◇——> B           — A aggregates B (weak)
+A ◆——> B           — A composes B (strong lifecycle)
+A ——▷ B            — A extends/inherits B
+A - -▷ B           — A implements interface B
+A - -> B           — A depends on B (dashed)
+```
+
+---
+
+### Concurrency Quick Reference
+
+| Tool | Use Case |
+|------|----------|
+| `synchronized` | Simple mutual exclusion |
+| `volatile` | Single variable visibility |
+| `ReentrantLock` | Advanced locking (tryLock, timed) |
+| `AtomicInteger` | Lock-free counter operations |
+| `ConcurrentHashMap` | Thread-safe map |
+| `BlockingQueue` | Producer-consumer pattern |
+| `CountDownLatch` | Wait for N threads to finish |
+| `CyclicBarrier` | Synchronize at a barrier point |
+| `Semaphore` | Limit concurrent access (e.g., connection pool) |
+| `ExecutorService` | Thread pool management |
+| `CompletableFuture` | Async computation chaining |
+
+---
+
+### Common LLD Anti-Patterns to Avoid
+
+| Anti-Pattern | Problem | Fix |
+|-------------|---------|-----|
+| **God Class** | One class does everything | Split by SRP |
+| **Anemic Domain Model** | Classes with only getters/setters, no behavior | Add behavior to domain objects |
+| **Shotgun Surgery** | One change requires edits in many classes | Apply SRP + high cohesion |
+| **Divergent Change** | One class changes for many reasons | Apply SRP |
+| **Feature Envy** | Method uses data of another class excessively | Move method to the other class |
+| **Primitive Obsession** | Using primitives instead of value objects | Extract small classes (Money, Address) |
+| **Data Clumps** | Same group of fields appear together often | Extract into a class |
+| **Switch Statements** | Long switch on type codes | Polymorphism / Strategy pattern |
+| **Parallel Inheritance Hierarchies** | Adding a subclass requires adding in two hierarchies | Bridge pattern or flatten |
+| **Lazy Class** | Class that does too little to justify existence | Inline it |
+
+---
+
+*End of LLD Complete Notes*
