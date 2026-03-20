@@ -1,0 +1,4281 @@
+# GraphQL — Complete Notes with Full Explanation
+
+> **GraphQL** is a query language for APIs and a runtime for executing those queries.
+> Developed by **Facebook** in 2012, open-sourced in 2015.
+> It gives clients the power to ask for **exactly what they need** — nothing more, nothing less.
+
+---
+
+## TABLE OF CONTENTS
+
+1. [What is GraphQL?](#1-what-is-graphql)
+2. [GraphQL vs REST — Deep Comparison](#2-graphql-vs-rest)
+3. [Core Concepts & Terminology](#3-core-concepts)
+4. [Schema Definition Language (SDL)](#4-schema-definition-language)
+5. [Scalar Types](#5-scalar-types)
+6. [Object Types & Fields](#6-object-types--fields)
+7. [Queries — Reading Data](#7-queries)
+8. [Mutations — Writing Data](#8-mutations)
+9. [Subscriptions — Real-Time Data](#9-subscriptions)
+10. [Arguments & Variables](#10-arguments--variables)
+11. [Fragments](#11-fragments)
+12. [Aliases](#12-aliases)
+13. [Directives](#13-directives)
+14. [Enums](#14-enums)
+15. [Interfaces](#15-interfaces)
+16. [Union Types](#16-union-types)
+17. [Input Types](#17-input-types)
+18. [Custom Scalars](#18-custom-scalars)
+19. [Resolvers — How Data is Fetched](#19-resolvers)
+20. [Context & Authentication](#20-context--authentication)
+21. [DataLoader — Solving the N+1 Problem](#21-dataloader)
+22. [Pagination](#22-pagination)
+23. [Error Handling](#23-error-handling)
+24. [File Uploads](#24-file-uploads)
+25. [Caching Strategies](#25-caching)
+26. [Security Best Practices](#26-security)
+27. [Schema Design Best Practices](#27-schema-design-best-practices)
+28. [Server: Node.js (Apollo Server)](#28-apollo-server-nodejs)
+29. [Server: Java (Spring for GraphQL)](#29-spring-for-graphql-java)
+30. [Server: Python (Strawberry / Graphene)](#30-python-graphql-servers)
+31. [Client: Apollo Client (React)](#31-apollo-client-react)
+32. [Client: Fetch / Axios (Vanilla JS)](#32-vanilla-js-graphql-client)
+33. [Client: React Query + GraphQL](#33-react-query--graphql)
+34. [Testing GraphQL](#34-testing-graphql)
+35. [Tooling & Ecosystem](#35-tooling--ecosystem)
+36. [Federation & Microservices](#36-federation--microservices)
+37. [GraphQL with TypeScript (Codegen)](#37-graphql-with-typescript)
+38. [Performance Optimization](#38-performance-optimization)
+39. [Real-World Schema Examples](#39-real-world-schema-examples)
+40. [Interview Questions & Answers](#40-interview-questions--answers)
+
+---
+
+## 1. WHAT IS GRAPHQL?
+
+### Definition
+GraphQL is:
+- A **query language** for your API (like SQL is for databases, but for APIs)
+- A **server-side runtime** that executes queries using a type system you define
+- A **specification** — not a library or framework (implementations exist in 20+ languages)
+
+### Key Characteristics
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     GRAPHQL KEY FEATURES                     │
+├─────────────────────────────────────────────────────────────┤
+│ ✓ Ask for what you need — get exactly that (no over/under) │
+│ ✓ Single endpoint — all data from one URL (/graphql)       │
+│ ✓ Strongly typed — schema defines what's possible          │
+│ ✓ Introspective — API is self-documenting                  │
+│ ✓ Hierarchical — queries mirror the shape of the response  │
+│ ✓ Language agnostic — works with any language/framework    │
+│ ✓ Real-time — subscriptions for live data                  │
+│ ✓ Versionless — evolve API without breaking clients        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### How It Works (Flow)
+```
+┌──────────┐    Query/Mutation     ┌─────────────────┐
+│          │ ──────────────────▶   │                 │
+│  CLIENT  │                       │  GRAPHQL SERVER │
+│ (React,  │   ◀──────────────── │  (Apollo, etc.) │
+│  Mobile) │    JSON Response      │                 │
+└──────────┘                       └────────┬────────┘
+                                            │
+                            ┌───────────────┼───────────────┐
+                            │               │               │
+                       ┌────▼───┐     ┌─────▼────┐   ┌─────▼────┐
+                       │Database│     │ REST API │   │  Micro-  │
+                       │        │     │          │   │ service  │
+                       └────────┘     └──────────┘   └──────────┘
+```
+
+### The Three Operations
+| Operation | Purpose | Analogy |
+|-----------|---------|---------|
+| **Query** | Read data | GET in REST |
+| **Mutation** | Write/modify data | POST/PUT/DELETE in REST |
+| **Subscription** | Real-time data stream | WebSocket |
+
+---
+
+## 2. GRAPHQL VS REST — DEEP COMPARISON
+
+### Side-by-Side
+
+| Aspect | REST | GraphQL |
+|--------|------|---------|
+| **Endpoints** | Multiple URLs (`/users`, `/posts`, `/comments`) | Single URL (`/graphql`) |
+| **Data fetching** | Server decides what data to return | Client decides what data to get |
+| **Over-fetching** | Returns all fields every time | Returns only requested fields |
+| **Under-fetching** | Need multiple requests for related data | Get all related data in one request |
+| **Versioning** | `/api/v1/users`, `/api/v2/users` | No versioning needed — evolve schema |
+| **Type system** | No built-in types (OpenAPI is optional) | Built-in strong type system (schema) |
+| **Documentation** | Must maintain separately (Swagger) | Self-documenting via introspection |
+| **Status codes** | Uses HTTP status codes (200, 404, 500) | Always returns 200 (errors in response body) |
+| **Caching** | HTTP caching (GET requests) | More complex (needs client libs) |
+| **File upload** | Native support | Requires extra spec (multipart) |
+| **Learning curve** | Lower | Higher |
+| **Tooling** | Postman, curl | GraphiQL, Apollo Studio, Playground |
+
+### Over-fetching Problem (REST)
+```
+REST: GET /api/users/1
+Response: {
+  "id": 1,
+  "name": "John",
+  "email": "john@example.com",
+  "phone": "+1234567890",     ← Don't need this
+  "address": "123 Main St",   ← Don't need this
+  "company": "Acme Corp",     ← Don't need this
+  "bio": "Long text...",      ← Don't need this
+  "avatar": "url...",         ← Don't need this
+  "createdAt": "...",         ← Don't need this
+  "updatedAt": "..."          ← Don't need this
+}
+// Client only needed name and email — got everything else too!
+```
+
+```
+GraphQL: POST /graphql
+Query: {
+  user(id: 1) {
+    name
+    email
+  }
+}
+Response: {
+  "data": {
+    "user": {
+      "name": "John",
+      "email": "john@example.com"
+    }
+  }
+}
+// Client got exactly what it asked for!
+```
+
+### Under-fetching Problem (REST)
+```
+To display a user profile with their posts and comments:
+
+REST (3 separate requests):
+  1. GET /api/users/1            → User data
+  2. GET /api/users/1/posts      → User's posts
+  3. GET /api/posts/5/comments   → Post comments
+  Total: 3 round trips to server
+
+GraphQL (1 request):
+  query {
+    user(id: 1) {
+      name
+      email
+      posts {
+        title
+        comments {
+          text
+          author { name }
+        }
+      }
+    }
+  }
+  Total: 1 round trip to server
+```
+
+### When to Use REST vs GraphQL
+
+| Use REST When | Use GraphQL When |
+|---------------|-----------------|
+| Simple CRUD APIs | Complex data relationships |
+| File serving | Mobile apps (bandwidth matters) |
+| Public APIs with caching needs | Multiple client types (web, mobile, TV) |
+| Team is already experienced with REST | Flexible data requirements |
+| Simple microservices communication | Aggregating data from multiple sources |
+| Webhook integrations | Real-time features needed |
+
+---
+
+## 3. CORE CONCEPTS & TERMINOLOGY
+
+| Term | Meaning | Example |
+|------|---------|---------|
+| **Schema** | Contract between client and server — defines all types, queries, mutations | The "blueprint" of your API |
+| **Type** | A shape of data with specific fields | `User { id, name, email }` |
+| **Field** | A single piece of data on a type | `name`, `email` |
+| **Query** | Read operation — fetching data | `{ user(id: 1) { name } }` |
+| **Mutation** | Write operation — creating/updating/deleting | `mutation { createUser(name: "John") }` |
+| **Subscription** | Real-time operation — push data to client | `subscription { messageAdded { text } }` |
+| **Resolver** | Function that returns data for a specific field | `resolvers.Query.user = (_, { id }) => db.findUser(id)` |
+| **Argument** | Parameter passed to a field | `user(id: 1)` — `id` is an argument |
+| **Variable** | Dynamic values passed separately from query | `$id: ID!` |
+| **Fragment** | Reusable set of fields | `fragment UserFields on User { name email }` |
+| **Alias** | Rename a field in the response | `johnUser: user(id: 1) { name }` |
+| **Directive** | Modifier that changes execution | `@include(if: $showEmail)` |
+| **Introspection** | Query the schema itself | `{ __schema { types { name } } }` |
+| **SDL** | Schema Definition Language — syntax for defining schema | `type User { name: String! }` |
+| **Root Types** | Entry points — Query, Mutation, Subscription | `type Query { ... }` |
+| **Input Type** | Special type for mutation arguments | `input CreateUserInput { name: String! }` |
+| **Enum** | Set of allowed values | `enum Role { ADMIN USER GUEST }` |
+| **Interface** | Abstract type with shared fields | `interface Node { id: ID! }` |
+| **Union** | Type that can be one of several types | `union SearchResult = User \| Post` |
+| **Non-Null** | Field that can never be null | `name: String!` (the `!` means required) |
+| **List** | Array of items | `posts: [Post!]!` |
+
+---
+
+## 4. SCHEMA DEFINITION LANGUAGE (SDL)
+
+The Schema is the most important concept — it defines your entire API.
+
+### Complete Schema Example
+```graphql
+# ========================================
+# ENUMS
+# ========================================
+enum Role {
+  ADMIN
+  USER
+  MODERATOR
+  GUEST
+}
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum SortOrder {
+  ASC
+  DESC
+}
+
+# ========================================
+# TYPES
+# ========================================
+type User {
+  id: ID!
+  name: String!
+  email: String!
+  age: Int
+  isActive: Boolean!
+  role: Role!
+  posts: [Post!]!
+  comments: [Comment!]!
+  profile: Profile
+  createdAt: String!
+  updatedAt: String
+}
+
+type Post {
+  id: ID!
+  title: String!
+  content: String!
+  status: PostStatus!
+  author: User!
+  comments: [Comment!]!
+  tags: [String!]
+  likes: Int!
+  createdAt: String!
+}
+
+type Comment {
+  id: ID!
+  text: String!
+  author: User!
+  post: Post!
+  createdAt: String!
+}
+
+type Profile {
+  bio: String
+  avatar: String
+  website: String
+  socialLinks: [String]
+}
+
+# ========================================
+# INPUT TYPES (for mutations)
+# ========================================
+input CreateUserInput {
+  name: String!
+  email: String!
+  age: Int
+  role: Role = USER    # Default value
+}
+
+input UpdateUserInput {
+  name: String
+  email: String
+  age: Int
+  role: Role
+}
+
+input CreatePostInput {
+  title: String!
+  content: String!
+  status: PostStatus = DRAFT
+  tags: [String]
+}
+
+input PostFilterInput {
+  status: PostStatus
+  authorId: ID
+  tag: String
+  searchText: String
+}
+
+input PaginationInput {
+  page: Int = 1
+  limit: Int = 10
+  sortBy: String = "createdAt"
+  sortOrder: SortOrder = DESC
+}
+
+# ========================================
+# RESPONSE TYPES
+# ========================================
+type PostConnection {
+  edges: [Post!]!
+  totalCount: Int!
+  pageInfo: PageInfo!
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  currentPage: Int!
+  totalPages: Int!
+}
+
+type AuthPayload {
+  token: String!
+  user: User!
+}
+
+type DeleteResponse {
+  success: Boolean!
+  message: String
+}
+
+# ========================================
+# ROOT TYPES
+# ========================================
+type Query {
+  # User queries
+  user(id: ID!): User
+  users(pagination: PaginationInput): [User!]!
+  me: User
+
+  # Post queries
+  post(id: ID!): Post
+  posts(filter: PostFilterInput, pagination: PaginationInput): PostConnection!
+  postsByUser(userId: ID!): [Post!]!
+
+  # Search
+  search(query: String!): [SearchResult!]!
+}
+
+type Mutation {
+  # Auth
+  register(input: CreateUserInput!): AuthPayload!
+  login(email: String!, password: String!): AuthPayload!
+
+  # User mutations
+  updateUser(id: ID!, input: UpdateUserInput!): User!
+  deleteUser(id: ID!): DeleteResponse!
+
+  # Post mutations
+  createPost(input: CreatePostInput!): Post!
+  updatePost(id: ID!, input: CreatePostInput!): Post!
+  deletePost(id: ID!): DeleteResponse!
+  publishPost(id: ID!): Post!
+
+  # Comment mutations
+  addComment(postId: ID!, text: String!): Comment!
+  deleteComment(id: ID!): DeleteResponse!
+
+  # Like
+  likePost(postId: ID!): Post!
+  unlikePost(postId: ID!): Post!
+}
+
+type Subscription {
+  postAdded: Post!
+  commentAdded(postId: ID!): Comment!
+  userStatusChanged: User!
+}
+
+# ========================================
+# UNION & INTERFACE
+# ========================================
+union SearchResult = User | Post | Comment
+
+interface Node {
+  id: ID!
+  createdAt: String!
+}
+
+# Schema root
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
+```
+
+---
+
+## 5. SCALAR TYPES
+
+### Built-in Scalar Types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `Int` | 32-bit signed integer | `42`, `-7` |
+| `Float` | Double-precision floating point | `3.14`, `-2.5` |
+| `String` | UTF-8 text | `"Hello World"` |
+| `Boolean` | `true` or `false` | `true` |
+| `ID` | Unique identifier (serialized as String) | `"abc123"`, `"1"` |
+
+### Nullability Rules
+
+```graphql
+type Example {
+  name: String       # Nullable — can return null
+  name: String!      # Non-null — MUST return a value (never null)
+  tags: [String]     # Nullable list of nullable strings (null, [], ["a", null])
+  tags: [String!]    # Nullable list of non-null strings (null, [], ["a", "b"])
+  tags: [String]!    # Non-null list of nullable strings ([], ["a", null])
+  tags: [String!]!   # Non-null list of non-null strings ([], ["a", "b"])
+}
+```
+
+**Cheat Sheet:**
+```
+String        → null OR "value"
+String!       → MUST be "value" (never null)
+[String]      → null OR [] OR ["a", null, "b"]
+[String!]     → null OR [] OR ["a", "b"]  (items can't be null)
+[String]!     → [] OR ["a", null, "b"]    (list can't be null)
+[String!]!    → [] OR ["a", "b"]          (nothing can be null)
+```
+
+---
+
+## 6. OBJECT TYPES & FIELDS
+
+### Defining Types
+```graphql
+type User {
+  # Scalar fields
+  id: ID!                    # Required unique identifier
+  name: String!              # Required string
+  email: String!             # Required string
+  age: Int                   # Optional integer (can be null)
+  isActive: Boolean!         # Required boolean
+  balance: Float             # Optional float
+  
+  # Relationship fields
+  posts: [Post!]!            # Required list of non-null Posts
+  friends: [User!]           # Optional list of non-null Users
+  profile: Profile           # Optional single Profile
+  
+  # Field with arguments
+  posts(limit: Int = 10, offset: Int = 0): [Post!]!
+  
+  # Computed field
+  fullName: String!          # Resolved by a custom resolver
+  postCount: Int!            # Resolved by counting posts
+}
+```
+
+### Type Relationships
+```graphql
+# One-to-One
+type User {
+  profile: Profile           # User has ONE Profile
+}
+type Profile {
+  user: User!                # Profile belongs to ONE User
+}
+
+# One-to-Many
+type User {
+  posts: [Post!]!            # User has MANY Posts
+}
+type Post {
+  author: User!              # Post belongs to ONE User
+}
+
+# Many-to-Many
+type Post {
+  tags: [Tag!]!              # Post has MANY Tags
+}
+type Tag {
+  posts: [Post!]!            # Tag has MANY Posts
+}
+```
+
+---
+
+## 7. QUERIES — READING DATA
+
+### Basic Query
+```graphql
+# Simple field query
+query {
+  user(id: "1") {
+    name
+    email
+  }
+}
+
+# Response:
+{
+  "data": {
+    "user": {
+      "name": "John Doe",
+      "email": "john@example.com"
+    }
+  }
+}
+```
+
+### Nested Query (Related Data)
+```graphql
+query {
+  user(id: "1") {
+    name
+    email
+    posts {
+      title
+      content
+      comments {
+        text
+        author {
+          name
+        }
+      }
+    }
+  }
+}
+
+# Response:
+{
+  "data": {
+    "user": {
+      "name": "John Doe",
+      "email": "john@example.com",
+      "posts": [
+        {
+          "title": "My First Post",
+          "content": "Hello World!",
+          "comments": [
+            {
+              "text": "Great post!",
+              "author": {
+                "name": "Jane Smith"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+```
+
+### Multiple Root Queries in One Request
+```graphql
+query {
+  user(id: "1") {
+    name
+  }
+  posts {
+    title
+  }
+  totalUsers
+}
+
+# All three queries execute in ONE HTTP request
+```
+
+### Named Queries (Best Practice)
+```graphql
+# Always name your queries in production
+query GetUserProfile {
+  user(id: "1") {
+    name
+    email
+  }
+}
+
+query GetAllPosts {
+  posts {
+    title
+    author {
+      name
+    }
+  }
+}
+
+query GetDashboardData {
+  me {
+    name
+    role
+  }
+  recentPosts(limit: 5) {
+    title
+    createdAt
+  }
+  stats {
+    totalUsers
+    totalPosts
+  }
+}
+```
+
+---
+
+## 8. MUTATIONS — WRITING DATA
+
+### Create
+```graphql
+mutation CreateUser {
+  register(input: {
+    name: "John Doe"
+    email: "john@example.com"
+    age: 28
+    role: USER
+  }) {
+    token
+    user {
+      id
+      name
+      email
+    }
+  }
+}
+
+# Response:
+{
+  "data": {
+    "register": {
+      "token": "eyJhbGciOiJIUzI1NiIs...",
+      "user": {
+        "id": "123",
+        "name": "John Doe",
+        "email": "john@example.com"
+      }
+    }
+  }
+}
+```
+
+### Update
+```graphql
+mutation UpdateUser {
+  updateUser(id: "123", input: {
+    name: "John Updated"
+    age: 29
+  }) {
+    id
+    name
+    age
+  }
+}
+```
+
+### Delete
+```graphql
+mutation DeleteUser {
+  deleteUser(id: "123") {
+    success
+    message
+  }
+}
+
+# Response:
+{
+  "data": {
+    "deleteUser": {
+      "success": true,
+      "message": "User deleted successfully"
+    }
+  }
+}
+```
+
+### Login
+```graphql
+mutation Login {
+  login(email: "john@example.com", password: "secret123") {
+    token
+    user {
+      id
+      name
+      role
+    }
+  }
+}
+```
+
+### Complex Mutation with Variables
+```graphql
+mutation CreatePost($input: CreatePostInput!) {
+  createPost(input: $input) {
+    id
+    title
+    content
+    status
+    author {
+      name
+    }
+  }
+}
+
+# Variables (sent separately as JSON):
+{
+  "input": {
+    "title": "My New Post",
+    "content": "This is the content...",
+    "status": "DRAFT",
+    "tags": ["graphql", "tutorial"]
+  }
+}
+```
+
+---
+
+## 9. SUBSCRIPTIONS — REAL-TIME DATA
+
+### How Subscriptions Work
+```
+1. Client opens a WebSocket connection to /graphql
+2. Client sends a subscription query
+3. Server pushes data through WebSocket whenever an event occurs
+4. Connection stays open until client unsubscribes
+```
+
+### Schema Definition
+```graphql
+type Subscription {
+  # Triggered when any new post is created
+  postCreated: Post!
+  
+  # Triggered when a comment is added to a specific post
+  commentAdded(postId: ID!): Comment!
+  
+  # Triggered when a user comes online/offline
+  userStatusChanged: User!
+  
+  # Triggered on new messages in a chat room
+  messageSent(roomId: ID!): Message!
+}
+```
+
+### Client Usage (Apollo Client)
+```javascript
+import { useSubscription, gql } from '@apollo/client';
+
+const NEW_COMMENT = gql`
+  subscription OnCommentAdded($postId: ID!) {
+    commentAdded(postId: $postId) {
+      id
+      text
+      author {
+        name
+      }
+      createdAt
+    }
+  }
+`;
+
+function Comments({ postId }) {
+  const { data, loading, error } = useSubscription(NEW_COMMENT, {
+    variables: { postId },
+  });
+
+  if (data) {
+    console.log('New comment:', data.commentAdded);
+  }
+
+  return <div>{/* render comments */}</div>;
+}
+```
+
+### Server Implementation (Apollo Server with subscriptions)
+```javascript
+import { PubSub } from 'graphql-subscriptions';
+
+const pubsub = new PubSub();
+const COMMENT_ADDED = 'COMMENT_ADDED';
+
+const resolvers = {
+  Mutation: {
+    addComment: async (_, { postId, text }, context) => {
+      const comment = await Comment.create({ postId, text, authorId: context.user.id });
+      
+      // Publish event
+      pubsub.publish(COMMENT_ADDED, { 
+        commentAdded: comment,
+        postId 
+      });
+      
+      return comment;
+    },
+  },
+  Subscription: {
+    commentAdded: {
+      subscribe: (_, { postId }) => {
+        // Filter: only send events for this specific post
+        return pubsub.asyncIterator(COMMENT_ADDED);
+      },
+      resolve: (payload) => payload.commentAdded,
+    },
+  },
+};
+```
+
+---
+
+## 10. ARGUMENTS & VARIABLES
+
+### Arguments in Schema
+```graphql
+type Query {
+  # Required argument
+  user(id: ID!): User
+  
+  # Optional argument
+  users(role: Role): [User!]!
+  
+  # Multiple arguments
+  posts(status: PostStatus, limit: Int = 10, offset: Int = 0): [Post!]!
+  
+  # Complex arguments with input type
+  searchPosts(filter: PostFilterInput!, pagination: PaginationInput): PostConnection!
+}
+```
+
+### Arguments in Queries
+```graphql
+# Inline arguments
+query {
+  user(id: "123") {
+    name
+  }
+  posts(status: PUBLISHED, limit: 5) {
+    title
+  }
+}
+```
+
+### Variables (Dynamic Values)
+```graphql
+# Query with variable declarations
+query GetUser($userId: ID!, $includeEmail: Boolean = false) {
+  user(id: $userId) {
+    name
+    email @include(if: $includeEmail)
+    posts {
+      title
+    }
+  }
+}
+```
+
+**Variables JSON (sent with the query):**
+```json
+{
+  "userId": "123",
+  "includeEmail": true
+}
+```
+
+### Variable Types
+```graphql
+# Required scalar
+$id: ID!
+
+# Optional scalar
+$name: String
+
+# Required input type
+$input: CreateUserInput!
+
+# Required list
+$ids: [ID!]!
+
+# Optional with default
+$limit: Int = 10
+
+# Enum
+$role: Role = USER
+```
+
+### Full Request Structure (HTTP POST body)
+```json
+{
+  "query": "query GetUser($id: ID!) { user(id: $id) { name email } }",
+  "variables": {
+    "id": "123"
+  },
+  "operationName": "GetUser"
+}
+```
+
+---
+
+## 11. FRAGMENTS
+
+Fragments let you **reuse sets of fields** across multiple queries.
+
+### Basic Fragment
+```graphql
+# Define fragment
+fragment UserBasicInfo on User {
+  id
+  name
+  email
+  role
+}
+
+# Use in queries
+query {
+  user(id: "1") {
+    ...UserBasicInfo
+    posts {
+      title
+    }
+  }
+  me {
+    ...UserBasicInfo
+    isActive
+  }
+}
+
+# Equivalent to writing:
+query {
+  user(id: "1") {
+    id
+    name
+    email
+    role
+    posts {
+      title
+    }
+  }
+  me {
+    id
+    name
+    email
+    role
+    isActive
+  }
+}
+```
+
+### Nested Fragments
+```graphql
+fragment PostSummary on Post {
+  id
+  title
+  status
+  createdAt
+}
+
+fragment PostWithAuthor on Post {
+  ...PostSummary
+  content
+  author {
+    ...UserBasicInfo
+  }
+}
+
+fragment UserWithPosts on User {
+  ...UserBasicInfo
+  posts {
+    ...PostSummary
+  }
+}
+
+query GetDashboard {
+  me {
+    ...UserWithPosts
+  }
+  latestPosts {
+    ...PostWithAuthor
+  }
+}
+```
+
+### Inline Fragments (for Unions/Interfaces)
+```graphql
+query Search($query: String!) {
+  search(query: $query) {
+    # Common fields from interface
+    ... on Node {
+      id
+      createdAt
+    }
+    # Type-specific fields
+    ... on User {
+      name
+      email
+    }
+    ... on Post {
+      title
+      content
+    }
+    ... on Comment {
+      text
+    }
+  }
+}
+```
+
+### __typename (Type Discrimination)
+```graphql
+query Search($query: String!) {
+  search(query: $query) {
+    __typename    # Returns "User", "Post", or "Comment"
+    ... on User {
+      name
+    }
+    ... on Post {
+      title
+    }
+  }
+}
+
+# Response:
+{
+  "data": {
+    "search": [
+      { "__typename": "User", "name": "John" },
+      { "__typename": "Post", "title": "GraphQL Guide" }
+    ]
+  }
+}
+```
+
+---
+
+## 12. ALIASES
+
+Aliases let you **rename fields** in the response — essential when querying the same field with different arguments.
+
+```graphql
+# Without aliases (ERROR — duplicate field "user")
+query {
+  user(id: "1") { name }     # ← Can't have two "user" fields
+  user(id: "2") { name }     # ← Conflict!
+}
+
+# With aliases (WORKS)
+query {
+  firstUser: user(id: "1") {
+    name
+  }
+  secondUser: user(id: "2") {
+    name
+  }
+}
+
+# Response:
+{
+  "data": {
+    "firstUser": {
+      "name": "Alice"
+    },
+    "secondUser": {
+      "name": "Bob"
+    }
+  }
+}
+```
+
+### Practical Example — Dashboard
+```graphql
+query Dashboard {
+  publishedPosts: posts(status: PUBLISHED) {
+    title
+    likes
+  }
+  draftPosts: posts(status: DRAFT) {
+    title
+    createdAt
+  }
+  archivedCount: postsCount(status: ARCHIVED)
+  publishedCount: postsCount(status: PUBLISHED)
+}
+```
+
+---
+
+## 13. DIRECTIVES
+
+Directives modify the execution of a query.
+
+### Built-in Directives
+
+| Directive | Where | Purpose |
+|-----------|-------|---------|
+| `@include(if: Boolean!)` | Fields, Fragments | Include field only if condition is true |
+| `@skip(if: Boolean!)` | Fields, Fragments | Skip field if condition is true |
+| `@deprecated(reason: String)` | Schema fields | Mark field as deprecated |
+
+### @include and @skip
+```graphql
+query GetUser($userId: ID!, $withPosts: Boolean!, $hideSensitive: Boolean!) {
+  user(id: $userId) {
+    name
+    email @skip(if: $hideSensitive)         # Skip email if hideSensitive is true
+    phone @skip(if: $hideSensitive)
+    posts @include(if: $withPosts) {        # Include posts only if withPosts is true
+      title
+      content
+    }
+  }
+}
+
+# Variables:
+{
+  "userId": "1",
+  "withPosts": true,
+  "hideSensitive": false
+}
+```
+
+### @deprecated (in Schema)
+```graphql
+type User {
+  id: ID!
+  name: String!
+  email: String!
+  username: String @deprecated(reason: "Use 'name' instead")
+  avatar: String @deprecated(reason: "Use 'profile.avatar' instead")
+  profile: Profile
+}
+```
+
+### Custom Directives (Schema)
+```graphql
+# Define custom directive
+directive @auth(requires: Role = ADMIN) on FIELD_DEFINITION
+directive @cacheControl(maxAge: Int) on FIELD_DEFINITION
+directive @rateLimit(max: Int!, window: String!) on FIELD_DEFINITION
+
+type Query {
+  me: User @auth(requires: USER)
+  users: [User!]! @auth(requires: ADMIN)
+  publicPosts: [Post!]! @cacheControl(maxAge: 300)
+  sensitiveData: Data! @auth(requires: ADMIN) @rateLimit(max: 10, window: "1m")
+}
+```
+
+---
+
+## 14. ENUMS
+
+```graphql
+enum Role {
+  ADMIN
+  MODERATOR
+  USER
+  GUEST
+}
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+  DELETED
+}
+
+enum SortOrder {
+  ASC
+  DESC
+}
+
+enum NotificationType {
+  EMAIL
+  SMS
+  PUSH
+  IN_APP
+}
+
+# Usage in types
+type User {
+  role: Role!       # Must be one of: ADMIN, MODERATOR, USER, GUEST
+}
+
+# Usage in queries
+query {
+  users(role: ADMIN) {
+    name
+  }
+  posts(status: PUBLISHED, sort: DESC) {
+    title
+  }
+}
+
+# Usage in mutations
+mutation {
+  updateUser(id: "1", input: { role: MODERATOR }) {
+    role
+  }
+}
+```
+
+---
+
+## 15. INTERFACES
+
+An interface defines a **set of fields that multiple types must implement**.
+
+```graphql
+# Interface definition
+interface Node {
+  id: ID!
+  createdAt: String!
+}
+
+interface Timestamped {
+  createdAt: String!
+  updatedAt: String
+}
+
+# Types implementing interface
+type User implements Node & Timestamped {
+  id: ID!
+  createdAt: String!
+  updatedAt: String
+  name: String!
+  email: String!
+}
+
+type Post implements Node & Timestamped {
+  id: ID!
+  createdAt: String!
+  updatedAt: String
+  title: String!
+  content: String!
+}
+
+type Comment implements Node {
+  id: ID!
+  createdAt: String!
+  text: String!
+}
+
+# Query that returns interface type
+type Query {
+  node(id: ID!): Node     # Can return User, Post, or Comment
+}
+
+# Client query
+query {
+  node(id: "abc123") {
+    id
+    createdAt
+    # Type-specific fields with inline fragments
+    ... on User {
+      name
+      email
+    }
+    ... on Post {
+      title
+      content
+    }
+  }
+}
+```
+
+---
+
+## 16. UNION TYPES
+
+A union means a type can be **one of several types** (no shared fields required).
+
+```graphql
+# Union definition
+union SearchResult = User | Post | Comment
+
+union Media = Image | Video | Audio
+
+union NotificationTarget = User | Team | Channel
+
+# Usage in schema
+type Query {
+  search(query: String!): [SearchResult!]!
+}
+
+# Client query — MUST use inline fragments
+query Search($q: String!) {
+  search(query: $q) {
+    __typename        # "User", "Post", or "Comment"
+    
+    ... on User {
+      id
+      name
+      email
+    }
+    
+    ... on Post {
+      id
+      title
+      content
+      author {
+        name
+      }
+    }
+    
+    ... on Comment {
+      id
+      text
+    }
+  }
+}
+
+# Response:
+{
+  "data": {
+    "search": [
+      { "__typename": "User", "id": "1", "name": "John", "email": "john@test.com" },
+      { "__typename": "Post", "id": "5", "title": "GraphQL Guide", "content": "...", "author": { "name": "Jane" } },
+      { "__typename": "Comment", "id": "10", "text": "Great article!" }
+    ]
+  }
+}
+```
+
+### Interface vs Union
+
+| Interface | Union |
+|-----------|-------|
+| Types share common fields | Types have NO common fields required |
+| `interface Node { id: ID! }` | `union Result = A \| B \| C` |
+| Types MUST implement all interface fields | Types are independent |
+| Good for: things that share a structure | Good for: search results, mixed feeds |
+
+---
+
+## 17. INPUT TYPES
+
+Input types are used **only for arguments** (mutation inputs). Regular types can't be used as arguments.
+
+```graphql
+# ✗ WRONG — can't use output type as input
+type User {
+  id: ID!
+  name: String!
+}
+mutation {
+  createUser(user: User): User    # ERROR!
+}
+
+# ✓ CORRECT — use input type
+input CreateUserInput {
+  name: String!
+  email: String!
+  password: String!
+  age: Int
+  role: Role = USER
+}
+
+input UpdateUserInput {
+  name: String
+  email: String
+  age: Int
+  role: Role
+}
+
+input LoginInput {
+  email: String!
+  password: String!
+}
+
+input PostFilterInput {
+  status: PostStatus
+  authorId: ID
+  tags: [String]
+  search: String
+  dateFrom: String
+  dateTo: String
+}
+
+# Nested input types
+input AddressInput {
+  street: String!
+  city: String!
+  state: String!
+  zipCode: String!
+  country: String!
+}
+
+input CreateUserInput {
+  name: String!
+  email: String!
+  address: AddressInput        # Nested input
+  socialLinks: [String]
+}
+
+# Usage in schema
+type Mutation {
+  createUser(input: CreateUserInput!): User!
+  updateUser(id: ID!, input: UpdateUserInput!): User!
+  login(input: LoginInput!): AuthPayload!
+}
+
+# Usage in query
+mutation {
+  createUser(input: {
+    name: "John"
+    email: "john@test.com"
+    password: "secure123"
+    address: {
+      street: "123 Main St"
+      city: "New York"
+      state: "NY"
+      zipCode: "10001"
+      country: "US"
+    }
+  }) {
+    id
+    name
+  }
+}
+```
+
+---
+
+## 18. CUSTOM SCALARS
+
+When built-in scalars aren't enough, create custom ones.
+
+### Schema Definition
+```graphql
+scalar DateTime        # ISO 8601 date-time
+scalar Date            # ISO 8601 date
+scalar JSON            # Arbitrary JSON
+scalar Email           # Validated email
+scalar URL             # Validated URL
+scalar PositiveInt     # Integer > 0
+scalar UUID            # UUID v4
+
+type User {
+  id: UUID!
+  email: Email!
+  createdAt: DateTime!
+  birthDate: Date
+  website: URL
+  metadata: JSON
+}
+```
+
+### Server Implementation (Apollo Server)
+```javascript
+import { GraphQLScalarType, Kind } from 'graphql';
+
+const DateTimeScalar = new GraphQLScalarType({
+  name: 'DateTime',
+  description: 'ISO 8601 DateTime',
+  
+  // Server → Client: serialize to string
+  serialize(value) {
+    return value instanceof Date ? value.toISOString() : value;
+  },
+  
+  // Client → Server (variable): parse from string
+  parseValue(value) {
+    return new Date(value);
+  },
+  
+  // Client → Server (inline): parse from AST
+  parseLiteral(ast) {
+    if (ast.kind === Kind.STRING) {
+      return new Date(ast.value);
+    }
+    return null;
+  },
+});
+
+const EmailScalar = new GraphQLScalarType({
+  name: 'Email',
+  description: 'Valid email address',
+  
+  serialize(value) {
+    return value;
+  },
+  
+  parseValue(value) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(value)) {
+      throw new Error('Invalid email format');
+    }
+    return value;
+  },
+  
+  parseLiteral(ast) {
+    if (ast.kind === Kind.STRING) {
+      return this.parseValue(ast.value);
+    }
+    return null;
+  },
+});
+
+// Add to resolvers
+const resolvers = {
+  DateTime: DateTimeScalar,
+  Email: EmailScalar,
+  // ...
+};
+```
+
+---
+
+## 19. RESOLVERS — HOW DATA IS FETCHED
+
+Resolvers are **functions that return data** for each field in the schema.
+
+### Resolver Function Signature
+```javascript
+fieldName(parent, args, context, info) {
+  // parent  — result from the parent resolver (for nested fields)
+  // args    — arguments passed to this field
+  // context — shared data (auth, dataloaders, db connection)
+  // info    — field-specific info (AST, field name, etc.)
+}
+```
+
+### Complete Resolver Example
+```javascript
+const resolvers = {
+  // ================================
+  // QUERY RESOLVERS
+  // ================================
+  Query: {
+    // Get single user
+    user: async (_, { id }, context) => {
+      return await context.db.users.findById(id);
+    },
+
+    // Get all users with pagination
+    users: async (_, { pagination }, context) => {
+      const { page = 1, limit = 10 } = pagination || {};
+      return await context.db.users.find()
+        .skip((page - 1) * limit)
+        .limit(limit);
+    },
+
+    // Get authenticated user
+    me: async (_, __, context) => {
+      if (!context.user) throw new Error('Not authenticated');
+      return await context.db.users.findById(context.user.id);
+    },
+
+    // Get posts with filter
+    posts: async (_, { filter, pagination }, context) => {
+      const query = {};
+      if (filter?.status) query.status = filter.status;
+      if (filter?.authorId) query.authorId = filter.authorId;
+      if (filter?.searchText) {
+        query.title = { $regex: filter.searchText, $options: 'i' };
+      }
+
+      const { page = 1, limit = 10 } = pagination || {};
+      const totalCount = await context.db.posts.countDocuments(query);
+      const posts = await context.db.posts.find(query)
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .sort({ createdAt: -1 });
+
+      return {
+        edges: posts,
+        totalCount,
+        pageInfo: {
+          currentPage: page,
+          totalPages: Math.ceil(totalCount / limit),
+          hasNextPage: page * limit < totalCount,
+          hasPreviousPage: page > 1,
+        },
+      };
+    },
+
+    // Search across types
+    search: async (_, { query }, context) => {
+      const users = await context.db.users.find(
+        { name: { $regex: query, $options: 'i' } }
+      );
+      const posts = await context.db.posts.find(
+        { title: { $regex: query, $options: 'i' } }
+      );
+      return [
+        ...users.map(u => ({ __typename: 'User', ...u })),
+        ...posts.map(p => ({ __typename: 'Post', ...p })),
+      ];
+    },
+  },
+
+  // ================================
+  // MUTATION RESOLVERS
+  // ================================
+  Mutation: {
+    register: async (_, { input }, context) => {
+      const existingUser = await context.db.users.findOne({ email: input.email });
+      if (existingUser) throw new Error('Email already exists');
+
+      const hashedPassword = await bcrypt.hash(input.password, 10);
+      const user = await context.db.users.create({
+        ...input,
+        password: hashedPassword,
+      });
+
+      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET);
+      return { token, user };
+    },
+
+    login: async (_, { email, password }, context) => {
+      const user = await context.db.users.findOne({ email });
+      if (!user) throw new Error('Invalid credentials');
+
+      const valid = await bcrypt.compare(password, user.password);
+      if (!valid) throw new Error('Invalid credentials');
+
+      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET);
+      return { token, user };
+    },
+
+    createPost: async (_, { input }, context) => {
+      if (!context.user) throw new Error('Not authenticated');
+      return await context.db.posts.create({
+        ...input,
+        authorId: context.user.id,
+      });
+    },
+
+    deletePost: async (_, { id }, context) => {
+      if (!context.user) throw new Error('Not authenticated');
+      const post = await context.db.posts.findById(id);
+      if (!post) return { success: false, message: 'Post not found' };
+      if (post.authorId !== context.user.id) throw new Error('Not authorized');
+
+      await context.db.posts.deleteById(id);
+      return { success: true, message: 'Post deleted' };
+    },
+  },
+
+  // ================================
+  // TYPE RESOLVERS (Relationship)
+  // ================================
+  User: {
+    // When a User type is returned, resolve the 'posts' field
+    posts: async (parent, _, context) => {
+      return await context.db.posts.find({ authorId: parent.id });
+    },
+    
+    // Computed field
+    postCount: async (parent, _, context) => {
+      return await context.db.posts.count({ authorId: parent.id });
+    },
+
+    fullName: (parent) => {
+      return `${parent.firstName} ${parent.lastName}`;
+    },
+  },
+
+  Post: {
+    // When a Post type is returned, resolve the 'author' field
+    author: async (parent, _, context) => {
+      return await context.db.users.findById(parent.authorId);
+    },
+
+    comments: async (parent, _, context) => {
+      return await context.db.comments.find({ postId: parent.id });
+    },
+  },
+
+  Comment: {
+    author: async (parent, _, context) => {
+      return await context.db.users.findById(parent.authorId);
+    },
+
+    post: async (parent, _, context) => {
+      return await context.db.posts.findById(parent.postId);
+    },
+  },
+
+  // ================================
+  // UNION/INTERFACE RESOLVERS
+  // ================================
+  SearchResult: {
+    __resolveType(obj) {
+      if (obj.email) return 'User';
+      if (obj.title) return 'Post';
+      if (obj.text) return 'Comment';
+      return null;
+    },
+  },
+
+  Node: {
+    __resolveType(obj) {
+      if (obj.email) return 'User';
+      if (obj.title) return 'Post';
+      return 'Comment';
+    },
+  },
+};
+```
+
+### Resolver Chain (Parent-Child)
+```
+Query.user (parent = null)
+  → User.posts (parent = the User object)
+    → Post.author (parent = each Post object)
+    → Post.comments (parent = each Post object)
+      → Comment.author (parent = each Comment object)
+```
+
+---
+
+## 20. CONTEXT & AUTHENTICATION
+
+### Setting Up Context
+```javascript
+import { ApolloServer } from '@apollo/server';
+import jwt from 'jsonwebtoken';
+
+const server = new ApolloServer({
+  typeDefs,
+  resolvers,
+});
+
+// Express integration
+import { expressMiddleware } from '@apollo/server/express4';
+
+app.use('/graphql', expressMiddleware(server, {
+  context: async ({ req }) => {
+    // Extract token from header
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    
+    let user = null;
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        user = await db.users.findById(decoded.userId);
+      } catch (e) {
+        // Invalid token — user remains null
+      }
+    }
+
+    return {
+      user,           // Authenticated user (or null)
+      db,             // Database connection
+      dataloaders: {  // DataLoaders (see section 21)
+        userLoader: new DataLoader(ids => batchUsers(ids)),
+        postLoader: new DataLoader(ids => batchPosts(ids)),
+      },
+    };
+  },
+}));
+```
+
+### Auth Checking in Resolvers
+```javascript
+const resolvers = {
+  Query: {
+    // Public — no auth needed
+    posts: async (_, args, context) => {
+      return await context.db.posts.find({ status: 'PUBLISHED' });
+    },
+
+    // Authenticated — any logged-in user
+    me: async (_, __, context) => {
+      if (!context.user) {
+        throw new AuthenticationError('Must be logged in');
+      }
+      return context.user;
+    },
+
+    // Authorized — specific role
+    users: async (_, __, context) => {
+      if (!context.user) {
+        throw new AuthenticationError('Must be logged in');
+      }
+      if (context.user.role !== 'ADMIN') {
+        throw new ForbiddenError('Admin access required');
+      }
+      return await context.db.users.find();
+    },
+  },
+};
+```
+
+### Auth Middleware / Directive Approach
+```javascript
+// Reusable auth check function
+function requireAuth(context, requiredRole = null) {
+  if (!context.user) {
+    throw new Error('Authentication required');
+  }
+  if (requiredRole && context.user.role !== requiredRole) {
+    throw new Error(`Role '${requiredRole}' required`);
+  }
+  return context.user;
+}
+
+// Usage
+const resolvers = {
+  Query: {
+    me: (_, __, ctx) => requireAuth(ctx),
+    adminDashboard: (_, __, ctx) => {
+      requireAuth(ctx, 'ADMIN');
+      return getDashboardData();
+    },
+  },
+};
+```
+
+---
+
+## 21. DATALOADER — SOLVING THE N+1 PROBLEM
+
+### The N+1 Problem
+```graphql
+# This query causes N+1 database calls:
+query {
+  posts {          # 1 query to get 100 posts
+    title
+    author {       # 100 queries to get each post's author (N queries)
+      name
+    }
+  }
+}
+# Total: 101 database queries for 100 posts! 😱
+```
+
+### Solution: DataLoader
+DataLoader **batches** multiple individual loads into a single batch query.
+
+```javascript
+import DataLoader from 'dataloader';
+
+// Batch function — receives array of IDs, returns array of results (same order)
+async function batchUsers(userIds) {
+  // ONE database query instead of N queries
+  const users = await db.users.find({ id: { $in: userIds } });
+  
+  // Must return results in the SAME ORDER as the input IDs
+  const userMap = new Map(users.map(u => [u.id.toString(), u]));
+  return userIds.map(id => userMap.get(id.toString()) || null);
+}
+
+// Create DataLoader in context (one per request)
+const context = {
+  loaders: {
+    userLoader: new DataLoader(batchUsers),
+    postLoader: new DataLoader(batchPosts),
+    commentLoader: new DataLoader(batchComments),
+  },
+};
+
+// Use in resolvers
+const resolvers = {
+  Post: {
+    // Before DataLoader: N queries
+    // author: (post) => db.users.findById(post.authorId),
+    
+    // After DataLoader: 1 batched query for all authors
+    author: (post, _, context) => context.loaders.userLoader.load(post.authorId),
+  },
+  
+  User: {
+    posts: (user, _, context) => context.loaders.postLoader.load(user.id),
+  },
+};
+```
+
+### How DataLoader Works
+```
+Without DataLoader:
+  Post 1 → findUser(1)  → DB query
+  Post 2 → findUser(2)  → DB query
+  Post 3 → findUser(1)  → DB query (duplicate!)
+  Post 4 → findUser(3)  → DB query
+  = 4 separate queries
+
+With DataLoader:
+  Post 1 → userLoader.load(1)  → queued
+  Post 2 → userLoader.load(2)  → queued
+  Post 3 → userLoader.load(1)  → cached (deduped!)
+  Post 4 → userLoader.load(3)  → queued
+  → Next tick: batchUsers([1, 2, 3]) → 1 query!
+  = 1 batched query + automatic caching
+```
+
+---
+
+## 22. PAGINATION
+
+### Offset-Based Pagination
+```graphql
+# Schema
+type Query {
+  posts(page: Int = 1, limit: Int = 10): PostPage!
+}
+
+type PostPage {
+  data: [Post!]!
+  totalCount: Int!
+  currentPage: Int!
+  totalPages: Int!
+  hasMore: Boolean!
+}
+
+# Query
+query {
+  posts(page: 2, limit: 10) {
+    data {
+      title
+      author { name }
+    }
+    totalCount
+    currentPage
+    totalPages
+    hasMore
+  }
+}
+```
+
+### Cursor-Based Pagination (Relay Style — Recommended)
+```graphql
+# Schema (Relay specification)
+type Query {
+  posts(first: Int, after: String, last: Int, before: String): PostConnection!
+}
+
+type PostConnection {
+  edges: [PostEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type PostEdge {
+  cursor: String!      # Opaque cursor (usually base64-encoded ID)
+  node: Post!          # The actual data
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+# Query — get first 10 posts
+query {
+  posts(first: 10) {
+    edges {
+      cursor
+      node {
+        title
+        createdAt
+      }
+    }
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    totalCount
+  }
+}
+
+# Query — get next 10 posts after a cursor
+query {
+  posts(first: 10, after: "Y3Vyc29yXzEw") {
+    edges {
+      cursor
+      node {
+        title
+      }
+    }
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+  }
+}
+```
+
+### Resolver for Cursor Pagination
+```javascript
+const resolvers = {
+  Query: {
+    posts: async (_, { first = 10, after }, context) => {
+      let query = {};
+      
+      if (after) {
+        const cursorId = Buffer.from(after, 'base64').toString('utf-8');
+        query._id = { $gt: cursorId };
+      }
+      
+      const posts = await context.db.posts
+        .find(query)
+        .sort({ _id: 1 })
+        .limit(first + 1);  // Fetch one extra to check hasNextPage
+      
+      const hasNextPage = posts.length > first;
+      const edges = posts.slice(0, first).map(post => ({
+        cursor: Buffer.from(post.id.toString()).toString('base64'),
+        node: post,
+      }));
+      
+      const totalCount = await context.db.posts.countDocuments();
+      
+      return {
+        edges,
+        totalCount,
+        pageInfo: {
+          hasNextPage,
+          hasPreviousPage: !!after,
+          startCursor: edges[0]?.cursor,
+          endCursor: edges[edges.length - 1]?.cursor,
+        },
+      };
+    },
+  },
+};
+```
+
+### Offset vs Cursor Pagination
+
+| Aspect | Offset | Cursor |
+|--------|--------|--------|
+| Simplicity | Simple (`page`, `limit`) | More complex |
+| Performance | Slow on large datasets | Fast (indexed) |
+| Consistency | Items can shift between pages | Stable — no duplicates |
+| Use case | Admin dashboards, small datasets | Feeds, infinite scroll, large datasets |
+| Standard | No standard | Relay spec (widely adopted) |
+
+---
+
+## 23. ERROR HANDLING
+
+### GraphQL Error Format
+```json
+{
+  "data": null,
+  "errors": [
+    {
+      "message": "User not found",
+      "locations": [{ "line": 2, "column": 3 }],
+      "path": ["user"],
+      "extensions": {
+        "code": "NOT_FOUND",
+        "statusCode": 404
+      }
+    }
+  ]
+}
+```
+
+### Partial Data with Errors
+```json
+{
+  "data": {
+    "user": {
+      "name": "John",
+      "email": null        ← This field errored
+    }
+  },
+  "errors": [
+    {
+      "message": "Not authorized to view email",
+      "path": ["user", "email"],
+      "extensions": { "code": "FORBIDDEN" }
+    }
+  ]
+}
+```
+
+### Custom Error Classes (Apollo Server)
+```javascript
+import { GraphQLError } from 'graphql';
+
+// Throw custom errors
+throw new GraphQLError('User not found', {
+  extensions: {
+    code: 'NOT_FOUND',
+    statusCode: 404,
+    userId: id,
+  },
+});
+
+throw new GraphQLError('Authentication required', {
+  extensions: {
+    code: 'UNAUTHENTICATED',
+    statusCode: 401,
+  },
+});
+
+throw new GraphQLError('You do not have permission', {
+  extensions: {
+    code: 'FORBIDDEN',
+    statusCode: 403,
+  },
+});
+
+throw new GraphQLError('Email already in use', {
+  extensions: {
+    code: 'BAD_USER_INPUT',
+    statusCode: 400,
+    field: 'email',
+  },
+});
+```
+
+### Error Handling Patterns
+
+```javascript
+// Pattern 1: Union result type (recommended for mutations)
+// Schema:
+// union CreateUserResult = User | ValidationError | DuplicateError
+
+// Pattern 2: Result type with errors field
+// type CreateUserPayload {
+//   user: User
+//   errors: [FieldError!]
+// }
+// type FieldError {
+//   field: String!
+//   message: String!
+// }
+
+const resolvers = {
+  Mutation: {
+    createUser: async (_, { input }, context) => {
+      const errors = [];
+      
+      if (!input.email.includes('@')) {
+        errors.push({ field: 'email', message: 'Invalid email format' });
+      }
+      if (input.name.length < 2) {
+        errors.push({ field: 'name', message: 'Name too short' });
+      }
+      
+      if (errors.length > 0) {
+        return { user: null, errors };
+      }
+
+      const user = await context.db.users.create(input);
+      return { user, errors: [] };
+    },
+  },
+};
+```
+
+### Error Formatting (Apollo Server)
+```javascript
+const server = new ApolloServer({
+  typeDefs,
+  resolvers,
+  formatError: (formattedError, error) => {
+    // Log all errors server-side
+    console.error('GraphQL Error:', error);
+    
+    // Don't expose internal errors to clients in production
+    if (process.env.NODE_ENV === 'production') {
+      if (formattedError.extensions?.code === 'INTERNAL_SERVER_ERROR') {
+        return {
+          message: 'An unexpected error occurred',
+          extensions: { code: 'INTERNAL_SERVER_ERROR' },
+        };
+      }
+    }
+    
+    return formattedError;
+  },
+});
+```
+
+---
+
+## 24. FILE UPLOADS
+
+### Using graphql-upload (Apollo Server)
+```javascript
+// Schema
+scalar Upload
+
+type Mutation {
+  uploadFile(file: Upload!): FileResponse!
+  uploadAvatar(userId: ID!, file: Upload!): User!
+}
+
+type FileResponse {
+  url: String!
+  filename: String!
+  mimetype: String!
+  size: Int!
+}
+
+// Resolver
+const resolvers = {
+  Upload: GraphQLUpload,
+  Mutation: {
+    uploadFile: async (_, { file }) => {
+      const { createReadStream, filename, mimetype } = await file;
+      const stream = createReadStream();
+      
+      // Save to local filesystem or cloud storage
+      const path = `uploads/${Date.now()}-${filename}`;
+      await saveToStorage(stream, path);
+      
+      return {
+        url: `/files/${path}`,
+        filename,
+        mimetype,
+        size: stream.bytesRead,
+      };
+    },
+  },
+};
+```
+
+### Client Upload (Apollo Client)
+```javascript
+import { useMutation, gql } from '@apollo/client';
+
+const UPLOAD_FILE = gql`
+  mutation UploadFile($file: Upload!) {
+    uploadFile(file: $file) {
+      url
+      filename
+    }
+  }
+`;
+
+function FileUpload() {
+  const [uploadFile] = useMutation(UPLOAD_FILE);
+
+  const handleUpload = async (event) => {
+    const file = event.target.files[0];
+    const { data } = await uploadFile({
+      variables: { file },
+    });
+    console.log('Uploaded:', data.uploadFile.url);
+  };
+
+  return <input type="file" onChange={handleUpload} />;
+}
+```
+
+---
+
+## 25. CACHING STRATEGIES
+
+### Client-Side Caching (Apollo Client)
+
+Apollo Client uses a **normalized cache** — it stores data by `__typename:id`.
+
+```javascript
+import { ApolloClient, InMemoryCache } from '@apollo/client';
+
+const client = new ApolloClient({
+  uri: '/graphql',
+  cache: new InMemoryCache({
+    typePolicies: {
+      Query: {
+        fields: {
+          // Merge paginated results
+          posts: {
+            keyArgs: ['filter'],
+            merge(existing = { edges: [] }, incoming) {
+              return {
+                ...incoming,
+                edges: [...existing.edges, ...incoming.edges],
+              };
+            },
+          },
+        },
+      },
+      User: {
+        keyFields: ['id'],  // How to identify unique users
+      },
+      Post: {
+        keyFields: ['id'],
+      },
+    },
+  }),
+});
+```
+
+### Fetch Policies
+```javascript
+const { data } = useQuery(GET_USERS, {
+  fetchPolicy: 'cache-first',       // Default — check cache first
+  // fetchPolicy: 'cache-only',      // Only from cache (no network)
+  // fetchPolicy: 'network-only',    // Always fetch from network
+  // fetchPolicy: 'cache-and-network', // Return cache + refresh from network
+  // fetchPolicy: 'no-cache',        // Never cache
+});
+```
+
+### Server-Side Caching
+```javascript
+// Apollo Server cache hints
+const resolvers = {
+  Query: {
+    posts: async (_, args, context, info) => {
+      // Set cache control
+      info.cacheControl.setCacheHint({ maxAge: 300 }); // 5 minutes
+      return await context.db.posts.find();
+    },
+  },
+};
+
+// Schema directive approach
+type Query {
+  posts: [Post!]! @cacheControl(maxAge: 300)
+  me: User @cacheControl(maxAge: 0)  # Never cache
+}
+```
+
+### HTTP-Level Caching
+```
+GET requests can use HTTP caching:
+  - Apollo Server supports automatic persisted queries (APQ)
+  - GET /graphql?query={...}&variables={...}
+  - CDN can cache GET requests
+
+POST requests cannot use HTTP caching:
+  - All mutations use POST
+  - Complex queries typically use POST
+```
+
+---
+
+## 26. SECURITY BEST PRACTICES
+
+### 1. Query Depth Limiting
+```javascript
+// Prevent deeply nested queries that overload the server
+import depthLimit from 'graphql-depth-limit';
+
+const server = new ApolloServer({
+  typeDefs,
+  resolvers,
+  validationRules: [depthLimit(7)], // Max depth of 7
+});
+
+// This would be rejected (too deep):
+query {
+  user {                    # depth 1
+    posts {                 # depth 2
+      comments {            # depth 3
+        author {            # depth 4
+          posts {            # depth 5
+            comments {       # depth 6
+              author {       # depth 7
+                posts { }    # depth 8 — REJECTED!
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### 2. Query Complexity Analysis
+```javascript
+import { createComplexityLimitRule } from 'graphql-validation-complexity';
+
+const server = new ApolloServer({
+  typeDefs,
+  resolvers,
+  validationRules: [
+    createComplexityLimitRule(1000), // Max complexity score
+  ],
+});
+
+// In schema, assign costs:
+type Query {
+  users: [User!]! @complexity(value: 10)      # Each user costs 10
+  posts: [Post!]! @complexity(value: 5)       # Each post costs 5
+}
+```
+
+### 3. Rate Limiting
+```javascript
+import rateLimit from 'express-rate-limit';
+
+// Apply to /graphql endpoint
+app.use('/graphql', rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100,                  // 100 requests per window
+  message: 'Too many requests',
+}));
+```
+
+### 4. Disable Introspection in Production
+```javascript
+const server = new ApolloServer({
+  typeDefs,
+  resolvers,
+  introspection: process.env.NODE_ENV !== 'production',
+});
+```
+
+### 5. Input Validation
+```javascript
+const resolvers = {
+  Mutation: {
+    createUser: async (_, { input }) => {
+      // Validate input
+      if (input.name.length > 100) throw new Error('Name too long');
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email)) {
+        throw new Error('Invalid email');
+      }
+      // ...
+    },
+  },
+};
+```
+
+### 6. Field-Level Authorization
+```javascript
+const resolvers = {
+  User: {
+    email: (parent, _, context) => {
+      // Only show email to the user themselves or admins
+      if (context.user?.id === parent.id || context.user?.role === 'ADMIN') {
+        return parent.email;
+      }
+      return null;
+    },
+    
+    salary: (parent, _, context) => {
+      if (context.user?.role !== 'ADMIN') {
+        throw new GraphQLError('Not authorized', {
+          extensions: { code: 'FORBIDDEN' },
+        });
+      }
+      return parent.salary;
+    },
+  },
+};
+```
+
+### 7. Persisted Queries (Allowlisting)
+```javascript
+// Only allow pre-registered queries
+const server = new ApolloServer({
+  typeDefs,
+  resolvers,
+  persistedQueries: {
+    // Only registered query hashes are allowed
+    cache: new KeyvAdapter(new Keyv()),
+  },
+});
+```
+
+### Security Checklist
+```
+□ Authentication (JWT / OAuth / Session)
+□ Authorization (role-based in resolvers)
+□ Query depth limiting
+□ Query complexity analysis
+□ Rate limiting
+□ Input validation / sanitization
+□ Disable introspection in production
+□ Persisted queries (optional)
+□ HTTPS only
+□ CORS configuration
+□ Error masking (don't leak internal errors)
+□ Timeout limits on queries
+□ Logging & monitoring
+```
+
+---
+
+## 27. SCHEMA DESIGN BEST PRACTICES
+
+### 1. Use Input Types for Mutations
+```graphql
+# ✗ BAD — too many inline arguments
+mutation {
+  createUser(name: String!, email: String!, age: Int, role: Role): User!
+}
+
+# ✓ GOOD — use input type
+input CreateUserInput {
+  name: String!
+  email: String!
+  age: Int
+  role: Role = USER
+}
+mutation {
+  createUser(input: CreateUserInput!): User!
+}
+```
+
+### 2. Return the Modified Object from Mutations
+```graphql
+# ✗ BAD — returns boolean (client must refetch)
+type Mutation {
+  updateUser(id: ID!, name: String!): Boolean!
+}
+
+# ✓ GOOD — returns updated object (client cache auto-updates)
+type Mutation {
+  updateUser(id: ID!, input: UpdateUserInput!): User!
+}
+```
+
+### 3. Use Payload Types for Complex Mutations
+```graphql
+# ✓ BEST — use payload type
+type UpdateUserPayload {
+  user: User
+  errors: [FieldError!]
+}
+
+type FieldError {
+  field: String!
+  message: String!
+}
+
+type Mutation {
+  updateUser(id: ID!, input: UpdateUserInput!): UpdateUserPayload!
+}
+```
+
+### 4. Use Connections for Lists (Relay Style)
+```graphql
+# ✗ BAD — no pagination info
+type Query {
+  posts: [Post!]!
+}
+
+# ✓ GOOD — with pagination
+type Query {
+  posts(first: Int, after: String): PostConnection!
+}
+```
+
+### 5. Prefix Boolean Fields with "is" or "has"
+```graphql
+type User {
+  isActive: Boolean!
+  isVerified: Boolean!
+  hasAvatar: Boolean!
+  canEdit: Boolean!
+}
+```
+
+### 6. Use Enums for Fixed Values
+```graphql
+# ✗ BAD — string
+type User {
+  role: String!    # Can be anything: "admn", "ADMIN", "admin"
+}
+
+# ✓ GOOD — enum
+enum Role { ADMIN USER MODERATOR }
+type User {
+  role: Role!      # Type-safe, auto-documented
+}
+```
+
+### 7. Keep the Schema Flat (Avoid Deep Nesting in Types)
+```graphql
+# ✗ BAD — excessive depth in types
+type Query {
+  company: Company
+}
+type Company {
+  departments: [Department]
+}
+type Department {
+  teams: [Team]
+}
+type Team {
+  members: [User]  # 4 levels deep!
+}
+
+# ✓ GOOD — provide direct access points
+type Query {
+  company(id: ID!): Company
+  department(id: ID!): Department
+  team(id: ID!): Team
+  users(teamId: ID): [User!]!
+}
+```
+
+### 8. Use @deprecated Instead of Removing Fields
+```graphql
+type User {
+  name: String!
+  username: String @deprecated(reason: "Use 'name' field instead. Will be removed on 2025-01-01")
+}
+```
+
+---
+
+## 28. APOLLO SERVER (NODE.JS)
+
+### Full Setup
+```bash
+npm install @apollo/server graphql express cors
+npm install @apollo/server-plugin-drain-http-server
+```
+
+```javascript
+// server.js
+import { ApolloServer } from '@apollo/server';
+import { expressMiddleware } from '@apollo/server/express4';
+import { ApolloServerPluginDrainHttpServer } from '@apollo/server/plugin/drainHttpServer';
+import express from 'express';
+import http from 'http';
+import cors from 'cors';
+
+// Schema
+const typeDefs = `#graphql
+  type User {
+    id: ID!
+    name: String!
+    email: String!
+    posts: [Post!]!
+  }
+
+  type Post {
+    id: ID!
+    title: String!
+    content: String!
+    author: User!
+  }
+
+  type Query {
+    users: [User!]!
+    user(id: ID!): User
+    posts: [Post!]!
+    post(id: ID!): Post
+  }
+
+  input CreateUserInput {
+    name: String!
+    email: String!
+  }
+
+  input CreatePostInput {
+    title: String!
+    content: String!
+    authorId: ID!
+  }
+
+  type Mutation {
+    createUser(input: CreateUserInput!): User!
+    createPost(input: CreatePostInput!): Post!
+    deleteUser(id: ID!): Boolean!
+  }
+`;
+
+// Mock data
+let users = [
+  { id: '1', name: 'Alice', email: 'alice@test.com' },
+  { id: '2', name: 'Bob', email: 'bob@test.com' },
+];
+
+let posts = [
+  { id: '1', title: 'GraphQL Basics', content: 'Learning GraphQL...', authorId: '1' },
+  { id: '2', title: 'Apollo Server', content: 'Setting up Apollo...', authorId: '1' },
+  { id: '3', title: 'React Tips', content: 'Best practices...', authorId: '2' },
+];
+
+// Resolvers
+const resolvers = {
+  Query: {
+    users: () => users,
+    user: (_, { id }) => users.find(u => u.id === id),
+    posts: () => posts,
+    post: (_, { id }) => posts.find(p => p.id === id),
+  },
+  Mutation: {
+    createUser: (_, { input }) => {
+      const user = { id: String(users.length + 1), ...input };
+      users.push(user);
+      return user;
+    },
+    createPost: (_, { input }) => {
+      const post = { id: String(posts.length + 1), ...input };
+      posts.push(post);
+      return post;
+    },
+    deleteUser: (_, { id }) => {
+      const index = users.findIndex(u => u.id === id);
+      if (index === -1) return false;
+      users.splice(index, 1);
+      return true;
+    },
+  },
+  User: {
+    posts: (parent) => posts.filter(p => p.authorId === parent.id),
+  },
+  Post: {
+    author: (parent) => users.find(u => u.id === parent.authorId),
+  },
+};
+
+// Start server
+const app = express();
+const httpServer = http.createServer(app);
+
+const server = new ApolloServer({
+  typeDefs,
+  resolvers,
+  plugins: [ApolloServerPluginDrainHttpServer({ httpServer })],
+});
+
+await server.start();
+
+app.use('/graphql', cors(), express.json(), expressMiddleware(server, {
+  context: async ({ req }) => ({
+    // Add auth, db, loaders here
+    token: req.headers.authorization,
+  }),
+}));
+
+httpServer.listen(4000, () => {
+  console.log('🚀 Server ready at http://localhost:4000/graphql');
+});
+```
+
+---
+
+## 29. SPRING FOR GRAPHQL (JAVA)
+
+### Dependencies (Spring Boot)
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-graphql</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-web</artifactId>
+</dependency>
+```
+
+### Schema File: `src/main/resources/graphql/schema.graphqls`
+```graphql
+type Query {
+    users: [User!]!
+    user(id: ID!): User
+    posts: [Post!]!
+}
+
+type Mutation {
+    createUser(input: CreateUserInput!): User!
+    createPost(input: CreatePostInput!): Post!
+}
+
+type User {
+    id: ID!
+    name: String!
+    email: String!
+    posts: [Post!]!
+}
+
+type Post {
+    id: ID!
+    title: String!
+    content: String!
+    author: User!
+}
+
+input CreateUserInput {
+    name: String!
+    email: String!
+}
+
+input CreatePostInput {
+    title: String!
+    content: String!
+    authorId: ID!
+}
+```
+
+### Controller
+```java
+import org.springframework.graphql.data.method.annotation.*;
+import org.springframework.stereotype.Controller;
+import java.util.List;
+
+@Controller
+public class UserController {
+
+    private final UserService userService;
+    private final PostService postService;
+
+    public UserController(UserService userService, PostService postService) {
+        this.userService = userService;
+        this.postService = postService;
+    }
+
+    // Query resolvers
+    @QueryMapping
+    public List<User> users() {
+        return userService.findAll();
+    }
+
+    @QueryMapping
+    public User user(@Argument Long id) {
+        return userService.findById(id);
+    }
+
+    @QueryMapping
+    public List<Post> posts() {
+        return postService.findAll();
+    }
+
+    // Mutation resolvers
+    @MutationMapping
+    public User createUser(@Argument CreateUserInput input) {
+        return userService.create(input);
+    }
+
+    @MutationMapping
+    public Post createPost(@Argument CreatePostInput input) {
+        return postService.create(input);
+    }
+
+    // Field resolver — User.posts
+    @SchemaMapping(typeName = "User", field = "posts")
+    public List<Post> userPosts(User user) {
+        return postService.findByAuthorId(user.getId());
+    }
+
+    // Field resolver — Post.author
+    @SchemaMapping(typeName = "Post", field = "author")
+    public User postAuthor(Post post) {
+        return userService.findById(post.getAuthorId());
+    }
+
+    // Batch loading (DataLoader equivalent)
+    @BatchMapping
+    public Map<User, List<Post>> posts(List<User> users) {
+        // Single query, mapped by user
+        return postService.findByAuthors(users);
+    }
+}
+```
+
+### Configuration
+```properties
+# application.properties
+spring.graphql.graphiql.enabled=true
+spring.graphql.graphiql.path=/graphiql
+spring.graphql.path=/graphql
+spring.graphql.schema.printer.enabled=true
+```
+
+---
+
+## 30. PYTHON GRAPHQL SERVERS
+
+### Strawberry (Modern, Type-Safe)
+```bash
+pip install strawberry-graphql[fastapi]
+```
+
+```python
+import strawberry
+from typing import List, Optional
+from fastapi import FastAPI
+from strawberry.fastapi import GraphQLRouter
+
+# Types
+@strawberry.type
+class User:
+    id: str
+    name: str
+    email: str
+
+@strawberry.type
+class Post:
+    id: str
+    title: str
+    content: str
+    author_id: str
+
+@strawberry.input
+class CreateUserInput:
+    name: str
+    email: str
+
+# Resolvers
+@strawberry.type
+class Query:
+    @strawberry.field
+    def users(self) -> List[User]:
+        return db.get_all_users()
+
+    @strawberry.field
+    def user(self, id: str) -> Optional[User]:
+        return db.get_user(id)
+
+@strawberry.type
+class Mutation:
+    @strawberry.mutation
+    def create_user(self, input: CreateUserInput) -> User:
+        return db.create_user(input.name, input.email)
+
+# Create schema
+schema = strawberry.Schema(query=Query, mutation=Mutation)
+
+# FastAPI integration
+app = FastAPI()
+graphql_app = GraphQLRouter(schema)
+app.include_router(graphql_app, prefix="/graphql")
+```
+
+### Graphene (Mature)
+```bash
+pip install graphene
+```
+
+```python
+import graphene
+
+class User(graphene.ObjectType):
+    id = graphene.ID(required=True)
+    name = graphene.String(required=True)
+    email = graphene.String(required=True)
+
+class Query(graphene.ObjectType):
+    users = graphene.List(graphene.NonNull(User))
+    user = graphene.Field(User, id=graphene.ID(required=True))
+
+    def resolve_users(self, info):
+        return db.get_all_users()
+
+    def resolve_user(self, info, id):
+        return db.get_user(id)
+
+class CreateUser(graphene.Mutation):
+    class Arguments:
+        name = graphene.String(required=True)
+        email = graphene.String(required=True)
+
+    user = graphene.Field(User)
+
+    def mutate(self, info, name, email):
+        user = db.create_user(name, email)
+        return CreateUser(user=user)
+
+class Mutation(graphene.ObjectType):
+    create_user = CreateUser.Field()
+
+schema = graphene.Schema(query=Query, mutation=Mutation)
+```
+
+---
+
+## 31. APOLLO CLIENT (REACT)
+
+### Setup
+```bash
+npm install @apollo/client graphql
+```
+
+```javascript
+// apollo-client.js
+import { ApolloClient, InMemoryCache, ApolloProvider, HttpLink, from } from '@apollo/client';
+import { onError } from '@apollo/client/link/error';
+import { setContext } from '@apollo/client/link/context';
+
+// Auth link — add token to every request
+const authLink = setContext((_, { headers }) => {
+  const token = localStorage.getItem('token');
+  return {
+    headers: {
+      ...headers,
+      authorization: token ? `Bearer ${token}` : '',
+    },
+  };
+});
+
+// Error link — handle errors globally
+const errorLink = onError(({ graphQLErrors, networkError }) => {
+  if (graphQLErrors) {
+    graphQLErrors.forEach(({ message, extensions }) => {
+      console.error(`GraphQL Error: ${message}`);
+      if (extensions?.code === 'UNAUTHENTICATED') {
+        // Redirect to login
+        window.location.href = '/login';
+      }
+    });
+  }
+  if (networkError) {
+    console.error('Network Error:', networkError);
+  }
+});
+
+// HTTP link
+const httpLink = new HttpLink({
+  uri: 'http://localhost:4000/graphql',
+});
+
+// Create client
+const client = new ApolloClient({
+  link: from([errorLink, authLink, httpLink]),
+  cache: new InMemoryCache(),
+  defaultOptions: {
+    watchQuery: {
+      fetchPolicy: 'cache-and-network',
+    },
+  },
+});
+
+// Wrap app
+function App() {
+  return (
+    <ApolloProvider client={client}>
+      <MainApp />
+    </ApolloProvider>
+  );
+}
+```
+
+### useQuery — Fetching Data
+```javascript
+import { useQuery, gql } from '@apollo/client';
+
+const GET_USERS = gql`
+  query GetUsers {
+    users {
+      id
+      name
+      email
+      role
+    }
+  }
+`;
+
+function UserList() {
+  const { loading, error, data, refetch } = useQuery(GET_USERS);
+
+  if (loading) return <p>Loading...</p>;
+  if (error) return <p>Error: {error.message}</p>;
+
+  return (
+    <div>
+      <button onClick={() => refetch()}>Refresh</button>
+      <ul>
+        {data.users.map(user => (
+          <li key={user.id}>{user.name} — {user.email}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+### useQuery with Variables
+```javascript
+const GET_USER = gql`
+  query GetUser($id: ID!) {
+    user(id: $id) {
+      name
+      email
+      posts {
+        title
+      }
+    }
+  }
+`;
+
+function UserProfile({ userId }) {
+  const { loading, error, data } = useQuery(GET_USER, {
+    variables: { id: userId },
+    skip: !userId,  // Don't execute if no userId
+  });
+
+  if (loading) return <p>Loading...</p>;
+  if (error) return <p>Error: {error.message}</p>;
+  if (!data?.user) return <p>User not found</p>;
+
+  const { user } = data;
+  return (
+    <div>
+      <h2>{user.name}</h2>
+      <p>{user.email}</p>
+      <h3>Posts:</h3>
+      {user.posts.map(post => <p key={post.title}>{post.title}</p>)}
+    </div>
+  );
+}
+```
+
+### useMutation — Writing Data
+```javascript
+const CREATE_USER = gql`
+  mutation CreateUser($input: CreateUserInput!) {
+    createUser(input: $input) {
+      id
+      name
+      email
+    }
+  }
+`;
+
+function CreateUserForm() {
+  const [createUser, { loading, error, data }] = useMutation(CREATE_USER, {
+    // Update cache after mutation
+    update(cache, { data: { createUser } }) {
+      const existing = cache.readQuery({ query: GET_USERS });
+      cache.writeQuery({
+        query: GET_USERS,
+        data: { users: [...existing.users, createUser] },
+      });
+    },
+    // Or simply refetch related queries
+    refetchQueries: [{ query: GET_USERS }],
+    onCompleted: (data) => {
+      console.log('User created:', data.createUser);
+    },
+    onError: (error) => {
+      console.error('Failed:', error.message);
+    },
+  });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    await createUser({
+      variables: {
+        input: {
+          name: formData.get('name'),
+          email: formData.get('email'),
+        },
+      },
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input name="name" placeholder="Name" required />
+      <input name="email" placeholder="Email" required />
+      <button type="submit" disabled={loading}>
+        {loading ? 'Creating...' : 'Create User'}
+      </button>
+      {error && <p>Error: {error.message}</p>}
+      {data && <p>Created: {data.createUser.name}</p>}
+    </form>
+  );
+}
+```
+
+### useMutation — Update & Delete
+```javascript
+const UPDATE_USER = gql`
+  mutation UpdateUser($id: ID!, $input: UpdateUserInput!) {
+    updateUser(id: $id, input: $input) {
+      id
+      name
+      email
+    }
+  }
+`;
+
+const DELETE_USER = gql`
+  mutation DeleteUser($id: ID!) {
+    deleteUser(id: $id) {
+      success
+      message
+    }
+  }
+`;
+
+function UserActions({ user }) {
+  const [updateUser] = useMutation(UPDATE_USER);
+  const [deleteUser] = useMutation(DELETE_USER, {
+    update(cache, { data }) {
+      if (data.deleteUser.success) {
+        cache.evict({ id: cache.identify(user) });
+        cache.gc();
+      }
+    },
+  });
+
+  const handleUpdate = () => {
+    updateUser({
+      variables: { id: user.id, input: { name: 'New Name' } },
+    });
+  };
+
+  const handleDelete = () => {
+    if (window.confirm('Delete user?')) {
+      deleteUser({ variables: { id: user.id } });
+    }
+  };
+
+  return (
+    <div>
+      <button onClick={handleUpdate}>Update</button>
+      <button onClick={handleDelete}>Delete</button>
+    </div>
+  );
+}
+```
+
+### useLazyQuery — Query on Demand
+```javascript
+const SEARCH_USERS = gql`
+  query SearchUsers($query: String!) {
+    searchUsers(query: $query) {
+      id
+      name
+    }
+  }
+`;
+
+function SearchBar() {
+  const [searchUsers, { loading, data }] = useLazyQuery(SEARCH_USERS);
+
+  const handleSearch = (e) => {
+    const value = e.target.value;
+    if (value.length >= 3) {
+      searchUsers({ variables: { query: value } });
+    }
+  };
+
+  return (
+    <div>
+      <input onChange={handleSearch} placeholder="Search users..." />
+      {loading && <p>Searching...</p>}
+      {data?.searchUsers.map(user => (
+        <p key={user.id}>{user.name}</p>
+      ))}
+    </div>
+  );
+}
+```
+
+---
+
+## 32. VANILLA JS GRAPHQL CLIENT
+
+### Using Fetch
+```javascript
+// Simple GraphQL fetch
+async function graphqlQuery(query, variables = {}) {
+  const response = await fetch('http://localhost:4000/graphql', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('token')}`,
+    },
+    body: JSON.stringify({ query, variables }),
+  });
+
+  const result = await response.json();
+
+  if (result.errors) {
+    throw new Error(result.errors[0].message);
+  }
+
+  return result.data;
+}
+
+// Usage
+const data = await graphqlQuery(`
+  query GetUser($id: ID!) {
+    user(id: $id) {
+      name
+      email
+    }
+  }
+`, { id: '1' });
+
+console.log(data.user.name);
+
+// Mutation
+const result = await graphqlQuery(`
+  mutation CreateUser($input: CreateUserInput!) {
+    createUser(input: $input) {
+      id
+      name
+    }
+  }
+`, {
+  input: { name: 'John', email: 'john@test.com' }
+});
+```
+
+### Using Axios
+```javascript
+import axios from 'axios';
+
+const graphqlClient = axios.create({
+  baseURL: 'http://localhost:4000/graphql',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Add auth token
+graphqlClient.interceptors.request.use(config => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Query function
+async function gqlRequest(query, variables = {}) {
+  const { data } = await graphqlClient.post('', { query, variables });
+  if (data.errors) throw new Error(data.errors[0].message);
+  return data.data;
+}
+
+// Usage
+const users = await gqlRequest('{ users { id name email } }');
+```
+
+---
+
+## 33. REACT QUERY + GRAPHQL
+
+### graphql-request + React Query (Lightweight Alternative to Apollo)
+```bash
+npm install @tanstack/react-query graphql-request graphql
+```
+
+```javascript
+import { GraphQLClient, gql } from 'graphql-request';
+import { useQuery, useMutation, useQueryClient, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+// GraphQL client
+const graphqlClient = new GraphQLClient('http://localhost:4000/graphql', {
+  headers: () => ({
+    authorization: `Bearer ${localStorage.getItem('token')}`,
+  }),
+});
+
+// Query client
+const queryClient = new QueryClient();
+
+// Custom hooks
+function useUsers() {
+  return useQuery({
+    queryKey: ['users'],
+    queryFn: () => graphqlClient.request(gql`
+      query {
+        users {
+          id
+          name
+          email
+        }
+      }
+    `),
+  });
+}
+
+function useUser(id) {
+  return useQuery({
+    queryKey: ['user', id],
+    queryFn: () => graphqlClient.request(gql`
+      query GetUser($id: ID!) {
+        user(id: $id) {
+          id
+          name
+          email
+          posts { title }
+        }
+      }
+    `, { id }),
+    enabled: !!id,
+  });
+}
+
+function useCreateUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input) => graphqlClient.request(gql`
+      mutation CreateUser($input: CreateUserInput!) {
+        createUser(input: $input) {
+          id
+          name
+          email
+        }
+      }
+    `, { input }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
+}
+
+// Components
+function UserList() {
+  const { data, isLoading, error } = useUsers();
+
+  if (isLoading) return <p>Loading...</p>;
+  if (error) return <p>Error: {error.message}</p>;
+
+  return (
+    <ul>
+      {data.users.map(user => (
+        <li key={user.id}>{user.name}</li>
+      ))}
+    </ul>
+  );
+}
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <UserList />
+    </QueryClientProvider>
+  );
+}
+```
+
+---
+
+## 34. TESTING GRAPHQL
+
+### Server Testing (Jest + Apollo Server)
+```javascript
+import { ApolloServer } from '@apollo/server';
+import assert from 'assert';
+
+describe('GraphQL API', () => {
+  let server;
+
+  beforeAll(async () => {
+    server = new ApolloServer({ typeDefs, resolvers });
+    await server.start();
+  });
+
+  afterAll(async () => {
+    await server.stop();
+  });
+
+  it('should return all users', async () => {
+    const response = await server.executeOperation({
+      query: '{ users { id name email } }',
+    });
+
+    assert(response.body.singleResult.errors === undefined);
+    const users = response.body.singleResult.data.users;
+    assert(users.length > 0);
+    assert(users[0].name);
+  });
+
+  it('should return user by ID', async () => {
+    const response = await server.executeOperation({
+      query: 'query GetUser($id: ID!) { user(id: $id) { name email } }',
+      variables: { id: '1' },
+    });
+
+    const user = response.body.singleResult.data.user;
+    assert.equal(user.name, 'Alice');
+  });
+
+  it('should create a user', async () => {
+    const response = await server.executeOperation({
+      query: `
+        mutation CreateUser($input: CreateUserInput!) {
+          createUser(input: $input) { id name email }
+        }
+      `,
+      variables: { input: { name: 'Test User', email: 'test@test.com' } },
+    });
+
+    const user = response.body.singleResult.data.createUser;
+    assert.equal(user.name, 'Test User');
+  });
+
+  it('should return error for invalid input', async () => {
+    const response = await server.executeOperation({
+      query: '{ user(id: "999") { name } }',
+    });
+
+    // User doesn't exist — should return null
+    assert.equal(response.body.singleResult.data.user, null);
+  });
+});
+```
+
+### Client Testing (React + Apollo)
+```javascript
+import { render, screen, waitFor } from '@testing-library/react';
+import { MockedProvider } from '@apollo/client/testing';
+import UserList from './UserList';
+
+const mocks = [
+  {
+    request: {
+      query: GET_USERS,
+    },
+    result: {
+      data: {
+        users: [
+          { id: '1', name: 'Alice', email: 'alice@test.com' },
+          { id: '2', name: 'Bob', email: 'bob@test.com' },
+        ],
+      },
+    },
+  },
+];
+
+describe('UserList', () => {
+  it('renders users', async () => {
+    render(
+      <MockedProvider mocks={mocks} addTypename={false}>
+        <UserList />
+      </MockedProvider>
+    );
+
+    // Initially shows loading
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+
+    // Wait for data
+    await waitFor(() => {
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+      expect(screen.getByText('Bob')).toBeInTheDocument();
+    });
+  });
+
+  it('handles error', async () => {
+    const errorMocks = [{
+      request: { query: GET_USERS },
+      error: new Error('Network error'),
+    }];
+
+    render(
+      <MockedProvider mocks={errorMocks} addTypename={false}>
+        <UserList />
+      </MockedProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/error/i)).toBeInTheDocument();
+    });
+  });
+});
+```
+
+---
+
+## 35. TOOLING & ECOSYSTEM
+
+### Development Tools
+
+| Tool | Purpose | URL |
+|------|---------|-----|
+| **GraphiQL** | In-browser IDE for exploring GraphQL | Built into most servers |
+| **Apollo Studio** | Schema management, monitoring, analytics | studio.apollographql.com |
+| **Banana Cake Pop** | GraphQL IDE (standalone app) | chillicream.com |
+| **Altair** | Feature-rich GraphQL client | altairgraphql.dev |
+| **Insomnia** | REST + GraphQL API client | insomnia.rest |
+| **Postman** | API testing (supports GraphQL) | postman.com |
+
+### Code Generation
+
+| Tool | Purpose |
+|------|---------|
+| **GraphQL Code Generator** | Generate TypeScript types, React hooks, resolvers |
+| **Apollo Codegen** | Generate types from schema |
+| **graphql-tools** | Schema utilities, stitching, mocking |
+
+### Server Libraries
+
+| Language | Library | Notes |
+|----------|---------|-------|
+| **Node.js** | Apollo Server, Mercurius, Yoga | Most popular ecosystem |
+| **Java** | Spring for GraphQL, graphql-java | Enterprise-grade |
+| **Python** | Strawberry, Graphene, Ariadne | Modern + legacy options |
+| **Go** | gqlgen, graphql-go | High performance |
+| **Ruby** | graphql-ruby | Rails integration |
+| **C#/.NET** | Hot Chocolate, GraphQL.NET | .NET ecosystem |
+| **PHP** | Lighthouse (Laravel), webonyx | PHP integration |
+| **Rust** | Juniper, async-graphql | Memory-safe |
+| **Kotlin** | ExpediaGroup/graphql-kotlin | JVM alternative |
+
+### Client Libraries
+
+| Platform | Library | Notes |
+|----------|---------|-------|
+| **React** | Apollo Client, urql, Relay | Apollo is most popular |
+| **Vue** | Apollo Vue, Villus | Vue-specific bindings |
+| **Angular** | Apollo Angular | Angular integration |
+| **React Native** | Apollo Client | Same as React |
+| **iOS** | Apollo iOS | Swift client |
+| **Android** | Apollo Kotlin | Kotlin client |
+| **Flutter** | graphql_flutter | Dart client |
+
+---
+
+## 36. FEDERATION & MICROSERVICES
+
+### What is GraphQL Federation?
+Federation lets you compose a **single graph from multiple services** — each team owns their part of the schema.
+
+```
+┌─────────────────────────────────────────────────────┐
+│                  APOLLO GATEWAY                      │
+│              (Single /graphql endpoint)              │
+├─────────────┬──────────────┬────────────────────────┤
+│   Users     │    Posts     │     Comments            │
+│  Service    │   Service    │     Service             │
+│  (team A)   │   (team B)   │     (team C)            │
+│             │              │                         │
+│ type User   │ type Post    │ type Comment            │
+│   id        │   id         │   id                    │
+│   name      │   title      │   text                  │
+│   email     │   author     │   author                │
+└─────────────┴──────────────┴────────────────────────┘
+```
+
+### Subgraph: Users Service
+```graphql
+# Users subgraph
+extend schema @link(url: "https://specs.apollo.dev/federation/v2.0", import: ["@key"])
+
+type Query {
+  users: [User!]!
+  user(id: ID!): User
+}
+
+type User @key(fields: "id") {
+  id: ID!
+  name: String!
+  email: String!
+}
+```
+
+### Subgraph: Posts Service
+```graphql
+# Posts subgraph
+extend schema @link(url: "https://specs.apollo.dev/federation/v2.0", import: ["@key", "@external"])
+
+type Query {
+  posts: [Post!]!
+  post(id: ID!): Post
+}
+
+type Post @key(fields: "id") {
+  id: ID!
+  title: String!
+  content: String!
+  authorId: ID!
+  author: User!
+}
+
+# Reference to User from Users service
+type User @key(fields: "id", resolvable: false) {
+  id: ID!
+}
+```
+
+### Gateway (Apollo Router)
+```yaml
+# supergraph.yaml
+federation_version: =2.0
+subgraphs:
+  users:
+    routing_url: http://users-service:4001/graphql
+    schema:
+      subgraph_url: http://users-service:4001/graphql
+  posts:
+    routing_url: http://posts-service:4002/graphql
+    schema:
+      subgraph_url: http://posts-service:4002/graphql
+```
+
+```bash
+# Compose supergraph
+rover supergraph compose --config supergraph.yaml > supergraph.graphql
+
+# Start router
+./router --supergraph supergraph.graphql
+```
+
+---
+
+## 37. GRAPHQL WITH TYPESCRIPT (CODEGEN)
+
+### Setup
+```bash
+npm install -D @graphql-codegen/cli @graphql-codegen/typescript \
+  @graphql-codegen/typescript-operations @graphql-codegen/typescript-react-apollo
+```
+
+### Config: `codegen.ts`
+```typescript
+import type { CodegenConfig } from '@graphql-codegen/cli';
+
+const config: CodegenConfig = {
+  schema: 'http://localhost:4000/graphql',
+  documents: ['src/**/*.{ts,tsx}'],
+  generates: {
+    './src/generated/graphql.ts': {
+      plugins: [
+        'typescript',
+        'typescript-operations',
+        'typescript-react-apollo',
+      ],
+      config: {
+        withHooks: true,
+        withComponent: false,
+      },
+    },
+  },
+};
+
+export default config;
+```
+
+### Run Codegen
+```bash
+npx graphql-codegen
+```
+
+### Generated Types (example output)
+```typescript
+// src/generated/graphql.ts (auto-generated)
+export type User = {
+  __typename?: 'User';
+  id: string;
+  name: string;
+  email: string;
+  posts: Post[];
+};
+
+export type Post = {
+  __typename?: 'Post';
+  id: string;
+  title: string;
+  content: string;
+  author: User;
+};
+
+export type GetUsersQuery = {
+  __typename?: 'Query';
+  users: Array<{
+    __typename?: 'User';
+    id: string;
+    name: string;
+    email: string;
+  }>;
+};
+
+// Auto-generated hook!
+export function useGetUsersQuery(options?: QueryHookOptions<GetUsersQuery>) {
+  return useQuery<GetUsersQuery>(GetUsersDocument, options);
+}
+```
+
+### Usage with Generated Hooks
+```typescript
+import { useGetUsersQuery, useCreateUserMutation } from './generated/graphql';
+
+function UserList() {
+  // Fully typed! data.users is User[] — autocomplete works
+  const { data, loading, error } = useGetUsersQuery();
+
+  if (loading) return <p>Loading...</p>;
+  if (error) return <p>Error: {error.message}</p>;
+
+  return (
+    <ul>
+      {data?.users.map(user => (
+        <li key={user.id}>
+          {user.name} — {user.email}
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+---
+
+## 38. PERFORMANCE OPTIMIZATION
+
+### 1. Query Batching
+```javascript
+// Apollo Client batches multiple queries in a single HTTP request
+import { BatchHttpLink } from '@apollo/client/link/batch-http';
+
+const link = new BatchHttpLink({
+  uri: '/graphql',
+  batchMax: 5,       // Max 5 queries per batch
+  batchInterval: 20, // Wait 20ms to collect queries
+});
+```
+
+### 2. Persisted Queries
+```javascript
+// Send query hash instead of full query string
+import { createPersistedQueryLink } from '@apollo/client/link/persisted-queries';
+import { sha256 } from 'crypto-hash';
+
+const link = createPersistedQueryLink({ sha256 }).concat(httpLink);
+
+// First request: sends hash + full query
+// Subsequent requests: sends only hash (much smaller payload)
+```
+
+### 3. Automatic Persisted Queries (APQ)
+```
+First request:
+  Client → "hash: abc123" → Server
+  Server: "I don't know hash abc123" → 404
+  Client → "hash: abc123 + full query" → Server
+  Server: stores { abc123: "query { users { name } }" }
+
+All future requests:
+  Client → "hash: abc123" → Server
+  Server: executes stored query → response
+  (Much smaller payload!)
+```
+
+### 4. Defer and Stream (@defer, @stream)
+```graphql
+# @defer — load parts of query later
+query {
+  user(id: "1") {
+    name
+    email
+    ... @defer {         # This part arrives later
+      posts {
+        title
+        comments {
+          text
+        }
+      }
+    }
+  }
+}
+
+# @stream — stream list items one by one
+query {
+  posts @stream(initialCount: 5) {    # First 5 arrive immediately
+    title                              # Rest stream in
+    author { name }
+  }
+}
+```
+
+### 5. Field-Level Caching
+```javascript
+// Cache control per field
+const typePolicies = {
+  User: {
+    fields: {
+      posts: {
+        // Cache posts for each user separately
+        keyArgs: ['status'],
+        merge(existing = [], incoming) {
+          return [...existing, ...incoming];
+        },
+      },
+    },
+  },
+};
+```
+
+### 6. Avoid N+1 with DataLoader (see Section 21)
+
+### Performance Checklist
+```
+□ Use DataLoader for relationship fields
+□ Implement pagination (don't fetch unlimited lists)
+□ Set query depth limits
+□ Set query complexity limits
+□ Use persisted queries in production
+□ Enable response caching (CDN, server-side)
+□ Use @defer for non-critical data
+□ Batch multiple queries
+□ Monitor query performance (Apollo Studio)
+□ Index database fields used in resolvers
+□ Use projections (only select needed DB columns)
+```
+
+---
+
+## 39. REAL-WORLD SCHEMA EXAMPLES
+
+### E-Commerce Schema
+```graphql
+type Query {
+  products(filter: ProductFilter, pagination: PaginationInput): ProductConnection!
+  product(id: ID!): Product
+  categories: [Category!]!
+  cart: Cart!
+  orders(status: OrderStatus): [Order!]!
+  me: User
+}
+
+type Mutation {
+  addToCart(productId: ID!, quantity: Int!): Cart!
+  removeFromCart(itemId: ID!): Cart!
+  updateCartItem(itemId: ID!, quantity: Int!): Cart!
+  checkout(input: CheckoutInput!): Order!
+  createReview(productId: ID!, input: ReviewInput!): Review!
+}
+
+type Product {
+  id: ID!
+  name: String!
+  description: String!
+  price: Float!
+  salePrice: Float
+  images: [String!]!
+  category: Category!
+  reviews: [Review!]!
+  averageRating: Float!
+  inStock: Boolean!
+  variants: [ProductVariant!]!
+}
+
+type Cart {
+  id: ID!
+  items: [CartItem!]!
+  totalPrice: Float!
+  itemCount: Int!
+}
+
+type CartItem {
+  id: ID!
+  product: Product!
+  quantity: Int!
+  subtotal: Float!
+}
+
+type Order {
+  id: ID!
+  items: [OrderItem!]!
+  status: OrderStatus!
+  totalAmount: Float!
+  shippingAddress: Address!
+  createdAt: DateTime!
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+input CheckoutInput {
+  shippingAddressId: ID!
+  paymentMethodId: ID!
+  couponCode: String
+}
+```
+
+### Social Media Schema
+```graphql
+type Query {
+  feed(pagination: PaginationInput): PostConnection!
+  profile(username: String!): User
+  trending: [Post!]!
+  notifications: [Notification!]!
+  search(query: String!, type: SearchType): [SearchResult!]!
+}
+
+type Mutation {
+  createPost(input: CreatePostInput!): Post!
+  likePost(postId: ID!): Post!
+  unlikePost(postId: ID!): Post!
+  addComment(postId: ID!, text: String!): Comment!
+  followUser(userId: ID!): User!
+  unfollowUser(userId: ID!): User!
+  updateProfile(input: UpdateProfileInput!): User!
+}
+
+type Subscription {
+  newNotification: Notification!
+  newMessage(chatId: ID!): Message!
+}
+
+type User {
+  id: ID!
+  username: String!
+  displayName: String!
+  avatar: String
+  bio: String
+  posts: [Post!]!
+  followers: [User!]!
+  following: [User!]!
+  followerCount: Int!
+  followingCount: Int!
+  isFollowedByMe: Boolean!
+}
+
+type Post {
+  id: ID!
+  content: String!
+  media: [MediaItem!]
+  author: User!
+  likes: Int!
+  isLikedByMe: Boolean!
+  comments: [Comment!]!
+  commentCount: Int!
+  createdAt: DateTime!
+}
+
+union SearchResult = User | Post | Hashtag
+union Notification = LikeNotification | CommentNotification | FollowNotification
+```
+
+### Chat Application Schema
+```graphql
+type Query {
+  conversations: [Conversation!]!
+  messages(conversationId: ID!, pagination: PaginationInput): MessageConnection!
+  contacts: [User!]!
+}
+
+type Mutation {
+  sendMessage(input: SendMessageInput!): Message!
+  createConversation(participantIds: [ID!]!): Conversation!
+  markAsRead(conversationId: ID!): Conversation!
+  deleteMessage(messageId: ID!): Boolean!
+  typingIndicator(conversationId: ID!): Boolean!
+}
+
+type Subscription {
+  messageSent(conversationId: ID!): Message!
+  userTyping(conversationId: ID!): TypingIndicator!
+  userOnlineStatus: OnlineStatus!
+}
+
+type Conversation {
+  id: ID!
+  participants: [User!]!
+  lastMessage: Message
+  unreadCount: Int!
+  updatedAt: DateTime!
+}
+
+type Message {
+  id: ID!
+  text: String
+  media: MediaItem
+  sender: User!
+  conversation: Conversation!
+  readBy: [User!]!
+  createdAt: DateTime!
+}
+```
+
+---
+
+## 40. INTERVIEW QUESTIONS & ANSWERS
+
+### Q1: What is GraphQL and how is it different from REST?
+**A:** GraphQL is a query language for APIs that lets clients request exactly the data they need. Unlike REST which has multiple endpoints returning fixed data structures, GraphQL has a single endpoint where clients specify the shape of the response via queries. This eliminates over-fetching (getting too much data) and under-fetching (needing multiple requests for related data).
+
+### Q2: What are the three main operations in GraphQL?
+**A:**
+- **Query** — Read data (equivalent to GET)
+- **Mutation** — Write/modify data (equivalent to POST/PUT/DELETE)
+- **Subscription** — Real-time data via WebSocket push
+
+### Q3: What is a Schema in GraphQL?
+**A:** The schema is the contract between client and server. It defines all types, their fields, relationships, queries, mutations, and subscriptions using SDL (Schema Definition Language). It's strongly typed and self-documenting — clients can introspect the schema to discover what operations are available.
+
+### Q4: What is a Resolver and how does it work?
+**A:** A resolver is a function that returns data for a specific field in the schema. It receives four arguments:
+- `parent` — result from the parent resolver
+- `args` — arguments passed to the field
+- `context` — shared data (auth, DB, DataLoaders)
+- `info` — query AST information
+
+Resolvers form a tree that mirrors the query shape, executing top-down.
+
+### Q5: What is the N+1 problem and how do you solve it?
+**A:** When fetching a list of items with their related data, GraphQL can make 1 query for the list + N queries for each item's related data (e.g., 100 posts + 100 author queries = 101 total).
+
+**Solution:** Use **DataLoader** which batches individual `.load(id)` calls into a single batch query. Instead of 100 separate author queries, DataLoader makes one query: `SELECT * FROM users WHERE id IN (...)`.
+
+### Q6: Explain the difference between Interface and Union in GraphQL.
+**A:**
+- **Interface**: Defines shared fields that implementing types MUST include. Use when types have common structure. `interface Node { id: ID! }` — all implementing types have `id`.
+- **Union**: A type that can be one of several types with NO shared fields required. Use for search results or mixed content. `union SearchResult = User | Post | Comment`.
+
+### Q7: What is a Fragment and why use it?
+**A:** A fragment is a reusable set of fields on a specific type. It avoids duplication when the same fields are needed in multiple queries.
+```graphql
+fragment UserFields on User { id name email }
+query { user(id: "1") { ...UserFields } me { ...UserFields } }
+```
+
+### Q8: How does GraphQL handle errors?
+**A:** GraphQL always returns HTTP 200. Errors are in the response body:
+```json
+{ "data": { "user": null }, "errors": [{ "message": "Not found", "path": ["user"] }] }
+```
+Partial data is possible — some fields succeed while others error. Each error includes `message`, `path`, `locations`, and optional `extensions` (for error codes).
+
+### Q9: What is Introspection in GraphQL?
+**A:** Introspection is the ability to query the schema itself. Clients can discover all types, fields, queries, and mutations at runtime using a special `__schema` query. This powers auto-complete in GraphQL IDEs and code generation tools. It should be disabled in production for security.
+
+### Q10: What are Directives in GraphQL?
+**A:** Directives modify query execution. Built-in:
+- `@include(if: Boolean!)` — conditionally include a field
+- `@skip(if: Boolean!)` — conditionally skip a field
+- `@deprecated(reason: String)` — mark schema fields as deprecated
+
+Custom directives can add auth checks, caching, rate limiting, etc.
+
+### Q11: Explain cursor-based vs offset-based pagination.
+**A:**
+- **Offset**: Uses `page` + `limit`. Simple but inconsistent with real-time data (items can shift between pages). Slow on large datasets.
+- **Cursor**: Uses opaque cursors (e.g., base64 IDs). Consistent results, better performance with indexed lookups. The Relay specification standardizes this with `edges`, `node`, and `pageInfo`.
+
+### Q12: How do you handle authentication in GraphQL?
+**A:** Authentication is typically handled via:
+1. Client sends JWT token in `Authorization` header
+2. Server middleware extracts and verifies the token
+3. Authenticated user is placed in `context`
+4. Individual resolvers check `context.user` for authorization
+
+Authorization can be per-resolver, per-field, or via custom directives.
+
+### Q13: What is Apollo Federation?
+**A:** Apollo Federation is an architecture for composing a single GraphQL API from multiple microservices (subgraphs). Each team owns their subgraph with their types. An Apollo Router/Gateway composes them into a unified schema. This enables independent deployment and team ownership.
+
+### Q14: What are Input Types and why can't we use regular types for mutation arguments?
+**A:** Input types (declared with `input` keyword) are used solely for arguments. Regular types can have resolvers, circular references, and complex computed fields that don't make sense as input. Input types are flat, serializable data structures. This separation ensures a clear contract between what clients send vs. what servers return.
+
+### Q15: How do you optimize GraphQL performance?
+**A:** Key strategies:
+1. **DataLoader** — batch and cache DB queries (N+1 fix)
+2. **Query depth/complexity limits** — prevent abuse
+3. **Persisted queries** — send hash instead of full query
+4. **Response caching** — CDN and server-side
+5. **Pagination** — never return unlimited lists
+6. **@defer/@stream** — incremental delivery
+7. **Code generation** — type-safe clients, avoid runtime overhead
+8. **Field-level projections** — only fetch needed DB columns
+
+### Q16: What is the difference between useQuery and useLazyQuery in Apollo Client?
+**A:**
+- `useQuery` executes immediately when the component renders
+- `useLazyQuery` returns a function that you call manually (e.g., on button click or form submit). Useful for search, conditional fetching, or user-triggered actions.
+
+### Q17: How does Apollo Client cache work?
+**A:** Apollo uses a **normalized cache** (InMemoryCache). It:
+1. Assigns each object a unique cache key: `__typename:id` (e.g., `User:123`)
+2. Stores objects flat in a key-value store
+3. When a mutation updates a `User:123`, ALL queries showing that user automatically update
+4. Uses `typePolicies` for custom cache behavior (merge, key fields)
+
+### Q18: When should you NOT use GraphQL?
+**A:** GraphQL may not be ideal when:
+- Simple CRUD with no complex relationships (REST is simpler)
+- File serving / binary data transfer
+- Heavy caching needs (REST's HTTP caching is superior)
+- Simple internal microservice communication
+- Team lacks GraphQL experience
+- Real-time isn't needed and WebSocket infrastructure isn't desired
+- Public API where clients shouldn't have arbitrary query power
+
+---
+
+## QUICK REFERENCE CHEAT SHEET
+
+### Query Syntax
+```graphql
+query OperationName($var: Type!) {        # Named query with variable
+  fieldName(arg: $var) {                   # Field with argument
+    scalarField                            # Return scalar
+    objectField { nestedField }            # Return nested object
+    ...FragmentName                        # Spread fragment
+    aliasName: fieldName(arg: value)       # Alias
+    conditionalField @include(if: $flag)   # Directive
+  }
+}
+```
+
+### Type System
+```graphql
+# Object type
+type User { name: String! }
+
+# Input type (for arguments)
+input CreateUserInput { name: String! }
+
+# Enum
+enum Role { ADMIN USER }
+
+# Interface
+interface Node { id: ID! }
+
+# Union
+union Result = User | Post
+
+# Custom scalar
+scalar DateTime
+
+# Nullability
+String     → nullable
+String!    → non-null
+[String!]! → non-null list of non-null strings
+```
+
+### Key Annotations
+```graphql
+@deprecated(reason: "Use X instead")  # Mark field deprecated
+@include(if: $bool)                   # Conditionally include
+@skip(if: $bool)                      # Conditionally skip
+@key(fields: "id")                    # Federation entity key
+@cacheControl(maxAge: 300)            # Cache hint
+```
+
+### Apollo Client Hooks
+```javascript
+useQuery(QUERY, { variables, fetchPolicy, skip })
+useLazyQuery(QUERY)     → [executeQuery, { data, loading }]
+useMutation(MUTATION)   → [mutate, { data, loading, error }]
+useSubscription(SUB)    → { data, loading, error }
+```
+
+### HTTP Request Format
+```
+POST /graphql
+Content-Type: application/json
+Authorization: Bearer <token>
+
+{
+  "query": "query { users { id name } }",
+  "variables": { "id": "1" },
+  "operationName": "GetUsers"
+}
+```
+
+### Response Format
+```json
+{
+  "data": { "users": [{ "id": "1", "name": "Alice" }] },
+  "errors": [],
+  "extensions": {}
+}
+```
