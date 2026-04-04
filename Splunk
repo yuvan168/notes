@@ -1,0 +1,5369 @@
+# Splunk Complete Notes
+
+---
+
+## 1. Introduction to Splunk
+
+### What is Splunk?
+Splunk is a powerful platform for searching, monitoring, and analyzing machine-generated big data via a web-based interface. It captures, indexes, and correlates real-time data in a searchable repository from which it can generate graphs, reports, alerts, dashboards, and visualizations.
+
+### Key Use Cases
+- **Log Management**: Collect, store, and analyze logs from servers, applications, network devices, etc.
+- **Security Information and Event Management (SIEM)**: Detect threats, investigate incidents, and respond to breaches.
+- **IT Operations Monitoring**: Monitor infrastructure health, application performance, and service availability.
+- **Business Analytics**: Gain insights from machine data to drive business decisions.
+- **Compliance & Auditing**: Meet regulatory requirements by retaining and searching audit data.
+
+### Splunk Products
+| Product | Description |
+|---------|-------------|
+| **Splunk Enterprise** | On-premises deployment for indexing and searching data |
+| **Splunk Cloud** | SaaS version of Splunk Enterprise hosted by Splunk |
+| **Splunk Free** | Limited version (500 MB/day indexing, no authentication, no alerting) |
+| **Splunk Light** | Lightweight version for small environments (discontinued) |
+| **Splunk SOAR** | Security Orchestration, Automation, and Response |
+| **Splunk ITSI** | IT Service Intelligence for monitoring KPIs and services |
+| **Splunk UBA** | User Behavior Analytics for detecting insider threats |
+
+---
+
+## 2. Splunk Architecture
+
+### Core Components
+
+#### 1. Forwarder
+Forwarders are lightweight agents installed on data sources that collect and forward data to indexers.
+
+- **Universal Forwarder (UF)**: Lightweight, forwards raw data only. Cannot parse or index data. Most commonly used.
+- **Heavy Forwarder (HF)**: Full Splunk instance that can parse, filter, and route data before forwarding. Uses more resources.
+- **Light Forwarder**: Deprecated. Replaced by Universal Forwarder.
+
+#### 2. Indexer
+The indexer processes incoming data by:
+1. **Parsing**: Breaking raw data into individual events
+2. **Timestamping**: Assigning timestamps to each event
+3. **Indexing**: Writing events to disk in compressed, searchable format
+4. **Storing**: Organizing data into indexes (buckets)
+
+Data flows through buckets in stages:
+- **Hot** → actively being written to (read/write)
+- **Warm** → rolled from hot, still searchable (read-only)
+- **Cold** → moved to cheaper/slower storage (read-only)
+- **Frozen** → archived or deleted (not searchable unless thawed)
+- **Thawed** → restored frozen data made searchable again
+
+#### 3. Search Head
+The Search Head provides the web interface for users to:
+- Run searches using SPL
+- Create dashboards, reports, and alerts
+- Manage knowledge objects (saved searches, field extractions, lookups)
+
+In distributed environments, the search head sends search requests to indexers, which return results.
+
+#### 4. Deployment Server
+Centrally manages configurations and app deployments to forwarders and other Splunk instances.
+
+#### 5. Cluster Master / Manager Node
+Manages indexer clusters for data replication and search factor configurations.
+
+#### 6. License Master
+Manages Splunk licensing across all instances.
+
+### Distributed Architecture Diagram (Conceptual)
+```
+Data Sources → Forwarders → Indexers (Cluster) → Search Heads (Cluster)
+                                ↑                        ↑
+                         Cluster Master          Search Head Deployer
+                         License Master
+                         Deployment Server
+```
+
+### Ports Used by Splunk
+| Port | Purpose |
+|------|---------|
+| 8000 | Splunk Web (UI) |
+| 8089 | Splunk Management / REST API (splunkd) |
+| 9997 | Receiving port (indexer listens for forwarder data) |
+| 8191 | KV Store |
+| 514  | Syslog (if configured) |
+
+---
+
+## 3. Splunk Installation & Setup
+
+### System Requirements
+- **OS**: Linux (RHEL, CentOS, Ubuntu), Windows, macOS
+- **RAM**: Minimum 4 GB (recommended 12+ GB for production)
+- **Disk**: Depends on data volume; SSDs recommended for hot/warm buckets
+- **CPU**: Multi-core recommended
+
+### Linux Installation
+```bash
+# Download the RPM or tar package from splunk.com
+# RPM installation
+sudo rpm -i splunk-<version>.rpm
+
+# Start Splunk
+sudo /opt/splunk/bin/splunk start --accept-license
+
+# Enable boot start
+sudo /opt/splunk/bin/splunk enable boot-start
+```
+
+### Windows Installation
+- Download the MSI installer from splunk.com
+- Run the installer and follow the wizard
+- Splunk installs to `C:\Program Files\Splunk` by default
+- Access via `http://localhost:8000`
+
+### Universal Forwarder Installation
+```bash
+# Linux
+sudo rpm -i splunkforwarder-<version>.rpm
+sudo /opt/splunkforwarder/bin/splunk start --accept-license
+
+# Configure forwarding
+/opt/splunkforwarder/bin/splunk add forward-server <indexer_ip>:9997
+/opt/splunkforwarder/bin/splunk add monitor /var/log/
+```
+
+### Key Configuration Files
+| File | Location | Purpose |
+|------|----------|---------|
+| `inputs.conf` | `$SPLUNK_HOME/etc/system/local/` | Define data inputs (files, ports, scripts) |
+| `outputs.conf` | `$SPLUNK_HOME/etc/system/local/` | Define where to forward data |
+| `props.conf` | `$SPLUNK_HOME/etc/system/local/` | Define source types, parsing rules, timestamps |
+| `transforms.conf` | `$SPLUNK_HOME/etc/system/local/` | Define field extractions, lookups, routing rules |
+| `indexes.conf` | `$SPLUNK_HOME/etc/system/local/` | Define indexes and their storage policies |
+| `server.conf` | `$SPLUNK_HOME/etc/system/local/` | General server settings |
+| `web.conf` | `$SPLUNK_HOME/etc/system/local/` | Web UI settings |
+| `authorize.conf` | `$SPLUNK_HOME/etc/system/local/` | Role-based access control |
+| `authentication.conf` | `$SPLUNK_HOME/etc/system/local/` | Authentication settings (LDAP, SAML) |
+
+### Configuration File Precedence (highest to lowest)
+1. `$SPLUNK_HOME/etc/system/local/` (user overrides — highest priority)
+2. `$SPLUNK_HOME/etc/apps/<app_name>/local/`
+3. `$SPLUNK_HOME/etc/apps/<app_name>/default/`
+4. `$SPLUNK_HOME/etc/system/default/` (factory defaults — lowest priority)
+
+---
+
+## 4. Data Input Methods
+
+### File & Directory Monitoring
+```ini
+# inputs.conf
+[monitor:///var/log/syslog]
+disabled = false
+sourcetype = syslog
+index = os_logs
+
+[monitor:///var/log/apache2/access.log]
+disabled = false
+sourcetype = access_combined
+index = web_logs
+```
+
+### Network Inputs (TCP/UDP)
+```ini
+# inputs.conf — receive syslog on UDP 514
+[udp://514]
+sourcetype = syslog
+index = network_logs
+
+# TCP input on port 5514
+[tcp://5514]
+sourcetype = custom_tcp
+index = custom_index
+```
+
+### Scripted Inputs
+```ini
+# inputs.conf — run a script every 60 seconds
+[script:///opt/splunk/etc/apps/myapp/bin/my_script.sh]
+interval = 60
+sourcetype = custom_script
+index = script_data
+```
+
+### HTTP Event Collector (HEC)
+HEC allows sending data to Splunk over HTTP/HTTPS using tokens.
+
+**Enable HEC in Splunk Web**: Settings → Data Inputs → HTTP Event Collector → Enable
+
+```bash
+# Send data via HEC using curl
+curl -k https://<splunk_host>:8088/services/collector/event \
+  -H "Authorization: Splunk <HEC_TOKEN>" \
+  -d '{"event": "Hello from HEC", "sourcetype": "manual", "index": "main"}'
+```
+
+### Windows-Specific Inputs
+```ini
+# inputs.conf
+[WinEventLog://Security]
+disabled = false
+index = win_security
+
+[WinEventLog://Application]
+disabled = false
+index = win_app
+
+[perfmon://CPU]
+object = Processor
+counters = % Processor Time
+instances = _Total
+interval = 30
+index = perfmon
+```
+
+### Database Inputs (DB Connect)
+Splunk DB Connect app allows pulling data from relational databases (MySQL, PostgreSQL, Oracle, SQL Server) on a schedule.
+
+---
+
+## 5. Indexes
+
+### What is an Index?
+An index is a repository where Splunk stores data. Each index is a collection of directories (buckets) containing compressed raw data and index files.
+
+### Default Indexes
+| Index | Description |
+|-------|-------------|
+| `main` | Default index for events if no index is specified |
+| `_internal` | Splunk's own internal logs (metrics, errors) |
+| `_audit` | Audit logs (user actions, search activity) |
+| `_introspection` | Performance and resource usage data |
+| `_telemetry` | Splunk usage telemetry |
+
+### Creating Custom Indexes
+```ini
+# indexes.conf
+[web_logs]
+homePath = $SPLUNK_DB/web_logs/db
+coldPath = $SPLUNK_DB/web_logs/colddb
+thawedPath = $SPLUNK_DB/web_logs/thaweddb
+maxTotalDataSizeMB = 50000
+frozenTimePeriodInSecs = 7776000   # 90 days retention
+```
+
+Or via Splunk Web: **Settings → Indexes → New Index**
+
+### Index Properties
+| Property | Description |
+|----------|-------------|
+| `maxTotalDataSizeMB` | Maximum total size of the index |
+| `frozenTimePeriodInSecs` | How long data is retained before freezing |
+| `maxDataSize` | Maximum size of a hot bucket (default: auto) |
+| `maxHotBuckets` | Maximum number of hot buckets |
+| `coldToFrozenDir` | Path to archive frozen buckets instead of deleting |
+
+---
+
+## 6. SPL — Search Processing Language
+
+SPL is the language used to search, filter, transform, and visualize data in Splunk.
+
+### Search Structure
+```
+search terms | command1 arguments | command2 arguments | ...
+```
+
+A search starts with **search terms** (keywords, field=value pairs) that filter events from the index. Results then flow through a **pipeline** of commands separated by `|` (pipe).
+
+### 6.1 Basic Searching
+
+#### Keyword Search
+```spl
+error
+failed login
+"connection refused"
+```
+- Keywords are case-insensitive
+- Phrases must be in double quotes
+- Boolean operators: `AND`, `OR`, `NOT` (must be uppercase)
+
+#### Field=Value Search
+```spl
+status=404
+host=webserver01
+sourcetype=access_combined status=500
+source="/var/log/syslog" error
+```
+
+#### Wildcards
+```spl
+fail*          # matches fail, failed, failure, etc.
+status=4*      # matches 400, 401, 404, etc.
+host=web*      # matches webserver01, webserver02, etc.
+```
+
+#### Comparison Operators
+```spl
+status >= 400
+response_time > 5
+bytes != 0
+status < 300
+```
+
+#### Boolean Logic
+```spl
+error OR warning
+error NOT timeout
+(status=500 OR status=503) AND host=web*
+```
+
+### 6.2 Time Range
+
+#### Time Picker (UI)
+You can use the time range picker in the Splunk UI to select preset ranges or custom windows.
+
+#### Inline Time Modifiers
+```spl
+earliest=-24h latest=now        # last 24 hours
+earliest=-7d@d latest=@d        # last 7 full days (aligned to midnight)
+earliest=-1h                    # last 1 hour
+earliest=01/01/2026:00:00:00 latest=01/31/2026:23:59:59
+```
+
+**Snap-to (`@`)** aligns time to a boundary:
+- `@d` = beginning of the day (midnight)
+- `@h` = beginning of the hour
+- `@w0` = beginning of the week (Sunday)
+- `@mon` = beginning of the month
+
+Examples:
+```spl
+earliest=-1d@d latest=@d     # yesterday (full day)
+earliest=@d                  # today so far
+earliest=-30m@m              # last 30 minutes, aligned to minute
+```
+
+### 6.3 Essential Search Commands
+
+#### `fields` — Select or Remove Fields
+```spl
+index=main | fields host, source, sourcetype, _time
+index=main | fields - _raw, _time       # remove specific fields
+index=main | fields + status, bytes      # keep only these fields
+```
+
+#### `table` — Display Results as a Table
+```spl
+index=web sourcetype=access_combined
+| table _time, clientip, method, uri_path, status, bytes
+```
+
+#### `rename` — Rename Fields
+```spl
+index=web | stats count by clientip
+| rename clientip AS "Client IP", count AS "Request Count"
+```
+
+#### `sort` — Sort Results
+```spl
+index=web | stats count by status | sort -count        # descending
+index=web | stats count by status | sort +count         # ascending (default)
+index=web | table _time, host, status | sort _time      # sort by time
+```
+
+#### `head` / `tail` — Limit Results
+```spl
+index=main | head 20      # first 20 events
+index=main | tail 10      # last 10 events
+```
+
+#### `dedup` — Remove Duplicates
+```spl
+index=main | dedup host                 # keep first event per host
+index=main | dedup host, sourcetype     # dedup by combination
+index=main | dedup 3 host              # keep first 3 events per host
+```
+
+#### `where` — Filter with Expressions
+```spl
+index=web | where status >= 400
+index=web | where like(uri_path, "/api/%")
+index=web | where cidrmatch("10.0.0.0/8", clientip)
+index=web | where isnotnull(user)
+index=web | where len(uri_path) > 100
+```
+
+`where` vs `search`:
+- `where` treats unquoted values as field names; `search` treats them as strings
+- `where` supports functions like `like()`, `cidrmatch()`, `isnotnull()`
+
+#### `eval` — Create or Transform Fields
+```spl
+# Create new fields
+| eval response_sec = response_time / 1000
+| eval status_category = if(status >= 400, "Error", "OK")
+| eval full_name = first_name . " " . last_name
+
+# Conditional logic
+| eval severity = case(
+    status >= 500, "Critical",
+    status >= 400, "Warning",
+    status >= 200, "OK",
+    true(), "Unknown"
+  )
+
+# Math functions
+| eval kb = round(bytes / 1024, 2)
+
+# String functions
+| eval lower_host = lower(host)
+| eval domain = replace(email, "^.*@", "")
+
+# Time functions
+| eval hour = strftime(_time, "%H")
+| eval epoch = strptime("2026-01-15", "%Y-%m-%d")
+
+# Multivalue
+| eval combined = mvappend(field1, field2)
+| eval count = mvcount(my_mv_field)
+```
+
+#### `rex` — Extract Fields with Regex
+```spl
+# Named capture group extracts into a new field
+| rex field=_raw "user=(?<username>\w+)"
+| rex field=_raw "(?<ip_address>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+
+# sed mode (replace)
+| rex field=email mode=sed "s/@.*//g"
+```
+
+#### `search` — Filter Results Mid-Pipeline
+```spl
+index=web | stats count by status | search count > 100
+```
+
+### 6.4 Statistical Commands
+
+#### `stats` — Aggregate Statistics
+```spl
+index=web | stats count                            # total event count
+index=web | stats count by status                  # count per status code
+index=web | stats count by host, sourcetype        # count by multiple fields
+index=web | stats avg(response_time) as avg_rt by host
+index=web | stats sum(bytes) as total_bytes by clientip
+index=web | stats min(response_time), max(response_time), avg(response_time) by uri_path
+index=web | stats dc(clientip) as unique_clients   # distinct count
+index=web | stats values(status) as status_codes by host   # list all unique values
+index=web | stats list(status) as all_statuses by host     # list all values (with duplicates)
+index=web | stats earliest(_time) as first_seen, latest(_time) as last_seen by host
+index=web | stats count as total, count(eval(status>=400)) as errors by host
+| eval error_rate = round(errors/total*100, 2)
+```
+
+**Common stats functions:**
+| Function | Description |
+|----------|-------------|
+| `count` | Number of events |
+| `dc(field)` | Distinct count of field values |
+| `sum(field)` | Sum of numeric field |
+| `avg(field)` | Average |
+| `min(field)` / `max(field)` | Minimum / Maximum |
+| `median(field)` | Median value |
+| `mode(field)` | Most common value |
+| `stdev(field)` | Standard deviation |
+| `perc95(field)` | 95th percentile |
+| `range(field)` | Difference between max and min |
+| `values(field)` | Distinct values (multivalue) |
+| `list(field)` | All values (multivalue, with duplicates) |
+| `first(field)` / `last(field)` | First / last value |
+| `earliest(field)` / `latest(field)` | Earliest / latest by time |
+
+#### `chart` — Tabular Aggregation
+```spl
+index=web | chart count by host, status
+# Creates a table: rows = host, columns = status values
+
+index=web | chart avg(response_time) over host by status
+# "over" defines the row axis, "by" defines the column split
+```
+
+#### `timechart` — Time-Series Aggregation
+```spl
+index=web | timechart count                          # events over time
+index=web | timechart span=1h count by status        # per-status counts per hour
+index=web | timechart span=5m avg(response_time) by host
+index=web | timechart span=1d sum(bytes) as daily_bytes
+```
+
+`span` options: `1m`, `5m`, `15m`, `1h`, `4h`, `1d`, `1w`, `1mon`
+
+#### `top` — Most Common Values
+```spl
+index=web | top status                    # top 10 by default
+index=web | top limit=5 clientip          # top 5
+index=web | top clientip by host          # top per host
+index=web | top limit=20 useother=true uri_path   # group remaining into "OTHER"
+```
+
+Output fields: `<field>`, `count`, `percent`
+
+#### `rare` — Least Common Values
+```spl
+index=web | rare status              # bottom 10 by default
+index=web | rare limit=5 uri_path
+```
+
+#### `eventstats` — Stats Without Collapsing Rows
+```spl
+# Unlike stats, eventstats adds aggregated values to each event
+index=web | eventstats avg(response_time) as avg_rt by host
+| where response_time > avg_rt * 2    # find events slower than 2x average
+```
+
+#### `streamstats` — Running/Cumulative Stats
+```spl
+# Running count
+index=web | streamstats count as event_number
+
+# Running average over last 10 events
+index=web | streamstats avg(response_time) as rolling_avg window=10
+
+# Cumulative sum
+index=web | streamstats sum(bytes) as cumulative_bytes
+```
+
+### 6.5 Transforming & Restructuring
+
+#### `transaction` — Group Related Events
+```spl
+# Group events by session ID with max 30-minute gap
+index=web | transaction session_id maxpause=30m
+
+# Group login → logout sequences
+index=auth | transaction user startswith="login" endswith="logout" maxspan=8h
+```
+
+Transaction creates fields: `duration`, `eventcount`
+
+**Note**: `transaction` is resource-intensive. Prefer `stats` when possible:
+```spl
+# Equivalent to transaction for basic grouping
+index=web | stats count as eventcount,
+    range(_time) as duration,
+    earliest(_time) as start,
+    latest(_time) as end
+    by session_id
+```
+
+#### `append` — Append Results from Another Search
+```spl
+index=web status=200 | stats count as success
+| append [search index=web status>=400 | stats count as errors]
+```
+
+#### `appendpipe` — Append Summary Row
+```spl
+index=web | stats count by host
+| appendpipe [stats sum(count) as count | eval host="TOTAL"]
+```
+
+#### `join` — SQL-Style Join
+```spl
+index=web | join clientip [search index=dns | fields clientip, hostname]
+# Left join by default; only returns matching rows
+
+index=web | join type=outer clientip [search index=dns | fields clientip, hostname]
+# Outer join keeps all left-side events
+```
+
+**Warning**: `join` is limited to 50,000 results by default and can be slow. Prefer lookups or `stats` when possible.
+
+#### `lookup` — Enrich Events from Lookup Tables
+```spl
+# Automatic lookup (if configured)
+# Manual lookup
+| lookup geo_lookup clientip OUTPUT city, country
+| lookup users_lookup username OUTPUT department, email
+```
+
+#### `inputlookup` / `outputlookup`
+```spl
+| inputlookup my_lookup.csv                       # load lookup as search results
+| inputlookup my_lookup.csv WHERE status="active"  # filter while loading
+index=web | stats count by host | outputlookup host_counts.csv  # save results to lookup
+```
+
+#### `map` — Run a Search for Each Result
+```spl
+index=main | head 5 | map search="search index=web host=$host$ | stats count"
+```
+
+#### `multisearch` — Run Multiple Searches in Parallel
+```spl
+| multisearch
+    [search index=web status=200 | stats count as success]
+    [search index=web status>=400 | stats count as errors]
+```
+
+### 6.6 Formatting & Output
+
+#### `convert`
+```spl
+| convert timeformat="%Y-%m-%d" ctime(_time) as date
+| convert rmunit(response_time)     # remove units (e.g., "5ms" → 5)
+| convert auto(bytes)               # auto-detect and convert
+```
+
+#### `fillnull`
+```spl
+| fillnull value="N/A"                    # replace all nulls
+| fillnull value=0 response_time, bytes   # specific fields
+```
+
+#### `makemv` — Convert Single-Value to Multivalue
+```spl
+| makemv delim="," categories
+```
+
+#### `mvexpand` — Expand Multivalue into Separate Rows
+```spl
+| mvexpand categories    # one row per value in multivalue field
+```
+
+#### `format` — Format Results for Subsearches
+```spl
+| format    # converts table to boolean expression for use in subsearches
+```
+
+---
+
+## 7. Field Extractions
+
+### Automatic Extraction
+Splunk automatically extracts fields like `host`, `source`, `sourcetype`, `_time`, `_raw` for every event. It also auto-extracts key=value pairs.
+
+### Inline Extraction (Search-Time)
+```spl
+| rex field=_raw "user=(?<username>\w+)"
+| rex field=_raw "duration=(?<duration>\d+\.?\d*)"
+```
+
+### Persistent Field Extraction (props.conf / transforms.conf)
+```ini
+# props.conf
+[my_sourcetype]
+EXTRACT-username = user=(?<username>\w+)
+EXTRACT-duration = duration=(?<duration>\d+\.?\d*)
+
+# For complex/reusable extractions, use transforms.conf
+REPORT-myfields = my_transform_name
+```
+```ini
+# transforms.conf
+[my_transform_name]
+REGEX = user=(?<username>\w+)\s+action=(?<action>\w+)
+```
+
+### Field Extraction via UI
+**Settings → Fields → Field Extractions → New Field Extraction**
+Use the interactive field extractor (IFX) for regex or delimiter-based extraction.
+
+### Calculated Fields
+```ini
+# props.conf
+[access_combined]
+EVAL-response_sec = response_time / 1000
+EVAL-status_type = if(status >= 400, "error", "ok")
+```
+
+### Field Aliases
+```ini
+# props.conf
+[my_sourcetype]
+FIELDALIAS-src = src_ip AS source_ip
+FIELDALIAS-dest = dest_ip AS destination_ip
+```
+
+---
+
+## 8. Lookups
+
+Lookups enrich events by adding fields from external data sources (CSV files, KV Store, database, scripts).
+
+### CSV Lookup
+1. Upload CSV: **Settings → Lookups → Lookup Table Files → Add New**
+2. Define lookup: **Settings → Lookups → Lookup Definitions → Add New**
+3. Optionally make automatic: **Settings → Lookups → Automatic Lookups**
+
+```spl
+# Manual usage
+| lookup status_codes status OUTPUT description
+# Adds "description" field to events based on matching "status" field
+```
+
+### KV Store Lookup
+KV Store is a built-in NoSQL database within Splunk.
+
+```spl
+# Read from KV Store
+| inputlookup kv_store_collection
+
+# Write to KV Store
+| outputlookup kv_store_collection
+
+# KV Store supports CRUD operations via REST API
+```
+
+### Geospatial Lookup
+```spl
+| iplocation clientip
+# Automatically adds: City, Country, Region, lat, lon
+```
+
+### External Lookup (Script-Based)
+```ini
+# transforms.conf
+[my_external_lookup]
+external_cmd = my_lookup_script.py ip
+fields_list = ip, hostname, location
+```
+
+---
+
+## 9. Knowledge Objects
+
+Knowledge objects are user-created entities that enrich and organize data.
+
+### Types of Knowledge Objects
+| Object | Purpose |
+|--------|---------|
+| **Saved Searches** | Reusable search queries |
+| **Reports** | Saved searches with visualization and scheduling |
+| **Alerts** | Triggered actions based on search results |
+| **Dashboards** | Visual displays of multiple panels |
+| **Event Types** | Categorize events with a search string |
+| **Tags** | Label field values for easier searching |
+| **Field Extractions** | Define custom fields |
+| **Field Aliases** | Create alternative names for fields |
+| **Calculated Fields** | Fields derived from eval expressions |
+| **Lookups** | External data enrichment |
+| **Data Models** | Structured representation of data for Pivot |
+| **Macros** | Reusable search snippets |
+| **Workflow Actions** | Links/actions triggered from event fields |
+
+### Event Types
+```ini
+# eventtypes.conf
+[web_error]
+search = index=web (status>=400)
+
+[login_failure]
+search = index=auth action=login result=failure
+```
+Usage: `eventtype=web_error`
+
+### Tags
+```ini
+# tags.conf
+[eventtype=web_error]
+error = enabled
+web = enabled
+
+[host=webserver01]
+production = enabled
+```
+Usage: `tag=error`, `tag::host=production`
+
+### Macros
+Macros are reusable search fragments. Create via **Settings → Advanced Search → Search Macros**.
+
+```spl
+# Define macro "get_errors" (no arguments)
+# Definition: index=web status>=400
+
+# Usage
+`get_errors` | stats count by host
+
+# Macro with arguments: "get_errors(1)"
+# Definition: index=web status>=$code$
+# Usage
+`get_errors(400)` | stats count by host
+```
+
+### Workflow Actions
+Create via **Settings → Fields → Workflow Actions**
+- **GET link**: Opens a URL with field values (e.g., lookup IP in VirusTotal)
+- **POST link**: Sends data to an external URL
+- **Search**: Launches a new Splunk search using field values
+
+---
+
+## 10. Reports & Alerts
+
+### Saved Reports
+1. Run a search
+2. Click **Save As → Report**
+3. Configure: name, description, time range, permissions
+4. Optionally schedule to run periodically
+
+### Scheduled Reports
+- Can be set to run on a cron schedule
+- Results can be emailed or used to populate summary indexes
+- Acceleration: enable report acceleration for faster results on large datasets
+
+### Alerts
+
+#### Creating an Alert
+1. Run a search
+2. Click **Save As → Alert**
+3. Configure trigger conditions and actions
+
+#### Alert Types
+| Type | Description |
+|------|-------------|
+| **Scheduled** | Runs on a cron schedule and triggers if conditions are met |
+| **Real-time** | Continuously monitors data (resource-intensive) |
+
+#### Trigger Conditions
+- Number of results (e.g., > 0)
+- Number of hosts
+- Number of sources
+- Custom condition (SPL expression)
+
+#### Throttling
+- Suppress triggering for a specified period
+- Can suppress per-field (e.g., trigger once per host per hour)
+
+#### Alert Actions
+- **Send email**: To specified recipients with results
+- **Run a script**: Execute a custom script
+- **Webhook**: POST data to a URL
+- **Log event**: Write to `_audit` index
+- **Add to triggered alerts list**: Display in Splunk UI
+- **Custom actions**: Installed via apps (e.g., ServiceNow, PagerDuty, Slack)
+
+---
+
+## 11. Dashboards & Visualizations
+
+### Dashboard Types
+1. **Classic Dashboards (Simple XML)**: XML-based, widely supported
+2. **Dashboard Studio**: Newer, more flexible layout, supports absolute positioning
+
+### Creating a Dashboard
+- **From search**: Save As → Dashboard Panel
+- **From scratch**: Dashboards → Create New Dashboard
+
+### Simple XML Structure
+```xml
+<dashboard>
+  <label>My Dashboard</label>
+  <row>
+    <panel>
+      <title>Error Count Over Time</title>
+      <chart>
+        <search>
+          <query>index=web status>=400 | timechart count</query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">line</option>
+      </chart>
+    </panel>
+  </row>
+</dashboard>
+```
+
+### Tokens (Dynamic Inputs)
+Tokens allow user interaction with dashboards.
+
+```xml
+<fieldset submitButton="true">
+  <input type="dropdown" token="selected_host">
+    <label>Host</label>
+    <choice value="*">All</choice>
+    <search>
+      <query>index=web | stats count by host</query>
+    </search>
+    <fieldForLabel>host</fieldForLabel>
+    <fieldForValue>host</fieldForValue>
+  </input>
+  <input type="time" token="time_range">
+    <label>Time Range</label>
+    <default>
+      <earliest>-24h</earliest>
+      <latest>now</latest>
+    </default>
+  </input>
+</fieldset>
+```
+
+Use tokens in searches: `index=web host=$selected_host$`
+
+### Visualization Types
+| Type | Command/Use |
+|------|-------------|
+| **Line Chart** | `timechart` |
+| **Bar Chart** | `chart`, `stats` |
+| **Pie Chart** | `stats count by field` |
+| **Area Chart** | `timechart` |
+| **Column Chart** | `chart`, `stats` |
+| **Single Value** | `stats count` (single result) |
+| **Gauge** | Single numeric value with ranges |
+| **Table** | `table` or `stats` |
+| **Map (Choropleth)** | `geostats` or `iplocation` |
+| **Scatter Plot** | Two numeric fields |
+
+### Drilldown
+Enable clicking on chart elements to navigate to detailed searches:
+```xml
+<chart>
+  <search>...</search>
+  <drilldown>
+    <link target="_blank">
+      /app/search/search?q=index%3Dweb%20host%3D$click.value$
+    </link>
+  </drilldown>
+</chart>
+```
+
+---
+
+## 12. Data Models & Pivot
+
+### What is a Data Model?
+A data model is a hierarchical, structured representation of your data. It provides a user-friendly interface for non-SPL users to create reports and dashboards using the **Pivot** tool.
+
+### Data Model Components
+- **Root Object**: Top-level dataset (based on a search or index constraint)
+- **Child Object**: Subset of root (filtered or constrained further)
+- **Fields**: Attributes defined with types (string, number, timestamp, etc.)
+
+### Creating a Data Model
+**Settings → Data Models → New Data Model**
+
+### Pivot
+Pivot is a drag-and-drop interface for creating reports from data models without writing SPL.
+
+### Data Model Acceleration
+- Accelerated data models pre-compute summaries for fast searches
+- Uses `tstats` command under the hood
+- Enable via data model settings; configure the acceleration time range
+
+### `tstats` — Fast Stats on Indexed/Accelerated Data
+```spl
+| tstats count WHERE index=web BY host, sourcetype
+
+| tstats count WHERE index=web host=webserver01
+    BY _time span=1h
+| timechart span=1h count
+
+# With accelerated data model
+| tstats count FROM datamodel=Web WHERE Web.status>=400
+    BY Web.host
+```
+
+`tstats` is significantly faster than `stats` because it uses indexed metadata rather than scanning raw events.
+
+---
+
+## 13. User Management & Access Control
+
+### Roles
+Splunk uses Role-Based Access Control (RBAC).
+
+#### Default Roles
+| Role | Capabilities |
+|------|-------------|
+| `admin` | Full access to everything |
+| `power` | Search all indexes, create knowledge objects, manage own objects |
+| `user` | Search default indexes, create personal knowledge objects |
+| `can_delete` | Can delete events from indexes |
+
+#### Custom Roles
+Create via **Settings → Access Controls → Roles → New Role**
+
+Role properties:
+- **Inherited roles**: Inherit capabilities from other roles
+- **Capabilities**: Specific permissions (schedule_search, edit_monitor, etc.)
+- **Allowed indexes**: Which indexes the role can search
+- **Search restrictions**: Mandatory search filters (e.g., `host=server1`)
+- **Search time range limits**: Maximum time window for searches
+- **Search job limits**: Concurrent search limits
+
+### Authentication Methods
+| Method | Description |
+|--------|-------------|
+| **Splunk Native** | Built-in user database |
+| **LDAP** | Active Directory or other LDAP servers |
+| **SAML** | Single Sign-On (Okta, ADFS, Azure AD) |
+| **Scripted Auth** | Custom authentication via scripts |
+| **MFA** | Duo Security integration |
+
+---
+
+## 14. Clustering
+
+### Indexer Clustering
+Indexer clusters provide data replication and high availability.
+
+**Key Concepts:**
+- **Replication Factor (RF)**: Number of copies of raw data (default: 3)
+- **Search Factor (SF)**: Number of searchable copies (default: 2)
+- **Cluster Master / Manager Node**: Coordinates the cluster
+
+```ini
+# server.conf on Manager Node
+[clustering]
+mode = manager
+replication_factor = 3
+search_factor = 2
+
+# server.conf on Peer Nodes
+[clustering]
+mode = peer
+manager_uri = https://<manager_ip>:8089
+
+# server.conf on Search Head
+[clustering]
+mode = searchhead
+manager_uri = https://<manager_ip>:8089
+```
+
+### Search Head Clustering (SHC)
+Multiple search heads share configurations and load-balance searches.
+
+**Components:**
+- **Search Head Captain**: Elected leader that coordinates the cluster
+- **Deployer**: Pushes apps and configurations to SHC members
+
+```ini
+# server.conf on SHC members
+[shclustering]
+conf_deploy_fetch_url = https://<deployer_ip>:8089
+mgmt_uri = https://<this_SH_ip>:8089
+replication_port = 9887
+```
+
+---
+
+## 15. Splunk REST API
+
+Splunk exposes a REST API on port 8089 for programmatic access.
+
+### Authentication
+```bash
+# Get a session token
+curl -k -u admin:password https://localhost:8089/services/auth/login \
+  -d username=admin -d password=changeme
+
+# Use the token
+curl -k -H "Authorization: Splunk <session_key>" \
+  https://localhost:8089/services/search/jobs
+```
+
+### Common Endpoints
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/services/auth/login` | POST | Authenticate and get session key |
+| `/services/search/jobs` | POST | Create a search job |
+| `/services/search/jobs/<sid>` | GET | Get search job status |
+| `/services/search/jobs/<sid>/results` | GET | Get search results |
+| `/services/data/indexes` | GET | List indexes |
+| `/services/data/inputs/monitor` | GET/POST | Manage file monitor inputs |
+| `/services/server/info` | GET | Server information |
+| `/services/apps/local` | GET | List installed apps |
+| `/services/saved/searches` | GET/POST | Manage saved searches |
+
+### Python SDK
+```python
+import splunklib.client as client
+import splunklib.results as results
+
+# Connect
+service = client.connect(
+    host="localhost",
+    port=8089,
+    username="admin",
+    password="changeme"
+)
+
+# Run a search
+search_query = "search index=main | head 10"
+job = service.jobs.create(search_query)
+
+# Wait for results
+while not job.is_done():
+    pass
+
+# Read results
+reader = results.JSONResultsReader(job.results(output_mode="json"))
+for result in reader:
+    if isinstance(result, dict):
+        print(result)
+```
+
+---
+
+## 16. Splunk for Security (SIEM)
+
+### Common Security Searches
+
+#### Failed Logins
+```spl
+index=auth action=login status=failure
+| stats count by user, src_ip
+| where count > 5
+| sort -count
+```
+
+#### Brute Force Detection
+```spl
+index=auth action=login status=failure
+| bin _time span=5m
+| stats count by _time, user, src_ip
+| where count > 10
+```
+
+#### Privileged Account Activity
+```spl
+index=auth user IN ("root", "admin", "administrator")
+| stats count by user, action, src_ip
+| sort -count
+```
+
+#### Network — Port Scan Detection
+```spl
+index=network
+| stats dc(dest_port) as port_count by src_ip
+| where port_count > 100
+```
+
+#### Malware / Suspicious Process
+```spl
+index=endpoint sourcetype=sysmon EventCode=1
+| search (process_name="powershell.exe" OR process_name="cmd.exe")
+| where like(command_line, "%-enc%") OR like(command_line, "%base64%")
+```
+
+### Notable Events & Incident Review
+Splunk Enterprise Security (ES) uses **Notable Events** to track security incidents. Analysts triage these in the **Incident Review** dashboard.
+
+### CIM (Common Information Model)
+The CIM is a set of field name conventions that normalize data across different source types:
+- `src` / `src_ip` / `src_port` — Source
+- `dest` / `dest_ip` / `dest_port` — Destination
+- `user` — Username
+- `action` — Action taken (allowed, blocked, etc.)
+- `status` — Success/failure
+
+Normalizing data to the CIM enables Splunk ES correlation searches to work across all data sources.
+
+---
+
+## 17. Optimization & Best Practices
+
+### Search Optimization Tips
+
+1. **Be specific with indexes and sourcetypes**
+   ```spl
+   # Bad: searches all indexes
+   error
+
+   # Good: targets specific data
+   index=web sourcetype=access_combined status>=400
+   ```
+
+2. **Use time ranges** — The narrower, the faster
+
+3. **Filter early** — Put restrictive terms at the beginning
+   ```spl
+   # Good: filter first, then compute
+   index=web status=500 | stats count by host
+
+   # Bad: compute on everything, then filter
+   index=web | stats count by host, status | where status=500
+   ```
+
+4. **Avoid wildcards at the start**
+   ```spl
+   # Slow
+   index=main *error*
+
+   # Faster
+   index=main error
+   ```
+
+5. **Use `stats` instead of `transaction`** when possible
+
+6. **Use `tstats` for indexed fields** — 10-100x faster than `stats`
+
+7. **Use `fields` command** to limit fields passed through the pipeline
+
+8. **Use summary indexing** for recurring expensive searches
+
+9. **Avoid real-time searches** in production — use scheduled searches
+
+10. **Use `prefix()` and `term()`** for exact indexed-term matching
+    ```spl
+    index=web TERM(status=404)
+    ```
+
+### Data Retention Best Practices
+- Separate indexes by data type and retention policy
+- Use `frozenTimePeriodInSecs` to enforce retention
+- Archive frozen data to cheap storage if needed for compliance
+- Monitor license usage: `index=_internal source=*license_usage.log`
+
+### Capacity Planning
+- **Indexing volume**: GB/day determines license needs
+- **Storage**: Typically 15% of raw data size after compression
+- **Search concurrency**: More users = more search heads needed
+- **Replication**: RF=3 means 3x storage
+
+---
+
+## 18. Useful SPL Examples (Quick Reference)
+
+### Count Events by Source Type
+```spl
+index=* | stats count by sourcetype | sort -count
+```
+
+### Find Large Events
+```spl
+index=main | eval event_size=len(_raw) | where event_size > 10000
+| table _time, source, event_size
+```
+
+### Monitor Index Size
+```spl
+| rest /services/data/indexes
+| table title, currentDBSizeMB, totalEventCount, maxTotalDataSizeMB
+| sort -currentDBSizeMB
+```
+
+### License Usage
+```spl
+index=_internal source=*license_usage.log type=Usage
+| timechart span=1d sum(b) as bytes
+| eval GB = round(bytes/1024/1024/1024, 2)
+| fields _time, GB
+```
+
+### Search Activity (Who Searched What)
+```spl
+index=_audit action=search
+| table _time, user, search, total_run_time
+| sort -total_run_time
+```
+
+### Scheduled Search Failures
+```spl
+index=_internal sourcetype=scheduler status=failed
+| stats count by savedsearch_name, app
+| sort -count
+```
+
+### Forwarder Health
+```spl
+index=_internal sourcetype=splunkd group=tcpin_connections
+| stats latest(_time) as last_connected by hostname
+| eval status = if(now() - last_connected > 900, "DOWN", "OK")
+| sort status
+```
+
+### Disk Usage by Index
+```spl
+| dbinspect index=* | stats sum(sizeOnDiskMB) as disk_MB by index
+| sort -disk_MB
+```
+
+---
+
+## 19. Splunk Apps & Add-ons
+
+### What's the Difference?
+- **App**: Provides a complete user interface (dashboards, views, navigation)
+- **Add-on (TA)**: Provides data inputs, field extractions, and CIM mappings without a UI
+
+### Popular Apps
+| App | Purpose |
+|-----|---------|
+| Splunk Enterprise Security (ES) | SIEM solution |
+| Splunk ITSI | IT Service Intelligence |
+| Splunk DB Connect | Database integration |
+| Splunk App for AWS | AWS monitoring |
+| Splunk Add-on for Unix | Linux/Unix data collection |
+| Splunk Add-on for Windows | Windows data collection |
+| Splunk Stream | Network packet capture |
+
+### Installing Apps
+- **Splunkbase**: Browse and install from within Splunk Web
+- **CLI**: `$SPLUNK_HOME/bin/splunk install app <package>.tgz`
+- **Manual**: Extract to `$SPLUNK_HOME/etc/apps/`
+
+---
+
+## 20. Troubleshooting Splunk
+
+### Common Issues & Solutions
+
+| Issue | Diagnosis |
+|-------|-----------|
+| Data not appearing | Check `inputs.conf`, verify forwarder connectivity, check index name |
+| Search is slow | Use `| search` command audit, check `dispatch.log`, optimize SPL |
+| License violation | Check `index=_internal source=*license_usage.log` |
+| Forwarder not sending | Check `outputs.conf`, verify port 9997 open, check `splunkd.log` |
+| Timestamp parsing wrong | Review `props.conf` for `TIME_FORMAT` and `TIME_PREFIX` |
+| Missing fields | Check `props.conf` / `transforms.conf` for field extractions |
+| Web UI not loading | Check port 8000, review `web_service.log` |
+| Cluster issues | Check `index=_internal sourcetype=splunkd cluster` |
+
+### Key Log Files
+| Log | Location | Content |
+|-----|----------|---------|
+| `splunkd.log` | `$SPLUNK_HOME/var/log/splunk/` | Main Splunk daemon log |
+| `web_service.log` | `$SPLUNK_HOME/var/log/splunk/` | Web UI issues |
+| `metrics.log` | `$SPLUNK_HOME/var/log/splunk/` | Performance metrics |
+| `audit.log` | `$SPLUNK_HOME/var/log/splunk/` | User activity |
+| `scheduler.log` | `$SPLUNK_HOME/var/log/splunk/` | Scheduled search execution |
+
+### Diagnostic Commands
+```spl
+# Server info
+| rest /services/server/info | fields splunk_version, os_name, cpu_arch
+
+# Check running searches
+| rest /services/search/jobs | table sid, runDuration, eventCount
+
+# Indexer cluster status
+| rest /services/cluster/manager/peers
+| table label, status, last_heartbeat, replication_count
+
+# List all forwarders
+| rest /services/deployment/server/clients
+| table hostname, ip, splunkVersion, lastPhoneHomeTime
+```
+
+---
+
+## 21. Splunk CLI Quick Reference
+
+```bash
+# Start / Stop / Restart
+splunk start
+splunk stop
+splunk restart
+
+# Check status
+splunk status
+
+# Search from CLI
+splunk search "index=main | head 5" -maxout 100
+
+# List indexes
+splunk list index
+
+# Add data input
+splunk add monitor /var/log/messages -index main -sourcetype syslog
+
+# Add forward server
+splunk add forward-server indexer1:9997
+
+# List forward servers
+splunk list forward-server
+
+# Reload config
+splunk reload deploy-server    # reload deployment server
+splunk reload auth             # reload authentication config
+
+# User management
+splunk add user jdoe -role user -password changeme
+splunk edit user jdoe -role power
+splunk remove user jdoe
+splunk list user
+
+# App management
+splunk install app myapp.tgz
+splunk remove app myapp
+splunk list app
+
+# License
+splunk list licenser-pools
+splunk list licenser-slaves
+
+# Clean index
+splunk clean eventdata -index myindex    # DESTRUCTIVE — removes all data
+
+# Validate config
+splunk btool inputs list --debug
+splunk btool props list --debug
+splunk btool check
+```
+
+---
+
+## 22. Regular Expressions in Splunk
+
+Splunk uses PCRE (Perl-Compatible Regular Expressions).
+
+### Common Patterns
+| Pattern | Description | Example Match |
+|---------|-------------|---------------|
+| `\d` | Any digit | `5` |
+| `\d+` | One or more digits | `12345` |
+| `\w` | Word character (letter, digit, underscore) | `a`, `5`, `_` |
+| `\w+` | One or more word characters | `hostname01` |
+| `\s` | Whitespace | ` `, `\t` |
+| `.` | Any character except newline | anything |
+| `.*` | Zero or more of any character | anything |
+| `.+` | One or more of any character | something |
+| `[A-Za-z]+` | Letters only | `Error` |
+| `\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}` | IPv4 address | `192.168.1.1` |
+| `(?<name>pattern)` | Named capture group | Extracts into field `name` |
+| `(?:pattern)` | Non-capturing group | Groups without extracting |
+
+### Using Regex in SPL
+```spl
+# rex — extract fields
+| rex field=_raw "src=(?<src_ip>\d+\.\d+\.\d+\.\d+)"
+
+# regex — filter events matching a pattern
+| regex _raw="error|fail|critical"
+
+# rex mode=sed — substitution
+| rex field=message mode=sed "s/password=\S+/password=REDACTED/g"
+```
+
+---
+
+## 23. Summary Indexing & Acceleration
+
+### Summary Indexing
+Run expensive searches on a schedule and store results in a summary index for faster future access.
+
+```spl
+# Scheduled search that populates summary index
+index=web | stats count by host, status
+| collect index=summary marker="web_status_summary"
+```
+
+```spl
+# Query the summary
+index=summary source="web_status_summary"
+| stats sum(count) by host, status
+```
+
+### Report Acceleration
+- Automatically creates summaries of report results
+- Enable via: **Edit Report → Acceleration → Enable**
+- Uses `summariesonly=true` in `tstats` under the hood
+
+### Data Model Acceleration
+- Pre-computes data model results for fast pivot/tstats queries
+- Enable via: **Settings → Data Models → Edit → Acceleration**
+- Can use significant disk space
+
+---
+
+## 24. Key Points to Remember (Cheat Sheet)
+
+### Architecture Key Points
+- **Universal Forwarder** is the most commonly deployed component — it's lightweight (no UI, no indexing).
+- **Heavy Forwarder** can parse, filter, mask, and route data. Use it when data needs transformation before indexing.
+- Data flows: **Source → Forwarder → Indexer → Search Head**
+- Splunk stores data in **buckets**: Hot → Warm → Cold → Frozen (→ Thawed if restored).
+- **Hot buckets** are read/write; everything else is read-only.
+- Default ports: **8000** (Web UI), **8089** (REST/management), **9997** (forwarder-to-indexer).
+- **Deployment Server** pushes configs to forwarders; **Cluster Master** manages indexer clusters.
+
+### Data Input Key Points
+- `inputs.conf` defines what data to collect; `outputs.conf` defines where to send it.
+- **HEC (HTTP Event Collector)** is the preferred way to ingest data from applications and cloud services. Uses token-based authentication over HTTPS.
+- **Scripted inputs** run on a schedule and capture stdout as events.
+- Always assign a **sourcetype** and **index** to every input for proper parsing and access control.
+
+### SPL Key Points
+- SPL is a **pipeline language**: each command takes input from the previous command's output.
+- **Streaming commands** (`eval`, `rex`, `where`, `fields`) process events one-by-one — efficient.
+- **Transforming commands** (`stats`, `chart`, `timechart`, `top`) aggregate data — they collapse events into result rows.
+- **`stats` vs `eventstats`**: `stats` collapses rows; `eventstats` adds aggregated values to each event without collapsing.
+- **`stats` vs `transaction`**: Prefer `stats` — it's far more efficient. Use `transaction` only when you need `duration`, ordered event grouping, or start/end conditions.
+- **`tstats` is 10-100x faster** than `stats` because it reads indexed metadata (tsidx) instead of raw events. Works on indexed fields and accelerated data models.
+- `where` evaluates expressions (supports functions); `search` does pattern matching (supports wildcards).
+- Always **filter early** in the pipeline and specify `index=` and `sourcetype=` to minimize data scanned.
+
+### Index Key Points
+- `main` is the default index — never store everything here in production.
+- `_internal` contains Splunk's own logs — essential for troubleshooting.
+- `_audit` tracks user activity (searches, logins, config changes).
+- **Retention** is controlled by `frozenTimePeriodInSecs` in `indexes.conf`.
+- Frozen data is deleted by default. Set `coldToFrozenDir` to archive instead.
+- Each index should have a clear **retention policy** and **access control**.
+
+### Knowledge Objects Key Points
+- Knowledge objects have **permissions**: Private (owner only), App (app users), Global (all apps).
+- **Naming convention matters**: Use a prefix like `myapp_` for all objects to avoid collisions.
+- **Macros** use backtick syntax: `` `my_macro` `` or `` `my_macro(arg1, arg2)` ``
+- **Event types** categorize events; **tags** label them. Both are searchable.
+- **Lookups** are the primary way to enrich data (like SQL JOINs).
+- **Field aliases** don't modify data — they create alternative field names at search time.
+- **Calculated fields** run `eval` expressions automatically for a given sourcetype.
+
+### Security / SIEM Key Points
+- **CIM (Common Information Model)** normalizes field names across source types. Essential for Enterprise Security.
+- The Splunk **ES app** uses **Correlation Searches** (scheduled searches that create Notable Events).
+- **Notable Events** are triaged by analysts in the **Incident Review** dashboard.
+- Always normalize data with **Technology Add-ons (TAs)** before using ES correlation searches.
+- The **kill chain** and **MITRE ATT&CK** frameworks are commonly mapped in Splunk ES.
+
+### Clustering Key Points
+- **Replication Factor (RF)** = number of copies of raw data. Default RF=3.
+- **Search Factor (SF)** = number of searchable copies. Default SF=2. SF ≤ RF.
+- **Search Head Cluster (SHC)** requires a minimum of 3 members + 1 deployer.
+- **Indexer Cluster** requires 1 Manager Node + N peer nodes (minimum RF peer nodes).
+- Use `| rest /services/cluster/manager/peers` to check cluster health.
+
+### Config File Key Points
+- **Precedence**: `system/local` > `app/local` > `app/default` > `system/default`
+- Never edit files in `system/default` — always override in `system/local` or `app/local`.
+- Use `splunk btool <conf_name> list --debug` to see effective configuration and which file each setting comes from.
+- After editing config files, restart Splunk or use `splunk reload` for supported configs.
+
+### Performance Key Points
+- **Search efficiency formula**: Narrow time range + specific index + specific sourcetype + early filtering = fast search.
+- Use `Job Inspector` (magnifying glass icon in search results) to analyze search performance.
+- `tstats` > `stats` > `transaction` in terms of speed.
+- Avoid `NOT` and leading wildcards (`*error`) — they are slow.
+- Use `TERM()` for exact index-time matching: `TERM(status=404)` — prevents tokenization.
+- Summary indexing reduces repeated expensive computation — schedule + `collect`.
+
+---
+
+## 25. Detailed Concept Deep Dives
+
+### 25.1 How Splunk Processes Data (Detailed Pipeline)
+
+When data enters Splunk, it passes through a multi-stage pipeline:
+
+**Stage 1: Input Phase**
+- Data arrives via forwarders, network inputs, HEC, or file monitoring.
+- Each stream is tagged with metadata: `source`, `host`, `sourcetype`, `index`.
+- The input pipeline reads raw data and hands it to the parsing pipeline.
+
+**Stage 2: Parsing Phase**
+- **Line Breaking**: Raw data is split into individual lines using `LINE_BREAKER` regex in `props.conf`. Default breaks on newlines.
+- **Line Merging**: Related lines are merged into multi-line events using `SHOULD_LINEMERGE`, `BREAK_ONLY_BEFORE`, `BREAK_ONLY_BEFORE_DATE` in `props.conf`.
+- **Timestamp Extraction**: Splunk identifies the timestamp in each event using `TIME_FORMAT` and `TIME_PREFIX`. If no timestamp is found, it uses the current time.
+- **Event Breaking**: Final event boundaries are established.
+- On a **Heavy Forwarder**, parsing happens before forwarding. On a **Universal Forwarder**, minimal parsing occurs — the indexer handles most of it.
+
+**Stage 3: Indexing Phase**
+- **Segmentation**: Events are broken into searchable tokens (words, numbers, punctuation segments). Controlled by `SEGMENTATION` in `props.conf`.
+- **Index-Time Field Extraction**: Default fields (`host`, `source`, `sourcetype`, `_time`) plus any configured `INDEXED_EXTRACTIONS` are extracted.
+- **Writing**: Events are compressed and written to the hot bucket on disk. Two key files are created:
+  - **rawdata journal**: Compressed raw event data
+  - **tsidx (time-series index)**: Index of tokens for fast searching
+
+**Stage 4: Search Phase**
+- User's SPL query is parsed by the search head.
+- In distributed environments, the search is split: **knowledge bundle** is sent to indexers.
+- **Indexers** execute the search locally using tsidx for fast filtering, then return results.
+- **Search head** merges results, applies search-time transformations (field extractions, lookups, eval), and presents results.
+
+### 25.2 How Search Works Internally
+
+When you run a search like `index=web status=404 | stats count by host`:
+
+1. **Search Parser** analyzes the SPL and creates a search plan.
+2. **Search Scheduler** (for scheduled searches) or **Search Manager** launches the job.
+3. **Map Phase** (on indexers):
+   - Indexers use **bloom filters** (probabilistic data structure) to quickly eliminate buckets that definitely don't contain the search terms.
+   - Matching buckets are opened and tsidx files are scanned for matching tokens.
+   - Matching events are decompressed from rawdata and returned.
+4. **Reduce Phase** (on search head):
+   - Results from all indexers are merged.
+   - Transforming commands (`stats count by host`) are applied.
+   - Final results are presented.
+
+**Bloom Filters** are key to Splunk's speed: each bucket has a bloom filter that can quickly say "this term is definitely NOT in this bucket" — avoiding expensive disk reads.
+
+### 25.3 Forwarder Types — When to Use Which
+
+| Scenario | Use |
+|----------|-----|
+| Collecting logs from a server | **Universal Forwarder** |
+| Need to mask/filter sensitive data before sending | **Heavy Forwarder** |
+| Need to route data to different indexes based on content | **Heavy Forwarder** |
+| Need to parse complex multi-line events at the source | **Heavy Forwarder** |
+| Collecting syslog from network devices | **Heavy Forwarder** (acts as syslog server) |
+| Simple file monitoring on many servers | **Universal Forwarder** |
+
+**Universal Forwarder vs Heavy Forwarder:**
+| Feature | Universal Forwarder | Heavy Forwarder |
+|---------|-------------------|-----------------|
+| Size | ~50 MB | ~1 GB (full Splunk) |
+| CPU/RAM | Minimal | Significant |
+| Can parse data | No (minimal) | Yes (full parsing pipeline) |
+| Can index data | No | Yes (but usually doesn't) |
+| Has Web UI | No | Yes |
+| Can route/filter data | Basic (via outputs.conf) | Advanced (via transforms.conf) |
+| Can run searches | No | Yes |
+
+### 25.4 `stats` vs `eventstats` vs `streamstats` — Detailed Comparison
+
+These three commands are frequently confused. Here's how they differ:
+
+**`stats`** — Aggregates and **collapses** events into summary rows.
+```spl
+index=web | stats avg(response_time) as avg_rt by host
+# Result: one row per host. Original events are gone.
+# host        | avg_rt
+# webserver01 | 245.6
+# webserver02 | 312.8
+```
+
+**`eventstats`** — Calculates stats and **appends** them to every original event.
+```spl
+index=web | eventstats avg(response_time) as avg_rt by host
+# Result: every original event still exists, but now has avg_rt field added.
+# _time    | host        | response_time | avg_rt
+# 12:01:00 | webserver01 | 180           | 245.6
+# 12:01:05 | webserver01 | 311           | 245.6
+# 12:01:10 | webserver02 | 450           | 312.8
+```
+**Use case**: Compare individual events against group averages. Example: find events where response_time is more than 2x the average.
+
+**`streamstats`** — Calculates **running/cumulative** stats as events flow through.
+```spl
+index=web | sort _time | streamstats avg(response_time) as running_avg window=5
+# Result: each event gets the average of itself and the previous 4 events.
+# _time    | response_time | running_avg
+# 12:01:00 | 180           | 180.0     (only 1 event so far)
+# 12:01:05 | 311           | 245.5     (avg of 2 events)
+# 12:01:10 | 450           | 313.7     (avg of 3 events)
+# 12:01:15 | 200           | 285.3     (avg of 4 events)
+# 12:01:20 | 150           | 258.2     (avg of 5 events — window full)
+# 12:01:25 | 300           | 282.2     (oldest dropped, window of 5)
+```
+**Use case**: Running counts, cumulative sums, rolling averages, detecting change over time.
+
+### 25.5 Knowledge Object Inheritance & Permissions — Detailed
+
+**Permission Levels:**
+1. **Private**: Only the owner can see and use the object.
+2. **Shared in App (App-level)**: All users with access to the app can see it.
+3. **Global**: Visible across all apps.
+
+**Role-Based Permissions:**
+- **Read**: Can use/view the object.
+- **Write**: Can edit/modify the object.
+- Permissions are set per-role.
+
+**Ownership:**
+- Creator is the owner.
+- `admin` can reassign ownership.
+- Ownership determines who can change permissions.
+
+**Export:**
+- Objects must be "exported" (shared) to be visible beyond the owner.
+- `dispatch.earliest_time` and `dispatch.latest_time` in saved searches restrict time ranges.
+
+### 25.6 Splunk Data Lifecycle — Detailed
+
+```
+        ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐
+Data →  │   HOT   │ →  │  WARM   │ →  │  COLD   │ →  │ FROZEN  │
+        │ (r/w)   │    │ (r/o)   │    │ (r/o)   │    │(archive)│
+        └─────────┘    └─────────┘    └─────────┘    └─────────┘
+                                                           │
+                                                     ┌─────┴─────┐
+                                                     │  THAWED   │
+                                                     │(restored) │
+                                                     └───────────┘
+```
+
+**Hot Bucket**:
+- Actively receiving new data.
+- Stored on fast storage (SSD recommended).
+- Number of hot buckets per index controlled by `maxHotBuckets` (default: 3).
+- Rolls to warm when: bucket reaches `maxDataSize` (default: auto ≈ 750MB), or Splunk restarts.
+
+**Warm Bucket**:
+- Searchable, read-only.
+- Still on primary storage.
+- Indexed by time range — Splunk knows the time span of each bucket.
+- Rolls to cold when: `maxWarmDBCount` is reached (default: 300).
+
+**Cold Bucket**:
+- Moved to secondary/cheaper storage.
+- Still searchable but may have slower I/O.
+- Path defined by `coldPath` in `indexes.conf`.
+- Rolls to frozen when: `frozenTimePeriodInSecs` is exceeded or `maxTotalDataSizeMB` is hit.
+
+**Frozen Bucket**:
+- **Not searchable**. By default, data is **deleted**.
+- To archive: set `coldToFrozenDir` in `indexes.conf` — Splunk moves the bucket there instead of deleting.
+- Archived buckets retain rawdata but tsidx files are removed.
+
+**Thawed Bucket**:
+- Frozen data that has been restored and re-indexed.
+- Must be placed in the `thawedPath` directory.
+- Requires rebuilding the index: `splunk rebuild <bucket_path>`
+
+### 25.7 Distributed Search — How It Works
+
+In a distributed environment:
+
+1. **User** submits search on the **Search Head**.
+2. Search Head creates a **search job** and determines which **indexers (search peers)** to query.
+3. Search Head sends a **knowledge bundle** to indexers containing:
+   - Search-time field extractions
+   - Lookup files
+   - Props/transforms configurations
+4. Each **indexer** executes the search independently against its local data.
+5. **Streaming commands** (eval, rex, where) run on indexers — close to the data.
+6. **Transforming commands** (stats, chart, timechart) run partially on indexers (map phase) and are finalized on the search head (reduce phase).
+7. Search Head **merges** results from all indexers and returns them to the user.
+
+**Bundle replication** is controlled by `distsearch.conf`. Bundles are cached and only re-sent when changed.
+
+---
+
+## 26. Splunk Interview Questions & Answers
+
+### Basic Level
+
+**Q1: What is Splunk and why is it used?**
+**A:** Splunk is a software platform for searching, monitoring, and analyzing machine-generated data (logs, metrics, events) through a web interface. It is used because:
+- It can ingest data from virtually any source without requiring a predefined schema.
+- It indexes data in real-time, making it immediately searchable.
+- SPL (Search Processing Language) provides powerful data analysis capabilities.
+- It's widely used for log management, security monitoring (SIEM), IT operations, and business intelligence.
+
+---
+
+**Q2: What are the main components of Splunk architecture?**
+**A:** The three core components are:
+1. **Forwarder** — Collects data from sources and sends it to indexers. Types: Universal Forwarder (lightweight, most common) and Heavy Forwarder (full Splunk instance with parsing capabilities).
+2. **Indexer** — Receives data, parses it into events, extracts timestamps, and stores it in indexes. It's the "database" of Splunk.
+3. **Search Head** — Provides the web UI, handles user searches, distributes search requests to indexers, and merges results.
+
+Additional components include: Deployment Server (config management), Cluster Master/Manager Node (indexer cluster coordination), and License Master.
+
+---
+
+**Q3: What is the difference between Universal Forwarder and Heavy Forwarder?**
+**A:**
+- **Universal Forwarder (UF)**: Lightweight (~50 MB), has no Splunk Web UI, cannot parse or index data, minimal resource usage. Best for simple log collection from endpoints.
+- **Heavy Forwarder (HF)**: Full Splunk installation (~1 GB), has Web UI, can parse, filter, mask sensitive data, and route data to different destinations. Used when data needs transformation before reaching the indexer.
+
+Key difference: UF forwards raw data; HF can process data before forwarding.
+
+---
+
+**Q4: What is SPL?**
+**A:** SPL (Search Processing Language) is Splunk's query language. It works as a pipeline — data flows from left to right through commands separated by the pipe `|` character. Example:
+```spl
+index=web status>=400 | stats count by host | sort -count
+```
+This searches for error-status events, counts them per host, and sorts by count descending. SPL includes 100+ commands for searching, filtering, transforming, and visualizing data.
+
+---
+
+**Q5: What are Splunk indexes? Name the default ones.**
+**A:** An index is a repository where Splunk stores event data. Each index consists of directories called buckets containing compressed raw data and index files (tsidx).
+
+Default indexes:
+- `main` — Default index for events
+- `_internal` — Splunk's internal logs (performance, errors, metrics)
+- `_audit` — Audit trail (user searches, configuration changes, logins)
+- `_introspection` — Resource usage data (CPU, memory, disk)
+- `_telemetry` — Usage telemetry data
+
+---
+
+**Q6: What are the bucket stages in Splunk?**
+**A:** Data flows through five bucket stages:
+1. **Hot** — Actively receiving data (read/write). On fast storage.
+2. **Warm** — Rolled from hot. Read-only. Still on primary storage.
+3. **Cold** — Moved to secondary/cheaper storage. Read-only.
+4. **Frozen** — Archived or deleted. Not searchable. Default behavior is deletion; set `coldToFrozenDir` to archive.
+5. **Thawed** — Previously frozen data restored to a searchable state.
+
+The transition is controlled by size limits (`maxDataSize`, `maxWarmDBCount`, `maxTotalDataSizeMB`) and time (`frozenTimePeriodInSecs`).
+
+---
+
+**Q7: What is the difference between `search` and `where` commands?**
+**A:**
+- `search` — Pattern matching. Treats bare words as string values. Supports wildcards (`*`). Works like the initial search terms. Example: `| search host=web*`
+- `where` — Expression evaluation. Treats bare words as field names. Supports functions (`like()`, `cidrmatch()`, `isnotnull()`). More precise. Example: `| where status >= 400 AND isnotnull(user)`
+
+Key difference: `| search user=admin` looks for the string "admin" in the user field. `| where user=admin` compares the `user` field to the `admin` field (both are field names in `where`). To match a string in `where`, use quotes: `| where user="admin"`.
+
+---
+
+**Q8: What is a sourcetype?**
+**A:** A sourcetype is a categorization of data that tells Splunk how to parse and format the data. It determines:
+- How to break raw data into events (line breaking)
+- How to extract timestamps
+- What delimiter or pattern to use for field extraction
+
+Examples: `access_combined` (Apache access logs), `syslog` (system logs), `json` (JSON-formatted data), `csv` (comma-separated values).
+
+You assign sourcetypes in `inputs.conf` or at data onboarding time. Splunk also auto-detects sourcetypes.
+
+---
+
+**Q9: What is the difference between `source`, `sourcetype`, and `host`?**
+**A:**
+- **`source`**: The file path, network port, or script that generated the data. Example: `/var/log/syslog`, `udp:514`
+- **`sourcetype`**: The format/category of the data. Determines parsing rules. Example: `syslog`, `access_combined`, `json`
+- **`host`**: The hostname of the machine where the data originated. Example: `webserver01`
+
+These three, along with `index` and `_time`, are the **default fields** present on every event.
+
+---
+
+**Q10: What are knowledge objects?**
+**A:** Knowledge objects are user-created entities that enrich, categorize, and normalize data. They include: saved searches, reports, alerts, dashboards, event types, tags, field extractions, field aliases, calculated fields, lookups, data models, macros, and workflow actions. They make data more meaningful and reusable. Knowledge objects have permission levels (private, app, global) and are managed via Splunk Web or configuration files.
+
+---
+
+### Intermediate Level
+
+**Q11: What is the difference between `stats`, `eventstats`, and `streamstats`?**
+**A:**
+- **`stats`**: Aggregates events and **collapses** them into summary rows grouped by specified fields. Original events are lost. Use for final summarization.
+- **`eventstats`**: Calculates the same aggregations but **appends** the results as new fields to every original event. Events are preserved. Use when you need to compare individual events against group statistics (e.g., find events above average).
+- **`streamstats`**: Calculates **running/cumulative** statistics as events stream through. Can use a `window` parameter for rolling calculations. Use for running counts, cumulative sums, and rolling averages.
+
+---
+
+**Q12: How would you optimize a slow Splunk search?**
+**A:** Key optimization techniques:
+1. **Specify index and sourcetype** explicitly — prevents scanning all data.
+2. **Narrow the time range** — smaller window = less data scanned.
+3. **Filter early** — put restrictive terms before the first pipe.
+4. **Use `tstats` instead of `stats`** for indexed fields — 10-100x faster.
+5. **Avoid leading wildcards** (`*error`) — they bypass the index and require full scan.
+6. **Use `TERM()` or `PREFIX()`** for exact indexed-term matching.
+7. **Use `fields` command** to drop unnecessary fields early in the pipeline.
+8. **Avoid `transaction`** — use `stats` with `range(_time)` instead.
+9. **Use summary indexing** for recurring expensive reports.
+10. **Check Job Inspector** — shows where time is spent (disk, network, commands).
+
+---
+
+**Q13: What is a lookup and how does it work?**
+**A:** A lookup enriches events by adding fields from an external data source based on a matching field. Types:
+- **CSV Lookup**: Matches a field in events to a column in a CSV file and adds other columns as new fields.
+- **KV Store Lookup**: Uses Splunk's built-in NoSQL database (faster, supports CRUD).
+- **External/Script Lookup**: Runs a Python script for each event to fetch additional data.
+- **Geospatial Lookup**: Adds geographic data (city, country) from IP addresses.
+
+Lookups can be **manual** (`| lookup my_lookup field_name`) or **automatic** (configured to run on every search for a given sourcetype).
+
+---
+
+**Q14: What is the Common Information Model (CIM)?**
+**A:** The CIM is a standardized set of field names and data models that normalize data across different source types. For example, regardless of whether a firewall log uses `src` and a web log uses `clientip`, both can be normalized to the CIM field `src`. 
+
+CIM is critical for Splunk Enterprise Security (ES) because correlation searches are written against CIM-normalized fields. Without CIM compliance, ES detections won't work.
+
+Technology Add-ons (TAs) typically handle CIM mapping by defining field aliases and field extractions in `props.conf`.
+
+---
+
+**Q15: Explain Splunk indexer clustering.**
+**A:** Indexer clustering provides data replication and high availability:
+
+- **Manager Node (Cluster Master)**: Coordinates the cluster — manages bucket replication, handles peer membership, and instructs peers on actions.
+- **Peer Nodes**: Store and replicate data. Each peer stores its own data plus copies of other peers' data.
+- **Replication Factor (RF)**: Number of copies of raw data maintained across the cluster. Default: 3.
+- **Search Factor (SF)**: Number of searchable (indexed) copies. Default: 2. Must be ≤ RF.
+- If a peer goes down, the manager instructs remaining peers to re-replicate data to maintain RF/SF.
+
+Example: With RF=3 and 5 peer nodes, each bucket is stored on 3 different peers. If one peer fails, data is still available on 2 others, and the cluster re-replicates to restore the third copy.
+
+---
+
+**Q16: What is a deployment server?**
+**A:** The Deployment Server is a Splunk instance that centrally manages configurations and apps for groups of Splunk instances (deployment clients), primarily forwarders. 
+
+Key concepts:
+- **Server Classes**: Define which apps/configs go to which clients. Clients are matched by hostname, IP, or other criteria.
+- **Deployment Apps**: Configuration bundles (inputs.conf, outputs.conf, etc.) stored on the deployment server.
+- **Phone Home Interval**: Clients periodically check in with the deployment server for updates.
+
+This allows managing thousands of forwarders from a single point instead of configuring each one individually.
+
+---
+
+**Q17: What is the `collect` command and what is summary indexing?**
+**A:** The `collect` command writes search results into a summary index for future use. Summary indexing is a technique where you:
+1. Schedule an expensive search to run periodically (e.g., hourly).
+2. Use `| collect index=summary` to store the pre-computed results.
+3. Query the summary index for fast access to historical results.
+
+This avoids re-running expensive searches over raw data. Example:
+```spl
+# Scheduled search (runs hourly)
+index=web | stats count by host, status | collect index=summary marker="hourly_web_stats"
+
+# Ad-hoc query against summary data (fast)
+index=summary source="hourly_web_stats" | timechart sum(count) by host
+```
+
+---
+
+**Q18: What is the difference between `map` and `join`?**
+**A:**
+- **`join`**: SQL-style join between two datasets based on a common field. Limited to 50,000 subsearch results by default. Performs a single subsearch and matches fields.
+- **`map`**: Runs a new search **for each result** of the preceding search. More flexible but potentially slower (many searches).
+
+Use `join` when you have two static datasets to combine. Use `map` when you need to run dynamic searches based on variable values from a previous search. In general, Splunk recommends using `stats` or `lookup` instead of `join` when possible.
+
+---
+
+**Q19: How does Splunk handle multivalue fields?**
+**A:** A multivalue field contains multiple values in a single field for a single event. SPL provides commands for working with them:
+- `makemv` — Splits a single-value field into multivalue (by delimiter).
+- `mvexpand` — Creates separate events for each value in a multivalue field.
+- `mvcount` — Returns the count of values.
+- `mvindex` — Returns a specific value by index position.
+- `mvjoin` — Joins multivalue into a single string.
+- `mvappend` — Combines multiple fields into one multivalue field.
+- `mvfilter` — Filters values within a multivalue field.
+- `mvfind` — Returns the index of the first matching value.
+- `mvsort` — Sorts values within the multivalue field.
+
+Example:
+```spl
+| eval categories = split(category_string, ",")
+| mvexpand categories
+| stats count by categories
+```
+
+---
+
+**Q20: What are macros in Splunk and how do you create them?**
+**A:** Macros are reusable search snippets that can be inserted into any search. They are defined via **Settings → Advanced Search → Search Macros**.
+
+Types:
+- **No arguments**: Direct text substitution. Usage: `` `my_macro` ``
+- **With arguments**: Accept parameters. Definition uses `$param# Splunk Complete Notes
+
+---
+
+## 1. Introduction to Splunk
+
+### What is Splunk?
+Splunk is a powerful platform for searching, monitoring, and analyzing machine-generated big data via a web-based interface. It captures, indexes, and correlates real-time data in a searchable repository from which it can generate graphs, reports, alerts, dashboards, and visualizations.
+
+### Key Use Cases
+- **Log Management**: Collect, store, and analyze logs from servers, applications, network devices, etc.
+- **Security Information and Event Management (SIEM)**: Detect threats, investigate incidents, and respond to breaches.
+- **IT Operations Monitoring**: Monitor infrastructure health, application performance, and service availability.
+- **Business Analytics**: Gain insights from machine data to drive business decisions.
+- **Compliance & Auditing**: Meet regulatory requirements by retaining and searching audit data.
+
+### Splunk Products
+| Product | Description |
+|---------|-------------|
+| **Splunk Enterprise** | On-premises deployment for indexing and searching data |
+| **Splunk Cloud** | SaaS version of Splunk Enterprise hosted by Splunk |
+| **Splunk Free** | Limited version (500 MB/day indexing, no authentication, no alerting) |
+| **Splunk Light** | Lightweight version for small environments (discontinued) |
+| **Splunk SOAR** | Security Orchestration, Automation, and Response |
+| **Splunk ITSI** | IT Service Intelligence for monitoring KPIs and services |
+| **Splunk UBA** | User Behavior Analytics for detecting insider threats |
+
+---
+
+## 2. Splunk Architecture
+
+### Core Components
+
+#### 1. Forwarder
+Forwarders are lightweight agents installed on data sources that collect and forward data to indexers.
+
+- **Universal Forwarder (UF)**: Lightweight, forwards raw data only. Cannot parse or index data. Most commonly used.
+- **Heavy Forwarder (HF)**: Full Splunk instance that can parse, filter, and route data before forwarding. Uses more resources.
+- **Light Forwarder**: Deprecated. Replaced by Universal Forwarder.
+
+#### 2. Indexer
+The indexer processes incoming data by:
+1. **Parsing**: Breaking raw data into individual events
+2. **Timestamping**: Assigning timestamps to each event
+3. **Indexing**: Writing events to disk in compressed, searchable format
+4. **Storing**: Organizing data into indexes (buckets)
+
+Data flows through buckets in stages:
+- **Hot** → actively being written to (read/write)
+- **Warm** → rolled from hot, still searchable (read-only)
+- **Cold** → moved to cheaper/slower storage (read-only)
+- **Frozen** → archived or deleted (not searchable unless thawed)
+- **Thawed** → restored frozen data made searchable again
+
+#### 3. Search Head
+The Search Head provides the web interface for users to:
+- Run searches using SPL
+- Create dashboards, reports, and alerts
+- Manage knowledge objects (saved searches, field extractions, lookups)
+
+In distributed environments, the search head sends search requests to indexers, which return results.
+
+#### 4. Deployment Server
+Centrally manages configurations and app deployments to forwarders and other Splunk instances.
+
+#### 5. Cluster Master / Manager Node
+Manages indexer clusters for data replication and search factor configurations.
+
+#### 6. License Master
+Manages Splunk licensing across all instances.
+
+### Distributed Architecture Diagram (Conceptual)
+```
+Data Sources → Forwarders → Indexers (Cluster) → Search Heads (Cluster)
+                                ↑                        ↑
+                         Cluster Master          Search Head Deployer
+                         License Master
+                         Deployment Server
+```
+
+### Ports Used by Splunk
+| Port | Purpose |
+|------|---------|
+| 8000 | Splunk Web (UI) |
+| 8089 | Splunk Management / REST API (splunkd) |
+| 9997 | Receiving port (indexer listens for forwarder data) |
+| 8191 | KV Store |
+| 514  | Syslog (if configured) |
+
+---
+
+## 3. Splunk Installation & Setup
+
+### System Requirements
+- **OS**: Linux (RHEL, CentOS, Ubuntu), Windows, macOS
+- **RAM**: Minimum 4 GB (recommended 12+ GB for production)
+- **Disk**: Depends on data volume; SSDs recommended for hot/warm buckets
+- **CPU**: Multi-core recommended
+
+### Linux Installation
+```bash
+# Download the RPM or tar package from splunk.com
+# RPM installation
+sudo rpm -i splunk-<version>.rpm
+
+# Start Splunk
+sudo /opt/splunk/bin/splunk start --accept-license
+
+# Enable boot start
+sudo /opt/splunk/bin/splunk enable boot-start
+```
+
+### Windows Installation
+- Download the MSI installer from splunk.com
+- Run the installer and follow the wizard
+- Splunk installs to `C:\Program Files\Splunk` by default
+- Access via `http://localhost:8000`
+
+### Universal Forwarder Installation
+```bash
+# Linux
+sudo rpm -i splunkforwarder-<version>.rpm
+sudo /opt/splunkforwarder/bin/splunk start --accept-license
+
+# Configure forwarding
+/opt/splunkforwarder/bin/splunk add forward-server <indexer_ip>:9997
+/opt/splunkforwarder/bin/splunk add monitor /var/log/
+```
+
+### Key Configuration Files
+| File | Location | Purpose |
+|------|----------|---------|
+| `inputs.conf` | `$SPLUNK_HOME/etc/system/local/` | Define data inputs (files, ports, scripts) |
+| `outputs.conf` | `$SPLUNK_HOME/etc/system/local/` | Define where to forward data |
+| `props.conf` | `$SPLUNK_HOME/etc/system/local/` | Define source types, parsing rules, timestamps |
+| `transforms.conf` | `$SPLUNK_HOME/etc/system/local/` | Define field extractions, lookups, routing rules |
+| `indexes.conf` | `$SPLUNK_HOME/etc/system/local/` | Define indexes and their storage policies |
+| `server.conf` | `$SPLUNK_HOME/etc/system/local/` | General server settings |
+| `web.conf` | `$SPLUNK_HOME/etc/system/local/` | Web UI settings |
+| `authorize.conf` | `$SPLUNK_HOME/etc/system/local/` | Role-based access control |
+| `authentication.conf` | `$SPLUNK_HOME/etc/system/local/` | Authentication settings (LDAP, SAML) |
+
+### Configuration File Precedence (highest to lowest)
+1. `$SPLUNK_HOME/etc/system/local/` (user overrides — highest priority)
+2. `$SPLUNK_HOME/etc/apps/<app_name>/local/`
+3. `$SPLUNK_HOME/etc/apps/<app_name>/default/`
+4. `$SPLUNK_HOME/etc/system/default/` (factory defaults — lowest priority)
+
+---
+
+## 4. Data Input Methods
+
+### File & Directory Monitoring
+```ini
+# inputs.conf
+[monitor:///var/log/syslog]
+disabled = false
+sourcetype = syslog
+index = os_logs
+
+[monitor:///var/log/apache2/access.log]
+disabled = false
+sourcetype = access_combined
+index = web_logs
+```
+
+### Network Inputs (TCP/UDP)
+```ini
+# inputs.conf — receive syslog on UDP 514
+[udp://514]
+sourcetype = syslog
+index = network_logs
+
+# TCP input on port 5514
+[tcp://5514]
+sourcetype = custom_tcp
+index = custom_index
+```
+
+### Scripted Inputs
+```ini
+# inputs.conf — run a script every 60 seconds
+[script:///opt/splunk/etc/apps/myapp/bin/my_script.sh]
+interval = 60
+sourcetype = custom_script
+index = script_data
+```
+
+### HTTP Event Collector (HEC)
+HEC allows sending data to Splunk over HTTP/HTTPS using tokens.
+
+**Enable HEC in Splunk Web**: Settings → Data Inputs → HTTP Event Collector → Enable
+
+```bash
+# Send data via HEC using curl
+curl -k https://<splunk_host>:8088/services/collector/event \
+  -H "Authorization: Splunk <HEC_TOKEN>" \
+  -d '{"event": "Hello from HEC", "sourcetype": "manual", "index": "main"}'
+```
+
+### Windows-Specific Inputs
+```ini
+# inputs.conf
+[WinEventLog://Security]
+disabled = false
+index = win_security
+
+[WinEventLog://Application]
+disabled = false
+index = win_app
+
+[perfmon://CPU]
+object = Processor
+counters = % Processor Time
+instances = _Total
+interval = 30
+index = perfmon
+```
+
+### Database Inputs (DB Connect)
+Splunk DB Connect app allows pulling data from relational databases (MySQL, PostgreSQL, Oracle, SQL Server) on a schedule.
+
+---
+
+## 5. Indexes
+
+### What is an Index?
+An index is a repository where Splunk stores data. Each index is a collection of directories (buckets) containing compressed raw data and index files.
+
+### Default Indexes
+| Index | Description |
+|-------|-------------|
+| `main` | Default index for events if no index is specified |
+| `_internal` | Splunk's own internal logs (metrics, errors) |
+| `_audit` | Audit logs (user actions, search activity) |
+| `_introspection` | Performance and resource usage data |
+| `_telemetry` | Splunk usage telemetry |
+
+### Creating Custom Indexes
+```ini
+# indexes.conf
+[web_logs]
+homePath = $SPLUNK_DB/web_logs/db
+coldPath = $SPLUNK_DB/web_logs/colddb
+thawedPath = $SPLUNK_DB/web_logs/thaweddb
+maxTotalDataSizeMB = 50000
+frozenTimePeriodInSecs = 7776000   # 90 days retention
+```
+
+Or via Splunk Web: **Settings → Indexes → New Index**
+
+### Index Properties
+| Property | Description |
+|----------|-------------|
+| `maxTotalDataSizeMB` | Maximum total size of the index |
+| `frozenTimePeriodInSecs` | How long data is retained before freezing |
+| `maxDataSize` | Maximum size of a hot bucket (default: auto) |
+| `maxHotBuckets` | Maximum number of hot buckets |
+| `coldToFrozenDir` | Path to archive frozen buckets instead of deleting |
+
+---
+
+## 6. SPL — Search Processing Language
+
+SPL is the language used to search, filter, transform, and visualize data in Splunk.
+
+### Search Structure
+```
+search terms | command1 arguments | command2 arguments | ...
+```
+
+A search starts with **search terms** (keywords, field=value pairs) that filter events from the index. Results then flow through a **pipeline** of commands separated by `|` (pipe).
+
+### 6.1 Basic Searching
+
+#### Keyword Search
+```spl
+error
+failed login
+"connection refused"
+```
+- Keywords are case-insensitive
+- Phrases must be in double quotes
+- Boolean operators: `AND`, `OR`, `NOT` (must be uppercase)
+
+#### Field=Value Search
+```spl
+status=404
+host=webserver01
+sourcetype=access_combined status=500
+source="/var/log/syslog" error
+```
+
+#### Wildcards
+```spl
+fail*          # matches fail, failed, failure, etc.
+status=4*      # matches 400, 401, 404, etc.
+host=web*      # matches webserver01, webserver02, etc.
+```
+
+#### Comparison Operators
+```spl
+status >= 400
+response_time > 5
+bytes != 0
+status < 300
+```
+
+#### Boolean Logic
+```spl
+error OR warning
+error NOT timeout
+(status=500 OR status=503) AND host=web*
+```
+
+### 6.2 Time Range
+
+#### Time Picker (UI)
+You can use the time range picker in the Splunk UI to select preset ranges or custom windows.
+
+#### Inline Time Modifiers
+```spl
+earliest=-24h latest=now        # last 24 hours
+earliest=-7d@d latest=@d        # last 7 full days (aligned to midnight)
+earliest=-1h                    # last 1 hour
+earliest=01/01/2026:00:00:00 latest=01/31/2026:23:59:59
+```
+
+**Snap-to (`@`)** aligns time to a boundary:
+- `@d` = beginning of the day (midnight)
+- `@h` = beginning of the hour
+- `@w0` = beginning of the week (Sunday)
+- `@mon` = beginning of the month
+
+Examples:
+```spl
+earliest=-1d@d latest=@d     # yesterday (full day)
+earliest=@d                  # today so far
+earliest=-30m@m              # last 30 minutes, aligned to minute
+```
+
+### 6.3 Essential Search Commands
+
+#### `fields` — Select or Remove Fields
+```spl
+index=main | fields host, source, sourcetype, _time
+index=main | fields - _raw, _time       # remove specific fields
+index=main | fields + status, bytes      # keep only these fields
+```
+
+#### `table` — Display Results as a Table
+```spl
+index=web sourcetype=access_combined
+| table _time, clientip, method, uri_path, status, bytes
+```
+
+#### `rename` — Rename Fields
+```spl
+index=web | stats count by clientip
+| rename clientip AS "Client IP", count AS "Request Count"
+```
+
+#### `sort` — Sort Results
+```spl
+index=web | stats count by status | sort -count        # descending
+index=web | stats count by status | sort +count         # ascending (default)
+index=web | table _time, host, status | sort _time      # sort by time
+```
+
+#### `head` / `tail` — Limit Results
+```spl
+index=main | head 20      # first 20 events
+index=main | tail 10      # last 10 events
+```
+
+#### `dedup` — Remove Duplicates
+```spl
+index=main | dedup host                 # keep first event per host
+index=main | dedup host, sourcetype     # dedup by combination
+index=main | dedup 3 host              # keep first 3 events per host
+```
+
+#### `where` — Filter with Expressions
+```spl
+index=web | where status >= 400
+index=web | where like(uri_path, "/api/%")
+index=web | where cidrmatch("10.0.0.0/8", clientip)
+index=web | where isnotnull(user)
+index=web | where len(uri_path) > 100
+```
+
+`where` vs `search`:
+- `where` treats unquoted values as field names; `search` treats them as strings
+- `where` supports functions like `like()`, `cidrmatch()`, `isnotnull()`
+
+#### `eval` — Create or Transform Fields
+```spl
+# Create new fields
+| eval response_sec = response_time / 1000
+| eval status_category = if(status >= 400, "Error", "OK")
+| eval full_name = first_name . " " . last_name
+
+# Conditional logic
+| eval severity = case(
+    status >= 500, "Critical",
+    status >= 400, "Warning",
+    status >= 200, "OK",
+    true(), "Unknown"
+  )
+
+# Math functions
+| eval kb = round(bytes / 1024, 2)
+
+# String functions
+| eval lower_host = lower(host)
+| eval domain = replace(email, "^.*@", "")
+
+# Time functions
+| eval hour = strftime(_time, "%H")
+| eval epoch = strptime("2026-01-15", "%Y-%m-%d")
+
+# Multivalue
+| eval combined = mvappend(field1, field2)
+| eval count = mvcount(my_mv_field)
+```
+
+#### `rex` — Extract Fields with Regex
+```spl
+# Named capture group extracts into a new field
+| rex field=_raw "user=(?<username>\w+)"
+| rex field=_raw "(?<ip_address>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+
+# sed mode (replace)
+| rex field=email mode=sed "s/@.*//g"
+```
+
+#### `search` — Filter Results Mid-Pipeline
+```spl
+index=web | stats count by status | search count > 100
+```
+
+### 6.4 Statistical Commands
+
+#### `stats` — Aggregate Statistics
+```spl
+index=web | stats count                            # total event count
+index=web | stats count by status                  # count per status code
+index=web | stats count by host, sourcetype        # count by multiple fields
+index=web | stats avg(response_time) as avg_rt by host
+index=web | stats sum(bytes) as total_bytes by clientip
+index=web | stats min(response_time), max(response_time), avg(response_time) by uri_path
+index=web | stats dc(clientip) as unique_clients   # distinct count
+index=web | stats values(status) as status_codes by host   # list all unique values
+index=web | stats list(status) as all_statuses by host     # list all values (with duplicates)
+index=web | stats earliest(_time) as first_seen, latest(_time) as last_seen by host
+index=web | stats count as total, count(eval(status>=400)) as errors by host
+| eval error_rate = round(errors/total*100, 2)
+```
+
+**Common stats functions:**
+| Function | Description |
+|----------|-------------|
+| `count` | Number of events |
+| `dc(field)` | Distinct count of field values |
+| `sum(field)` | Sum of numeric field |
+| `avg(field)` | Average |
+| `min(field)` / `max(field)` | Minimum / Maximum |
+| `median(field)` | Median value |
+| `mode(field)` | Most common value |
+| `stdev(field)` | Standard deviation |
+| `perc95(field)` | 95th percentile |
+| `range(field)` | Difference between max and min |
+| `values(field)` | Distinct values (multivalue) |
+| `list(field)` | All values (multivalue, with duplicates) |
+| `first(field)` / `last(field)` | First / last value |
+| `earliest(field)` / `latest(field)` | Earliest / latest by time |
+
+#### `chart` — Tabular Aggregation
+```spl
+index=web | chart count by host, status
+# Creates a table: rows = host, columns = status values
+
+index=web | chart avg(response_time) over host by status
+# "over" defines the row axis, "by" defines the column split
+```
+
+#### `timechart` — Time-Series Aggregation
+```spl
+index=web | timechart count                          # events over time
+index=web | timechart span=1h count by status        # per-status counts per hour
+index=web | timechart span=5m avg(response_time) by host
+index=web | timechart span=1d sum(bytes) as daily_bytes
+```
+
+`span` options: `1m`, `5m`, `15m`, `1h`, `4h`, `1d`, `1w`, `1mon`
+
+#### `top` — Most Common Values
+```spl
+index=web | top status                    # top 10 by default
+index=web | top limit=5 clientip          # top 5
+index=web | top clientip by host          # top per host
+index=web | top limit=20 useother=true uri_path   # group remaining into "OTHER"
+```
+
+Output fields: `<field>`, `count`, `percent`
+
+#### `rare` — Least Common Values
+```spl
+index=web | rare status              # bottom 10 by default
+index=web | rare limit=5 uri_path
+```
+
+#### `eventstats` — Stats Without Collapsing Rows
+```spl
+# Unlike stats, eventstats adds aggregated values to each event
+index=web | eventstats avg(response_time) as avg_rt by host
+| where response_time > avg_rt * 2    # find events slower than 2x average
+```
+
+#### `streamstats` — Running/Cumulative Stats
+```spl
+# Running count
+index=web | streamstats count as event_number
+
+# Running average over last 10 events
+index=web | streamstats avg(response_time) as rolling_avg window=10
+
+# Cumulative sum
+index=web | streamstats sum(bytes) as cumulative_bytes
+```
+
+### 6.5 Transforming & Restructuring
+
+#### `transaction` — Group Related Events
+```spl
+# Group events by session ID with max 30-minute gap
+index=web | transaction session_id maxpause=30m
+
+# Group login → logout sequences
+index=auth | transaction user startswith="login" endswith="logout" maxspan=8h
+```
+
+Transaction creates fields: `duration`, `eventcount`
+
+**Note**: `transaction` is resource-intensive. Prefer `stats` when possible:
+```spl
+# Equivalent to transaction for basic grouping
+index=web | stats count as eventcount,
+    range(_time) as duration,
+    earliest(_time) as start,
+    latest(_time) as end
+    by session_id
+```
+
+#### `append` — Append Results from Another Search
+```spl
+index=web status=200 | stats count as success
+| append [search index=web status>=400 | stats count as errors]
+```
+
+#### `appendpipe` — Append Summary Row
+```spl
+index=web | stats count by host
+| appendpipe [stats sum(count) as count | eval host="TOTAL"]
+```
+
+#### `join` — SQL-Style Join
+```spl
+index=web | join clientip [search index=dns | fields clientip, hostname]
+# Left join by default; only returns matching rows
+
+index=web | join type=outer clientip [search index=dns | fields clientip, hostname]
+# Outer join keeps all left-side events
+```
+
+**Warning**: `join` is limited to 50,000 results by default and can be slow. Prefer lookups or `stats` when possible.
+
+#### `lookup` — Enrich Events from Lookup Tables
+```spl
+# Automatic lookup (if configured)
+# Manual lookup
+| lookup geo_lookup clientip OUTPUT city, country
+| lookup users_lookup username OUTPUT department, email
+```
+
+#### `inputlookup` / `outputlookup`
+```spl
+| inputlookup my_lookup.csv                       # load lookup as search results
+| inputlookup my_lookup.csv WHERE status="active"  # filter while loading
+index=web | stats count by host | outputlookup host_counts.csv  # save results to lookup
+```
+
+#### `map` — Run a Search for Each Result
+```spl
+index=main | head 5 | map search="search index=web host=$host$ | stats count"
+```
+
+#### `multisearch` — Run Multiple Searches in Parallel
+```spl
+| multisearch
+    [search index=web status=200 | stats count as success]
+    [search index=web status>=400 | stats count as errors]
+```
+
+### 6.6 Formatting & Output
+
+#### `convert`
+```spl
+| convert timeformat="%Y-%m-%d" ctime(_time) as date
+| convert rmunit(response_time)     # remove units (e.g., "5ms" → 5)
+| convert auto(bytes)               # auto-detect and convert
+```
+
+#### `fillnull`
+```spl
+| fillnull value="N/A"                    # replace all nulls
+| fillnull value=0 response_time, bytes   # specific fields
+```
+
+#### `makemv` — Convert Single-Value to Multivalue
+```spl
+| makemv delim="," categories
+```
+
+#### `mvexpand` — Expand Multivalue into Separate Rows
+```spl
+| mvexpand categories    # one row per value in multivalue field
+```
+
+#### `format` — Format Results for Subsearches
+```spl
+| format    # converts table to boolean expression for use in subsearches
+```
+
+---
+
+## 7. Field Extractions
+
+### Automatic Extraction
+Splunk automatically extracts fields like `host`, `source`, `sourcetype`, `_time`, `_raw` for every event. It also auto-extracts key=value pairs.
+
+### Inline Extraction (Search-Time)
+```spl
+| rex field=_raw "user=(?<username>\w+)"
+| rex field=_raw "duration=(?<duration>\d+\.?\d*)"
+```
+
+### Persistent Field Extraction (props.conf / transforms.conf)
+```ini
+# props.conf
+[my_sourcetype]
+EXTRACT-username = user=(?<username>\w+)
+EXTRACT-duration = duration=(?<duration>\d+\.?\d*)
+
+# For complex/reusable extractions, use transforms.conf
+REPORT-myfields = my_transform_name
+```
+```ini
+# transforms.conf
+[my_transform_name]
+REGEX = user=(?<username>\w+)\s+action=(?<action>\w+)
+```
+
+### Field Extraction via UI
+**Settings → Fields → Field Extractions → New Field Extraction**
+Use the interactive field extractor (IFX) for regex or delimiter-based extraction.
+
+### Calculated Fields
+```ini
+# props.conf
+[access_combined]
+EVAL-response_sec = response_time / 1000
+EVAL-status_type = if(status >= 400, "error", "ok")
+```
+
+### Field Aliases
+```ini
+# props.conf
+[my_sourcetype]
+FIELDALIAS-src = src_ip AS source_ip
+FIELDALIAS-dest = dest_ip AS destination_ip
+```
+
+---
+
+## 8. Lookups
+
+Lookups enrich events by adding fields from external data sources (CSV files, KV Store, database, scripts).
+
+### CSV Lookup
+1. Upload CSV: **Settings → Lookups → Lookup Table Files → Add New**
+2. Define lookup: **Settings → Lookups → Lookup Definitions → Add New**
+3. Optionally make automatic: **Settings → Lookups → Automatic Lookups**
+
+```spl
+# Manual usage
+| lookup status_codes status OUTPUT description
+# Adds "description" field to events based on matching "status" field
+```
+
+### KV Store Lookup
+KV Store is a built-in NoSQL database within Splunk.
+
+```spl
+# Read from KV Store
+| inputlookup kv_store_collection
+
+# Write to KV Store
+| outputlookup kv_store_collection
+
+# KV Store supports CRUD operations via REST API
+```
+
+### Geospatial Lookup
+```spl
+| iplocation clientip
+# Automatically adds: City, Country, Region, lat, lon
+```
+
+### External Lookup (Script-Based)
+```ini
+# transforms.conf
+[my_external_lookup]
+external_cmd = my_lookup_script.py ip
+fields_list = ip, hostname, location
+```
+
+---
+
+## 9. Knowledge Objects
+
+Knowledge objects are user-created entities that enrich and organize data.
+
+### Types of Knowledge Objects
+| Object | Purpose |
+|--------|---------|
+| **Saved Searches** | Reusable search queries |
+| **Reports** | Saved searches with visualization and scheduling |
+| **Alerts** | Triggered actions based on search results |
+| **Dashboards** | Visual displays of multiple panels |
+| **Event Types** | Categorize events with a search string |
+| **Tags** | Label field values for easier searching |
+| **Field Extractions** | Define custom fields |
+| **Field Aliases** | Create alternative names for fields |
+| **Calculated Fields** | Fields derived from eval expressions |
+| **Lookups** | External data enrichment |
+| **Data Models** | Structured representation of data for Pivot |
+| **Macros** | Reusable search snippets |
+| **Workflow Actions** | Links/actions triggered from event fields |
+
+### Event Types
+```ini
+# eventtypes.conf
+[web_error]
+search = index=web (status>=400)
+
+[login_failure]
+search = index=auth action=login result=failure
+```
+Usage: `eventtype=web_error`
+
+### Tags
+```ini
+# tags.conf
+[eventtype=web_error]
+error = enabled
+web = enabled
+
+[host=webserver01]
+production = enabled
+```
+Usage: `tag=error`, `tag::host=production`
+
+### Macros
+Macros are reusable search fragments. Create via **Settings → Advanced Search → Search Macros**.
+
+```spl
+# Define macro "get_errors" (no arguments)
+# Definition: index=web status>=400
+
+# Usage
+`get_errors` | stats count by host
+
+# Macro with arguments: "get_errors(1)"
+# Definition: index=web status>=$code$
+# Usage
+`get_errors(400)` | stats count by host
+```
+
+### Workflow Actions
+Create via **Settings → Fields → Workflow Actions**
+- **GET link**: Opens a URL with field values (e.g., lookup IP in VirusTotal)
+- **POST link**: Sends data to an external URL
+- **Search**: Launches a new Splunk search using field values
+
+---
+
+## 10. Reports & Alerts
+
+### Saved Reports
+1. Run a search
+2. Click **Save As → Report**
+3. Configure: name, description, time range, permissions
+4. Optionally schedule to run periodically
+
+### Scheduled Reports
+- Can be set to run on a cron schedule
+- Results can be emailed or used to populate summary indexes
+- Acceleration: enable report acceleration for faster results on large datasets
+
+### Alerts
+
+#### Creating an Alert
+1. Run a search
+2. Click **Save As → Alert**
+3. Configure trigger conditions and actions
+
+#### Alert Types
+| Type | Description |
+|------|-------------|
+| **Scheduled** | Runs on a cron schedule and triggers if conditions are met |
+| **Real-time** | Continuously monitors data (resource-intensive) |
+
+#### Trigger Conditions
+- Number of results (e.g., > 0)
+- Number of hosts
+- Number of sources
+- Custom condition (SPL expression)
+
+#### Throttling
+- Suppress triggering for a specified period
+- Can suppress per-field (e.g., trigger once per host per hour)
+
+#### Alert Actions
+- **Send email**: To specified recipients with results
+- **Run a script**: Execute a custom script
+- **Webhook**: POST data to a URL
+- **Log event**: Write to `_audit` index
+- **Add to triggered alerts list**: Display in Splunk UI
+- **Custom actions**: Installed via apps (e.g., ServiceNow, PagerDuty, Slack)
+
+---
+
+## 11. Dashboards & Visualizations
+
+### Dashboard Types
+1. **Classic Dashboards (Simple XML)**: XML-based, widely supported
+2. **Dashboard Studio**: Newer, more flexible layout, supports absolute positioning
+
+### Creating a Dashboard
+- **From search**: Save As → Dashboard Panel
+- **From scratch**: Dashboards → Create New Dashboard
+
+### Simple XML Structure
+```xml
+<dashboard>
+  <label>My Dashboard</label>
+  <row>
+    <panel>
+      <title>Error Count Over Time</title>
+      <chart>
+        <search>
+          <query>index=web status>=400 | timechart count</query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">line</option>
+      </chart>
+    </panel>
+  </row>
+</dashboard>
+```
+
+### Tokens (Dynamic Inputs)
+Tokens allow user interaction with dashboards.
+
+```xml
+<fieldset submitButton="true">
+  <input type="dropdown" token="selected_host">
+    <label>Host</label>
+    <choice value="*">All</choice>
+    <search>
+      <query>index=web | stats count by host</query>
+    </search>
+    <fieldForLabel>host</fieldForLabel>
+    <fieldForValue>host</fieldForValue>
+  </input>
+  <input type="time" token="time_range">
+    <label>Time Range</label>
+    <default>
+      <earliest>-24h</earliest>
+      <latest>now</latest>
+    </default>
+  </input>
+</fieldset>
+```
+
+Use tokens in searches: `index=web host=$selected_host$`
+
+### Visualization Types
+| Type | Command/Use |
+|------|-------------|
+| **Line Chart** | `timechart` |
+| **Bar Chart** | `chart`, `stats` |
+| **Pie Chart** | `stats count by field` |
+| **Area Chart** | `timechart` |
+| **Column Chart** | `chart`, `stats` |
+| **Single Value** | `stats count` (single result) |
+| **Gauge** | Single numeric value with ranges |
+| **Table** | `table` or `stats` |
+| **Map (Choropleth)** | `geostats` or `iplocation` |
+| **Scatter Plot** | Two numeric fields |
+
+### Drilldown
+Enable clicking on chart elements to navigate to detailed searches:
+```xml
+<chart>
+  <search>...</search>
+  <drilldown>
+    <link target="_blank">
+      /app/search/search?q=index%3Dweb%20host%3D$click.value$
+    </link>
+  </drilldown>
+</chart>
+```
+
+---
+
+## 12. Data Models & Pivot
+
+### What is a Data Model?
+A data model is a hierarchical, structured representation of your data. It provides a user-friendly interface for non-SPL users to create reports and dashboards using the **Pivot** tool.
+
+### Data Model Components
+- **Root Object**: Top-level dataset (based on a search or index constraint)
+- **Child Object**: Subset of root (filtered or constrained further)
+- **Fields**: Attributes defined with types (string, number, timestamp, etc.)
+
+### Creating a Data Model
+**Settings → Data Models → New Data Model**
+
+### Pivot
+Pivot is a drag-and-drop interface for creating reports from data models without writing SPL.
+
+### Data Model Acceleration
+- Accelerated data models pre-compute summaries for fast searches
+- Uses `tstats` command under the hood
+- Enable via data model settings; configure the acceleration time range
+
+### `tstats` — Fast Stats on Indexed/Accelerated Data
+```spl
+| tstats count WHERE index=web BY host, sourcetype
+
+| tstats count WHERE index=web host=webserver01
+    BY _time span=1h
+| timechart span=1h count
+
+# With accelerated data model
+| tstats count FROM datamodel=Web WHERE Web.status>=400
+    BY Web.host
+```
+
+`tstats` is significantly faster than `stats` because it uses indexed metadata rather than scanning raw events.
+
+---
+
+## 13. User Management & Access Control
+
+### Roles
+Splunk uses Role-Based Access Control (RBAC).
+
+#### Default Roles
+| Role | Capabilities |
+|------|-------------|
+| `admin` | Full access to everything |
+| `power` | Search all indexes, create knowledge objects, manage own objects |
+| `user` | Search default indexes, create personal knowledge objects |
+| `can_delete` | Can delete events from indexes |
+
+#### Custom Roles
+Create via **Settings → Access Controls → Roles → New Role**
+
+Role properties:
+- **Inherited roles**: Inherit capabilities from other roles
+- **Capabilities**: Specific permissions (schedule_search, edit_monitor, etc.)
+- **Allowed indexes**: Which indexes the role can search
+- **Search restrictions**: Mandatory search filters (e.g., `host=server1`)
+- **Search time range limits**: Maximum time window for searches
+- **Search job limits**: Concurrent search limits
+
+### Authentication Methods
+| Method | Description |
+|--------|-------------|
+| **Splunk Native** | Built-in user database |
+| **LDAP** | Active Directory or other LDAP servers |
+| **SAML** | Single Sign-On (Okta, ADFS, Azure AD) |
+| **Scripted Auth** | Custom authentication via scripts |
+| **MFA** | Duo Security integration |
+
+---
+
+## 14. Clustering
+
+### Indexer Clustering
+Indexer clusters provide data replication and high availability.
+
+**Key Concepts:**
+- **Replication Factor (RF)**: Number of copies of raw data (default: 3)
+- **Search Factor (SF)**: Number of searchable copies (default: 2)
+- **Cluster Master / Manager Node**: Coordinates the cluster
+
+```ini
+# server.conf on Manager Node
+[clustering]
+mode = manager
+replication_factor = 3
+search_factor = 2
+
+# server.conf on Peer Nodes
+[clustering]
+mode = peer
+manager_uri = https://<manager_ip>:8089
+
+# server.conf on Search Head
+[clustering]
+mode = searchhead
+manager_uri = https://<manager_ip>:8089
+```
+
+### Search Head Clustering (SHC)
+Multiple search heads share configurations and load-balance searches.
+
+**Components:**
+- **Search Head Captain**: Elected leader that coordinates the cluster
+- **Deployer**: Pushes apps and configurations to SHC members
+
+```ini
+# server.conf on SHC members
+[shclustering]
+conf_deploy_fetch_url = https://<deployer_ip>:8089
+mgmt_uri = https://<this_SH_ip>:8089
+replication_port = 9887
+```
+
+---
+
+## 15. Splunk REST API
+
+Splunk exposes a REST API on port 8089 for programmatic access.
+
+### Authentication
+```bash
+# Get a session token
+curl -k -u admin:password https://localhost:8089/services/auth/login \
+  -d username=admin -d password=changeme
+
+# Use the token
+curl -k -H "Authorization: Splunk <session_key>" \
+  https://localhost:8089/services/search/jobs
+```
+
+### Common Endpoints
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/services/auth/login` | POST | Authenticate and get session key |
+| `/services/search/jobs` | POST | Create a search job |
+| `/services/search/jobs/<sid>` | GET | Get search job status |
+| `/services/search/jobs/<sid>/results` | GET | Get search results |
+| `/services/data/indexes` | GET | List indexes |
+| `/services/data/inputs/monitor` | GET/POST | Manage file monitor inputs |
+| `/services/server/info` | GET | Server information |
+| `/services/apps/local` | GET | List installed apps |
+| `/services/saved/searches` | GET/POST | Manage saved searches |
+
+### Python SDK
+```python
+import splunklib.client as client
+import splunklib.results as results
+
+# Connect
+service = client.connect(
+    host="localhost",
+    port=8089,
+    username="admin",
+    password="changeme"
+)
+
+# Run a search
+search_query = "search index=main | head 10"
+job = service.jobs.create(search_query)
+
+# Wait for results
+while not job.is_done():
+    pass
+
+# Read results
+reader = results.JSONResultsReader(job.results(output_mode="json"))
+for result in reader:
+    if isinstance(result, dict):
+        print(result)
+```
+
+---
+
+## 16. Splunk for Security (SIEM)
+
+### Common Security Searches
+
+#### Failed Logins
+```spl
+index=auth action=login status=failure
+| stats count by user, src_ip
+| where count > 5
+| sort -count
+```
+
+#### Brute Force Detection
+```spl
+index=auth action=login status=failure
+| bin _time span=5m
+| stats count by _time, user, src_ip
+| where count > 10
+```
+
+#### Privileged Account Activity
+```spl
+index=auth user IN ("root", "admin", "administrator")
+| stats count by user, action, src_ip
+| sort -count
+```
+
+#### Network — Port Scan Detection
+```spl
+index=network
+| stats dc(dest_port) as port_count by src_ip
+| where port_count > 100
+```
+
+#### Malware / Suspicious Process
+```spl
+index=endpoint sourcetype=sysmon EventCode=1
+| search (process_name="powershell.exe" OR process_name="cmd.exe")
+| where like(command_line, "%-enc%") OR like(command_line, "%base64%")
+```
+
+### Notable Events & Incident Review
+Splunk Enterprise Security (ES) uses **Notable Events** to track security incidents. Analysts triage these in the **Incident Review** dashboard.
+
+### CIM (Common Information Model)
+The CIM is a set of field name conventions that normalize data across different source types:
+- `src` / `src_ip` / `src_port` — Source
+- `dest` / `dest_ip` / `dest_port` — Destination
+- `user` — Username
+- `action` — Action taken (allowed, blocked, etc.)
+- `status` — Success/failure
+
+Normalizing data to the CIM enables Splunk ES correlation searches to work across all data sources.
+
+---
+
+## 17. Optimization & Best Practices
+
+### Search Optimization Tips
+
+1. **Be specific with indexes and sourcetypes**
+   ```spl
+   # Bad: searches all indexes
+   error
+
+   # Good: targets specific data
+   index=web sourcetype=access_combined status>=400
+   ```
+
+2. **Use time ranges** — The narrower, the faster
+
+3. **Filter early** — Put restrictive terms at the beginning
+   ```spl
+   # Good: filter first, then compute
+   index=web status=500 | stats count by host
+
+   # Bad: compute on everything, then filter
+   index=web | stats count by host, status | where status=500
+   ```
+
+4. **Avoid wildcards at the start**
+   ```spl
+   # Slow
+   index=main *error*
+
+   # Faster
+   index=main error
+   ```
+
+5. **Use `stats` instead of `transaction`** when possible
+
+6. **Use `tstats` for indexed fields** — 10-100x faster than `stats`
+
+7. **Use `fields` command** to limit fields passed through the pipeline
+
+8. **Use summary indexing** for recurring expensive searches
+
+9. **Avoid real-time searches** in production — use scheduled searches
+
+10. **Use `prefix()` and `term()`** for exact indexed-term matching
+    ```spl
+    index=web TERM(status=404)
+    ```
+
+### Data Retention Best Practices
+- Separate indexes by data type and retention policy
+- Use `frozenTimePeriodInSecs` to enforce retention
+- Archive frozen data to cheap storage if needed for compliance
+- Monitor license usage: `index=_internal source=*license_usage.log`
+
+### Capacity Planning
+- **Indexing volume**: GB/day determines license needs
+- **Storage**: Typically 15% of raw data size after compression
+- **Search concurrency**: More users = more search heads needed
+- **Replication**: RF=3 means 3x storage
+
+---
+
+## 18. Useful SPL Examples (Quick Reference)
+
+### Count Events by Source Type
+```spl
+index=* | stats count by sourcetype | sort -count
+```
+
+### Find Large Events
+```spl
+index=main | eval event_size=len(_raw) | where event_size > 10000
+| table _time, source, event_size
+```
+
+### Monitor Index Size
+```spl
+| rest /services/data/indexes
+| table title, currentDBSizeMB, totalEventCount, maxTotalDataSizeMB
+| sort -currentDBSizeMB
+```
+
+### License Usage
+```spl
+index=_internal source=*license_usage.log type=Usage
+| timechart span=1d sum(b) as bytes
+| eval GB = round(bytes/1024/1024/1024, 2)
+| fields _time, GB
+```
+
+### Search Activity (Who Searched What)
+```spl
+index=_audit action=search
+| table _time, user, search, total_run_time
+| sort -total_run_time
+```
+
+### Scheduled Search Failures
+```spl
+index=_internal sourcetype=scheduler status=failed
+| stats count by savedsearch_name, app
+| sort -count
+```
+
+### Forwarder Health
+```spl
+index=_internal sourcetype=splunkd group=tcpin_connections
+| stats latest(_time) as last_connected by hostname
+| eval status = if(now() - last_connected > 900, "DOWN", "OK")
+| sort status
+```
+
+### Disk Usage by Index
+```spl
+| dbinspect index=* | stats sum(sizeOnDiskMB) as disk_MB by index
+| sort -disk_MB
+```
+
+---
+
+## 19. Splunk Apps & Add-ons
+
+### What's the Difference?
+- **App**: Provides a complete user interface (dashboards, views, navigation)
+- **Add-on (TA)**: Provides data inputs, field extractions, and CIM mappings without a UI
+
+### Popular Apps
+| App | Purpose |
+|-----|---------|
+| Splunk Enterprise Security (ES) | SIEM solution |
+| Splunk ITSI | IT Service Intelligence |
+| Splunk DB Connect | Database integration |
+| Splunk App for AWS | AWS monitoring |
+| Splunk Add-on for Unix | Linux/Unix data collection |
+| Splunk Add-on for Windows | Windows data collection |
+| Splunk Stream | Network packet capture |
+
+### Installing Apps
+- **Splunkbase**: Browse and install from within Splunk Web
+- **CLI**: `$SPLUNK_HOME/bin/splunk install app <package>.tgz`
+- **Manual**: Extract to `$SPLUNK_HOME/etc/apps/`
+
+---
+
+## 20. Troubleshooting Splunk
+
+### Common Issues & Solutions
+
+| Issue | Diagnosis |
+|-------|-----------|
+| Data not appearing | Check `inputs.conf`, verify forwarder connectivity, check index name |
+| Search is slow | Use `| search` command audit, check `dispatch.log`, optimize SPL |
+| License violation | Check `index=_internal source=*license_usage.log` |
+| Forwarder not sending | Check `outputs.conf`, verify port 9997 open, check `splunkd.log` |
+| Timestamp parsing wrong | Review `props.conf` for `TIME_FORMAT` and `TIME_PREFIX` |
+| Missing fields | Check `props.conf` / `transforms.conf` for field extractions |
+| Web UI not loading | Check port 8000, review `web_service.log` |
+| Cluster issues | Check `index=_internal sourcetype=splunkd cluster` |
+
+### Key Log Files
+| Log | Location | Content |
+|-----|----------|---------|
+| `splunkd.log` | `$SPLUNK_HOME/var/log/splunk/` | Main Splunk daemon log |
+| `web_service.log` | `$SPLUNK_HOME/var/log/splunk/` | Web UI issues |
+| `metrics.log` | `$SPLUNK_HOME/var/log/splunk/` | Performance metrics |
+| `audit.log` | `$SPLUNK_HOME/var/log/splunk/` | User activity |
+| `scheduler.log` | `$SPLUNK_HOME/var/log/splunk/` | Scheduled search execution |
+
+### Diagnostic Commands
+```spl
+# Server info
+| rest /services/server/info | fields splunk_version, os_name, cpu_arch
+
+# Check running searches
+| rest /services/search/jobs | table sid, runDuration, eventCount
+
+# Indexer cluster status
+| rest /services/cluster/manager/peers
+| table label, status, last_heartbeat, replication_count
+
+# List all forwarders
+| rest /services/deployment/server/clients
+| table hostname, ip, splunkVersion, lastPhoneHomeTime
+```
+
+---
+
+## 21. Splunk CLI Quick Reference
+
+```bash
+# Start / Stop / Restart
+splunk start
+splunk stop
+splunk restart
+
+# Check status
+splunk status
+
+# Search from CLI
+splunk search "index=main | head 5" -maxout 100
+
+# List indexes
+splunk list index
+
+# Add data input
+splunk add monitor /var/log/messages -index main -sourcetype syslog
+
+# Add forward server
+splunk add forward-server indexer1:9997
+
+# List forward servers
+splunk list forward-server
+
+# Reload config
+splunk reload deploy-server    # reload deployment server
+splunk reload auth             # reload authentication config
+
+# User management
+splunk add user jdoe -role user -password changeme
+splunk edit user jdoe -role power
+splunk remove user jdoe
+splunk list user
+
+# App management
+splunk install app myapp.tgz
+splunk remove app myapp
+splunk list app
+
+# License
+splunk list licenser-pools
+splunk list licenser-slaves
+
+# Clean index
+splunk clean eventdata -index myindex    # DESTRUCTIVE — removes all data
+
+# Validate config
+splunk btool inputs list --debug
+splunk btool props list --debug
+splunk btool check
+```
+
+---
+
+## 22. Regular Expressions in Splunk
+
+Splunk uses PCRE (Perl-Compatible Regular Expressions).
+
+### Common Patterns
+| Pattern | Description | Example Match |
+|---------|-------------|---------------|
+| `\d` | Any digit | `5` |
+| `\d+` | One or more digits | `12345` |
+| `\w` | Word character (letter, digit, underscore) | `a`, `5`, `_` |
+| `\w+` | One or more word characters | `hostname01` |
+| `\s` | Whitespace | ` `, `\t` |
+| `.` | Any character except newline | anything |
+| `.*` | Zero or more of any character | anything |
+| `.+` | One or more of any character | something |
+| `[A-Za-z]+` | Letters only | `Error` |
+| `\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}` | IPv4 address | `192.168.1.1` |
+| `(?<name>pattern)` | Named capture group | Extracts into field `name` |
+| `(?:pattern)` | Non-capturing group | Groups without extracting |
+
+### Using Regex in SPL
+```spl
+# rex — extract fields
+| rex field=_raw "src=(?<src_ip>\d+\.\d+\.\d+\.\d+)"
+
+# regex — filter events matching a pattern
+| regex _raw="error|fail|critical"
+
+# rex mode=sed — substitution
+| rex field=message mode=sed "s/password=\S+/password=REDACTED/g"
+```
+
+---
+
+## 23. Summary Indexing & Acceleration
+
+### Summary Indexing
+Run expensive searches on a schedule and store results in a summary index for faster future access.
+
+```spl
+# Scheduled search that populates summary index
+index=web | stats count by host, status
+| collect index=summary marker="web_status_summary"
+```
+
+```spl
+# Query the summary
+index=summary source="web_status_summary"
+| stats sum(count) by host, status
+```
+
+### Report Acceleration
+- Automatically creates summaries of report results
+- Enable via: **Edit Report → Acceleration → Enable**
+- Uses `summariesonly=true` in `tstats` under the hood
+
+### Data Model Acceleration
+- Pre-computes data model results for fast pivot/tstats queries
+- Enable via: **Settings → Data Models → Edit → Acceleration**
+- Can use significant disk space
+
+ placeholders. Usage: `` `my_macro(value1, value2)` ``
+
+Example:
+- Macro name: `get_errors(1)` (1 = number of arguments)
+- Definition: `index=web status>=$min_status# Splunk Complete Notes
+
+---
+
+## 1. Introduction to Splunk
+
+### What is Splunk?
+Splunk is a powerful platform for searching, monitoring, and analyzing machine-generated big data via a web-based interface. It captures, indexes, and correlates real-time data in a searchable repository from which it can generate graphs, reports, alerts, dashboards, and visualizations.
+
+### Key Use Cases
+- **Log Management**: Collect, store, and analyze logs from servers, applications, network devices, etc.
+- **Security Information and Event Management (SIEM)**: Detect threats, investigate incidents, and respond to breaches.
+- **IT Operations Monitoring**: Monitor infrastructure health, application performance, and service availability.
+- **Business Analytics**: Gain insights from machine data to drive business decisions.
+- **Compliance & Auditing**: Meet regulatory requirements by retaining and searching audit data.
+
+### Splunk Products
+| Product | Description |
+|---------|-------------|
+| **Splunk Enterprise** | On-premises deployment for indexing and searching data |
+| **Splunk Cloud** | SaaS version of Splunk Enterprise hosted by Splunk |
+| **Splunk Free** | Limited version (500 MB/day indexing, no authentication, no alerting) |
+| **Splunk Light** | Lightweight version for small environments (discontinued) |
+| **Splunk SOAR** | Security Orchestration, Automation, and Response |
+| **Splunk ITSI** | IT Service Intelligence for monitoring KPIs and services |
+| **Splunk UBA** | User Behavior Analytics for detecting insider threats |
+
+---
+
+## 2. Splunk Architecture
+
+### Core Components
+
+#### 1. Forwarder
+Forwarders are lightweight agents installed on data sources that collect and forward data to indexers.
+
+- **Universal Forwarder (UF)**: Lightweight, forwards raw data only. Cannot parse or index data. Most commonly used.
+- **Heavy Forwarder (HF)**: Full Splunk instance that can parse, filter, and route data before forwarding. Uses more resources.
+- **Light Forwarder**: Deprecated. Replaced by Universal Forwarder.
+
+#### 2. Indexer
+The indexer processes incoming data by:
+1. **Parsing**: Breaking raw data into individual events
+2. **Timestamping**: Assigning timestamps to each event
+3. **Indexing**: Writing events to disk in compressed, searchable format
+4. **Storing**: Organizing data into indexes (buckets)
+
+Data flows through buckets in stages:
+- **Hot** → actively being written to (read/write)
+- **Warm** → rolled from hot, still searchable (read-only)
+- **Cold** → moved to cheaper/slower storage (read-only)
+- **Frozen** → archived or deleted (not searchable unless thawed)
+- **Thawed** → restored frozen data made searchable again
+
+#### 3. Search Head
+The Search Head provides the web interface for users to:
+- Run searches using SPL
+- Create dashboards, reports, and alerts
+- Manage knowledge objects (saved searches, field extractions, lookups)
+
+In distributed environments, the search head sends search requests to indexers, which return results.
+
+#### 4. Deployment Server
+Centrally manages configurations and app deployments to forwarders and other Splunk instances.
+
+#### 5. Cluster Master / Manager Node
+Manages indexer clusters for data replication and search factor configurations.
+
+#### 6. License Master
+Manages Splunk licensing across all instances.
+
+### Distributed Architecture Diagram (Conceptual)
+```
+Data Sources → Forwarders → Indexers (Cluster) → Search Heads (Cluster)
+                                ↑                        ↑
+                         Cluster Master          Search Head Deployer
+                         License Master
+                         Deployment Server
+```
+
+### Ports Used by Splunk
+| Port | Purpose |
+|------|---------|
+| 8000 | Splunk Web (UI) |
+| 8089 | Splunk Management / REST API (splunkd) |
+| 9997 | Receiving port (indexer listens for forwarder data) |
+| 8191 | KV Store |
+| 514  | Syslog (if configured) |
+
+---
+
+## 3. Splunk Installation & Setup
+
+### System Requirements
+- **OS**: Linux (RHEL, CentOS, Ubuntu), Windows, macOS
+- **RAM**: Minimum 4 GB (recommended 12+ GB for production)
+- **Disk**: Depends on data volume; SSDs recommended for hot/warm buckets
+- **CPU**: Multi-core recommended
+
+### Linux Installation
+```bash
+# Download the RPM or tar package from splunk.com
+# RPM installation
+sudo rpm -i splunk-<version>.rpm
+
+# Start Splunk
+sudo /opt/splunk/bin/splunk start --accept-license
+
+# Enable boot start
+sudo /opt/splunk/bin/splunk enable boot-start
+```
+
+### Windows Installation
+- Download the MSI installer from splunk.com
+- Run the installer and follow the wizard
+- Splunk installs to `C:\Program Files\Splunk` by default
+- Access via `http://localhost:8000`
+
+### Universal Forwarder Installation
+```bash
+# Linux
+sudo rpm -i splunkforwarder-<version>.rpm
+sudo /opt/splunkforwarder/bin/splunk start --accept-license
+
+# Configure forwarding
+/opt/splunkforwarder/bin/splunk add forward-server <indexer_ip>:9997
+/opt/splunkforwarder/bin/splunk add monitor /var/log/
+```
+
+### Key Configuration Files
+| File | Location | Purpose |
+|------|----------|---------|
+| `inputs.conf` | `$SPLUNK_HOME/etc/system/local/` | Define data inputs (files, ports, scripts) |
+| `outputs.conf` | `$SPLUNK_HOME/etc/system/local/` | Define where to forward data |
+| `props.conf` | `$SPLUNK_HOME/etc/system/local/` | Define source types, parsing rules, timestamps |
+| `transforms.conf` | `$SPLUNK_HOME/etc/system/local/` | Define field extractions, lookups, routing rules |
+| `indexes.conf` | `$SPLUNK_HOME/etc/system/local/` | Define indexes and their storage policies |
+| `server.conf` | `$SPLUNK_HOME/etc/system/local/` | General server settings |
+| `web.conf` | `$SPLUNK_HOME/etc/system/local/` | Web UI settings |
+| `authorize.conf` | `$SPLUNK_HOME/etc/system/local/` | Role-based access control |
+| `authentication.conf` | `$SPLUNK_HOME/etc/system/local/` | Authentication settings (LDAP, SAML) |
+
+### Configuration File Precedence (highest to lowest)
+1. `$SPLUNK_HOME/etc/system/local/` (user overrides — highest priority)
+2. `$SPLUNK_HOME/etc/apps/<app_name>/local/`
+3. `$SPLUNK_HOME/etc/apps/<app_name>/default/`
+4. `$SPLUNK_HOME/etc/system/default/` (factory defaults — lowest priority)
+
+---
+
+## 4. Data Input Methods
+
+### File & Directory Monitoring
+```ini
+# inputs.conf
+[monitor:///var/log/syslog]
+disabled = false
+sourcetype = syslog
+index = os_logs
+
+[monitor:///var/log/apache2/access.log]
+disabled = false
+sourcetype = access_combined
+index = web_logs
+```
+
+### Network Inputs (TCP/UDP)
+```ini
+# inputs.conf — receive syslog on UDP 514
+[udp://514]
+sourcetype = syslog
+index = network_logs
+
+# TCP input on port 5514
+[tcp://5514]
+sourcetype = custom_tcp
+index = custom_index
+```
+
+### Scripted Inputs
+```ini
+# inputs.conf — run a script every 60 seconds
+[script:///opt/splunk/etc/apps/myapp/bin/my_script.sh]
+interval = 60
+sourcetype = custom_script
+index = script_data
+```
+
+### HTTP Event Collector (HEC)
+HEC allows sending data to Splunk over HTTP/HTTPS using tokens.
+
+**Enable HEC in Splunk Web**: Settings → Data Inputs → HTTP Event Collector → Enable
+
+```bash
+# Send data via HEC using curl
+curl -k https://<splunk_host>:8088/services/collector/event \
+  -H "Authorization: Splunk <HEC_TOKEN>" \
+  -d '{"event": "Hello from HEC", "sourcetype": "manual", "index": "main"}'
+```
+
+### Windows-Specific Inputs
+```ini
+# inputs.conf
+[WinEventLog://Security]
+disabled = false
+index = win_security
+
+[WinEventLog://Application]
+disabled = false
+index = win_app
+
+[perfmon://CPU]
+object = Processor
+counters = % Processor Time
+instances = _Total
+interval = 30
+index = perfmon
+```
+
+### Database Inputs (DB Connect)
+Splunk DB Connect app allows pulling data from relational databases (MySQL, PostgreSQL, Oracle, SQL Server) on a schedule.
+
+---
+
+## 5. Indexes
+
+### What is an Index?
+An index is a repository where Splunk stores data. Each index is a collection of directories (buckets) containing compressed raw data and index files.
+
+### Default Indexes
+| Index | Description |
+|-------|-------------|
+| `main` | Default index for events if no index is specified |
+| `_internal` | Splunk's own internal logs (metrics, errors) |
+| `_audit` | Audit logs (user actions, search activity) |
+| `_introspection` | Performance and resource usage data |
+| `_telemetry` | Splunk usage telemetry |
+
+### Creating Custom Indexes
+```ini
+# indexes.conf
+[web_logs]
+homePath = $SPLUNK_DB/web_logs/db
+coldPath = $SPLUNK_DB/web_logs/colddb
+thawedPath = $SPLUNK_DB/web_logs/thaweddb
+maxTotalDataSizeMB = 50000
+frozenTimePeriodInSecs = 7776000   # 90 days retention
+```
+
+Or via Splunk Web: **Settings → Indexes → New Index**
+
+### Index Properties
+| Property | Description |
+|----------|-------------|
+| `maxTotalDataSizeMB` | Maximum total size of the index |
+| `frozenTimePeriodInSecs` | How long data is retained before freezing |
+| `maxDataSize` | Maximum size of a hot bucket (default: auto) |
+| `maxHotBuckets` | Maximum number of hot buckets |
+| `coldToFrozenDir` | Path to archive frozen buckets instead of deleting |
+
+---
+
+## 6. SPL — Search Processing Language
+
+SPL is the language used to search, filter, transform, and visualize data in Splunk.
+
+### Search Structure
+```
+search terms | command1 arguments | command2 arguments | ...
+```
+
+A search starts with **search terms** (keywords, field=value pairs) that filter events from the index. Results then flow through a **pipeline** of commands separated by `|` (pipe).
+
+### 6.1 Basic Searching
+
+#### Keyword Search
+```spl
+error
+failed login
+"connection refused"
+```
+- Keywords are case-insensitive
+- Phrases must be in double quotes
+- Boolean operators: `AND`, `OR`, `NOT` (must be uppercase)
+
+#### Field=Value Search
+```spl
+status=404
+host=webserver01
+sourcetype=access_combined status=500
+source="/var/log/syslog" error
+```
+
+#### Wildcards
+```spl
+fail*          # matches fail, failed, failure, etc.
+status=4*      # matches 400, 401, 404, etc.
+host=web*      # matches webserver01, webserver02, etc.
+```
+
+#### Comparison Operators
+```spl
+status >= 400
+response_time > 5
+bytes != 0
+status < 300
+```
+
+#### Boolean Logic
+```spl
+error OR warning
+error NOT timeout
+(status=500 OR status=503) AND host=web*
+```
+
+### 6.2 Time Range
+
+#### Time Picker (UI)
+You can use the time range picker in the Splunk UI to select preset ranges or custom windows.
+
+#### Inline Time Modifiers
+```spl
+earliest=-24h latest=now        # last 24 hours
+earliest=-7d@d latest=@d        # last 7 full days (aligned to midnight)
+earliest=-1h                    # last 1 hour
+earliest=01/01/2026:00:00:00 latest=01/31/2026:23:59:59
+```
+
+**Snap-to (`@`)** aligns time to a boundary:
+- `@d` = beginning of the day (midnight)
+- `@h` = beginning of the hour
+- `@w0` = beginning of the week (Sunday)
+- `@mon` = beginning of the month
+
+Examples:
+```spl
+earliest=-1d@d latest=@d     # yesterday (full day)
+earliest=@d                  # today so far
+earliest=-30m@m              # last 30 minutes, aligned to minute
+```
+
+### 6.3 Essential Search Commands
+
+#### `fields` — Select or Remove Fields
+```spl
+index=main | fields host, source, sourcetype, _time
+index=main | fields - _raw, _time       # remove specific fields
+index=main | fields + status, bytes      # keep only these fields
+```
+
+#### `table` — Display Results as a Table
+```spl
+index=web sourcetype=access_combined
+| table _time, clientip, method, uri_path, status, bytes
+```
+
+#### `rename` — Rename Fields
+```spl
+index=web | stats count by clientip
+| rename clientip AS "Client IP", count AS "Request Count"
+```
+
+#### `sort` — Sort Results
+```spl
+index=web | stats count by status | sort -count        # descending
+index=web | stats count by status | sort +count         # ascending (default)
+index=web | table _time, host, status | sort _time      # sort by time
+```
+
+#### `head` / `tail` — Limit Results
+```spl
+index=main | head 20      # first 20 events
+index=main | tail 10      # last 10 events
+```
+
+#### `dedup` — Remove Duplicates
+```spl
+index=main | dedup host                 # keep first event per host
+index=main | dedup host, sourcetype     # dedup by combination
+index=main | dedup 3 host              # keep first 3 events per host
+```
+
+#### `where` — Filter with Expressions
+```spl
+index=web | where status >= 400
+index=web | where like(uri_path, "/api/%")
+index=web | where cidrmatch("10.0.0.0/8", clientip)
+index=web | where isnotnull(user)
+index=web | where len(uri_path) > 100
+```
+
+`where` vs `search`:
+- `where` treats unquoted values as field names; `search` treats them as strings
+- `where` supports functions like `like()`, `cidrmatch()`, `isnotnull()`
+
+#### `eval` — Create or Transform Fields
+```spl
+# Create new fields
+| eval response_sec = response_time / 1000
+| eval status_category = if(status >= 400, "Error", "OK")
+| eval full_name = first_name . " " . last_name
+
+# Conditional logic
+| eval severity = case(
+    status >= 500, "Critical",
+    status >= 400, "Warning",
+    status >= 200, "OK",
+    true(), "Unknown"
+  )
+
+# Math functions
+| eval kb = round(bytes / 1024, 2)
+
+# String functions
+| eval lower_host = lower(host)
+| eval domain = replace(email, "^.*@", "")
+
+# Time functions
+| eval hour = strftime(_time, "%H")
+| eval epoch = strptime("2026-01-15", "%Y-%m-%d")
+
+# Multivalue
+| eval combined = mvappend(field1, field2)
+| eval count = mvcount(my_mv_field)
+```
+
+#### `rex` — Extract Fields with Regex
+```spl
+# Named capture group extracts into a new field
+| rex field=_raw "user=(?<username>\w+)"
+| rex field=_raw "(?<ip_address>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+
+# sed mode (replace)
+| rex field=email mode=sed "s/@.*//g"
+```
+
+#### `search` — Filter Results Mid-Pipeline
+```spl
+index=web | stats count by status | search count > 100
+```
+
+### 6.4 Statistical Commands
+
+#### `stats` — Aggregate Statistics
+```spl
+index=web | stats count                            # total event count
+index=web | stats count by status                  # count per status code
+index=web | stats count by host, sourcetype        # count by multiple fields
+index=web | stats avg(response_time) as avg_rt by host
+index=web | stats sum(bytes) as total_bytes by clientip
+index=web | stats min(response_time), max(response_time), avg(response_time) by uri_path
+index=web | stats dc(clientip) as unique_clients   # distinct count
+index=web | stats values(status) as status_codes by host   # list all unique values
+index=web | stats list(status) as all_statuses by host     # list all values (with duplicates)
+index=web | stats earliest(_time) as first_seen, latest(_time) as last_seen by host
+index=web | stats count as total, count(eval(status>=400)) as errors by host
+| eval error_rate = round(errors/total*100, 2)
+```
+
+**Common stats functions:**
+| Function | Description |
+|----------|-------------|
+| `count` | Number of events |
+| `dc(field)` | Distinct count of field values |
+| `sum(field)` | Sum of numeric field |
+| `avg(field)` | Average |
+| `min(field)` / `max(field)` | Minimum / Maximum |
+| `median(field)` | Median value |
+| `mode(field)` | Most common value |
+| `stdev(field)` | Standard deviation |
+| `perc95(field)` | 95th percentile |
+| `range(field)` | Difference between max and min |
+| `values(field)` | Distinct values (multivalue) |
+| `list(field)` | All values (multivalue, with duplicates) |
+| `first(field)` / `last(field)` | First / last value |
+| `earliest(field)` / `latest(field)` | Earliest / latest by time |
+
+#### `chart` — Tabular Aggregation
+```spl
+index=web | chart count by host, status
+# Creates a table: rows = host, columns = status values
+
+index=web | chart avg(response_time) over host by status
+# "over" defines the row axis, "by" defines the column split
+```
+
+#### `timechart` — Time-Series Aggregation
+```spl
+index=web | timechart count                          # events over time
+index=web | timechart span=1h count by status        # per-status counts per hour
+index=web | timechart span=5m avg(response_time) by host
+index=web | timechart span=1d sum(bytes) as daily_bytes
+```
+
+`span` options: `1m`, `5m`, `15m`, `1h`, `4h`, `1d`, `1w`, `1mon`
+
+#### `top` — Most Common Values
+```spl
+index=web | top status                    # top 10 by default
+index=web | top limit=5 clientip          # top 5
+index=web | top clientip by host          # top per host
+index=web | top limit=20 useother=true uri_path   # group remaining into "OTHER"
+```
+
+Output fields: `<field>`, `count`, `percent`
+
+#### `rare` — Least Common Values
+```spl
+index=web | rare status              # bottom 10 by default
+index=web | rare limit=5 uri_path
+```
+
+#### `eventstats` — Stats Without Collapsing Rows
+```spl
+# Unlike stats, eventstats adds aggregated values to each event
+index=web | eventstats avg(response_time) as avg_rt by host
+| where response_time > avg_rt * 2    # find events slower than 2x average
+```
+
+#### `streamstats` — Running/Cumulative Stats
+```spl
+# Running count
+index=web | streamstats count as event_number
+
+# Running average over last 10 events
+index=web | streamstats avg(response_time) as rolling_avg window=10
+
+# Cumulative sum
+index=web | streamstats sum(bytes) as cumulative_bytes
+```
+
+### 6.5 Transforming & Restructuring
+
+#### `transaction` — Group Related Events
+```spl
+# Group events by session ID with max 30-minute gap
+index=web | transaction session_id maxpause=30m
+
+# Group login → logout sequences
+index=auth | transaction user startswith="login" endswith="logout" maxspan=8h
+```
+
+Transaction creates fields: `duration`, `eventcount`
+
+**Note**: `transaction` is resource-intensive. Prefer `stats` when possible:
+```spl
+# Equivalent to transaction for basic grouping
+index=web | stats count as eventcount,
+    range(_time) as duration,
+    earliest(_time) as start,
+    latest(_time) as end
+    by session_id
+```
+
+#### `append` — Append Results from Another Search
+```spl
+index=web status=200 | stats count as success
+| append [search index=web status>=400 | stats count as errors]
+```
+
+#### `appendpipe` — Append Summary Row
+```spl
+index=web | stats count by host
+| appendpipe [stats sum(count) as count | eval host="TOTAL"]
+```
+
+#### `join` — SQL-Style Join
+```spl
+index=web | join clientip [search index=dns | fields clientip, hostname]
+# Left join by default; only returns matching rows
+
+index=web | join type=outer clientip [search index=dns | fields clientip, hostname]
+# Outer join keeps all left-side events
+```
+
+**Warning**: `join` is limited to 50,000 results by default and can be slow. Prefer lookups or `stats` when possible.
+
+#### `lookup` — Enrich Events from Lookup Tables
+```spl
+# Automatic lookup (if configured)
+# Manual lookup
+| lookup geo_lookup clientip OUTPUT city, country
+| lookup users_lookup username OUTPUT department, email
+```
+
+#### `inputlookup` / `outputlookup`
+```spl
+| inputlookup my_lookup.csv                       # load lookup as search results
+| inputlookup my_lookup.csv WHERE status="active"  # filter while loading
+index=web | stats count by host | outputlookup host_counts.csv  # save results to lookup
+```
+
+#### `map` — Run a Search for Each Result
+```spl
+index=main | head 5 | map search="search index=web host=$host$ | stats count"
+```
+
+#### `multisearch` — Run Multiple Searches in Parallel
+```spl
+| multisearch
+    [search index=web status=200 | stats count as success]
+    [search index=web status>=400 | stats count as errors]
+```
+
+### 6.6 Formatting & Output
+
+#### `convert`
+```spl
+| convert timeformat="%Y-%m-%d" ctime(_time) as date
+| convert rmunit(response_time)     # remove units (e.g., "5ms" → 5)
+| convert auto(bytes)               # auto-detect and convert
+```
+
+#### `fillnull`
+```spl
+| fillnull value="N/A"                    # replace all nulls
+| fillnull value=0 response_time, bytes   # specific fields
+```
+
+#### `makemv` — Convert Single-Value to Multivalue
+```spl
+| makemv delim="," categories
+```
+
+#### `mvexpand` — Expand Multivalue into Separate Rows
+```spl
+| mvexpand categories    # one row per value in multivalue field
+```
+
+#### `format` — Format Results for Subsearches
+```spl
+| format    # converts table to boolean expression for use in subsearches
+```
+
+---
+
+## 7. Field Extractions
+
+### Automatic Extraction
+Splunk automatically extracts fields like `host`, `source`, `sourcetype`, `_time`, `_raw` for every event. It also auto-extracts key=value pairs.
+
+### Inline Extraction (Search-Time)
+```spl
+| rex field=_raw "user=(?<username>\w+)"
+| rex field=_raw "duration=(?<duration>\d+\.?\d*)"
+```
+
+### Persistent Field Extraction (props.conf / transforms.conf)
+```ini
+# props.conf
+[my_sourcetype]
+EXTRACT-username = user=(?<username>\w+)
+EXTRACT-duration = duration=(?<duration>\d+\.?\d*)
+
+# For complex/reusable extractions, use transforms.conf
+REPORT-myfields = my_transform_name
+```
+```ini
+# transforms.conf
+[my_transform_name]
+REGEX = user=(?<username>\w+)\s+action=(?<action>\w+)
+```
+
+### Field Extraction via UI
+**Settings → Fields → Field Extractions → New Field Extraction**
+Use the interactive field extractor (IFX) for regex or delimiter-based extraction.
+
+### Calculated Fields
+```ini
+# props.conf
+[access_combined]
+EVAL-response_sec = response_time / 1000
+EVAL-status_type = if(status >= 400, "error", "ok")
+```
+
+### Field Aliases
+```ini
+# props.conf
+[my_sourcetype]
+FIELDALIAS-src = src_ip AS source_ip
+FIELDALIAS-dest = dest_ip AS destination_ip
+```
+
+---
+
+## 8. Lookups
+
+Lookups enrich events by adding fields from external data sources (CSV files, KV Store, database, scripts).
+
+### CSV Lookup
+1. Upload CSV: **Settings → Lookups → Lookup Table Files → Add New**
+2. Define lookup: **Settings → Lookups → Lookup Definitions → Add New**
+3. Optionally make automatic: **Settings → Lookups → Automatic Lookups**
+
+```spl
+# Manual usage
+| lookup status_codes status OUTPUT description
+# Adds "description" field to events based on matching "status" field
+```
+
+### KV Store Lookup
+KV Store is a built-in NoSQL database within Splunk.
+
+```spl
+# Read from KV Store
+| inputlookup kv_store_collection
+
+# Write to KV Store
+| outputlookup kv_store_collection
+
+# KV Store supports CRUD operations via REST API
+```
+
+### Geospatial Lookup
+```spl
+| iplocation clientip
+# Automatically adds: City, Country, Region, lat, lon
+```
+
+### External Lookup (Script-Based)
+```ini
+# transforms.conf
+[my_external_lookup]
+external_cmd = my_lookup_script.py ip
+fields_list = ip, hostname, location
+```
+
+---
+
+## 9. Knowledge Objects
+
+Knowledge objects are user-created entities that enrich and organize data.
+
+### Types of Knowledge Objects
+| Object | Purpose |
+|--------|---------|
+| **Saved Searches** | Reusable search queries |
+| **Reports** | Saved searches with visualization and scheduling |
+| **Alerts** | Triggered actions based on search results |
+| **Dashboards** | Visual displays of multiple panels |
+| **Event Types** | Categorize events with a search string |
+| **Tags** | Label field values for easier searching |
+| **Field Extractions** | Define custom fields |
+| **Field Aliases** | Create alternative names for fields |
+| **Calculated Fields** | Fields derived from eval expressions |
+| **Lookups** | External data enrichment |
+| **Data Models** | Structured representation of data for Pivot |
+| **Macros** | Reusable search snippets |
+| **Workflow Actions** | Links/actions triggered from event fields |
+
+### Event Types
+```ini
+# eventtypes.conf
+[web_error]
+search = index=web (status>=400)
+
+[login_failure]
+search = index=auth action=login result=failure
+```
+Usage: `eventtype=web_error`
+
+### Tags
+```ini
+# tags.conf
+[eventtype=web_error]
+error = enabled
+web = enabled
+
+[host=webserver01]
+production = enabled
+```
+Usage: `tag=error`, `tag::host=production`
+
+### Macros
+Macros are reusable search fragments. Create via **Settings → Advanced Search → Search Macros**.
+
+```spl
+# Define macro "get_errors" (no arguments)
+# Definition: index=web status>=400
+
+# Usage
+`get_errors` | stats count by host
+
+# Macro with arguments: "get_errors(1)"
+# Definition: index=web status>=$code$
+# Usage
+`get_errors(400)` | stats count by host
+```
+
+### Workflow Actions
+Create via **Settings → Fields → Workflow Actions**
+- **GET link**: Opens a URL with field values (e.g., lookup IP in VirusTotal)
+- **POST link**: Sends data to an external URL
+- **Search**: Launches a new Splunk search using field values
+
+---
+
+## 10. Reports & Alerts
+
+### Saved Reports
+1. Run a search
+2. Click **Save As → Report**
+3. Configure: name, description, time range, permissions
+4. Optionally schedule to run periodically
+
+### Scheduled Reports
+- Can be set to run on a cron schedule
+- Results can be emailed or used to populate summary indexes
+- Acceleration: enable report acceleration for faster results on large datasets
+
+### Alerts
+
+#### Creating an Alert
+1. Run a search
+2. Click **Save As → Alert**
+3. Configure trigger conditions and actions
+
+#### Alert Types
+| Type | Description |
+|------|-------------|
+| **Scheduled** | Runs on a cron schedule and triggers if conditions are met |
+| **Real-time** | Continuously monitors data (resource-intensive) |
+
+#### Trigger Conditions
+- Number of results (e.g., > 0)
+- Number of hosts
+- Number of sources
+- Custom condition (SPL expression)
+
+#### Throttling
+- Suppress triggering for a specified period
+- Can suppress per-field (e.g., trigger once per host per hour)
+
+#### Alert Actions
+- **Send email**: To specified recipients with results
+- **Run a script**: Execute a custom script
+- **Webhook**: POST data to a URL
+- **Log event**: Write to `_audit` index
+- **Add to triggered alerts list**: Display in Splunk UI
+- **Custom actions**: Installed via apps (e.g., ServiceNow, PagerDuty, Slack)
+
+---
+
+## 11. Dashboards & Visualizations
+
+### Dashboard Types
+1. **Classic Dashboards (Simple XML)**: XML-based, widely supported
+2. **Dashboard Studio**: Newer, more flexible layout, supports absolute positioning
+
+### Creating a Dashboard
+- **From search**: Save As → Dashboard Panel
+- **From scratch**: Dashboards → Create New Dashboard
+
+### Simple XML Structure
+```xml
+<dashboard>
+  <label>My Dashboard</label>
+  <row>
+    <panel>
+      <title>Error Count Over Time</title>
+      <chart>
+        <search>
+          <query>index=web status>=400 | timechart count</query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">line</option>
+      </chart>
+    </panel>
+  </row>
+</dashboard>
+```
+
+### Tokens (Dynamic Inputs)
+Tokens allow user interaction with dashboards.
+
+```xml
+<fieldset submitButton="true">
+  <input type="dropdown" token="selected_host">
+    <label>Host</label>
+    <choice value="*">All</choice>
+    <search>
+      <query>index=web | stats count by host</query>
+    </search>
+    <fieldForLabel>host</fieldForLabel>
+    <fieldForValue>host</fieldForValue>
+  </input>
+  <input type="time" token="time_range">
+    <label>Time Range</label>
+    <default>
+      <earliest>-24h</earliest>
+      <latest>now</latest>
+    </default>
+  </input>
+</fieldset>
+```
+
+Use tokens in searches: `index=web host=$selected_host$`
+
+### Visualization Types
+| Type | Command/Use |
+|------|-------------|
+| **Line Chart** | `timechart` |
+| **Bar Chart** | `chart`, `stats` |
+| **Pie Chart** | `stats count by field` |
+| **Area Chart** | `timechart` |
+| **Column Chart** | `chart`, `stats` |
+| **Single Value** | `stats count` (single result) |
+| **Gauge** | Single numeric value with ranges |
+| **Table** | `table` or `stats` |
+| **Map (Choropleth)** | `geostats` or `iplocation` |
+| **Scatter Plot** | Two numeric fields |
+
+### Drilldown
+Enable clicking on chart elements to navigate to detailed searches:
+```xml
+<chart>
+  <search>...</search>
+  <drilldown>
+    <link target="_blank">
+      /app/search/search?q=index%3Dweb%20host%3D$click.value$
+    </link>
+  </drilldown>
+</chart>
+```
+
+---
+
+## 12. Data Models & Pivot
+
+### What is a Data Model?
+A data model is a hierarchical, structured representation of your data. It provides a user-friendly interface for non-SPL users to create reports and dashboards using the **Pivot** tool.
+
+### Data Model Components
+- **Root Object**: Top-level dataset (based on a search or index constraint)
+- **Child Object**: Subset of root (filtered or constrained further)
+- **Fields**: Attributes defined with types (string, number, timestamp, etc.)
+
+### Creating a Data Model
+**Settings → Data Models → New Data Model**
+
+### Pivot
+Pivot is a drag-and-drop interface for creating reports from data models without writing SPL.
+
+### Data Model Acceleration
+- Accelerated data models pre-compute summaries for fast searches
+- Uses `tstats` command under the hood
+- Enable via data model settings; configure the acceleration time range
+
+### `tstats` — Fast Stats on Indexed/Accelerated Data
+```spl
+| tstats count WHERE index=web BY host, sourcetype
+
+| tstats count WHERE index=web host=webserver01
+    BY _time span=1h
+| timechart span=1h count
+
+# With accelerated data model
+| tstats count FROM datamodel=Web WHERE Web.status>=400
+    BY Web.host
+```
+
+`tstats` is significantly faster than `stats` because it uses indexed metadata rather than scanning raw events.
+
+---
+
+## 13. User Management & Access Control
+
+### Roles
+Splunk uses Role-Based Access Control (RBAC).
+
+#### Default Roles
+| Role | Capabilities |
+|------|-------------|
+| `admin` | Full access to everything |
+| `power` | Search all indexes, create knowledge objects, manage own objects |
+| `user` | Search default indexes, create personal knowledge objects |
+| `can_delete` | Can delete events from indexes |
+
+#### Custom Roles
+Create via **Settings → Access Controls → Roles → New Role**
+
+Role properties:
+- **Inherited roles**: Inherit capabilities from other roles
+- **Capabilities**: Specific permissions (schedule_search, edit_monitor, etc.)
+- **Allowed indexes**: Which indexes the role can search
+- **Search restrictions**: Mandatory search filters (e.g., `host=server1`)
+- **Search time range limits**: Maximum time window for searches
+- **Search job limits**: Concurrent search limits
+
+### Authentication Methods
+| Method | Description |
+|--------|-------------|
+| **Splunk Native** | Built-in user database |
+| **LDAP** | Active Directory or other LDAP servers |
+| **SAML** | Single Sign-On (Okta, ADFS, Azure AD) |
+| **Scripted Auth** | Custom authentication via scripts |
+| **MFA** | Duo Security integration |
+
+---
+
+## 14. Clustering
+
+### Indexer Clustering
+Indexer clusters provide data replication and high availability.
+
+**Key Concepts:**
+- **Replication Factor (RF)**: Number of copies of raw data (default: 3)
+- **Search Factor (SF)**: Number of searchable copies (default: 2)
+- **Cluster Master / Manager Node**: Coordinates the cluster
+
+```ini
+# server.conf on Manager Node
+[clustering]
+mode = manager
+replication_factor = 3
+search_factor = 2
+
+# server.conf on Peer Nodes
+[clustering]
+mode = peer
+manager_uri = https://<manager_ip>:8089
+
+# server.conf on Search Head
+[clustering]
+mode = searchhead
+manager_uri = https://<manager_ip>:8089
+```
+
+### Search Head Clustering (SHC)
+Multiple search heads share configurations and load-balance searches.
+
+**Components:**
+- **Search Head Captain**: Elected leader that coordinates the cluster
+- **Deployer**: Pushes apps and configurations to SHC members
+
+```ini
+# server.conf on SHC members
+[shclustering]
+conf_deploy_fetch_url = https://<deployer_ip>:8089
+mgmt_uri = https://<this_SH_ip>:8089
+replication_port = 9887
+```
+
+---
+
+## 15. Splunk REST API
+
+Splunk exposes a REST API on port 8089 for programmatic access.
+
+### Authentication
+```bash
+# Get a session token
+curl -k -u admin:password https://localhost:8089/services/auth/login \
+  -d username=admin -d password=changeme
+
+# Use the token
+curl -k -H "Authorization: Splunk <session_key>" \
+  https://localhost:8089/services/search/jobs
+```
+
+### Common Endpoints
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/services/auth/login` | POST | Authenticate and get session key |
+| `/services/search/jobs` | POST | Create a search job |
+| `/services/search/jobs/<sid>` | GET | Get search job status |
+| `/services/search/jobs/<sid>/results` | GET | Get search results |
+| `/services/data/indexes` | GET | List indexes |
+| `/services/data/inputs/monitor` | GET/POST | Manage file monitor inputs |
+| `/services/server/info` | GET | Server information |
+| `/services/apps/local` | GET | List installed apps |
+| `/services/saved/searches` | GET/POST | Manage saved searches |
+
+### Python SDK
+```python
+import splunklib.client as client
+import splunklib.results as results
+
+# Connect
+service = client.connect(
+    host="localhost",
+    port=8089,
+    username="admin",
+    password="changeme"
+)
+
+# Run a search
+search_query = "search index=main | head 10"
+job = service.jobs.create(search_query)
+
+# Wait for results
+while not job.is_done():
+    pass
+
+# Read results
+reader = results.JSONResultsReader(job.results(output_mode="json"))
+for result in reader:
+    if isinstance(result, dict):
+        print(result)
+```
+
+---
+
+## 16. Splunk for Security (SIEM)
+
+### Common Security Searches
+
+#### Failed Logins
+```spl
+index=auth action=login status=failure
+| stats count by user, src_ip
+| where count > 5
+| sort -count
+```
+
+#### Brute Force Detection
+```spl
+index=auth action=login status=failure
+| bin _time span=5m
+| stats count by _time, user, src_ip
+| where count > 10
+```
+
+#### Privileged Account Activity
+```spl
+index=auth user IN ("root", "admin", "administrator")
+| stats count by user, action, src_ip
+| sort -count
+```
+
+#### Network — Port Scan Detection
+```spl
+index=network
+| stats dc(dest_port) as port_count by src_ip
+| where port_count > 100
+```
+
+#### Malware / Suspicious Process
+```spl
+index=endpoint sourcetype=sysmon EventCode=1
+| search (process_name="powershell.exe" OR process_name="cmd.exe")
+| where like(command_line, "%-enc%") OR like(command_line, "%base64%")
+```
+
+### Notable Events & Incident Review
+Splunk Enterprise Security (ES) uses **Notable Events** to track security incidents. Analysts triage these in the **Incident Review** dashboard.
+
+### CIM (Common Information Model)
+The CIM is a set of field name conventions that normalize data across different source types:
+- `src` / `src_ip` / `src_port` — Source
+- `dest` / `dest_ip` / `dest_port` — Destination
+- `user` — Username
+- `action` — Action taken (allowed, blocked, etc.)
+- `status` — Success/failure
+
+Normalizing data to the CIM enables Splunk ES correlation searches to work across all data sources.
+
+---
+
+## 17. Optimization & Best Practices
+
+### Search Optimization Tips
+
+1. **Be specific with indexes and sourcetypes**
+   ```spl
+   # Bad: searches all indexes
+   error
+
+   # Good: targets specific data
+   index=web sourcetype=access_combined status>=400
+   ```
+
+2. **Use time ranges** — The narrower, the faster
+
+3. **Filter early** — Put restrictive terms at the beginning
+   ```spl
+   # Good: filter first, then compute
+   index=web status=500 | stats count by host
+
+   # Bad: compute on everything, then filter
+   index=web | stats count by host, status | where status=500
+   ```
+
+4. **Avoid wildcards at the start**
+   ```spl
+   # Slow
+   index=main *error*
+
+   # Faster
+   index=main error
+   ```
+
+5. **Use `stats` instead of `transaction`** when possible
+
+6. **Use `tstats` for indexed fields** — 10-100x faster than `stats`
+
+7. **Use `fields` command** to limit fields passed through the pipeline
+
+8. **Use summary indexing** for recurring expensive searches
+
+9. **Avoid real-time searches** in production — use scheduled searches
+
+10. **Use `prefix()` and `term()`** for exact indexed-term matching
+    ```spl
+    index=web TERM(status=404)
+    ```
+
+### Data Retention Best Practices
+- Separate indexes by data type and retention policy
+- Use `frozenTimePeriodInSecs` to enforce retention
+- Archive frozen data to cheap storage if needed for compliance
+- Monitor license usage: `index=_internal source=*license_usage.log`
+
+### Capacity Planning
+- **Indexing volume**: GB/day determines license needs
+- **Storage**: Typically 15% of raw data size after compression
+- **Search concurrency**: More users = more search heads needed
+- **Replication**: RF=3 means 3x storage
+
+---
+
+## 18. Useful SPL Examples (Quick Reference)
+
+### Count Events by Source Type
+```spl
+index=* | stats count by sourcetype | sort -count
+```
+
+### Find Large Events
+```spl
+index=main | eval event_size=len(_raw) | where event_size > 10000
+| table _time, source, event_size
+```
+
+### Monitor Index Size
+```spl
+| rest /services/data/indexes
+| table title, currentDBSizeMB, totalEventCount, maxTotalDataSizeMB
+| sort -currentDBSizeMB
+```
+
+### License Usage
+```spl
+index=_internal source=*license_usage.log type=Usage
+| timechart span=1d sum(b) as bytes
+| eval GB = round(bytes/1024/1024/1024, 2)
+| fields _time, GB
+```
+
+### Search Activity (Who Searched What)
+```spl
+index=_audit action=search
+| table _time, user, search, total_run_time
+| sort -total_run_time
+```
+
+### Scheduled Search Failures
+```spl
+index=_internal sourcetype=scheduler status=failed
+| stats count by savedsearch_name, app
+| sort -count
+```
+
+### Forwarder Health
+```spl
+index=_internal sourcetype=splunkd group=tcpin_connections
+| stats latest(_time) as last_connected by hostname
+| eval status = if(now() - last_connected > 900, "DOWN", "OK")
+| sort status
+```
+
+### Disk Usage by Index
+```spl
+| dbinspect index=* | stats sum(sizeOnDiskMB) as disk_MB by index
+| sort -disk_MB
+```
+
+---
+
+## 19. Splunk Apps & Add-ons
+
+### What's the Difference?
+- **App**: Provides a complete user interface (dashboards, views, navigation)
+- **Add-on (TA)**: Provides data inputs, field extractions, and CIM mappings without a UI
+
+### Popular Apps
+| App | Purpose |
+|-----|---------|
+| Splunk Enterprise Security (ES) | SIEM solution |
+| Splunk ITSI | IT Service Intelligence |
+| Splunk DB Connect | Database integration |
+| Splunk App for AWS | AWS monitoring |
+| Splunk Add-on for Unix | Linux/Unix data collection |
+| Splunk Add-on for Windows | Windows data collection |
+| Splunk Stream | Network packet capture |
+
+### Installing Apps
+- **Splunkbase**: Browse and install from within Splunk Web
+- **CLI**: `$SPLUNK_HOME/bin/splunk install app <package>.tgz`
+- **Manual**: Extract to `$SPLUNK_HOME/etc/apps/`
+
+---
+
+## 20. Troubleshooting Splunk
+
+### Common Issues & Solutions
+
+| Issue | Diagnosis |
+|-------|-----------|
+| Data not appearing | Check `inputs.conf`, verify forwarder connectivity, check index name |
+| Search is slow | Use `| search` command audit, check `dispatch.log`, optimize SPL |
+| License violation | Check `index=_internal source=*license_usage.log` |
+| Forwarder not sending | Check `outputs.conf`, verify port 9997 open, check `splunkd.log` |
+| Timestamp parsing wrong | Review `props.conf` for `TIME_FORMAT` and `TIME_PREFIX` |
+| Missing fields | Check `props.conf` / `transforms.conf` for field extractions |
+| Web UI not loading | Check port 8000, review `web_service.log` |
+| Cluster issues | Check `index=_internal sourcetype=splunkd cluster` |
+
+### Key Log Files
+| Log | Location | Content |
+|-----|----------|---------|
+| `splunkd.log` | `$SPLUNK_HOME/var/log/splunk/` | Main Splunk daemon log |
+| `web_service.log` | `$SPLUNK_HOME/var/log/splunk/` | Web UI issues |
+| `metrics.log` | `$SPLUNK_HOME/var/log/splunk/` | Performance metrics |
+| `audit.log` | `$SPLUNK_HOME/var/log/splunk/` | User activity |
+| `scheduler.log` | `$SPLUNK_HOME/var/log/splunk/` | Scheduled search execution |
+
+### Diagnostic Commands
+```spl
+# Server info
+| rest /services/server/info | fields splunk_version, os_name, cpu_arch
+
+# Check running searches
+| rest /services/search/jobs | table sid, runDuration, eventCount
+
+# Indexer cluster status
+| rest /services/cluster/manager/peers
+| table label, status, last_heartbeat, replication_count
+
+# List all forwarders
+| rest /services/deployment/server/clients
+| table hostname, ip, splunkVersion, lastPhoneHomeTime
+```
+
+---
+
+## 21. Splunk CLI Quick Reference
+
+```bash
+# Start / Stop / Restart
+splunk start
+splunk stop
+splunk restart
+
+# Check status
+splunk status
+
+# Search from CLI
+splunk search "index=main | head 5" -maxout 100
+
+# List indexes
+splunk list index
+
+# Add data input
+splunk add monitor /var/log/messages -index main -sourcetype syslog
+
+# Add forward server
+splunk add forward-server indexer1:9997
+
+# List forward servers
+splunk list forward-server
+
+# Reload config
+splunk reload deploy-server    # reload deployment server
+splunk reload auth             # reload authentication config
+
+# User management
+splunk add user jdoe -role user -password changeme
+splunk edit user jdoe -role power
+splunk remove user jdoe
+splunk list user
+
+# App management
+splunk install app myapp.tgz
+splunk remove app myapp
+splunk list app
+
+# License
+splunk list licenser-pools
+splunk list licenser-slaves
+
+# Clean index
+splunk clean eventdata -index myindex    # DESTRUCTIVE — removes all data
+
+# Validate config
+splunk btool inputs list --debug
+splunk btool props list --debug
+splunk btool check
+```
+
+---
+
+## 22. Regular Expressions in Splunk
+
+Splunk uses PCRE (Perl-Compatible Regular Expressions).
+
+### Common Patterns
+| Pattern | Description | Example Match |
+|---------|-------------|---------------|
+| `\d` | Any digit | `5` |
+| `\d+` | One or more digits | `12345` |
+| `\w` | Word character (letter, digit, underscore) | `a`, `5`, `_` |
+| `\w+` | One or more word characters | `hostname01` |
+| `\s` | Whitespace | ` `, `\t` |
+| `.` | Any character except newline | anything |
+| `.*` | Zero or more of any character | anything |
+| `.+` | One or more of any character | something |
+| `[A-Za-z]+` | Letters only | `Error` |
+| `\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}` | IPv4 address | `192.168.1.1` |
+| `(?<name>pattern)` | Named capture group | Extracts into field `name` |
+| `(?:pattern)` | Non-capturing group | Groups without extracting |
+
+### Using Regex in SPL
+```spl
+# rex — extract fields
+| rex field=_raw "src=(?<src_ip>\d+\.\d+\.\d+\.\d+)"
+
+# regex — filter events matching a pattern
+| regex _raw="error|fail|critical"
+
+# rex mode=sed — substitution
+| rex field=message mode=sed "s/password=\S+/password=REDACTED/g"
+```
+
+---
+
+## 23. Summary Indexing & Acceleration
+
+### Summary Indexing
+Run expensive searches on a schedule and store results in a summary index for faster future access.
+
+```spl
+# Scheduled search that populates summary index
+index=web | stats count by host, status
+| collect index=summary marker="web_status_summary"
+```
+
+```spl
+# Query the summary
+index=summary source="web_status_summary"
+| stats sum(count) by host, status
+```
+
+### Report Acceleration
+- Automatically creates summaries of report results
+- Enable via: **Edit Report → Acceleration → Enable**
+- Uses `summariesonly=true` in `tstats` under the hood
+
+### Data Model Acceleration
+- Pre-computes data model results for fast pivot/tstats queries
+- Enable via: **Settings → Data Models → Edit → Acceleration**
+- Can use significant disk space
+
+
+- Argument: `min_status`
+- Usage: `` `get_errors(400)` `` expands to `index=web status>=400`
+
+Macros can contain validation expressions to check arguments and can call other macros.
+
+---
+
+### Advanced Level
+
+**Q21: How does Splunk's bloom filter work?**
+**A:** Each bucket in Splunk has a bloom filter — a probabilistic data structure that can quickly determine if a search term is **definitely NOT** in the bucket, or **possibly** in the bucket.
+
+How it works:
+1. When data is indexed, each unique term is hashed multiple times and the corresponding bits are set in a bit array.
+2. When searching, the search term is hashed the same way.
+3. If ALL corresponding bits are set → the term **might be** in the bucket (proceed to search it).
+4. If ANY bit is NOT set → the term is **definitely NOT** in the bucket (skip it).
+
+This dramatically reduces the number of buckets Splunk needs to open, making searches much faster. False positives are possible (unnecessary bucket scans) but false negatives are not (Splunk never misses data).
+
+---
+
+**Q22: Explain search head clustering (SHC) in detail.**
+**A:** Search Head Clustering provides high availability and horizontal scaling for the search tier.
+
+**Components:**
+- **SHC Members** (minimum 3): Run searches, serve the UI, and replicate knowledge objects among themselves.
+- **Captain**: An elected SHC member that coordinates replication jobs and manages the cluster. If the captain fails, a new one is automatically elected.
+- **Deployer**: A separate Splunk instance that pushes apps and configurations to all SHC members. Does NOT participate in searches.
+
+**How it works:**
+- Knowledge objects (saved searches, dashboards, etc.) are replicated across all members.
+- Users can connect to any member (via a load balancer).
+- Searches are executed by the member that receives the request.
+- Configuration changes are replicated by the captain to all members.
+
+**Key settings:**
+- `replication_factor` — Number of copies of each knowledge object (default: 3).
+- `replication_port` — Port used for artifact replication between members.
+- `conf_deploy_fetch_url` — URL of the deployer.
+
+---
+
+**Q23: What is `tstats` and when should you use it?**
+**A:** `tstats` performs statistical queries against indexed metadata (tsidx files) rather than raw event data. This makes it 10-100x faster than `stats`.
+
+**When to use:**
+- Querying **indexed fields** (host, source, sourcetype, _time, and any fields extracted at index time).
+- Querying **accelerated data models** — `| tstats count FROM datamodel=Web`.
+- When you need fast counts, sums, or breakdowns over large datasets.
+
+**Limitations:**
+- Only works on indexed fields or accelerated data model fields.
+- Cannot work on search-time extracted fields.
+- Cannot use with non-indexed custom fields unless they are in an accelerated data model.
+
+```spl
+# Fast count by sourcetype (indexed field)
+| tstats count WHERE index=web BY sourcetype
+
+# Using accelerated data model
+| tstats sum(Web.bytes) FROM datamodel=Web WHERE Web.status>=400 BY Web.host
+```
+
+---
+
+**Q24: How would you handle data masking for sensitive information?**
+**A:** Data can be masked at different stages:
+
+1. **At ingestion (Heavy Forwarder) — Recommended:**
+   ```ini
+   # props.conf
+   [my_sourcetype]
+   SEDCMD-mask_ssn = s/\d{3}-\d{2}-\d{4}/XXX-XX-XXXX/g
+   SEDCMD-mask_cc = s/\d{4}-\d{4}-\d{4}-\d{4}/XXXX-XXXX-XXXX-XXXX/g
+   ```
+   This modifies data **before** indexing — the original values are permanently removed.
+
+2. **At search time (less secure, data still exists):**
+   ```spl
+   | rex field=_raw mode=sed "s/\d{3}-\d{2}-\d{4}/XXX-XX-XXXX/g"
+   ```
+   Data is masked in the display but remains in the index.
+
+3. **Using `TRANSFORMS` for conditional routing/filtering:**
+   ```ini
+   # transforms.conf
+   [mask_sensitive]
+   REGEX = password=(\S+)
+   FORMAT = password=REDACTED
+   DEST_KEY = _raw
+   ```
+
+Best practice: Mask at the earliest point possible (forwarder level) so sensitive data never reaches the indexer.
+
+---
+
+**Q25: Explain the concept of search-time vs index-time operations.**
+**A:**
+
+**Index-time operations** happen when data is ingested:
+- Line breaking, event merging, timestamp extraction
+- Index-time field extraction (configured via `INDEXED_EXTRACTIONS`)
+- Data masking/modification via `SEDCMD`
+- Source type assignment
+- These are permanent — changes require re-indexing the data.
+
+**Search-time operations** happen when a user runs a search:
+- Field extractions (`EXTRACT` in props.conf, `rex` in SPL)
+- Field aliases, calculated fields
+- Lookups
+- Event type and tag assignments
+- These are dynamic — changes take effect immediately without re-indexing.
+
+**General rule**: Prefer search-time operations. Index-time operations should only be used when:
+- You need the field for `tstats` queries.
+- You need to mask data before indexing.
+- You need to route events to different indexes based on content.
+
+Index-time extractions increase indexing load and storage requirements.
+
+---
+
+**Q26: How do you troubleshoot a Splunk forwarder that's not sending data?**
+**A:** Systematic troubleshooting steps:
+
+1. **Check forwarder status:**
+   ```bash
+   /opt/splunkforwarder/bin/splunk status
+   ```
+
+2. **Verify outputs.conf:**
+   ```bash
+   /opt/splunkforwarder/bin/splunk btool outputs list --debug
+   ```
+   Confirm `server = <indexer_ip>:9997` is correct.
+
+3. **Check connectivity:**
+   ```bash
+   telnet <indexer_ip> 9997
+   # or
+   nc -zv <indexer_ip> 9997
+   ```
+
+4. **Check inputs.conf:**
+   ```bash
+   /opt/splunkforwarder/bin/splunk btool inputs list --debug
+   ```
+   Verify monitored files exist and `disabled = false`.
+
+5. **Check splunkd.log for errors:**
+   ```bash
+   tail -100 /opt/splunkforwarder/var/log/splunk/splunkd.log | grep -i error
+   ```
+
+6. **Check file permissions:** Ensure the Splunk user can read the monitored files.
+
+7. **Check fishbucket:** Splunk tracks file read positions in the fishbucket. If a file was already fully read, Splunk won't re-read it.
+   ```bash
+   /opt/splunkforwarder/bin/splunk cmd btprobe -d /opt/splunkforwarder/var/lib/splunk/fishbucket/splunk_private_db --file <monitored_file>
+   ```
+
+8. **On the indexer**, check if the forwarder is connecting:
+   ```spl
+   index=_internal sourcetype=splunkd group=tcpin_connections
+   | stats latest(_time) as last_seen by hostname
+   ```
+
+---
+
+**Q27: What are accelerated data models and how do they work?**
+**A:** Accelerated data models pre-compute and store summaries of data to make `tstats` and Pivot queries extremely fast.
+
+**How they work:**
+1. When acceleration is enabled, Splunk runs a background search process that continuously builds TSIDX summary files.
+2. These summaries cover a specified time range (e.g., last 7 days, 30 days).
+3. When a `tstats` query hits the data model, it reads from these summaries instead of scanning raw events.
+
+**Trade-offs:**
+- **Pro**: Queries run 10-100x faster than raw searches.
+- **Pro**: Enable Pivot for non-SPL users.
+- **Con**: Acceleration consumes disk space (roughly 3-5% of raw data size).
+- **Con**: Acceleration processes consume CPU/IO resources.
+- **Con**: New data has a slight delay before it appears in summaries.
+
+Enable via: Settings → Data Models → Select model → Edit Acceleration → Enable, set summary range.
+
+---
+
+**Q28: How do you set up LDAP authentication in Splunk?**
+**A:** Steps to configure LDAP:
+
+1. **Settings → Access Controls → Authentication Method → LDAP**
+2. **Create LDAP Strategy:**
+   - Host: LDAP server hostname/IP
+   - Port: 389 (LDAP) or 636 (LDAPS)
+   - Bind DN: Service account DN (e.g., `CN=splunk_svc,OU=Service,DC=corp,DC=com`)
+   - Bind Password: Service account password
+   - User base DN: Where to search for users (e.g., `OU=Users,DC=corp,DC=com`)
+   - User name attribute: `sAMAccountName` (for Active Directory)
+   - Group base DN: Where to search for groups
+   - Group mapping: Map LDAP groups to Splunk roles
+
+3. **Configuration file (`authentication.conf`):**
+   ```ini
+   [authentication]
+   authType = LDAP
+   authSettings = my_ldap
+
+   [my_ldap]
+   host = ldap.corp.com
+   port = 636
+   SSLEnabled = 1
+   bindDN = CN=splunk_svc,OU=Service,DC=corp,DC=com
+   bindDNpassword = <password>
+   userBaseDN = OU=Users,DC=corp,DC=com
+   userNameAttribute = sAMAccountName
+   groupBaseDN = OU=Groups,DC=corp,DC=com
+   groupMappingAttribute = dn
+   groupMemberAttribute = member
+
+   [roleMap_my_ldap]
+   admin = SplunkAdmins
+   power = SplunkPowerUsers
+   user = SplunkUsers
+   ```
+
+---
+
+**Q29: What is the difference between real-time and historical searches?**
+**A:**
+
+**Historical Search:**
+- Searches over already-indexed data in a specified time range.
+- Uses bloom filters and tsidx for efficient retrieval.
+- Runs as a job that completes when all matching events are processed.
+- Resource-friendly; preferred for most use cases.
+
+**Real-Time Search:**
+- Continuously processes events as they arrive — never "completes."
+- Two types:
+  - **Per-result**: Triggers on every matching event. Most resource-intensive.
+  - **Windowed**: Maintains a sliding window (e.g., 5-minute window). Less resource-intensive.
+- Bypasses indexing optimizations (no bloom filters) — each event is checked.
+- Consumes significant CPU/memory on the search head.
+- **Best practice**: Avoid in production. Use scheduled searches with short intervals instead.
+
+**Indexed Real-Time:**
+- A compromise. Searches indexed data with near-real-time results.
+- Slightly delayed but much more efficient than true real-time.
+- Enable in `limits.conf`: `indexed_realtime_use_by_default = true`
+
+---
+
+**Q30: Explain how Splunk licensing works.**
+**A:** Splunk licenses are based on **daily indexing volume** (GB/day).
+
+**License Types:**
+- **Enterprise License**: Based on purchased daily indexing capacity (e.g., 10 GB/day, 100 GB/day).
+- **Free License**: 500 MB/day. No authentication, no alerting, no distributed search.
+- **Dev/Test License**: 10 GB/day for non-production use.
+
+**How it works:**
+- The **License Master** tracks how much data is indexed daily across all indexers.
+- If you exceed the licensed volume, you get a **license violation warning**.
+- You get 5 warnings in a 30-day rolling window before enforcement.
+- **Enforcement**: Search is disabled (only `index=_internal` works), but indexing continues.
+
+**Monitoring:**
+```spl
+index=_internal source=*license_usage.log type=Usage
+| timechart span=1d sum(b) as bytes | eval GB = round(bytes/1024/1024/1024, 2)
+```
+
+**Tips:**
+- Use `_internal` license usage logs to forecast growth.
+- Exclude non-essential data to reduce license consumption.
+- Use `volume` settings in `indexes.conf` to cap specific indexes.
+
+---
+
+### Scenario-Based Questions
+
+**Q31: You notice that searches are significantly slower than usual. How do you diagnose?**
+**A:** Step-by-step troubleshooting:
+
+1. **Check Job Inspector** for the slow search — identify which phase is slow (dispatch, search, results).
+2. **Check concurrent searches:**
+   ```spl
+   | rest /services/search/jobs | stats count by dispatchState
+   ```
+3. **Check system resources:**
+   ```spl
+   index=_introspection sourcetype=splunk_resource_usage component=Hostwide
+   | timechart avg(data.cpu_system_pct) avg(data.mem_used)
+   ```
+4. **Check for expensive searches by other users:**
+   ```spl
+   index=_audit action=search | stats max(total_run_time) by user, search | sort -max(total_run_time)
+   ```
+5. **Check indexer disk I/O** — slow disks cause slow searches.
+6. **Check skip ratio** — high skip ratio means searches are scanning too broadly:
+   ```spl
+   index=_internal sourcetype=splunk_search_messages | search "skipped"
+   ```
+7. **Review the search itself** — apply optimization techniques (specific index, time range, early filtering).
+8. **Check if search is running in smart mode** — try switching to "fast mode" for better performance.
+
+---
+
+**Q32: Data is appearing in Splunk with wrong timestamps. How do you fix it?**
+**A:**
+
+1. **Identify the problem**: Search the data and compare `_time` with the timestamp visible in `_raw`.
+
+2. **Check current timestamp config:**
+   ```bash
+   splunk btool props list <sourcetype> --debug | grep -i time
+   ```
+
+3. **Fix in `props.conf`:**
+   ```ini
+   [my_sourcetype]
+   TIME_PREFIX = ^                           # regex before the timestamp
+   TIME_FORMAT = %Y-%m-%d %H:%M:%S          # strptime format
+   MAX_TIMESTAMP_LOOKAHEAD = 25             # how far into the event to look
+   TZ = America/New_York                    # timezone if not in the log
+   ```
+
+4. **Common `TIME_FORMAT` patterns:**
+   | Format | Example |
+   |--------|---------|
+   | `%Y-%m-%d %H:%M:%S` | 2026-01-15 14:30:00 |
+   | `%d/%b/%Y:%H:%M:%S %z` | 15/Jan/2026:14:30:00 +0000 |
+   | `%b %d %H:%M:%S` | Jan 15 14:30:00 |
+   | `%s` | 1737000600 (epoch) |
+   | `%m-%d-%Y %I:%M:%S %p` | 01-15-2026 02:30:00 PM |
+
+5. **Test with `| makeresults`:**
+   ```spl
+   | makeresults | eval raw_time="2026-01-15 14:30:00"
+   | eval parsed = strptime(raw_time, "%Y-%m-%d %H:%M:%S")
+   | eval formatted = strftime(parsed, "%c")
+   ```
+
+6. **Re-index the data** if the fix is for already-indexed data (timestamp extraction is an index-time operation).
+
+---
+
+**Q33: How would you set up monitoring for a critical application?**
+**A:** Complete monitoring setup:
+
+1. **Data Collection**: Install Universal Forwarders on app servers. Configure `inputs.conf` to monitor application logs, system logs, and performance metrics.
+
+2. **Data Parsing**: Create a custom sourcetype in `props.conf` with correct timestamp format, line breaking, and field extractions.
+
+3. **Index Configuration**: Create a dedicated index with appropriate retention:
+   ```ini
+   [app_logs]
+   homePath = $SPLUNK_DB/app_logs/db
+   coldPath = $SPLUNK_DB/app_logs/colddb
+   thawedPath = $SPLUNK_DB/app_logs/thaweddb
+   frozenTimePeriodInSecs = 7776000
+   ```
+
+4. **Dashboards**: Create dashboards showing:
+   - Error rate over time: `index=app_logs level=ERROR | timechart count`
+   - Response time trends: `index=app_logs | timechart avg(response_time)`
+   - Top errors: `index=app_logs level=ERROR | top error_message`
+   - Service health: Single-value panels with status indicators.
+
+5. **Alerts**: Set up alerts for:
+   - Error spike: `index=app_logs level=ERROR | stats count | where count > 100`
+   - Application down: No events in last 5 minutes
+   - Slow response: `index=app_logs | stats avg(response_time) as avg_rt | where avg_rt > 5000`
+
+6. **Reports**: Schedule daily/weekly reports on application health metrics.
+
+---
+
+**Q34: A Splunk indexer cluster peer has gone down. What happens and what do you do?**
+**A:**
+
+**What happens automatically:**
+1. The Manager Node detects the peer is down (missed heartbeat).
+2. Manager checks if RF and SF are still met for all buckets.
+3. If RF/SF is violated, the Manager instructs remaining peers to **replicate** data to restore the factors.
+4. Searches continue — the search head queries remaining peers that have copies of the data.
+
+**What you do:**
+1. **Check cluster status:**
+   ```spl
+   | rest /services/cluster/manager/peers | table label, status, last_heartbeat
+   ```
+
+2. **Investigate the failed peer**: Check hardware, OS, disk space, `splunkd.log`.
+
+3. **If recoverable**: Restart Splunk on the peer. It will rejoin the cluster, and the Manager will re-balance.
+
+4. **If not recoverable**: Decommission the peer and add a new one. The cluster will replicate data to the new peer to restore RF/SF.
+
+**Key point**: As long as RF > 1, no data is lost when a single peer fails.
+
+---
+
+**Q35: How do you migrate data from one Splunk instance to another?**
+**A:** Several approaches:
+
+1. **Forward data from old to new**: Configure the old instance as a forwarder (`outputs.conf`) to send data to the new instance. Good for ongoing migration.
+
+2. **Copy buckets directly**: 
+   - Stop Splunk on the source.
+   - Copy bucket directories to the destination's index path.
+   - Fix ownership and permissions.
+   - Start Splunk and rebuild: `splunk rebuild <bucket_path>`
+
+3. **Use `| outputlookup` / `| collect`**: For smaller datasets, search and write results to the new instance.
+
+4. **Restore from backup**: If you have backups of index directories, restore them to the new instance's `thawedPath` and rebuild.
+
+---
+
+## 27. Key Formulas & Calculations to Remember
+
+### Capacity Planning
+```
+Daily Storage = Daily Ingest Volume × Compression Factor × Replication Factor
+Compression Factor ≈ 0.15 (Splunk compresses to ~15% of raw size)
+
+Example: 100 GB/day, RF=3
+Storage per day = 100 × 0.15 × 3 = 45 GB/day
+30-day retention = 45 × 30 = 1,350 GB = 1.35 TB
+```
+
+### License Size Estimation
+```
+License Needed = Sum of all daily data ingested (before compression)
+Includes data from all forwarders, HEC, scripted inputs, etc.
+Does NOT count internal indexes (_internal, _audit)
+```
+
+### Search Concurrency
+```
+Max concurrent searches = Number of search heads × max_searches_per_cpu × CPUs
+Default max_searches_per_cpu = 1 (configurable in limits.conf)
+```
+
+### Bucket Size Formula
+```
+Default hot bucket max size = auto ≈ 750 MB
+Max warm buckets per index = 300 (default)
+Max total index size = maxTotalDataSizeMB (default: 500 GB)
+```
+
+---
+
+## 28. Mnemonics & Memory Aids
+
+### Data Pipeline: "I PUT SOME IN" 
+- **I**nput → **P**arsing → **U**nicoding → **T**imestamp → **S**egmentation → **O**utput → **M**etadata → **E**vent → **IN**dexing
+
+### Bucket Lifecycle: "H-W-C-F-T" = "Hot Water Comes From Taps"
+- **H**ot → **W**arm → **C**old → **F**rozen → **T**hawed
+
+### Default Ports: "8-8-9" 
+- **8**000 = Web UI
+- **8**089 = Management/API
+- **9**997 = Data receiving
+
+### SPL Speed Ranking: "T-S-T" = "The Slowest Transaction"
+- **T**stats (fastest) > **S**tats (medium) > **T**ransaction (slowest)
+
+### Config Precedence: "Local Beats Default" 
+- system/local → app/local → app/default → system/default
+- Always edit in `local/`, never in `default/`
+
+### Cluster Factors: "SF ≤ RF" 
+- **S**earch **F**actor is always ≤ **R**eplication **F**actor
+- SF = searchable copies, RF = total copies (searchable + non-searchable)
+
+---
+
+*End of Splunk Complete Notes*
