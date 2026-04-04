@@ -1,0 +1,1990 @@
+# Computer Vision in Machine Learning — Complete Notes
+
+---
+
+## 1. Introduction to Computer Vision
+
+### What is Computer Vision?
+Computer Vision (CV) is a field of artificial intelligence that enables machines to interpret and understand visual information from the world — images, videos, and real-time camera feeds. It aims to replicate and surpass human visual perception by extracting meaningful information from pixel data.
+
+### How Does It Relate to ML/DL?
+- **Traditional CV** (pre-2012): Hand-crafted features (SIFT, HOG, SURF) + classical ML classifiers (SVM, Random Forest).
+- **Deep Learning CV** (post-2012): End-to-end learning from raw pixels using Convolutional Neural Networks (CNNs). Features are learned automatically.
+- **Modern CV** (2020+): Transformers (Vision Transformers — ViT), foundation models, multimodal models (CLIP, GPT-4V), diffusion models.
+
+### Key Applications
+| Domain | Applications |
+|--------|-------------|
+| **Healthcare** | Medical image analysis (X-ray, MRI, CT), tumor detection, retinal disease diagnosis |
+| **Autonomous Driving** | Lane detection, object detection, pedestrian tracking, sign recognition |
+| **Retail** | Visual search, shelf analytics, cashier-less checkout (Amazon Go) |
+| **Security** | Surveillance, face recognition, anomaly detection |
+| **Manufacturing** | Defect detection, quality inspection, robotic guidance |
+| **Agriculture** | Crop disease detection, yield estimation, drone-based monitoring |
+| **Entertainment** | AR/VR, deepfakes, image/video generation, style transfer |
+| **Document Processing** | OCR, handwriting recognition, document layout analysis |
+
+### Core CV Tasks
+| Task | Description |
+|------|-------------|
+| **Image Classification** | Assign a label to an entire image (cat vs dog) |
+| **Object Detection** | Locate and classify multiple objects with bounding boxes |
+| **Semantic Segmentation** | Classify every pixel into a category |
+| **Instance Segmentation** | Like semantic segmentation but distinguishes individual object instances |
+| **Panoptic Segmentation** | Combines semantic + instance segmentation |
+| **Pose Estimation** | Detect body keypoints (joints, limbs) |
+| **Image Generation** | Create new images (GANs, Diffusion Models, VAEs) |
+| **Image Super-Resolution** | Upscale low-resolution images |
+| **Depth Estimation** | Predict distance of each pixel from the camera |
+| **Optical Flow** | Estimate motion between consecutive frames |
+| **3D Reconstruction** | Build 3D models from 2D images |
+| **Visual Question Answering** | Answer questions about an image |
+| **Image Captioning** | Generate text description of an image |
+
+---
+
+## 2. Image Fundamentals
+
+### 2.1 Digital Image Representation
+An image is a 2D grid (matrix) of pixels.
+
+**Grayscale Image**: 2D array of shape `(H, W)`. Each pixel value: 0 (black) to 255 (white).
+```
+Shape: (height, width)
+Values: 0–255 (8-bit unsigned integer)
+```
+
+**Color Image (RGB)**: 3D array of shape `(H, W, 3)`. Three channels: Red, Green, Blue.
+```
+Shape: (height, width, 3)
+Each channel: 0–255
+Example: pixel (100, 50) = [R=200, G=50, B=100]
+```
+
+**Other Color Spaces:**
+| Color Space | Channels | Use Case |
+|-------------|----------|----------|
+| **RGB** | Red, Green, Blue | Default for display and deep learning |
+| **BGR** | Blue, Green, Red | OpenCV default (reverse of RGB) |
+| **HSV** | Hue, Saturation, Value | Color-based filtering, skin detection |
+| **LAB** | Lightness, A (green-red), B (blue-yellow) | Perceptually uniform; color transfer |
+| **YCbCr** | Luminance, Chrominance | JPEG compression, video processing |
+
+### 2.2 Image Properties
+| Property | Description |
+|----------|-------------|
+| **Resolution** | Width × Height in pixels (e.g., 1920×1080) |
+| **Bit Depth** | Bits per pixel per channel (8-bit = 256 values, 16-bit = 65,536) |
+| **Aspect Ratio** | Width:Height ratio (e.g., 16:9, 4:3) |
+| **DPI** | Dots per inch — relevant for printing, not ML |
+
+### 2.3 Image Coordinates
+```
+Origin (0,0) ──────────► x (width)
+     │
+     │    Image
+     │
+     ▼
+   y (height)
+```
+- **OpenCV/NumPy**: `image[y, x]` — row first, then column.
+- **PIL/Pillow**: `image.getpixel((x, y))` — x first.
+
+### 2.4 Image File Formats
+| Format | Compression | Transparency | Use Case |
+|--------|------------|--------------|----------|
+| **JPEG** | Lossy | No | Photos, web images |
+| **PNG** | Lossless | Yes (alpha channel) | Screenshots, logos, masks |
+| **BMP** | None | No | Raw uncompressed images |
+| **TIFF** | Lossless/None | Yes | Medical imaging, satellite |
+| **WebP** | Lossy/Lossless | Yes | Web optimization |
+| **DICOM** | Various | N/A | Medical imaging standard |
+
+---
+
+## 3. Traditional Computer Vision (Pre-Deep Learning)
+
+### 3.1 Image Preprocessing
+
+#### Resizing
+```python
+import cv2
+resized = cv2.resize(image, (width, height), interpolation=cv2.INTER_LINEAR)
+# Interpolation methods:
+# cv2.INTER_NEAREST  — fastest, blocky
+# cv2.INTER_LINEAR   — bilinear (default, good balance)
+# cv2.INTER_CUBIC    — bicubic (smoother, slower)
+# cv2.INTER_LANCZOS4 — highest quality downscaling
+```
+
+#### Color Conversion
+```python
+gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # OpenCV uses BGR by default
+```
+
+#### Thresholding
+Converts grayscale to binary (black/white).
+```python
+# Simple threshold
+_, binary = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
+
+# Otsu's method — automatic threshold selection
+_, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+# Adaptive threshold — handles varying illumination
+binary = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                cv2.THRESH_BINARY, blockSize=11, C=2)
+```
+
+#### Histogram Equalization
+Improves contrast by spreading out pixel intensities.
+```python
+equalized = cv2.equalizeHist(gray)
+# For color: apply to V channel of HSV or L channel of LAB
+clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+enhanced = clahe.apply(gray)  # CLAHE — contrast-limited adaptive histogram equalization
+```
+
+### 3.2 Image Filtering & Convolution
+
+#### What is Convolution?
+Convolution slides a small matrix (**kernel/filter**) over the image, computing a weighted sum at each position. This is the fundamental operation in both traditional CV and CNNs.
+
+```
+Input Image     Kernel (3×3)     Output
+┌───┬───┬───┐   ┌───┬───┬───┐
+│ 1 │ 2 │ 3 │   │ 0 │ 1 │ 0 │   Result = sum of
+├───┼───┼───┤ × ├───┼───┼───┤   element-wise
+│ 4 │ 5 │ 6 │   │ 1 │-4 │ 1 │   multiplication
+├───┼───┼───┤   ├───┼───┼───┤
+│ 7 │ 8 │ 9 │   │ 0 │ 1 │ 0 │
+└───┴───┴───┘   └───┴───┴───┘
+```
+
+#### Common Filters
+```python
+# Blur (smoothing) — reduces noise
+blurred = cv2.GaussianBlur(image, (5, 5), sigmaX=0)   # Gaussian blur
+blurred = cv2.medianBlur(image, 5)                     # Median blur (good for salt-and-pepper noise)
+blurred = cv2.bilateralFilter(image, 9, 75, 75)        # Edge-preserving blur
+
+# Sharpening
+kernel = np.array([[ 0, -1,  0],
+                   [-1,  5, -1],
+                   [ 0, -1,  0]])
+sharpened = cv2.filter2D(image, -1, kernel)
+```
+
+#### Edge Detection
+Edges are areas of rapid intensity change.
+
+```python
+# Sobel — gradient in x or y direction
+sobel_x = cv2.Sobel(gray, cv2.CV_64F, dx=1, dy=0, ksize=3)
+sobel_y = cv2.Sobel(gray, cv2.CV_64F, dx=0, dy=1, ksize=3)
+edges = np.sqrt(sobel_x**2 + sobel_y**2)
+
+# Canny — most popular edge detector (multi-stage)
+edges = cv2.Canny(gray, threshold1=50, threshold2=150)
+# Steps: 1) Gaussian blur, 2) Gradient computation, 3) Non-max suppression, 4) Hysteresis thresholding
+
+# Laplacian — second derivative (detects edges in all directions)
+laplacian = cv2.Laplacian(gray, cv2.CV_64F)
+```
+
+### 3.3 Morphological Operations
+Used on binary/thresholded images to remove noise, fill gaps, or separate objects.
+
+```python
+kernel = np.ones((5, 5), np.uint8)
+
+# Erosion — shrinks white regions (removes noise)
+eroded = cv2.erode(binary, kernel, iterations=1)
+
+# Dilation — expands white regions (fills gaps)
+dilated = cv2.dilate(binary, kernel, iterations=1)
+
+# Opening — erosion then dilation (removes small noise)
+opened = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
+
+# Closing — dilation then erosion (fills small holes)
+closed = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+```
+
+### 3.4 Contour Detection
+Contours are curves joining continuous points with the same intensity.
+
+```python
+contours, hierarchy = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+for cnt in contours:
+    area = cv2.contourArea(cnt)
+    perimeter = cv2.arcLength(cnt, closed=True)
+    x, y, w, h = cv2.boundingRect(cnt)          # Bounding box
+    (cx, cy), radius = cv2.minEnclosingCircle(cnt)  # Min enclosing circle
+    M = cv2.moments(cnt)                         # Moments (centroid, area)
+    centroid_x = int(M['m10'] / M['m00'])
+    centroid_y = int(M['m01'] / M['m00'])
+```
+
+### 3.5 Feature Detection & Descriptors
+
+#### What are Features?
+Features are distinctive points or regions in an image (corners, edges, blobs) that can be reliably detected and matched across different images.
+
+| Algorithm | Type | Description |
+|-----------|------|-------------|
+| **Harris Corner** | Corner | Detects corners based on intensity gradient |
+| **Shi-Tomasi** | Corner | Improved Harris; used in `goodFeaturesToTrack()` |
+| **SIFT** | Keypoint + Descriptor | Scale-Invariant Feature Transform; robust to scale/rotation |
+| **SURF** | Keypoint + Descriptor | Speeded-Up Robust Features; faster SIFT approximation |
+| **ORB** | Keypoint + Descriptor | Oriented FAST and Rotated BRIEF; fast and free |
+| **FAST** | Keypoint | Features from Accelerated Segment Test; very fast |
+| **BRIEF** | Descriptor | Binary Robust Independent Elementary Features |
+
+```python
+# ORB example
+orb = cv2.ORB_create(nfeatures=500)
+keypoints, descriptors = orb.detectAndCompute(gray, None)
+
+# Feature matching
+bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+matches = bf.match(desc1, desc2)
+matches = sorted(matches, key=lambda x: x.distance)
+```
+
+### 3.6 Template Matching
+Find a small template image within a larger image.
+```python
+result = cv2.matchTemplate(image, template, cv2.TM_CCOEFF_NORMED)
+min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+# max_loc = top-left corner of best match
+```
+
+### 3.7 Hough Transform
+Detect geometric shapes (lines, circles).
+```python
+# Hough Line Transform
+lines = cv2.HoughLinesP(edges, rho=1, theta=np.pi/180, threshold=100,
+                         minLineLength=50, maxLineGap=10)
+
+# Hough Circle Transform
+circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, dp=1, minDist=50,
+                            param1=200, param2=30, minRadius=10, maxRadius=100)
+```
+
+### 3.8 Histogram of Oriented Gradients (HOG)
+HOG was the state-of-the-art for pedestrian detection before deep learning.
+
+**How HOG works:**
+1. Compute gradient magnitude and direction at each pixel.
+2. Divide image into cells (e.g., 8×8 pixels).
+3. Create histogram of gradient orientations per cell (typically 9 bins).
+4. Normalize histograms across blocks (groups of cells).
+5. Concatenate all block histograms into a single feature vector.
+6. Train a classifier (typically SVM) on the feature vector.
+
+```python
+from skimage.feature import hog
+features, hog_image = hog(gray, orientations=9, pixels_per_cell=(8, 8),
+                          cells_per_block=(2, 2), visualize=True)
+```
+
+---
+
+## 4. Convolutional Neural Networks (CNNs) — Core of Deep Learning CV
+
+### 4.1 Why CNNs for Images?
+- **Fully connected networks** treat each pixel independently — no spatial understanding. A 224×224×3 image = 150,528 inputs → billions of parameters.
+- **CNNs** use local connectivity (small filters), weight sharing, and spatial hierarchy — dramatically fewer parameters while capturing spatial patterns.
+
+### 4.2 CNN Building Blocks
+
+#### Convolutional Layer
+The core layer that applies learnable filters to detect features.
+
+```
+Input: (H, W, C_in)
+Kernel: (K, K, C_in) × N_filters
+Output: (H_out, W_out, N_filters)
+
+H_out = (H - K + 2P) / S + 1
+W_out = (W - K + 2P) / S + 1
+
+Where:
+K = kernel size
+P = padding
+S = stride
+```
+
+**Key concepts:**
+- **Kernel/Filter**: Small learnable weight matrix (typically 3×3 or 5×5). Each filter detects one type of feature.
+- **Stride**: Step size when sliding the filter. Stride=1 preserves size; stride=2 halves dimensions.
+- **Padding**: Adding zeros around the border. `same` padding preserves spatial dimensions; `valid` padding means no padding.
+- **Feature Map**: Output of one filter applied across the entire image.
+- **Depth (Channels)**: Number of filters = number of output channels.
+
+**What filters learn:**
+- **Early layers**: Edges, corners, colors, textures (low-level features).
+- **Middle layers**: Shapes, patterns, object parts (mid-level features).
+- **Deep layers**: Object categories, faces, complex structures (high-level features).
+
+#### Pooling Layer
+Reduces spatial dimensions (downsampling) to reduce computation and provide translation invariance.
+
+```python
+# Max Pooling — takes maximum value in each window
+# Input: (8, 8, 64), Pool size: 2×2, Stride: 2
+# Output: (4, 4, 64)
+
+nn.MaxPool2d(kernel_size=2, stride=2)
+
+# Average Pooling — takes average value
+nn.AvgPool2d(kernel_size=2, stride=2)
+
+# Global Average Pooling — reduces each feature map to a single value
+nn.AdaptiveAvgPool2d((1, 1))  # Output: (1, 1, C) regardless of input size
+```
+
+#### Activation Functions
+```python
+# ReLU — most common in CNNs
+f(x) = max(0, x)
+# Pros: Simple, fast, avoids vanishing gradient
+# Cons: "Dying ReLU" — neurons can get stuck at 0
+
+# Leaky ReLU
+f(x) = x if x > 0 else 0.01x
+
+# GELU — used in modern architectures (Transformers)
+f(x) = x × Φ(x)  # where Φ is the Gaussian CDF
+
+# Sigmoid — for binary classification output
+f(x) = 1 / (1 + e^(-x))
+
+# Softmax — for multi-class classification output
+f(x_i) = e^(x_i) / Σ(e^(x_j))
+```
+
+#### Batch Normalization
+Normalizes activations to zero mean and unit variance within a mini-batch. Placed after convolution, before activation.
+
+```python
+nn.BatchNorm2d(num_features=64)
+```
+**Benefits**: Faster training, allows higher learning rates, acts as mild regularization, reduces sensitivity to weight initialization.
+
+#### Dropout
+Randomly sets a fraction of activations to zero during training. Prevents overfitting.
+```python
+nn.Dropout(p=0.5)     # For fully connected layers
+nn.Dropout2d(p=0.25)  # For convolutional layers (drops entire channels)
+```
+
+#### Fully Connected (Dense) Layer
+After convolutional layers extract features, FC layers combine them for classification.
+```python
+nn.Linear(in_features=512, out_features=num_classes)
+```
+
+### 4.3 Typical CNN Architecture
+```
+Input Image (224×224×3)
+    ↓
+Conv(3×3, 64) + BN + ReLU      → (224×224×64)
+Conv(3×3, 64) + BN + ReLU      → (224×224×64)
+MaxPool(2×2)                     → (112×112×64)
+    ↓
+Conv(3×3, 128) + BN + ReLU     → (112×112×128)
+Conv(3×3, 128) + BN + ReLU     → (112×112×128)
+MaxPool(2×2)                     → (56×56×128)
+    ↓
+Conv(3×3, 256) + BN + ReLU     → (56×56×256)
+Conv(3×3, 256) + BN + ReLU     → (56×56×256)
+MaxPool(2×2)                     → (28×28×256)
+    ↓
+Global Average Pooling           → (1×1×256)
+Flatten                          → (256)
+FC(256, 128) + ReLU             → (128)
+FC(128, num_classes)            → (num_classes)
+Softmax                          → probabilities
+```
+
+### 4.4 CNN Math — Parameter Count
+
+```
+Convolutional Layer:
+Parameters = (K × K × C_in + 1) × C_out
+             ↑               ↑     ↑
+          kernel size    bias per   number of
+          × input       filter     filters
+          channels
+
+Example: Conv(3×3), input channels=64, output channels=128
+Parameters = (3 × 3 × 64 + 1) × 128 = 73,856
+
+Fully Connected Layer:
+Parameters = (input_size + 1) × output_size
+
+Example: FC(512, 1000)
+Parameters = (512 + 1) × 1000 = 513,000
+```
+
+### 4.5 Receptive Field
+The receptive field is the region in the input image that influences a particular output feature. Deeper layers have larger receptive fields.
+
+```
+Layer 1 (3×3 conv): Receptive field = 3×3
+Layer 2 (3×3 conv): Receptive field = 5×5
+Layer 3 (3×3 conv): Receptive field = 7×7
+
+With pooling (stride 2): Receptive field doubles
+```
+
+This is why deeper networks can "see" more context and detect larger objects.
+
+---
+
+## 5. Landmark CNN Architectures (Evolution)
+
+### Timeline
+```
+1998: LeNet-5 (LeCun)
+2012: AlexNet (Krizhevsky) — ImageNet breakthrough
+2014: VGGNet (Simonyan & Zisserman) — deeper with 3×3 convs
+2014: GoogLeNet/Inception (Szegedy) — multi-scale filters
+2015: ResNet (He) — residual connections (152 layers!)
+2016: DenseNet (Huang) — dense connections
+2017: MobileNet (Howard) — lightweight for mobile
+2017: SENet (Hu) — channel attention
+2019: EfficientNet (Tan & Le) — compound scaling
+2020: Vision Transformer (ViT) — Transformers for images
+2021: Swin Transformer — hierarchical vision transformer
+2023: ConvNeXt V2 — modernized CNNs competitive with Transformers
+```
+
+### LeNet-5 (1998)
+- **Purpose**: Handwritten digit recognition (MNIST).
+- **Architecture**: 2 conv layers + 2 pooling + 3 FC layers.
+- **Significance**: First practical CNN; proved convolutions work for images.
+
+### AlexNet (2012) — The Deep Learning Revolution
+- **Architecture**: 5 conv layers + 3 FC layers. ~60M parameters.
+- **Key innovations**:
+  - ReLU activation (instead of sigmoid/tanh) — faster training.
+  - Dropout — reduced overfitting.
+  - Data augmentation — image flips, crops, color jitter.
+  - GPU training — split across 2 GPUs.
+- **Result**: Won ImageNet 2012 with 16.4% top-5 error (vs 26.2% for second place).
+- **Significance**: Proved deep learning works for large-scale image recognition.
+
+### VGGNet (2014)
+- **Key idea**: Use very small (3×3) convolution filters in deep stacks.
+- **Variants**: VGG-16 (16 layers, 138M params), VGG-19 (19 layers).
+- **Why 3×3?**: Two stacked 3×3 convs have the same receptive field as one 5×5 but fewer parameters and more non-linearity.
+- **Significance**: Showed depth matters. Simple, uniform architecture.
+- **Weakness**: Very expensive (138M parameters); FC layers account for most params.
+
+### GoogLeNet / Inception (2014)
+- **Key idea**: **Inception module** — apply multiple filter sizes (1×1, 3×3, 5×5) in parallel and concatenate.
+- **1×1 convolutions**: Used as dimensionality reduction (bottleneck). Reduces channels before expensive 3×3/5×5 convs.
+- **Architecture**: 22 layers deep, only ~6.8M parameters (20x less than VGG).
+- **No FC layers**: Uses Global Average Pooling instead.
+- **Significance**: Width matters, not just depth. Efficient multi-scale processing.
+- **Variants**: Inception v2/v3/v4 with factorized convolutions, batch normalization.
+
+### ResNet (2015) — The Residual Revolution
+- **Problem it solved**: Very deep networks (50+ layers) were degrading due to vanishing gradients and optimization difficulty — NOT overfitting, but underfitting.
+- **Key idea**: **Residual (skip) connections** — instead of learning `H(x)`, learn `F(x) = H(x) - x` and compute `H(x) = F(x) + x`.
+
+```
+          ┌────────────────┐
+Input x → │ Conv + BN + ReLU│ → F(x)
+          │ Conv + BN       │
+          └───────┬────────┘
+                  │
+                  + ←── x (shortcut/identity connection)
+                  │
+                 ReLU
+                  │
+              F(x) + x = output
+```
+
+- **Why it works**: Gradients flow directly through skip connections. Network can learn identity mapping (do nothing) — never worse than shallower version.
+- **Variants**: ResNet-18, 34, 50, 101, 152.
+- **ResNet-50 details**: Uses **bottleneck blocks** (1×1 → 3×3 → 1×1) to reduce computation.
+- **Result**: 3.57% top-5 error on ImageNet (surpassed human performance: ~5.1%).
+- **Significance**: Enabled training of 100+ layer networks. Residual connections are now used everywhere.
+
+### DenseNet (2016)
+- **Key idea**: Every layer connects to every subsequent layer (dense connections). Each layer receives feature maps from ALL preceding layers.
+- **Benefits**: Feature reuse, stronger gradient flow, fewer parameters than ResNet.
+- **Growth rate (k)**: Each layer adds k feature maps; concatenated, not added.
+
+### MobileNet (2017)
+- **Purpose**: Efficient CNNs for mobile/edge devices.
+- **Key idea**: **Depthwise separable convolutions** — split standard convolution into:
+  1. **Depthwise conv**: One filter per input channel (spatial filtering).
+  2. **Pointwise conv (1×1)**: Combine channels.
+- **Computation reduction**: ~8-9x fewer operations than standard conv.
+
+```
+Standard Conv: K × K × C_in × C_out multiplications
+Depthwise Separable: K × K × C_in + C_in × C_out multiplications
+
+Example: 3×3 conv, 128 → 256 channels
+Standard:     3×3×128×256 = 294,912
+Depthwise:    3×3×128 + 128×256 = 1,152 + 32,768 = 33,920 (8.7x fewer)
+```
+
+- **Variants**: MobileNetV2 (inverted residuals), MobileNetV3 (NAS-optimized).
+
+### EfficientNet (2019)
+- **Key idea**: **Compound scaling** — scale depth, width, and resolution together using a fixed ratio.
+```
+depth = α^φ
+width = β^φ
+resolution = γ^φ
+where α × β² × γ² ≈ 2, and φ is a user-specified coefficient
+```
+- **EfficientNet-B0 to B7**: Progressively larger and more accurate.
+- **Significance**: Achieved state-of-the-art accuracy with far fewer parameters and FLOPs than prior models.
+
+---
+
+## 6. Vision Transformers (ViT) & Modern Architectures
+
+### 6.1 Vision Transformer (ViT) — 2020
+The Vision Transformer applied the Transformer architecture (originally for NLP) to images.
+
+**How ViT works:**
+1. **Patch Embedding**: Split image into fixed-size patches (e.g., 16×16). Each patch = a "token."
+   - Image 224×224 → 196 patches of 16×16.
+   - Each patch is flattened and linearly projected to an embedding dimension.
+
+2. **Position Encoding**: Add learnable position embeddings to retain spatial information.
+
+3. **[CLS] Token**: A special classification token is prepended. Its final representation is used for classification.
+
+4. **Transformer Encoder**: Standard Transformer blocks (Multi-Head Self-Attention + MLP + LayerNorm + Residual connections).
+
+5. **Classification Head**: MLP on the [CLS] token output.
+
+```
+Image (224×224×3)
+    ↓
+Split into 16×16 patches → 196 patches
+    ↓
+Linear projection → 196 token embeddings (each dim D)
+    ↓
++ Position embeddings + [CLS] token → 197 tokens
+    ↓
+Transformer Encoder (L layers of MSA + MLP)
+    ↓
+[CLS] token output → MLP Head → Class prediction
+```
+
+**Self-Attention in ViT:**
+Each patch attends to every other patch → global receptive field from the first layer (unlike CNNs which build it gradually).
+
+```
+Attention(Q, K, V) = softmax(QK^T / √d_k) × V
+
+Where Q, K, V are learned projections of the input tokens
+Multi-Head: Multiple attention heads in parallel, concatenated
+```
+
+**ViT Key Points:**
+- Needs **large datasets** (or pre-training) to work well — fewer inductive biases than CNNs.
+- With sufficient data/pre-training, ViT **outperforms** CNNs on image classification.
+- Computationally expensive: Self-attention is O(n²) where n = number of patches.
+
+### 6.2 Swin Transformer (2021)
+Addresses ViT's limitations with a hierarchical design.
+
+**Key ideas:**
+- **Hierarchical feature maps**: Like CNNs, produces multi-scale features (useful for detection/segmentation).
+- **Shifted windows**: Self-attention computed within local windows, then shifted — reduces O(n²) to O(n).
+- **Patch merging**: Downsamples feature maps between stages.
+
+```
+Stage 1: 56×56 tokens, C dimensions
+Stage 2: 28×28 tokens, 2C dimensions (patch merging)
+Stage 3: 14×14 tokens, 4C dimensions
+Stage 4: 7×7 tokens, 8C dimensions
+```
+
+**Significance**: Swin Transformer became the backbone for many CV tasks (detection, segmentation) — general-purpose vision backbone.
+
+### 6.3 ConvNeXt (2022)
+"Modernized" ResNet that borrows ideas from Transformers to match Swin Transformer performance.
+
+**Key modifications to ResNet:**
+- Larger kernel sizes (7×7 instead of 3×3)
+- Fewer activation functions
+- LayerNorm instead of BatchNorm
+- GELU instead of ReLU
+- Depthwise separable convolutions
+- Inverted bottleneck (expand then compress)
+
+**Significance**: Proved CNNs can still compete with Transformers when modernized.
+
+### 6.4 CNN vs Transformer Comparison
+
+| Feature | CNN | Vision Transformer |
+|---------|-----|-------------------|
+| **Inductive bias** | Strong (locality, translation equivariance) | Weak (learns from data) |
+| **Data efficiency** | Better with small datasets | Needs large datasets / pre-training |
+| **Receptive field** | Local → Global (through depth) | Global from layer 1 (self-attention) |
+| **Computational cost** | O(n) per layer | O(n²) per layer (self-attention) |
+| **Multi-scale features** | Natural (via pooling/stride) | Requires design (Swin, PVT) |
+| **Performance ceiling** | High | Higher (with enough data) |
+| **Pre-training benefit** | Moderate | Very high (ViT thrives on pre-training) |
+
+---
+
+## 7. Image Classification — Deep Dive
+
+### 7.1 The Task
+Given an image, assign it to one (or more) predefined categories.
+
+### 7.2 Key Datasets
+| Dataset | Classes | Images | Image Size | Description |
+|---------|---------|--------|------------|-------------|
+| **MNIST** | 10 | 70K | 28×28 gray | Handwritten digits (0-9) |
+| **CIFAR-10** | 10 | 60K | 32×32 color | Tiny natural images |
+| **CIFAR-100** | 100 | 60K | 32×32 color | Fine-grained CIFAR |
+| **ImageNet (ILSVRC)** | 1,000 | 1.2M | ~256×256 | THE benchmark for classification |
+| **Fashion-MNIST** | 10 | 70K | 28×28 gray | Clothing items |
+| **Stanford Cars** | 196 | 16K | Variable | Car model recognition |
+| **CUB-200** | 200 | 12K | Variable | Bird species |
+| **Food-101** | 101 | 101K | Variable | Food classes |
+
+### 7.3 Training Pipeline
+
+```python
+import torch
+import torchvision.transforms as T
+from torchvision import models
+from torch.utils.data import DataLoader
+
+# 1. Data Augmentation & Preprocessing
+train_transform = T.Compose([
+    T.RandomResizedCrop(224),
+    T.RandomHorizontalFlip(),
+    T.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
+    T.ToTensor(),
+    T.Normalize(mean=[0.485, 0.456, 0.406],   # ImageNet mean
+                std=[0.229, 0.224, 0.225])      # ImageNet std
+])
+
+val_transform = T.Compose([
+    T.Resize(256),
+    T.CenterCrop(224),
+    T.ToTensor(),
+    T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+])
+
+# 2. Data Loaders
+train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, num_workers=4)
+val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, num_workers=4)
+
+# 3. Model (Transfer Learning)
+model = models.resnet50(pretrained=True)
+model.fc = torch.nn.Linear(2048, num_classes)  # Replace final layer
+
+# 4. Loss & Optimizer
+criterion = torch.nn.CrossEntropyLoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+
+# 5. Training Loop
+for epoch in range(epochs):
+    model.train()
+    for images, labels in train_loader:
+        outputs = model(images)
+        loss = criterion(outputs, labels)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+    scheduler.step()
+```
+
+### 7.4 Loss Functions for Classification
+| Loss | Use Case | Formula |
+|------|----------|---------|
+| **Cross-Entropy** | Multi-class (single label) | $L = -\sum_{c} y_c \log(\hat{y}_c)$ |
+| **Binary Cross-Entropy** | Binary or multi-label | $L = -[y\log(\hat{y}) + (1-y)\log(1-\hat{y})]$ |
+| **Focal Loss** | Class imbalance | $L = -\alpha(1-\hat{y})^\gamma \log(\hat{y})$ |
+| **Label Smoothing CE** | Prevent overconfidence | Uses soft labels: $y_{smooth} = (1-\epsilon)y + \epsilon/K$ |
+
+### 7.5 Evaluation Metrics
+| Metric | Formula | Use Case |
+|--------|---------|----------|
+| **Accuracy** | Correct / Total | Balanced classes |
+| **Top-5 Accuracy** | Correct class in top 5 predictions | ImageNet |
+| **Precision** | TP / (TP + FP) | When false positives are costly |
+| **Recall** | TP / (TP + FN) | When false negatives are costly |
+| **F1 Score** | 2 × (P × R) / (P + R) | Balanced precision/recall |
+| **Confusion Matrix** | NxN matrix of predictions vs true labels | Per-class analysis |
+| **AUC-ROC** | Area under ROC curve | Binary classification |
+
+### 7.6 Transfer Learning & Fine-Tuning
+
+**Transfer Learning** = Using a model pre-trained on a large dataset (ImageNet) as a starting point for a new task.
+
+**Approaches:**
+1. **Feature Extraction**: Freeze all pre-trained layers, train only the new classification head.
+2. **Fine-Tuning**: Unfreeze some/all pre-trained layers and train with a lower learning rate.
+3. **Gradual Unfreezing**: Start with frozen layers; unfreeze layers one at a time from top to bottom.
+
+**When to use which:**
+| Your Dataset | Similarity to ImageNet | Strategy |
+|-------------|------------------------|----------|
+| Small, similar | High | Feature extraction (freeze all) |
+| Small, different | Low | Feature extraction + fine-tune top layers |
+| Large, similar | High | Fine-tune all with low LR |
+| Large, different | Low | Fine-tune all or train from scratch |
+
+```python
+# Freeze all layers
+for param in model.parameters():
+    param.requires_grad = False
+
+# Unfreeze last few layers
+for param in model.layer4.parameters():
+    param.requires_grad = True
+
+# Different learning rates
+optimizer = torch.optim.Adam([
+    {'params': model.layer4.parameters(), 'lr': 1e-4},
+    {'params': model.fc.parameters(), 'lr': 1e-3}
+])
+```
+
+---
+
+## 8. Object Detection
+
+### 8.1 The Task
+Locate ALL objects in an image, draw bounding boxes around them, and classify each object.
+
+**Output per object**: `(class, confidence, x_min, y_min, x_max, y_max)` or `(class, confidence, x_center, y_center, width, height)`
+
+### 8.2 Key Datasets
+| Dataset | Classes | Images | Annotations | Description |
+|---------|---------|--------|-------------|-------------|
+| **PASCAL VOC** | 20 | 11.5K | Bounding boxes | Classic benchmark |
+| **MS COCO** | 80 | 330K | BBox + segmentation | THE modern benchmark |
+| **Open Images** | 600 | 9M | BBox + relationships | Largest open dataset |
+| **KITTI** | 8 | 15K | 3D BBox | Autonomous driving |
+
+### 8.3 Two-Stage Detectors (Region-Based)
+
+#### How They Work
+1. **Stage 1**: Generate region proposals (potential object locations).
+2. **Stage 2**: Classify each proposal and refine bounding boxes.
+
+#### R-CNN (2014)
+```
+Image → Selective Search (2000 proposals) → Warp each to 227×227 → CNN features → SVM classifier + BBox regression
+```
+- Slow: CNN runs 2000 times per image.
+
+#### Fast R-CNN (2015)
+```
+Image → CNN (full image, once) → Feature map → RoI Pooling (extract features per proposal) → FC → Class + BBox
+```
+- CNN runs once; RoI Pooling extracts per-proposal features from the shared feature map.
+- Still uses Selective Search for proposals (slow).
+
+#### Faster R-CNN (2016)
+```
+Image → CNN backbone → Feature map → RPN (Region Proposal Network) → RoI Pooling → FC → Class + BBox
+```
+- **Region Proposal Network (RPN)**: A small CNN that slides over the feature map and predicts whether each location contains an object (objectness score) + proposes bounding box adjustments.
+- **Anchors**: Pre-defined boxes of different sizes and aspect ratios at each feature map location. RPN refines these anchors.
+- End-to-end trainable. ~5 fps.
+
+**Faster R-CNN Key Concepts:**
+- **Anchor boxes**: Typically 3 scales × 3 aspect ratios = 9 anchors per location.
+- **RoI Pooling / RoI Align**: Extracts fixed-size features for each proposal from the feature map. RoI Align (Mask R-CNN) uses bilinear interpolation for better accuracy.
+- **Non-Maximum Suppression (NMS)**: Removes duplicate detections by keeping the highest-confidence box and suppressing overlapping boxes (IoU > threshold).
+
+### 8.4 One-Stage Detectors
+
+No region proposal step — predict class and bounding box directly from the feature map in a single pass.
+
+#### YOLO (You Only Look Once) Family
+
+**YOLOv1 (2016):**
+- Divides image into S×S grid.
+- Each grid cell predicts B bounding boxes + confidence + C class probabilities.
+- Single forward pass → very fast (~45 fps).
+- Weakness: Struggles with small objects and nearby objects.
+
+**YOLOv3 (2018):**
+- Multi-scale detection (3 different scales) using Feature Pyramid.
+- Darknet-53 backbone (residual connections).
+- Better at small objects than v1/v2.
+
+**YOLOv5 (2020):**
+- PyTorch implementation (Ultralytics).
+- Multiple sizes: n (nano), s (small), m (medium), l (large), x (extra-large).
+- Extensive data augmentation (Mosaic, MixUp).
+- Easy to use, widely adopted.
+
+**YOLOv8 (2023):**
+- Anchor-free detection.
+- Decoupled head (separate branches for classification and box regression).
+- State-of-the-art speed-accuracy trade-off.
+- Supports detection, segmentation, pose estimation.
+
+```python
+from ultralytics import YOLO
+
+# Load model
+model = YOLO('yolov8n.pt')  # nano model
+
+# Train
+model.train(data='coco128.yaml', epochs=100, imgsz=640)
+
+# Predict
+results = model('image.jpg')
+for box in results[0].boxes:
+    print(f"Class: {box.cls}, Confidence: {box.conf}, BBox: {box.xyxy}")
+```
+
+#### SSD (Single Shot Detector) — 2016
+- Multi-scale feature maps from different layers.
+- Predicts boxes and classes at each scale.
+- Faster than Faster R-CNN, slightly less accurate.
+
+#### RetinaNet (2017)
+- **Focal Loss** to address class imbalance between background and objects.
+- Uses Feature Pyramid Network (FPN) backbone.
+- Matched two-stage detector accuracy while being one-stage.
+
+### 8.5 Modern Detectors
+
+#### DETR (Detection Transformer) — 2020
+- End-to-end detection using Transformers.
+- No anchors, no NMS, no hand-designed components.
+- Uses bipartite matching loss (Hungarian algorithm) to assign predictions to ground truth.
+```
+Image → CNN backbone → Transformer Encoder → Transformer Decoder (object queries) → FFN → Class + BBox
+```
+
+#### DINO-DETR, RT-DETR
+- Improved DETR variants with better convergence and real-time speed.
+
+### 8.6 Key Concepts in Detection
+
+#### IoU (Intersection over Union)
+```
+IoU = Area of Overlap / Area of Union
+
+IoU = 0: No overlap
+IoU = 1: Perfect overlap
+Typical threshold: IoU ≥ 0.5 means "correct detection"
+```
+
+#### mAP (Mean Average Precision)
+The standard detection metric:
+1. For each class, compute Precision-Recall curve.
+2. Compute AP (area under the P-R curve) per class.
+3. mAP = mean of AP across all classes.
+
+**COCO metrics:**
+- `mAP@0.5`: IoU threshold = 0.5
+- `mAP@0.75`: IoU threshold = 0.75
+- `mAP@[0.5:0.95]`: Average over IoU thresholds from 0.5 to 0.95 (step 0.05) — THE primary COCO metric.
+
+#### Feature Pyramid Network (FPN)
+Combines low-resolution, semantically strong features with high-resolution, spatially precise features.
+
+```
+        P5 ← C5 (low res, strong semantics)
+         ↑
+        P4 ← C4 + Upsampled P5
+         ↑
+        P3 ← C3 + Upsampled P4
+         ↑
+        P2 ← C2 + Upsampled P3  (high res, precise locations)
+```
+Predictions are made at all levels — small objects from P2/P3, large objects from P4/P5.
+
+#### Non-Maximum Suppression (NMS)
+```
+1. Sort all detections by confidence score.
+2. Select the highest confidence box.
+3. Remove all other boxes with IoU > threshold (e.g., 0.5) with the selected box.
+4. Repeat for remaining boxes.
+```
+
+#### Anchor Boxes
+Pre-defined boxes at each feature map location with different:
+- **Scales**: e.g., 32², 64², 128²
+- **Aspect ratios**: e.g., 1:1, 1:2, 2:1
+
+The network predicts **offsets** from anchors, not absolute coordinates. This makes learning easier.
+
+**Anchor-Free detectors** (FCOS, CenterNet, YOLOv8) predict center points + distances to edges, eliminating hand-designed anchors.
+
+---
+
+## 9. Image Segmentation
+
+### 9.1 Types of Segmentation
+| Type | Output | Example |
+|------|--------|---------|
+| **Semantic** | Per-pixel class label (all cars = same label) | Road scene parsing |
+| **Instance** | Per-pixel class + unique instance ID (car1, car2, car3) | COCO |
+| **Panoptic** | Semantic for "stuff" (sky, road) + Instance for "things" (cars, people) | Cityscapes |
+
+### 9.2 Semantic Segmentation
+
+#### FCN (Fully Convolutional Network) — 2015
+- First deep learning approach for pixel-wise segmentation.
+- Replaces FC layers with 1×1 convolutions.
+- Uses transposed convolutions (upsampling) to restore spatial resolution.
+- Skip connections from earlier layers for finer details.
+
+#### U-Net (2015)
+Originally designed for medical image segmentation. Still widely used.
+
+```
+Encoder (Downsampling)          Decoder (Upsampling)
+┌──────────┐                    ┌──────────┐
+│ Conv+Conv │ ──skip connect──→ │ Conv+Conv │
+│ MaxPool   │                   │ UpConv    │
+├──────────┤                    ├──────────┤
+│ Conv+Conv │ ──skip connect──→ │ Conv+Conv │
+│ MaxPool   │                   │ UpConv    │
+├──────────┤                    ├──────────┤
+│ Conv+Conv │ ──skip connect──→ │ Conv+Conv │
+│ MaxPool   │                   │ UpConv    │
+├──────────┤                    ├──────────┤
+│           Bottleneck           │
+└────────────────────────────────┘
+```
+
+**Key ideas:**
+- **Encoder**: Standard CNN (VGG, ResNet) that progressively downsamples.
+- **Decoder**: Mirrors the encoder, progressively upsamples.
+- **Skip connections**: Concatenate encoder features with decoder features at each level. Preserves fine-grained spatial details lost during downsampling.
+- Works extremely well even with small datasets.
+
+#### DeepLab Family
+- **DeepLabV1**: Atrous (dilated) convolutions for larger receptive field without reducing resolution.
+- **DeepLabV2**: Atrous Spatial Pyramid Pooling (ASPP) — parallel dilated convolutions at multiple rates.
+- **DeepLabV3/V3+**: Improved ASPP + encoder-decoder structure.
+
+**Atrous/Dilated Convolution**: Inserts gaps (zeros) between kernel elements to increase receptive field without increasing parameters.
+```
+Standard 3×3 conv: Receptive field = 3×3
+Dilated 3×3 conv (rate=2): Receptive field = 5×5
+Dilated 3×3 conv (rate=4): Receptive field = 9×9
+```
+
+#### SegFormer (2021)
+Transformer-based segmentation:
+- Hierarchical Transformer encoder (like Swin).
+- Lightweight MLP decoder.
+- No positional encoding → flexible input resolution.
+
+### 9.3 Instance Segmentation
+
+#### Mask R-CNN (2017)
+Extends Faster R-CNN by adding a **mask prediction branch**.
+
+```
+Image → CNN → FPN → RPN (proposals) → RoI Align → 
+    ├── FC → Class + BBox (same as Faster R-CNN)
+    └── Small FCN → Binary mask per RoI
+```
+
+- **RoI Align** (instead of RoI Pooling): Uses bilinear interpolation for precise spatial alignment — critical for pixel-level masks.
+- Predicts a **binary mask** for each class independently.
+- Still the go-to for instance segmentation.
+
+#### SAM (Segment Anything Model) — 2023
+Foundation model for segmentation.
+- **Prompt-based**: Click a point, draw a box, or provide text → SAM segments the object.
+- Pre-trained on 1 billion masks from 11 million images.
+- Zero-shot — works on any image without fine-tuning.
+
+```python
+from segment_anything import SamPredictor, sam_model_registry
+
+sam = sam_model_registry["vit_h"](checkpoint="sam_vit_h.pth")
+predictor = SamPredictor(sam)
+predictor.set_image(image)
+masks, scores, logits = predictor.predict(point_coords=[[500, 375]], point_labels=[1])
+```
+
+### 9.4 Loss Functions for Segmentation
+| Loss | Description |
+|------|-------------|
+| **Cross-Entropy** | Per-pixel classification loss |
+| **Dice Loss** | $1 - \frac{2|A \cap B|}{|A| + |B|}$; handles class imbalance |
+| **Focal Loss** | Down-weights easy pixels, focuses on hard ones |
+| **Boundary Loss** | Penalizes boundary errors |
+| **Combined** | CE + Dice (most common) |
+
+### 9.5 Evaluation Metrics
+| Metric | Description |
+|--------|-------------|
+| **mIoU** | Mean Intersection over Union across all classes |
+| **Pixel Accuracy** | Percentage of correctly classified pixels |
+| **Dice Score** | Same as F1 score per class, averaged |
+| **Boundary F1** | F1 score along object boundaries |
+| **PQ (Panoptic Quality)** | Combines segmentation quality and recognition quality |
+
+---
+
+## 10. Generative Models in CV
+
+### 10.1 Generative Adversarial Networks (GANs)
+
+**Architecture:**
+```
+Random Noise z → Generator (G) → Fake Image
+                                      ↓
+Real Image →              Discriminator (D) → Real or Fake?
+```
+
+- **Generator (G)**: Takes random noise and generates an image. Goal: fool D.
+- **Discriminator (D)**: Classifies images as real or fake. Goal: correctly distinguish.
+- **Training**: G and D compete in a minimax game.
+
+**Loss (Original GAN):**
+$$\min_G \max_D \; \mathbb{E}_{x \sim p_{data}}[\log D(x)] + \mathbb{E}_{z \sim p_z}[\log(1 - D(G(z)))]$$
+
+**Key GAN Variants:**
+| Variant | Key Idea |
+|---------|----------|
+| **DCGAN** | Deep Convolutional GAN — established CNN architecture for GANs |
+| **WGAN** | Wasserstein distance — more stable training |
+| **Conditional GAN (cGAN)** | Condition on class label or other input |
+| **Pix2Pix** | Image-to-image translation (paired data) |
+| **CycleGAN** | Unpaired image translation (horse ↔ zebra) |
+| **StyleGAN** | Controllable face generation with style mixing |
+| **Progressive GAN** | Grow resolution during training (4×4 → 1024×1024) |
+
+**GAN Challenges:**
+- **Mode collapse**: Generator produces limited variety.
+- **Training instability**: Hard to balance G and D.
+- **Evaluation difficulty**: No single metric (FID, IS are common).
+
+### 10.2 Variational Autoencoders (VAEs)
+
+```
+Input x → Encoder → μ, σ (latent distribution) → Sample z → Decoder → Reconstructed x̂
+```
+
+- **Encoder**: Maps input to a probability distribution (mean μ, variance σ) in latent space.
+- **Reparameterization trick**: z = μ + σ × ε (where ε ~ N(0,1)) — makes sampling differentiable.
+- **Decoder**: Reconstructs image from latent vector z.
+- **Loss**: Reconstruction loss + KL divergence (keeps latent space close to standard normal).
+
+$$L = \|x - \hat{x}\|^2 + D_{KL}(q(z|x) \| p(z))$$
+
+**Use cases**: Image generation, interpolation in latent space, anomaly detection.
+
+### 10.3 Diffusion Models (2020-present)
+
+The current state-of-the-art for image generation.
+
+**Core Idea:**
+1. **Forward process**: Gradually add Gaussian noise to an image over T timesteps until it becomes pure noise.
+2. **Reverse process**: Train a neural network to predict and remove noise at each step, gradually denoising random noise into a clean image.
+
+```
+Forward:  Clean Image → x₁ (slight noise) → x₂ → ... → xₜ (pure noise)
+Reverse:  Pure Noise → xₜ₋₁ (slightly denoised) → ... → x₀ (clean image)
+```
+
+**Training**: At each step t, add noise to a clean image. Train the network to predict the added noise.
+$$L = \|ε - ε_θ(x_t, t)\|^2$$
+
+**Key Models:**
+| Model | Description |
+|-------|-------------|
+| **DDPM** | Denoising Diffusion Probabilistic Models — original formulation |
+| **Stable Diffusion** | Latent diffusion — runs in compressed latent space (faster) |
+| **DALL-E 2/3** | Text-to-image using diffusion + CLIP |
+| **Midjourney** | High-quality text-to-image generation |
+| **Imagen** | Google's text-to-image diffusion model |
+
+**Stable Diffusion Architecture:**
+```
+Text Prompt → CLIP Text Encoder → Text Embeddings
+                                        ↓
+Random Latent z → U-Net (denoising in latent space, guided by text) → Denoised Latent
+                                                                         ↓
+                                                    VAE Decoder → Generated Image
+```
+
+**Key concepts:**
+- **Classifier-Free Guidance (CFG)**: Controls how strongly the text prompt influences generation. Higher CFG = more adherence to prompt.
+- **Latent Diffusion**: Operate in VAE latent space instead of pixel space → much faster/cheaper.
+- **Schedulers**: Control noise schedule (DDIM, Euler, DPM++ etc.).
+- **LoRA**: Low-Rank Adaptation for fine-tuning diffusion models efficiently.
+
+### 10.4 Neural Style Transfer
+Transfer the "style" of one image to the "content" of another.
+
+```
+Content Image → CNN → Content features (high-level layers)
+Style Image → CNN → Style features (Gram matrices of multiple layers)
+
+Optimize output image to match:
+- Content features of Content Image
+- Style features (Gram matrices) of Style Image
+```
+
+---
+
+## 11. Data Augmentation
+
+### Why Augment?
+- Increases effective dataset size.
+- Reduces overfitting.
+- Makes models robust to transformations.
+- Simulates real-world variations.
+
+### 11.1 Basic Augmentations
+```python
+import torchvision.transforms as T
+
+transform = T.Compose([
+    T.RandomHorizontalFlip(p=0.5),
+    T.RandomVerticalFlip(p=0.5),
+    T.RandomRotation(degrees=15),
+    T.RandomResizedCrop(224, scale=(0.8, 1.0)),
+    T.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+    T.RandomGrayscale(p=0.1),
+    T.GaussianBlur(kernel_size=3),
+    T.RandomPerspective(distortion_scale=0.2, p=0.3),
+    T.RandomAffine(degrees=10, translate=(0.1, 0.1), scale=(0.9, 1.1)),
+])
+```
+
+### 11.2 Advanced Augmentations
+| Technique | Description |
+|-----------|-------------|
+| **Cutout / Random Erasing** | Randomly mask a rectangular region with zeros/noise |
+| **Mixup** | Blend two images: `x = λ·x₁ + (1-λ)·x₂`, labels blended similarly |
+| **CutMix** | Cut a patch from one image and paste onto another; blend labels by area |
+| **Mosaic** | Combine 4 images into one (used in YOLOv4/v5) |
+| **AutoAugment** | Use RL/search to find optimal augmentation policies |
+| **RandAugment** | Simplified: randomly apply N transformations with magnitude M |
+| **TrivialAugment** | Even simpler: one random augmentation per image |
+| **AugMax** | Adversarial augmentation for robustness |
+
+### 11.3 Augmentation Libraries
+| Library | Features |
+|---------|----------|
+| **Albumentations** | Fast, rich library; supports bbox/mask augmentation |
+| **torchvision.transforms** | PyTorch built-in; basic augmentations |
+| **imgaug** | Flexible augmentation pipelines |
+| **Kornia** | Differentiable augmentations (GPU-accelerated) |
+
+```python
+import albumentations as A
+
+transform = A.Compose([
+    A.RandomCrop(width=256, height=256),
+    A.HorizontalFlip(p=0.5),
+    A.RandomBrightnessContrast(p=0.2),
+    A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['class_labels']))
+```
+
+---
+
+## 12. Regularization & Training Techniques
+
+### 12.1 Regularization
+| Technique | Description |
+|-----------|-------------|
+| **Dropout** | Randomly zero out activations during training |
+| **DropPath/Stochastic Depth** | Randomly drop entire layers (residual blocks) |
+| **Weight Decay (L2)** | Penalize large weights: $L_{total} = L + \lambda\|w\|^2$ |
+| **Label Smoothing** | Replace hard labels [0,1] with soft labels [0.1/K, 0.9+0.1/K] |
+| **Data Augmentation** | Acts as implicit regularization |
+| **Early Stopping** | Stop training when validation loss stops improving |
+| **Batch Normalization** | Has mild regularization effect |
+
+### 12.2 Learning Rate Scheduling
+| Schedule | Description |
+|----------|-------------|
+| **Step Decay** | Multiply LR by factor every N epochs |
+| **Cosine Annealing** | LR follows cosine curve from max to min |
+| **Warmup + Cosine** | Start with very low LR, linearly increase, then cosine decay |
+| **OneCycleLR** | Cycle from low → high → low LR during training |
+| **ReduceOnPlateau** | Reduce LR when validation loss plateaus |
+
+```python
+# Cosine Annealing with Warmup
+scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10)
+
+# OneCycleLR
+scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=1e-3, 
+                                                  total_steps=epochs*steps_per_epoch)
+```
+
+### 12.3 Optimizers for CV
+| Optimizer | Description |
+|-----------|-------------|
+| **SGD + Momentum** | Classic; often best for CNNs with proper LR schedule |
+| **Adam** | Adaptive learning rate; good default; works well for Transformers |
+| **AdamW** | Adam with decoupled weight decay; preferred for modern training |
+| **LAMB** | Large batch optimization |
+| **SAM** | Sharpness-Aware Minimization; finds flatter minima for better generalization |
+
+### 12.4 Mixed Precision Training
+Use FP16 (half precision) for most computations, FP32 for critical operations. 2x speedup, less memory.
+
+```python
+from torch.cuda.amp import autocast, GradScaler
+
+scaler = GradScaler()
+for images, labels in loader:
+    with autocast():
+        outputs = model(images)
+        loss = criterion(outputs, labels)
+    scaler.scale(loss).backward()
+    scaler.step(optimizer)
+    scaler.update()
+```
+
+---
+
+## 13. Pose Estimation
+
+### The Task
+Detect body keypoints (joints) in an image/video.
+
+### 13.1 Types
+| Type | Description |
+|------|-------------|
+| **Single-person** | Estimate keypoints for one person |
+| **Multi-person top-down** | Detect people first (bounding boxes), then estimate pose per person |
+| **Multi-person bottom-up** | Detect all keypoints first, then group them into people |
+
+### 13.2 Key Models
+| Model | Approach |
+|-------|----------|
+| **OpenPose** | Bottom-up; uses Part Affinity Fields (PAFs) |
+| **HRNet** | High-Resolution Networks; maintains high resolution throughout |
+| **MediaPipe Pose** | Google's real-time pose on mobile |
+| **RTMPose** | Real-time multi-person pose estimation |
+| **ViTPose** | Vision Transformer for pose estimation |
+
+### 13.3 Keypoint Formats
+- **COCO format**: 17 keypoints (nose, eyes, ears, shoulders, elbows, wrists, hips, knees, ankles).
+- Each keypoint: `(x, y, visibility)` where visibility = 0 (not labeled), 1 (labeled but occluded), 2 (visible).
+
+### 13.4 Evaluation
+- **OKS (Object Keypoint Similarity)**: Like IoU but for keypoints.
+  $$OKS = \frac{\sum_i \exp(-d_i^2 / 2s^2k_i^2) \cdot \delta(v_i > 0)}{\sum_i \delta(v_i > 0)}$$
+  where $d_i$ = distance, $s$ = object scale, $k_i$ = per-keypoint constant.
+- **AP (Average Precision)**: Computed over OKS thresholds (like mAP for detection).
+
+---
+
+## 14. Video Understanding
+
+### 14.1 Key Tasks
+| Task | Description |
+|------|-------------|
+| **Action Recognition** | Classify the action in a video clip |
+| **Temporal Action Detection** | Detect when actions start and end |
+| **Video Object Detection** | Detect objects across frames |
+| **Video Object Segmentation** | Segment objects across frames |
+| **Optical Flow** | Estimate per-pixel motion between frames |
+| **Video Captioning** | Generate text description of video content |
+
+### 14.2 Approaches
+
+#### 2D CNN + Temporal Modeling
+- Extract frame-level features with a 2D CNN.
+- Aggregate over time with: LSTM, Temporal Pooling, or Transformers.
+
+#### 3D CNNs
+- **C3D**: 3D convolutions (kernel spans time + space).
+- **I3D**: Inflate 2D filters to 3D; initialized from ImageNet weights.
+- **SlowFast**: Two paths — Slow (low FPS, spatial details) + Fast (high FPS, temporal details).
+
+#### Video Transformers
+- **TimeSformer**: Applies attention across space and time.
+- **ViViT**: Video Vision Transformer.
+- **VideoMAE**: Masked Autoencoder pre-training for video.
+
+### 14.3 Optical Flow
+Estimates the motion of each pixel between consecutive frames.
+
+```
+Frame t    →    Optical Flow    →    Frame t+1
+pixel(x,y) →  (dx, dy) displacement → pixel(x+dx, y+dy)
+```
+
+**Methods**: Lucas-Kanade, Horn-Schunck, FlowNet, RAFT (current best).
+
+---
+
+## 15. 3D Computer Vision
+
+### 15.1 Depth Estimation
+**Monocular Depth**: Predict depth from a single image.
+- **MiDaS**: Robust monocular depth estimation.
+- **Depth Anything**: Foundation model for depth.
+
+**Stereo Depth**: Compute depth from two cameras (disparity).
+
+### 15.2 Point Clouds
+3D data represented as a set of (x, y, z) coordinates.
+
+**Key Models:**
+| Model | Description |
+|-------|-------------|
+| **PointNet** | Directly processes point clouds; order-invariant |
+| **PointNet++** | Hierarchical point cloud processing |
+| **PointPillars** | For LiDAR-based 3D detection |
+
+### 15.3 NeRF (Neural Radiance Fields) — 2020
+Represent a 3D scene as a neural network.
+- Input: 3D coordinate (x, y, z) + viewing direction (θ, φ).
+- Output: Color (R, G, B) + density (σ).
+- Render novel views by ray marching through the learned volume.
+
+### 15.4 3D Gaussian Splatting (2023)
+- Represents scenes as millions of 3D Gaussians.
+- Much faster rendering than NeRF (real-time).
+- High quality novel view synthesis.
+
+---
+
+## 16. Self-Supervised & Foundation Models
+
+### 16.1 Self-Supervised Learning (SSL)
+Train on unlabeled data by defining a pretext task.
+
+**Contrastive Learning:**
+| Method | Idea |
+|--------|------|
+| **SimCLR** | Augmented views of same image = positive pair; different images = negative |
+| **MoCo** | Momentum Contrast; uses a momentum encoder and queue of negatives |
+| **BYOL** | Bootstrap Your Own Latent; no negatives needed |
+| **SwAV** | Clustering-based contrastive learning |
+
+**Masked Image Modeling:**
+| Method | Idea |
+|--------|------|
+| **MAE** (Masked Autoencoder) | Mask 75% of image patches → reconstruct masked patches |
+| **BEiT** | Masked patch prediction with discrete visual tokens |
+| **SimMIM** | Simple Masked Image Modeling |
+
+### 16.2 Foundation Models for Vision
+| Model | Type | Capabilities |
+|-------|------|-------------|
+| **CLIP** | Vision-Language | Connects images and text in shared embedding space |
+| **DINO / DINOv2** | Self-supervised ViT | Powerful visual features without labels |
+| **SAM** | Segmentation | Segment anything with prompts |
+| **Grounding DINO** | Open-set detection | Detect any object described by text |
+| **GPT-4V / GPT-4o** | Multimodal LLM | Understand and reason about images |
+| **LLaVA** | Multimodal LLM | Open-source vision-language model |
+
+### 16.3 CLIP (Contrastive Language-Image Pre-training)
+Trained on 400M image-text pairs from the internet.
+
+**How it works:**
+1. Image encoder (ViT or ResNet) produces image embedding.
+2. Text encoder (Transformer) produces text embedding.
+3. Training: Maximize cosine similarity for matching pairs, minimize for non-matching.
+
+**Zero-shot classification:**
+```python
+# No training needed on target dataset
+image_features = clip_model.encode_image(image)
+text_features = clip_model.encode_text(["a photo of a cat", "a photo of a dog"])
+similarity = (image_features @ text_features.T)  # Cosine similarity
+prediction = similarity.argmax()
+```
+
+---
+
+## 17. Practical Frameworks & Libraries
+
+### 17.1 Deep Learning Frameworks
+| Framework | Language | Strengths |
+|-----------|----------|-----------|
+| **PyTorch** | Python | Most popular for research; dynamic graphs; excellent ecosystem |
+| **TensorFlow/Keras** | Python | Production deployment; TFLite for mobile; TF Serving |
+| **JAX** | Python | Google; functional; great for research |
+| **ONNX** | Universal | Model interchange format; deploy anywhere |
+
+### 17.2 CV-Specific Libraries
+| Library | Purpose |
+|---------|---------|
+| **OpenCV** | Classical CV; image processing; video I/O |
+| **torchvision** | PyTorch: datasets, models, transforms |
+| **timm** | PyTorch Image Models — 700+ pre-trained models |
+| **Detectron2** | Facebook's detection/segmentation framework |
+| **MMDetection** | OpenMMLab's detection toolkit |
+| **Ultralytics** | YOLOv5/v8 — easy object detection |
+| **Albumentations** | Fast image augmentation |
+| **Hugging Face** | Vision models via `transformers` library |
+| **Segment Anything** | Meta's SAM model |
+| **Pillow (PIL)** | Basic image I/O and manipulation |
+| **scikit-image** | Scientific image processing |
+| **MediaPipe** | Google's real-time ML solutions (face, pose, hands) |
+
+### 17.3 Common Code Patterns
+
+**Loading a pre-trained model (timm):**
+```python
+import timm
+
+model = timm.create_model('efficientnet_b3', pretrained=True, num_classes=10)
+model.eval()
+output = model(torch.randn(1, 3, 300, 300))
+```
+
+**Using Hugging Face ViT:**
+```python
+from transformers import ViTForImageClassification, ViTFeatureExtractor
+
+feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
+model = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
+
+inputs = feature_extractor(images=image, return_tensors="pt")
+outputs = model(**inputs)
+predicted_class = outputs.logits.argmax(-1)
+```
+
+---
+
+## 18. Model Deployment & Optimization
+
+### 18.1 Model Compression
+| Technique | Description | Speedup |
+|-----------|-------------|---------|
+| **Pruning** | Remove unimportant weights/neurons/channels | 2-10x |
+| **Quantization** | Reduce precision (FP32 → INT8) | 2-4x |
+| **Knowledge Distillation** | Train small "student" model to mimic large "teacher" | Model-dependent |
+| **Architecture Search (NAS)** | Automatically find efficient architectures | Model-dependent |
+
+### 18.2 Quantization
+```python
+# Post-Training Quantization (PyTorch)
+quantized_model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
+
+# QAT (Quantization-Aware Training) — better accuracy
+model.qconfig = torch.quantization.get_default_qat_qconfig('fbgemm')
+torch.quantization.prepare_qat(model, inplace=True)
+# ... train ...
+torch.quantization.convert(model, inplace=True)
+```
+
+### 18.3 Deployment Formats & Runtimes
+| Format/Runtime | Platform | Use Case |
+|----------------|----------|----------|
+| **ONNX** | Cross-platform | Universal interchange format |
+| **ONNX Runtime** | CPU/GPU | Efficient inference |
+| **TensorRT** | NVIDIA GPU | Fastest GPU inference |
+| **TFLite** | Mobile (Android/iOS) | On-device inference |
+| **Core ML** | Apple devices | iOS/macOS deployment |
+| **OpenVINO** | Intel hardware | Optimized for Intel CPUs/GPUs |
+| **Triton Inference Server** | Server | Multi-model serving |
+
+### 18.4 Export to ONNX
+```python
+dummy_input = torch.randn(1, 3, 224, 224)
+torch.onnx.export(model, dummy_input, "model.onnx", opset_version=11)
+```
+
+---
+
+## 19. Evaluation & Debugging
+
+### 19.1 Visualization Techniques
+| Technique | Purpose |
+|-----------|---------|
+| **Grad-CAM** | Highlights which regions influenced the prediction |
+| **Attention Maps** | Visualize transformer attention (which patches attend to which) |
+| **Feature Map Visualization** | View what each conv filter responds to |
+| **t-SNE / UMAP** | Visualize high-dimensional features in 2D |
+| **Confusion Matrix** | Per-class prediction analysis |
+| **Saliency Maps** | Gradient of prediction w.r.t. input pixels |
+
+**Grad-CAM:**
+```python
+# Compute gradient of target class score w.r.t. last conv layer
+# Weight feature maps by mean gradient per channel
+# Result: heatmap showing important regions
+```
+
+### 19.2 Common Failure Modes
+| Problem | Symptom | Fix |
+|---------|---------|-----|
+| **Overfitting** | Train accuracy ↑↑, val accuracy flat/↓ | More data, augmentation, dropout, early stopping |
+| **Underfitting** | Both train and val accuracy low | Bigger model, lower regularization, more training |
+| **Class Imbalance** | Model predicts majority class always | Class weights, oversampling, focal loss |
+| **Domain Shift** | Works on training data, fails on real-world | Domain adaptation, better augmentation |
+| **Bias** | Model has demographic or environmental bias | Diverse training data, fairness constraints |
+
+---
+
+## 20. Key Points to Remember
+
+### Fundamentals
+- Images are 3D tensors: `(H, W, C)` — height, width, channels.
+- CNNs exploit **local connectivity** and **weight sharing** — core of visual feature learning.
+- **Convolution** = sliding learnable filter over the image. Each filter detects one feature type.
+- **Pooling** reduces spatial size → computational efficiency + translation invariance.
+- **Receptive field** grows with depth — deeper layers = larger context.
+
+### Architecture Principles
+- **ResNet's skip connections** solved the vanishing gradient problem for deep networks.
+- **1×1 convolutions** control channel dimensions (bottleneck).
+- **Batch Normalization** stabilizes training and enables higher learning rates.
+- **Depthwise separable convolutions** (MobileNet) reduce computation ~9x.
+- **Feature Pyramid Networks** enable multi-scale detection.
+- **Vision Transformers** have global receptive field from layer 1 but need more data.
+
+### Tasks
+- **Classification**: Whole-image label. Metric: Accuracy, Top-5.
+- **Detection**: BBoxes + labels. Metric: mAP@[0.5:0.95].
+- **Segmentation**: Per-pixel labels. Metric: mIoU, Dice.
+- **YOLO** = fastest detection; **Faster R-CNN** = more accurate but slower.
+- **U-Net** = best for medical segmentation with limited data.
+- **Mask R-CNN** = standard for instance segmentation.
+
+### Training
+- **Transfer learning ≫ training from scratch** for most practical tasks.
+- **ImageNet pre-training** is the standard starting point.
+- **AdamW + Cosine LR with Warmup** is the go-to training recipe for modern models.
+- **Data augmentation** is the single most impactful regularization technique.
+- **Mixed precision (FP16)** gives 2x speedup for free.
+
+### Modern Trends
+- **Foundation models** (CLIP, SAM, DINOv2) are replacing task-specific pre-training.
+- **Diffusion models** dominate image generation.
+- **Vision Transformers** dominate benchmarks with enough data/compute.
+- **Multimodal models** (GPT-4V, LLaVA) combine vision + language understanding.
+
+---
+
+## 21. Interview Questions & Answers
+
+### Basic Level
+
+**Q1: What is a convolutional neural network and why is it used for images?**
+**A:** A CNN is a neural network that uses convolutional layers to automatically learn spatial features from images. It's preferred over fully connected networks because:
+1. **Local connectivity**: Each neuron connects to a small region (not all pixels). This captures local patterns (edges, textures).
+2. **Weight sharing**: The same filter is applied across the entire image. This dramatically reduces parameters (a 3×3 filter has 9 weights regardless of image size).
+3. **Translation equivariance**: A feature is detected regardless of its position in the image.
+4. **Hierarchical features**: Early layers detect edges, middle layers detect shapes, deep layers detect objects.
+
+A fully connected layer for a 224×224×3 image would need 150K+ input neurons. A 3×3 conv filter needs only 27 weights but can detect its feature everywhere.
+
+---
+
+**Q2: Explain convolution, stride, and padding.**
+**A:**
+- **Convolution**: A fixed-size learnable filter (e.g., 3×3) slides across the image. At each position, element-wise multiplication is computed and summed to produce one output value. This operation detects a specific feature (edge, corner, texture).
+
+- **Stride**: The step size of the filter as it slides. Stride=1 moves one pixel at a time (preserves spatial size). Stride=2 moves two pixels (halves spatial dimensions). Stride replaces pooling in some architectures.
+
+- **Padding**: Adding extra pixels (usually zeros) around the image border. `Same/zero padding` adds enough to keep output size = input size. `Valid/no padding` means no padding is added and the output shrinks.
+
+Output size formula: $H_{out} = \frac{H - K + 2P}{S} + 1$
+
+---
+
+**Q3: What is pooling and why is it used?**
+**A:** Pooling reduces the spatial dimensions of feature maps by summarizing a local region into a single value.
+
+- **Max Pooling**: Takes the maximum value in each window. Most common. Preserves the strongest activations.
+- **Average Pooling**: Takes the average. Smoother but may lose important details.
+- **Global Average Pooling**: Reduces each feature map to a single value. Used to replace FC layers (GoogLeNet, ResNet).
+
+**Why**: (1) Reduces computation in subsequent layers. (2) Provides translation invariance — small shifts in the input don't change the output. (3) Controls overfitting by reducing parameters.
+
+---
+
+**Q4: What is transfer learning and why is it important for CV?**
+**A:** Transfer learning uses a model pre-trained on a large dataset (typically ImageNet with 1.2 million images) as the starting point for a new task. Instead of training from scratch:
+
+1. Load a pre-trained model (e.g., ResNet-50 trained on ImageNet).
+2. Replace the final classification layer with one matching your number of classes.
+3. Fine-tune: Train with a lower learning rate.
+
+**Why it's important:**
+- Most real-world CV tasks have limited labeled data (hundreds to thousands, not millions).
+- Low-level features (edges, textures) learned on ImageNet are universal — they transfer to almost any image task.
+- Dramatically faster training and better accuracy than training from scratch.
+- Even for different domains (medical, satellite), pre-trained features provide a strong starting point.
+
+---
+
+**Q5: What is the difference between object detection and image segmentation?**
+**A:**
+| Aspect | Object Detection | Segmentation |
+|--------|-----------------|--------------|
+| **Output** | Bounding boxes + class labels | Per-pixel class labels |
+| **Precision** | Rectangular approximation | Exact shape/boundary |
+| **Types** | One-stage (YOLO) / Two-stage (Faster R-CNN) | Semantic / Instance / Panoptic |
+| **Metric** | mAP (Mean Average Precision) | mIoU (Mean IoU) |
+| **Use case** | Counting objects, tracking | Medical imaging, autonomous driving |
+
+Detection tells you **where** objects are (roughly). Segmentation tells you the **exact pixels** that belong to each object.
+
+---
+
+**Q6: Explain batch normalization.**
+**A:** Batch Normalization normalizes the activations of a layer across a mini-batch to have zero mean and unit variance, then applies a learnable scale (γ) and shift (β).
+
+$$\hat{x} = \frac{x - \mu_{batch}}{\sqrt{\sigma^2_{batch} + \epsilon}} \quad \rightarrow \quad y = \gamma \hat{x} + \beta$$
+
+**Benefits:**
+1. **Faster convergence**: Smooths the loss landscape.
+2. **Higher learning rates**: Normalization prevents exploding/vanishing values.
+3. **Mild regularization**: Noise from batch statistics acts like dropout.
+4. **Reduces internal covariate shift**: Each layer sees more stable input distributions.
+
+**During inference**: Uses running mean/variance computed during training (not batch statistics).
+
+---
+
+**Q7: What is IoU and how is it used in object detection?**
+**A:** Intersection over Union measures the overlap between a predicted bounding box and the ground truth.
+
+$$IoU = \frac{\text{Area of Overlap}}{\text{Area of Union}}$$
+
+- IoU = 0: No overlap at all.
+- IoU = 1: Perfect match.
+- Typical threshold: IoU ≥ 0.5 is considered a correct detection.
+
+Used in:
+- **mAP calculation**: A detection is "correct" if IoU ≥ threshold with ground truth.
+- **NMS (Non-Maximum Suppression)**: Remove duplicate detections if IoU > threshold.
+- **Anchor matching**: Assign ground truth to anchors with highest IoU.
+
+---
+
+### Intermediate Level
+
+**Q8: Explain ResNet's residual connections. Why did they enable much deeper networks?**
+**A:** In very deep networks (50+ layers), training accuracy **degrades** — not from overfitting, but from optimization difficulty. Adding more layers makes the network harder to train.
+
+ResNet introduces **skip (shortcut) connections**: Instead of learning the output Y = F(x) directly, the network learns a residual: Y = F(x) + x.
+
+**Why this works:**
+1. **Gradient flow**: Gradients flow directly through skip connections during backpropagation, bypassing potentially problematic layers. This solves the vanishing gradient problem.
+2. **Identity mapping**: If a layer is unnecessary, the network can easily learn F(x) = 0, making Y = x (identity). So deeper layers are **never worse** than shallower ones.
+3. **Feature reuse**: Skip connections allow earlier features to be directly accessed by later layers.
+
+This enabled training networks with 152+ layers. Before ResNet, networks beyond ~20 layers were difficult to train effectively.
+
+---
+
+**Q9: Compare YOLO and Faster R-CNN.**
+**A:**
+| Feature | YOLO (One-stage) | Faster R-CNN (Two-stage) |
+|---------|-----------------|--------------------------|
+| **Speed** | Very fast (30-100+ FPS) | Slower (5-15 FPS) |
+| **Accuracy** | Slightly lower | Generally higher, especially small objects |
+| **Approach** | Single forward pass; prediction grid | Stage 1: RPN proposals, Stage 2: classify & refine |
+| **Architecture** | Backbone + Neck + Head | Backbone + RPN + RoI Head |
+| **Small objects** | Improved in v3+ (multi-scale) but still challenged | Better with FPN |
+| **Use case** | Real-time applications (video, edge) | High-accuracy applications (medical, satellite) |
+
+Modern YOLOv8 has closed much of the accuracy gap while remaining faster.
+
+---
+
+**Q10: What is the Feature Pyramid Network (FPN) and why is it important?**
+**A:** FPN creates a multi-scale feature pyramid by combining:
+- **Bottom-up pathway**: Regular CNN forward pass — creates features at multiple scales.
+- **Top-down pathway**: Upsamples high-level (semantically strong) features.
+- **Lateral connections**: Merge upsampled features with bottom-up features at each scale via 1×1 conv + element-wise addition.
+
+**Why it's important:**
+- Small objects need fine-grained spatial details (from early layers).
+- Large objects need semantic understanding (from deep layers).
+- FPN provides **both** at every level.
+- Used as the backbone feature extractor in Faster R-CNN, Mask R-CNN, RetinaNet, and most modern detectors.
+
+---
+
+**Q11: Explain U-Net architecture and why it works for segmentation.**
+**A:** U-Net has a symmetric encoder-decoder structure with skip connections:
+
+- **Encoder** (left side): Successive conv + pooling blocks that downsample the image, extracting increasingly abstract features.
+- **Decoder** (right side): Successive upsample + conv blocks that restore spatial resolution.
+- **Skip connections**: Concatenate encoder features with decoder features at each resolution level.
+
+**Why it works:**
+1. **Skip connections preserve spatial detail**: Downsampling loses fine-grained location information. By concatenating encoder features (which retain spatial precision) with decoder features (which have semantic understanding), U-Net gets the best of both worlds.
+2. **Works with small datasets**: Medical imaging often has very few labeled examples. U-Net's architecture with data augmentation trains well on small datasets.
+3. **Pixel-level output**: The symmetric design ensures the output mask has the same resolution as the input.
+
+---
+
+**Q12: What are GANs and how do they work?**
+**A:** GANs consist of two competing networks:
+- **Generator (G)**: Takes random noise and generates fake images. Goal: produce images indistinguishable from real data.
+- **Discriminator (D)**: Takes an image and predicts whether it's real or fake. Goal: correctly classify real vs fake.
+
+**Training process** (adversarial game):
+1. Train D: Show real + fake images → D learns to tell them apart.
+2. Train G: Generate images → G learns to fool D (maximize D's error).
+3. Over time, G produces increasingly realistic images while D becomes a better judge.
+4. At equilibrium, G produces data indistinguishable from real data.
+
+**Challenges**: Mode collapse (G produces limited variety), training instability (balancing G and D), no good convergence metric.
+
+---
+
+**Q13: Explain how diffusion models generate images.**
+**A:**
+1. **Forward process** (fixed, not learned): Gradually add Gaussian noise to a clean image over T timesteps. After T steps, the image is pure noise.
+   $$x_t = \sqrt{\alpha_t} x_0 + \sqrt{1-\alpha_t} \epsilon, \quad \epsilon \sim N(0, I)$$
+
+2. **Training**: At each step t, the noise added is known. Train a U-Net to predict the noise:
+   $$L = \|\epsilon - \epsilon_\theta(x_t, t)\|^2$$
+
+3. **Inference (reverse process)**: Start from pure random noise. Apply the trained model T times to gradually denoise → clean image.
+
+**Key advantages over GANs**:
+- More stable training (no adversarial game).
+- Better mode coverage (don't collapse).
+- Controllable via conditioning (text, class, layout).
+
+**Stable Diffusion** runs this process in a compressed **latent space** (not pixel space) for efficiency.
+
+---
+
+### Advanced Level
+
+**Q14: How does self-attention work in Vision Transformers?**
+**A:** In ViT, the image is split into patches (e.g., 16×16), each flattened and projected to embeddings. Self-attention computes relationships between ALL patches:
+
+1. Each patch embedding is projected into Query (Q), Key (K), and Value (V) vectors.
+2. **Attention scores**: $A = \text{softmax}(QK^T / \sqrt{d_k})$
+   - Q of each patch is multiplied with K of every other patch.
+   - Softmax normalizes to get attention weights (which patches to attend to).
+3. **Output**: $\text{Attention}(Q,K,V) = A \cdot V$
+   - Each patch's output is a weighted sum of all Value vectors, weighted by attention scores.
+
+**Multi-Head Attention**: Run multiple attention heads in parallel with different projections, concatenate results.
+
+**Key difference from CNNs**: Self-attention gives every patch a **global receptive field** from layer 1. A patch in the top-left can directly attend to a patch in the bottom-right. CNNs need many layers to achieve this.
+
+**Cost**: O(n²) where n = number of patches. For a 224×224 image with 16×16 patches: 196 patches → 196² = 38K attention computations per layer per head.
+
+---
+
+**Q15: What is Non-Maximum Suppression (NMS) and why is it needed?**
+**A:** Object detectors produce many overlapping predictions for the same object. NMS removes duplicates:
+
+1. Sort all detections by confidence score (highest first).
+2. Select the highest-confidence box.
+3. Compute IoU of all remaining boxes with the selected box.
+4. Remove boxes with IoU > threshold (e.g., 0.5) — they detect the same object.
+5. Repeat from step 2 with remaining boxes.
+
+**Why needed**: Dense detectors make predictions at every anchor/grid position. Multiple nearby positions often detect the same object with slight variations. Without NMS, you'd get 10-50 boxes per object.
+
+**Variants**:
+- **Soft-NMS**: Instead of removing, reduce confidence of overlapping boxes.
+- **Weighted NMS**: Merge overlapping boxes with weighted average.
+- **DETR eliminates NMS**: Uses set-based prediction with Hungarian matching.
+
+---
+
+**Q16: Explain the concept of anchor boxes in object detection.**
+**A:** Anchors are pre-defined reference boxes at each spatial position of the feature map. They provide a starting point for the detector.
+
+**How they work:**
+1. At each position in the feature map, place K anchor boxes with different sizes and aspect ratios.
+   - E.g., 3 scales × 3 ratios = 9 anchors per position.
+2. The network predicts **offsets** from each anchor (not absolute coordinates):
+   - dx, dy (center offset)
+   - dw, dh (width/height scaling)
+3. The network also predicts an objectness score (is there an object?) and class probabilities.
+
+**During training:**
+- Anchors with IoU > 0.7 with any ground truth → positive (foreground).
+- Anchors with IoU < 0.3 with all ground truths → negative (background).
+- In between → ignored.
+
+**Why anchors**: Predicting offsets from a reference (anchor) is easier than predicting absolute coordinates. Anchors also handle multi-scale detection — different scales at different feature levels.
+
+**Anchor-free** approaches (CenterNet, FCOS, YOLOv8) directly predict center points + distances, removing the need for hand-designed anchors.
+
+---
+
+**Q17: How would you handle a dataset with severe class imbalance in object detection?**
+**A:**
+1. **Focal Loss** (most effective for detection):
+   $$FL(p_t) = -\alpha_t(1-p_t)^\gamma \log(p_t)$$
+   Down-weights well-classified (easy) examples, focuses learning on hard examples. γ=2 is typical. Used by RetinaNet.
+
+2. **Oversampling**: Repeat images containing rare classes. Under-sample majority class.
+
+3. **Data augmentation**: Apply heavier augmentation to rare classes.
+
+4. **Class-weighted loss**: Assign higher loss weight to minority classes.
+
+5. **Copy-paste augmentation**: Cut objects from one image and paste into another — increases instances of rare classes.
+
+6. **Two-stage training**: First train normally, then fine-tune with balanced sampling.
+
+7. **Evaluation**: Don't rely on accuracy — use per-class AP and mAP. Check confusion matrix for each class.
+
+---
+
+**Q18: Compare semantic segmentation, instance segmentation, and panoptic segmentation.**
+**A:**
+| Feature | Semantic | Instance | Panoptic |
+|---------|----------|----------|----------|
+| **Output** | Per-pixel class | Per-pixel class + instance ID | Both |
+| **Distinguishes instances?** | No (all cars = car) | Yes (car1, car2, car3) | Yes for "things" |
+| **Handles uncountable?** | Yes (sky, road) | No | Yes ("stuff" classes) |
+| **Models** | DeepLab, SegFormer | Mask R-CNN, SAM | Panoptic-FPN, MaskFormer |
+| **Metric** | mIoU | AP (mask) | PQ (Panoptic Quality) |
+
+**Panoptic** = semantic (for amorphous "stuff" like sky, road) + instance (for countable "things" like people, cars). PQ = SQ × RQ (Segmentation Quality × Recognition Quality).
+
+---
+
+### Scenario-Based
+
+**Q19: You're building a defect detection system for a manufacturing line. Describe your approach.**
+**A:**
+
+1. **Data Collection**: Capture images of normal and defective products under controlled lighting. Ensure variety: different defect types, sizes, positions, lighting conditions.
+
+2. **Annotation**: Label defects with bounding boxes (for detection) or pixel masks (for precise defect boundaries). Use a tool like CVAT or Labelbox.
+
+3. **Problem Formulation**:
+   - If defects are rare → anomaly detection approach (train on normal only).
+   - If defects are labeled → object detection (YOLO/Faster R-CNN) or segmentation (U-Net).
+
+4. **Model Selection**:
+   - **Real-time requirement**: YOLOv8 (fast, accurate).
+   - **Precise boundaries needed**: U-Net or Mask R-CNN.
+   - **Few defect examples**: Use anomaly detection (autoencoder on normal images).
+
+5. **Data Augmentation**: Rotation, flips, brightness/contrast jitter, elastic deformation. For rare defects: copy-paste augmentation.
+
+6. **Training**: Transfer learning from ImageNet pre-trained backbone. Fine-tune on defect dataset. Use focal loss if defects are rare.
+
+7. **Evaluation**: Per-defect-type precision/recall, false positive rate (critical in manufacturing — false alarms stop the line).
+
+8. **Deployment**: Export to ONNX → TensorRT for GPU inference or OpenVINO for Intel edge devices. Integrate with camera feed.
+
+9. **Monitoring**: Track detection statistics over time, retrain periodically with new defect types.
+
+---
+
+**Q20: You need to build a real-time face recognition system. What are the key components?**
+**A:**
+
+1. **Face Detection**: Detect faces in each frame. Use: RetinaFace, MTCNN, or BlazeFace (mobile).
+
+2. **Face Alignment**: Align detected faces using landmarks (eyes, nose, mouth) to a canonical orientation. Ensures consistent representation.
+
+3. **Face Embedding**: Pass aligned face through a trained network to get a fixed-size feature vector (e.g., 512-d). Models: ArcFace, FaceNet, CosFace.
+   - **Training**: Use metric learning losses (Triplet Loss, ArcFace Loss) to make same-person embeddings close and different-person embeddings far.
+
+4. **Face Matching**: Compare embedding of detected face against database of known face embeddings using cosine similarity or L2 distance.
+   - Distance < threshold → match (identified).
+   - Distance > threshold → unknown.
+
+5. **Database**: Store enrolled face embeddings. Index with FAISS or Annoy for fast nearest-neighbor search.
+
+6. **Pipeline**:
+   ```
+   Camera → Frame → Face Detect → Crop & Align → Embedding Network → 
+   Compare with Database → Identity / Unknown
+   ```
+
+7. **Considerations**:
+   - **Lighting & angle**: Augment with various conditions.
+   - **Privacy**: Follow regulations (GDPR, etc.).
+   - **Bias**: Test across demographics.
+   - **Liveness detection**: Prevent spoofing (photo/video attacks).
+
+---
+
+## 22. Formulas Quick Reference
+
+### Convolution Output Size
+$$H_{out} = \frac{H_{in} - K + 2P}{S} + 1$$
+
+### Number of Parameters
+**Conv layer:** $(K \times K \times C_{in} + 1) \times C_{out}$
+
+**FC layer:** $(N_{in} + 1) \times N_{out}$
+
+### IoU
+$$IoU = \frac{|A \cap B|}{|A \cup B|}$$
+
+### mAP
+$$mAP = \frac{1}{C} \sum_{c=1}^{C} AP_c$$
+
+### Apdex / Performance
+$$\text{FLOPs (Conv)} = 2 \times K^2 \times C_{in} \times C_{out} \times H_{out} \times W_{out}$$
+
+### Receptive Field
+$$r_l = r_{l-1} + (k_l - 1) \times \prod_{i=1}^{l-1} s_i$$
+
+### Dice Score
+$$Dice = \frac{2|A \cap B|}{|A| + |B|}$$
+
+### Focal Loss
+$$FL(p_t) = -\alpha_t (1-p_t)^\gamma \log(p_t)$$
+
+---
+
+## 23. Mnemonics & Memory Aids
+
+### CNN Layers: "CBPR" = "Convolve, Batch-normalize, Pool, ReLU"
+(Actual order may vary, but these are the 4 key ops)
+
+### ResNet Insight: "Skip to Succeed"
+Skip connections let gradients bypass layers → deeper = better
+
+### Detection Speed Ranking: "YoLo Speeds Past R-CNN"
+YOLO > SSD > RetinaNet > Faster R-CNN (speed, left to right)
+
+### Segmentation Models: "U for Medical, Mask for Instance, Deep for Semantic"
+- **U**-Net → medical segmentation
+- **Mask** R-CNN → instance segmentation  
+- **Deep**Lab → semantic segmentation
+
+### Feature Hierarchy: "Edges → Textures → Parts → Objects"
+Early conv layers → middle layers → deep layers → classification
+
+### Data Augmentation Rule: "Augment Before You Grow" 
+Always try more augmentation before collecting more data
+
+### Transfer Learning Rule: "Freeze Low, Train High"
+Freeze early layers (universal features), train later layers (task-specific)
+
+### Architecture Eras:
+- **2012-2015**: CNNs getting deeper (AlexNet → VGG → ResNet)
+- **2016-2019**: CNNs getting efficient (MobileNet, EfficientNet, NAS)
+- **2020+**: Transformers (ViT, Swin) + Foundation models (CLIP, SAM)
+
+---
+
+*End of Computer Vision Complete Notes*
