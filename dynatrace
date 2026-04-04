@@ -1,0 +1,1989 @@
+# Dynatrace Complete Notes
+
+---
+
+## 1. Introduction to Dynatrace
+
+### What is Dynatrace?
+Dynatrace is an AI-powered, full-stack observability and application performance management (APM) platform. It automatically discovers, monitors, and analyzes the entire technology stack — from applications and microservices to infrastructure and user experience — using a single agent (OneAgent) and AI engine (Davis AI).
+
+### Why Dynatrace?
+- **Automatic discovery**: OneAgent auto-discovers all processes, services, and dependencies — no manual configuration needed.
+- **AI-powered root cause analysis**: Davis AI correlates billions of data points to pinpoint the exact root cause of problems.
+- **Full-stack monitoring**: From browser/mobile → application → service → process → host → network → cloud infrastructure.
+- **Real User Monitoring (RUM)**: Captures every real user session — not samples.
+- **Code-level visibility**: Provides method-level response time breakdowns, exceptions, and database call analysis.
+- **Cloud-native support**: Kubernetes, Docker, AWS, Azure, GCP, OpenShift native integration.
+
+### Dynatrace vs Traditional APM Tools
+| Feature | Dynatrace | Traditional APM |
+|---------|-----------|-----------------|
+| Discovery | Automatic (OneAgent) | Manual agent config per app |
+| AI/Root Cause | Davis AI (automatic) | Rule-based alerts, manual analysis |
+| Full Stack | Single platform | Multiple tools stitched together |
+| Scalability | Handles millions of entities | Often limited |
+| Deployment | Single agent for everything | Different agents per technology |
+| Cloud-Native | Built for K8s, serverless | Bolted-on support |
+
+### Key Use Cases
+- **Application Performance Management (APM)**: Monitor application health, response times, error rates, throughput.
+- **Infrastructure Monitoring**: CPU, memory, disk, network across hosts, VMs, containers.
+- **Digital Experience Monitoring (DEM)**: Real User Monitoring (RUM), Synthetic Monitoring, Session Replay.
+- **Cloud & Kubernetes Monitoring**: Full visibility into K8s clusters, pods, nodes, namespaces.
+- **AIOps**: Automated problem detection, root cause analysis, and alerting via Davis AI.
+- **Business Analytics**: Map technical metrics to business KPIs (revenue, conversions, etc.).
+- **Log Management & Analytics**: Ingest, search, and analyze logs alongside metrics and traces.
+- **Security**: Runtime Application Self-Protection (RASP), vulnerability detection.
+
+---
+
+## 2. Dynatrace Architecture
+
+### Core Components
+
+#### 1. OneAgent
+- A single agent installed on each monitored host.
+- Automatically discovers all running processes, services, and applications.
+- Injects into application processes to capture code-level data (method calls, SQL queries, exceptions).
+- Captures metrics, traces, logs, and real user data.
+- Communicates with Dynatrace Cluster/SaaS via encrypted HTTPS.
+- Auto-updates without restarts (in most cases).
+- Supports: Java, .NET, Node.js, PHP, Go, Python, C/C++, and more.
+
+#### 2. ActiveGate
+- An optional proxy/gateway between OneAgents and the Dynatrace server.
+- **Use cases:**
+  - Route OneAgent traffic through a single point (firewall-friendly).
+  - Monitor remote technologies (VMware, databases, cloud APIs) that don't run OneAgent.
+  - Perform synthetic monitoring from specific locations.
+  - Act as a cluster node for Dynatrace Managed.
+
+**Types of ActiveGate:**
+| Type | Purpose |
+|------|---------|
+| **Environment ActiveGate** | Routes OneAgent data, runs remote plugins, synthetic monitors |
+| **Cluster ActiveGate** | Specific to Dynatrace Managed; handles cluster operations |
+
+#### 3. Dynatrace Server (Backend)
+- **Dynatrace SaaS**: Hosted by Dynatrace in the cloud. No infrastructure management needed.
+- **Dynatrace Managed**: Self-hosted on your own infrastructure. Full control over data residency.
+
+The server stores all collected data, runs Davis AI analysis, serves the web UI, and provides APIs.
+
+#### 4. Davis AI Engine
+- The artificial intelligence engine at the core of Dynatrace.
+- Continuously analyzes billions of dependencies and data points.
+- **Deterministic AI**: Uses topology, transactional data, and causation — not just correlation.
+- Automatically detects problems, identifies root causes, and determines business impact.
+- Requires no training, no rules, no thresholds — works out of the box.
+
+### Architecture Diagram (Conceptual)
+```
+Users (Browser/Mobile)
+        │
+        ▼
+┌─── Real User Monitoring (JavaScript agent) ───┐
+│                                                 │
+▼                                                 ▼
+Application Servers ◄── OneAgent ──► ActiveGate ──► Dynatrace Server (SaaS/Managed)
+     │                                                      │
+     ├── Databases                                     Davis AI Engine
+     ├── Message Queues                                     │
+     ├── Cloud Services                              Smartscape Topology
+     └── Kubernetes/Docker                                  │
+                                                      Web UI / API
+```
+
+### Communication & Ports
+| Port | Purpose |
+|------|---------|
+| 443 | OneAgent → Dynatrace SaaS (HTTPS) |
+| 443 | OneAgent → ActiveGate (HTTPS) |
+| 9999 | OneAgent communication port (local) |
+| 8021 | ActiveGate internal communication |
+| 9200 | Dynatrace Managed — Elasticsearch (internal) |
+| 8019 | Dynatrace Managed — Cluster communication |
+
+---
+
+## 3. Dynatrace Deployment & Installation
+
+### 3.1 OneAgent Installation
+
+#### Linux
+```bash
+# Download and run the installer (from Dynatrace UI: Deploy → Start Installation)
+wget -O Dynatrace-OneAgent.sh "https://<your-environment>.live.dynatrace.com/api/v1/deployment/installer/agent/unix/default/latest?Api-Token=<TOKEN>&arch=x86&flavor=default"
+chmod +x Dynatrace-OneAgent.sh
+sudo /bin/sh Dynatrace-OneAgent.sh --set-app-log-content-access=true
+
+# Verify installation
+sudo systemctl status oneagent
+```
+
+#### Windows
+```powershell
+# Download the MSI installer from Dynatrace UI
+# Run the installer
+msiexec /i Dynatrace-OneAgent.msi
+
+# Or via PowerShell
+Invoke-WebRequest -Uri "https://<env>.live.dynatrace.com/api/v1/deployment/installer/agent/windows/default/latest?Api-Token=<TOKEN>" -OutFile Dynatrace-OneAgent.exe
+.\Dynatrace-OneAgent.exe
+```
+
+#### Docker / Container
+```dockerfile
+# Method 1: Add to Dockerfile
+COPY Dynatrace-OneAgent.sh /tmp/
+RUN /bin/sh /tmp/Dynatrace-OneAgent.sh --set-app-log-content-access=true
+
+# Method 2: Kubernetes Operator (recommended)
+# Install via Dynatrace Operator (Helm or YAML)
+```
+
+#### Kubernetes (Dynatrace Operator)
+```bash
+# Install Dynatrace Operator via Helm
+helm repo add dynatrace https://raw.githubusercontent.com/Dynatrace/dynatrace-operator/main/config/helm/repos/stable
+helm install dynatrace-operator dynatrace/dynatrace-operator \
+  --namespace dynatrace \
+  --create-namespace
+
+# Create DynaKube custom resource
+kubectl apply -f dynakube.yaml
+```
+
+```yaml
+# dynakube.yaml
+apiVersion: dynatrace.com/v1beta1
+kind: DynaKube
+metadata:
+  name: dynakube
+  namespace: dynatrace
+spec:
+  apiUrl: https://<environment-id>.live.dynatrace.com/api
+  tokens: dynakube     # Secret name containing API and PaaS tokens
+  oneAgent:
+    cloudNativeFullStack: {}   # Full monitoring for K8s
+```
+
+**Deployment Modes for Kubernetes:**
+| Mode | Description |
+|------|-------------|
+| **Cloud-Native Full Stack** | Full monitoring: infrastructure + application + code-level |
+| **Classic Full Stack** | OneAgent DaemonSet on every node |
+| **Application-Only** | Code-level only (no infrastructure metrics) — for PaaS/serverless |
+| **Host Monitoring** | Infrastructure only (CPU, memory, disk) — no code injection |
+
+### 3.2 ActiveGate Installation
+
+```bash
+# Linux
+wget -O Dynatrace-ActiveGate.sh "https://<env>.live.dynatrace.com/api/v1/deployment/installer/gateway/unix/latest?Api-Token=<TOKEN>"
+sudo /bin/sh Dynatrace-ActiveGate.sh
+
+# Verify
+sudo systemctl status dynatracegateway
+```
+
+### 3.3 Environment Configuration
+- **Settings → Preferences → OneAgent features**: Enable/disable specific monitoring features.
+- **Settings → Monitoring → Monitoring overview**: See all monitored hosts and their status.
+- **Settings → Integration → Cloud and virtualization**: Configure AWS, Azure, GCP integrations.
+
+---
+
+## 4. Smartscape Topology
+
+### What is Smartscape?
+Smartscape is Dynatrace's real-time, auto-discovered topology map of your entire environment. It visualizes all entities (hosts, processes, services, applications) and their relationships in a multi-layered interactive map.
+
+### Smartscape Layers
+Smartscape is organized into four horizontal layers:
+
+```
+┌────────────────────────────────────┐
+│       Applications Layer           │  ← Web/mobile applications, user actions
+├────────────────────────────────────┤
+│         Services Layer             │  ← Microservices, APIs, web services
+├────────────────────────────────────┤
+│      Process Groups Layer          │  ← JVMs, .NET processes, Node.js, containers
+├────────────────────────────────────┤
+│          Hosts Layer               │  ← Physical/Virtual machines, K8s nodes
+└────────────────────────────────────┘
+```
+
+**Vertical connections** show which host runs which process, which process exposes which service, and which service is called by which application.
+
+**Horizontal connections** show service-to-service calls, process-to-process communication, and host-to-host network traffic.
+
+### How Smartscape is Built
+- OneAgent automatically discovers all entities and their dependencies.
+- Updated in real-time as new processes start, services are deployed, or infrastructure changes.
+- No manual configuration — it discovers everything from code injection and network monitoring.
+
+### Using Smartscape
+- **Navigate**: Click on any entity to drill down (host → process → service → application).
+- **Filter**: Filter by technology, host group, management zone, tags.
+- **Troubleshoot**: Visually trace a failing transaction from user action through services down to the database.
+- **Impact Analysis**: See what's affected when a host or service goes down.
+
+---
+
+## 5. Entities, Tags & Management Zones
+
+### 5.1 Entities
+Everything Dynatrace monitors is an **entity** — a uniquely identified component with a type.
+
+**Common Entity Types:**
+| Entity Type | Examples |
+|-------------|----------|
+| `HOST` | Physical servers, VMs, EC2 instances, K8s nodes |
+| `PROCESS_GROUP` | JVM, .NET CLR, Node.js process, container |
+| `PROCESS_GROUP_INSTANCE` | Individual running instance of a process group |
+| `SERVICE` | Web service, API endpoint, database service |
+| `APPLICATION` | Web application (defined by RUM rules) |
+| `SYNTHETIC_TEST` | Browser monitor, HTTP monitor |
+| `KUBERNETES_CLUSTER` | K8s cluster |
+| `KUBERNETES_NODE` | K8s node |
+| `CLOUD_APPLICATION` | Kubernetes workload (deployment, StatefulSet) |
+| `CLOUD_APPLICATION_NAMESPACE` | K8s namespace |
+| `CUSTOM_DEVICE` | Devices monitored via custom extensions |
+
+Each entity has a unique **Entity ID** (e.g., `HOST-A1B2C3D4E5F6`).
+
+### 5.2 Tags
+Tags are key-value labels attached to entities for organization and filtering.
+
+**Types of Tags:**
+| Type | Description | Example |
+|------|-------------|---------|
+| **Manual Tags** | Added by users via UI or API | `team:backend`, `env:production` |
+| **Automatic Tags (Rules)** | Applied automatically by rules based on entity properties | Auto-tag all hosts with `AWS_Region` from cloud metadata |
+| **Kubernetes Labels** | Auto-imported from K8s metadata | `app.kubernetes.io/name`, `version` |
+| **Environment Variables** | OneAgent reads specific env vars as tags | `DT_TAGS=team=backend env=prod` |
+
+**Creating Auto-Tag Rules:**
+1. Go to **Settings → Tags → Automatically applied tags**
+2. Define rule name (e.g., `Environment`)
+3. Add conditions (e.g., Host name contains "prod" → tag value = "Production")
+4. Apply to entity types (hosts, services, process groups)
+
+**Tag Usage:**
+```
+tag:team=backend          # filter in Dynatrace UI
+[environment]="production" # in Management Zone rules
+```
+
+### 5.3 Management Zones
+Management Zones segment your environment into logical units (by team, application, environment, etc.). They control **visibility** and **access**.
+
+**How Management Zones Work:**
+- Define rules based on entity properties, tags, host groups, or cloud metadata.
+- Each entity can belong to multiple Management Zones.
+- Users can be restricted to specific Management Zones (RBAC).
+- Dashboards, problems, and alerts are filtered by Management Zone.
+
+**Example Management Zones:**
+- `Production` — All hosts/services in production
+- `Team-Frontend` — All services owned by the frontend team
+- `AWS-US-East` — All entities in AWS US-East region
+- `App-OrderService` — Everything related to the order service
+
+**Creating a Management Zone:**
+1. **Settings → Preferences → Management Zones → Add**
+2. Define rules:
+   - Entity type: Service
+   - Condition: Tag `team` equals `payments`
+3. Preview affected entities.
+4. Save.
+
+---
+
+## 6. Application Performance Management (APM)
+
+### 6.1 Services
+A **service** in Dynatrace is an automatically detected logical component that processes requests (HTTP calls, database queries, messaging operations).
+
+**What Dynatrace captures per service:**
+- **Response time**: Average, median, 90th percentile, and distribution
+- **Failure rate**: Percentage of failed requests (HTTP 5xx, exceptions)
+- **Throughput**: Requests per minute
+- **Top endpoints**: Which URLs/methods are called most
+- **Dependencies**: Which services this service calls and is called by
+- **Database statements**: SQL queries, NoSQL operations with execution times
+- **Exceptions**: Stack traces and frequency
+- **Service flow**: Visual request flow through downstream services
+
+### 6.2 Distributed Tracing (PurePath)
+A **PurePath** is Dynatrace's term for a distributed trace. It captures a complete end-to-end transaction across all services, processes, and hosts.
+
+**What PurePath includes:**
+- Every method call in the transaction (with timing)
+- Every service hop (including cross-process/cross-host)
+- Database calls with SQL statements and bind values
+- External HTTP calls with headers
+- Queue/messaging operations
+- Code-level hotspots (CPU time breakdown)
+
+**PurePath Capture:**
+- Dynatrace captures **100% of transactions** for analysis.
+- Detailed PurePaths (with code-level data) are captured based on **adaptive sampling** — high-traffic services get sampled; slow/error transactions are always captured.
+
+**Viewing PurePaths:**
+1. Go to a Service → "PurePaths" tab
+2. Filter by: response time, error status, endpoint
+3. Click a PurePath to see the waterfall view:
+   - Each bar = a method call or service hop
+   - Color coding: green (fast), yellow (moderate), red (slow)
+   - Expand to see SQL queries, exceptions, method arguments
+
+### 6.3 Database Monitoring
+Dynatrace automatically monitors database calls made by your application:
+
+- **SQL statements** with execution time
+- **Bind values** (optional, can be enabled)
+- **N+1 query detection**
+- **Connection pool monitoring**
+- **Database-level response time** breakdown
+
+For standalone databases, Dynatrace can monitor via:
+- **OneAgent** (if installed on the DB host): Process-level metrics (CPU, memory, connections)
+- **Extensions**: Deep database monitoring for specific technologies (SQL Server, Oracle, PostgreSQL, MySQL)
+- **ActiveGate plugins**: Remote monitoring without OneAgent on the DB host
+
+### 6.4 Request Attributes
+Request attributes allow you to capture custom data from requests (headers, method arguments, return values) and use them for filtering and analysis.
+
+**Creating Request Attributes:**
+1. **Settings → Server-side service monitoring → Request attributes**
+2. Define:
+   - Name (e.g., `Order ID`)
+   - Source: HTTP header, method argument, return value, session attribute
+   - Data source specifics (e.g., header name: `X-Order-ID`)
+3. Captured values appear on PurePaths and can be used in:
+   - Multidimensional analysis
+   - Service-level filtering
+   - Custom metrics
+   - Alerting
+
+### 6.5 Custom Services
+If Dynatrace doesn't automatically detect a service, you can define custom service detection rules.
+
+**Settings → Server-side service monitoring → Custom service detection**
+- Define entry points (class + method) that should be treated as service endpoints.
+- Useful for batch jobs, message queue consumers, or custom frameworks.
+
+---
+
+## 7. Real User Monitoring (RUM)
+
+### What is RUM?
+RUM captures every real user's experience interacting with your web or mobile application. Unlike synthetic monitoring (which simulates users), RUM observes actual users.
+
+### How It Works
+- Dynatrace injects a **JavaScript agent** (RUM snippet) into every HTML page served by a monitored web server.
+- The JavaScript agent captures:
+  - Page load times (all W3C Navigation Timing metrics)
+  - XHR (AJAX) calls and their response times
+  - JavaScript errors
+  - User actions (clicks, taps, page navigations)
+  - User sessions (sequence of actions)
+  - Geographic location (from IP)
+  - Browser type, OS, device
+  - Visually complete / Speed index / Largest Contentful Paint
+  - Core Web Vitals (LCP, FID/INP, CLS)
+
+### 7.1 Applications
+In Dynatrace, an **Application** is a collection of web pages/endpoints grouped by detection rules.
+
+**Default detection**: Dynatrace creates one application per domain.
+
+**Custom application detection rules:**
+- Settings → Web and mobile monitoring → Applications detection rules
+- Group URLs by pattern, domain, or header into named applications
+
+### 7.2 User Actions
+A **User Action** is a meaningful interaction:
+- **Load actions**: Page loads, route changes (SPA navigation)
+- **XHR actions**: AJAX calls triggered by user interaction
+- **Custom actions**: Manually defined via the JavaScript API
+
+**User Action Properties:**
+| Metric | Description |
+|--------|-------------|
+| Duration | Total time to complete the action |
+| Visually Complete | Time until the page looks fully rendered |
+| Speed Index | Average time at which visible parts are displayed |
+| Apdex | User satisfaction score (Satisfied / Tolerating / Frustrated) |
+| JavaScript Errors | Errors during the action |
+| Request Count | Number of network requests |
+
+### 7.3 User Sessions
+A **session** is the complete journey of a user through your application.
+
+**Session properties:**
+- Duration, bounce rate, number of user actions
+- User type: new vs returning
+- Geography, browser, OS, device
+- Revenue (if configured with session properties)
+- Replay available (if Session Replay is enabled)
+
+### 7.4 Session Replay
+Session Replay records and visually replays a user's session, showing exactly what the user saw and did.
+
+- Records DOM changes, mouse movements, clicks, scrolls, inputs (masked by default for security).
+- Helps reproduce bugs and understand user confusion.
+- Can be filtered by: frustrated users, errors, specific pages.
+- **Privacy**: Masking modes (mask all input, mask all text, mask specific elements).
+
+### 7.5 User Session Query Language (USQL)
+USQL is Dynatrace's query language for analyzing user session data.
+
+```sql
+-- Total sessions by country
+SELECT country, COUNT(*) AS sessions
+FROM usersession
+GROUP BY country
+ORDER BY sessions DESC
+
+-- Average page load time by browser
+SELECT browserFamily, AVG(duration) AS avg_duration
+FROM useraction
+WHERE type = "Load"
+GROUP BY browserFamily
+
+-- Frustrated users with errors
+SELECT userId, city, browserFamily, COUNT(*) AS errors
+FROM usersession
+WHERE userExperienceScore = "FRUSTRATED"
+GROUP BY userId, city, browserFamily
+
+-- Conversion funnel
+SELECT FUNNEL(
+  useraction.name = "Home Page" AS "Landing",
+  useraction.name = "Product Page" AS "Browsing",
+  useraction.name LIKE "*add to cart*" AS "Add to Cart",
+  useraction.name LIKE "*checkout*" AS "Checkout",
+  useraction.name LIKE "*confirmation*" AS "Purchase"
+) FROM usersession
+
+-- Revenue analysis
+SELECT SUM(doubleProperties.revenue) AS totalRevenue,
+       COUNT(*) AS sessions
+FROM usersession
+WHERE doubleProperties.revenue IS NOT NULL
+
+-- Session replay candidates (slow and frustrated)
+SELECT TOP 20 userSessionId, duration, userExperienceScore,
+       stringProperties.userId
+FROM usersession
+WHERE userExperienceScore = "FRUSTRATED"
+ORDER BY duration DESC
+```
+
+**USQL can query:**
+- `usersession` — Session-level data
+- `useraction` — Action-level data
+- `userevent` — Event-level data (errors, rage clicks)
+
+### 7.6 Apdex Score
+Apdex (Application Performance Index) measures user satisfaction:
+
+```
+Apdex = (Satisfied + Tolerating × 0.5) / Total Samples
+```
+
+| Category | Condition |
+|----------|-----------|
+| **Satisfied** | Response time ≤ T (threshold) |
+| **Tolerating** | T < Response time ≤ 4T |
+| **Frustrated** | Response time > 4T or error |
+
+Default thresholds: T = 3 seconds for load actions, T = 1 second for XHR actions. Configurable per application.
+
+---
+
+## 8. Synthetic Monitoring
+
+### What is Synthetic Monitoring?
+Synthetic monitoring proactively tests application availability and performance by simulating user interactions from specific locations — even when no real users are active.
+
+### 8.1 Browser Monitors (Browser Clickpaths)
+Simulate real user interactions in a browser:
+- Navigate to pages, click buttons, fill forms, validate content
+- Run from multiple global/private locations on a schedule
+- Capture screenshots, waterfall charts, full W3C timing
+
+**Creating a Browser Monitor:**
+1. **Synthetic → Create a synthetic monitor → Create a browser monitor**
+2. Record a clickpath using the Dynatrace recorder (Chrome extension) or write manually.
+3. Configure:
+   - Execution frequency (e.g., every 5 minutes)
+   - Locations (global Dynatrace nodes or private ActiveGates)
+   - Validation rules (text on page, HTTP status)
+   - Alerting thresholds
+
+### 8.2 HTTP Monitors
+Simple HTTP request monitors:
+- Send GET/POST/PUT requests to URLs
+- Validate response codes, body content, response time
+- Lightweight and fast; good for API health checks
+
+### 8.3 Private Synthetic Locations
+If you need to monitor internal applications not accessible from the internet:
+- Deploy an **ActiveGate** with Synthetic capability inside your network.
+- Configure it as a Private Synthetic Location.
+- Schedule monitors to run from this private location.
+
+### 8.4 Third-Party Synthetic
+Dynatrace can also integrate data from third-party synthetic tools via API.
+
+---
+
+## 9. Infrastructure Monitoring
+
+### 9.1 Host Monitoring
+OneAgent collects comprehensive host metrics:
+
+| Metric Category | Metrics |
+|-----------------|---------|
+| **CPU** | System, user, I/O wait, steal (virtualized), per-core breakdown |
+| **Memory** | Used, available, page faults, swap usage |
+| **Disk** | Read/write throughput, IOPS, latency, queue length, utilization |
+| **Network** | Bandwidth in/out, retransmissions, connectivity, dropped packets |
+| **Processes** | CPU%, memory, threads, file descriptors, open connections |
+
+**Host groups**: Logical grouping of hosts for organization (similar to tags but used in OneAgent config).
+
+### 9.2 Process Monitoring
+Dynatrace monitors every running process:
+- **Process Group**: Logical grouping of identical processes (e.g., all instances of your Java app across hosts).
+- **Process Group Instance (PGI)**: Individual running process.
+- Metrics: CPU, memory, threads, GC (for JVM), suspended state.
+- **Technology-specific**: JVM heap, .NET CLR, Node.js event loop, PHP opcache.
+
+### 9.3 Network Monitoring
+Dynatrace monitors network-level data automatically:
+- **Network traffic** between processes/hosts/data centers
+- **TCP retransmissions** and **connection failures**
+- **Network interfaces** throughput and errors
+- **Process-level network connections**: Which process talks to which destination on which port
+
+### 9.4 Cloud Monitoring
+
+#### AWS
+```
+Settings → Cloud and virtualization → AWS
+```
+- Uses AWS IAM role or access key for API-based monitoring.
+- Monitors: EC2, RDS, ELB/ALB, Lambda, S3, DynamoDB, SQS, ECS, EKS, CloudFront, etc.
+- Pulls CloudWatch metrics and tags.
+- Full integration with OneAgent on EC2 instances for deep monitoring.
+
+#### Azure
+- Uses Azure AD app registration for API access.
+- Monitors: VMs, App Services, SQL Database, Functions, AKS, Storage, etc.
+- Pulls Azure Monitor metrics.
+
+#### GCP
+- Uses service account key for API access.
+- Monitors: Compute Engine, Cloud SQL, GKE, Cloud Functions, etc.
+
+#### VMware
+- ActiveGate connects to vCenter for virtualisation metrics.
+- Monitors: ESXi hosts, VMs, datastores, resource pools.
+
+### 9.5 Kubernetes Monitoring
+Dynatrace provides deep Kubernetes visibility:
+
+**Cluster level:**
+- Nodes, namespaces, workloads, pods
+- Resource requests vs limits vs actual usage
+- Pod health, restart counts, evictions
+
+**Workload level:**
+- Deployments, StatefulSets, DaemonSets, Jobs
+- Replica counts, update strategies
+- Container resource usage
+
+**Pod level:**
+- Container CPU/memory
+- Readiness/liveness probe status
+- Log streaming
+
+**Kubernetes-specific views:**
+- **Kubernetes overview**: Cluster health dashboard
+- **Kubernetes workloads**: All deployments with health indicators
+- **Kubernetes namespaces**: Resource usage per namespace
+
+**Labels and annotations** are automatically imported as tags for filtering.
+
+---
+
+## 10. Davis AI — Problem Detection & Root Cause Analysis
+
+### How Davis AI Works
+Davis is Dynatrace's causal AI engine. Unlike rule-based alerting, Davis:
+
+1. **Builds a real-time topology model** (Smartscape) of all entities and their dependencies.
+2. **Learns baselines automatically** for every metric (response time, failure rate, throughput, CPU, etc.) — adapts to daily/weekly patterns.
+3. **Detects anomalies** when metrics deviate significantly from learned baselines.
+4. **Correlates related anomalies** across the topology — e.g., if 50 services slow down at the same time and all depend on the same database, Davis groups them into a single **Problem**.
+5. **Determines root cause** by analyzing the dependency chain and timing — what broke first.
+6. **Assesses business impact** — how many users are affected, which applications, what's the revenue impact.
+
+### Problem Cards
+When Davis detects a problem, it creates a **Problem Card** containing:
+
+| Section | Content |
+|---------|---------|
+| **Title** | Description of the problem (e.g., "Response time degradation on OrderService") |
+| **Impact** | Affected applications, services, users |
+| **Root Cause** | The entity/metric identified as the origin |
+| **Events** | Timeline of all related events |
+| **Topology** | Visual map of affected entities |
+| **Comments** | Team collaboration notes |
+
+### Problem Lifecycle
+```
+OPEN → CONFIRMED → ROOT CAUSE IDENTIFIED → RESOLVED (auto-closed)
+```
+
+- Problems auto-close when all affected metrics return to normal baselines.
+- **Problem duration** tracks the full incident from detection to resolution.
+
+### Custom Anomaly Detection
+You can customize Davis's detection sensitivity:
+
+**Settings → Anomaly detection → ....**
+
+| Category | Settings |
+|----------|----------|
+| **Services** | Response time, failure rate, throughput anomalies |
+| **Infrastructure** | CPU, memory, disk, network anomalies |
+| **Applications (RUM)** | User action duration, JavaScript errors |
+| **Custom events** | Create custom alerting based on any metric |
+
+**Detection modes:**
+- **Auto**: Davis decides thresholds based on learned baselines (recommended).
+- **Fixed**: Static thresholds you define (e.g., alert if CPU > 90% for 5 minutes).
+
+### Custom Events for Alerting
+Create custom alerting rules:
+
+1. **Settings → Anomaly detection → Custom events for alerting**
+2. Select metric (e.g., `builtin:service.response.time`)
+3. Define scope (specific service, tag, management zone)
+4. Set condition:
+   - Static threshold: value > X for Y minutes
+   - Auto-adaptive baseline: deviates by X standard deviations
+5. Configure event properties (title, severity, description)
+
+### Alerting Profiles
+Alerting profiles control which problems trigger notifications:
+
+1. **Settings → Alerting → Alerting profiles**
+2. Define severity filters:
+   - Availability (most critical)
+   - Error
+   - Slowdown
+   - Resource contention
+   - Custom
+3. Set delay (e.g., only alert if problem persists for 5 minutes).
+4. Filter by tags or management zones.
+
+### Problem Notifications
+Send alerts to external systems:
+
+| Integration | Description |
+|-------------|-------------|
+| **Email** | Send to individuals or groups |
+| **Slack** | Post to Slack channels |
+| **PagerDuty** | Trigger incidents |
+| **ServiceNow** | Create incidents/tickets |
+| **Jira** | Create issues |
+| **OpsGenie** | Trigger alerts |
+| **Webhook** | Custom HTTP POST to any endpoint |
+| **Microsoft Teams** | Post to Teams channels |
+| **Ansible Tower** | Trigger remediation playbooks |
+| **xMatters** | Alert routing |
+
+---
+
+## 11. Metrics, Events & Logs
+
+### 11.1 Metrics
+Dynatrace collects thousands of built-in metrics and supports custom metrics.
+
+**Built-in Metric Categories:**
+| Category | Examples |
+|----------|---------|
+| `builtin:host.cpu.*` | CPU usage, system, user, I/O wait |
+| `builtin:host.mem.*` | Memory usage, available, page faults |
+| `builtin:host.disk.*` | Disk reads/writes, utilization |
+| `builtin:service.response.time` | Service response time |
+| `builtin:service.errors.*` | Service failure rate, error count |
+| `builtin:service.requestCount.*` | Service throughput |
+| `builtin:apps.web.*` | RUM: user actions, load time, errors |
+| `builtin:kubernetes.*` | Pod CPU/memory, node status |
+
+**Metric Key Format:** `category.subcategory.metric`
+
+**Data Explorer:**
+The Data Explorer is Dynatrace's tool for visual metric analysis:
+1. Go to **Explore data** (or **Metrics** in newer versions)
+2. Select metric(s)
+3. Apply filters (entity, tag, management zone)
+4. Split by dimensions
+5. Apply aggregations (avg, sum, min, max, percentile)
+6. Choose visualization (line, bar, heatmap, single value, table)
+
+### 11.2 Custom Metrics
+You can ingest custom metrics via:
+
+**OneAgent Metric API (local):**
+```bash
+# Write metrics from the monitored host
+curl -X POST "http://localhost:14499/metrics/ingest" \
+  -H "Content-Type: text/plain" \
+  -d "my.custom.metric,environment=production 42"
+```
+
+**Dynatrace Metrics API v2:**
+```bash
+curl -X POST "https://<env>.live.dynatrace.com/api/v2/metrics/ingest" \
+  -H "Authorization: Api-Token <TOKEN>" \
+  -H "Content-Type: text/plain" \
+  -d "my.custom.metric,env=prod gauge,42"
+```
+
+**Metric line format:**
+```
+metric.key,dimension1=value1,dimension2=value2 gauge,<value>
+metric.key,dimension1=value1 count,delta=<value>
+```
+
+### 11.3 Events
+Events are markers on the timeline that provide context:
+
+**Event Types:**
+| Type | Description |
+|------|-------------|
+| `CUSTOM_DEPLOYMENT` | Deployment markers |
+| `CUSTOM_ANNOTATION` | Custom annotations |
+| `CUSTOM_INFO` | Informational events |
+| `CUSTOM_ALERT` | Custom alert events |
+| `ERROR_EVENT` | Error events |
+| `AVAILABILITY_EVENT` | Availability issues |
+| `PERFORMANCE_EVENT` | Performance degradation |
+| `RESOURCE_CONTENTION_EVENT` | Resource problems |
+
+**Sending Custom Events (API):**
+```bash
+curl -X POST "https://<env>.live.dynatrace.com/api/v2/events/ingest" \
+  -H "Authorization: Api-Token <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "eventType": "CUSTOM_DEPLOYMENT",
+    "title": "Deployed OrderService v2.5",
+    "properties": {
+      "version": "2.5",
+      "deployer": "jenkins",
+      "commit": "abc123"
+    },
+    "entitySelector": "type(SERVICE),tag(app:order-service)"
+  }'
+```
+
+Deployment events are especially valuable — Davis AI uses them to correlate problems with recent deployments.
+
+### 11.4 Log Management
+Dynatrace can ingest, store, search, and analyze logs.
+
+**Log Sources:**
+- OneAgent automatically collects logs from monitored processes.
+- Custom log ingest via Log API.
+- Cloud log integration (AWS CloudWatch Logs, Azure Log Analytics).
+
+**Log Viewer:**
+- Search logs with filters: `status:error AND content:"NullPointerException"`
+- Filter by: host, process group, management zone, time range
+- Logs are automatically correlated with traces and metrics.
+
+**Log Metrics:**
+Create metrics from log data:
+```
+Settings → Log Monitoring → Log metrics
+```
+Example: Count occurrences of "OutOfMemoryError" per service as a metric.
+
+**Log Processing Rules:**
+- Parse and extract fields from log content.
+- Mask sensitive data.
+- Filter/drop unwanted logs to reduce storage.
+
+---
+
+## 12. Dashboards & Reporting
+
+### 12.1 Dashboards
+Dashboards provide customizable visual displays of metrics, problems, and data.
+
+**Dashboard Tiles:**
+| Tile Type | Content |
+|-----------|---------|
+| **Data explorer** | Custom metric charts |
+| **Problems** | Open problems filtered by criteria |
+| **SLO** | Service Level Objective status |
+| **USQL** | User session query results |
+| **Markdown** | Text, links, headings |
+| **Top list** | Ranked list of entities by metric |
+| **Host health** | Host status overview |
+| **Service health** | Service status overview |
+| **Application health** | Application/RUM status |
+| **Synthetic** | Synthetic monitor results |
+| **Custom chart** | Legacy metric chart |
+| **Log viewer** | Log search results |
+
+**Dashboard Variables:**
+- Create variables for dynamic filtering (similar to Splunk tokens).
+- Variables appear as dropdowns at the top of the dashboard.
+- Types: entity, tag, management zone, dimension value.
+
+**Sharing:**
+- Share with specific users/groups or make it a preset dashboard (appears for all users in a management zone).
+- Export as JSON for version control or migration.
+
+### 12.2 Notebooks
+Notebooks (newer feature) combine:
+- Metrics queries
+- DQL (Dynatrace Query Language) queries
+- Log queries
+- Markdown documentation
+- Sections and collaboration
+
+### 12.3 Reports
+- **Automated scheduled reports** can be configured for dashboards.
+- Reports sent via email at specified intervals.
+
+---
+
+## 13. Dynatrace Query Language (DQL)
+
+DQL is Dynatrace's query language for the Grail data lakehouse. It's used in Notebooks, Dashboards (new), and the Dynatrace Platform.
+
+### Basic Syntax
+```dql
+fetch logs
+| filter loglevel == "ERROR"
+| sort timestamp desc
+| limit 100
+```
+
+### Key DQL Commands
+| Command | Description |
+|---------|-------------|
+| `fetch` | Retrieve data from a data source (logs, metrics, events, spans, entities) |
+| `filter` | Filter records by condition |
+| `fields` | Select specific fields |
+| `sort` | Sort results |
+| `limit` | Limit number of results |
+| `summarize` | Aggregate data (count, avg, sum, min, max) |
+| `fieldsAdd` | Add calculated fields |
+| `fieldsRemove` | Remove fields |
+| `parse` | Extract fields from strings using patterns |
+| `lookup` | Enrich with data from another query |
+| `join` | Join two datasets |
+| `append` | Union two datasets |
+| `makeTimeseries` | Create time-series data |
+
+### DQL Examples
+
+```dql
+-- Fetch error logs from last 2 hours
+fetch logs, from: -2h
+| filter loglevel == "ERROR"
+| summarize count = count(), by: {dt.entity.service}
+| sort count desc
+
+-- Fetch service response time metrics
+fetch dt.entity.service
+| fieldsAdd avg_response = avg(dt.service.response.time)
+| filter avg_response > 1000
+| sort avg_response desc
+
+-- Parse custom log format
+fetch logs
+| filter contains(content, "OrderID")
+| parse content, "OrderID=LD:orderId ' ' 'status=' LD:status"
+| summarize count(), by: {status}
+
+-- Distributed traces analysis
+fetch spans
+| filter dt.entity.service == "SERVICE-ABC123"
+| filter duration > 5000000000   -- nanoseconds (5 seconds)
+| sort duration desc
+| limit 50
+
+-- Time series of error count
+fetch logs, from: -24h
+| filter loglevel == "ERROR"
+| makeTimeseries count = count(), interval: 1h
+
+-- Entity relationships
+fetch dt.entity.service
+| fieldsAdd calls = collectArray(dt.entity.service.calls)
+```
+
+---
+
+## 14. Service Level Objectives (SLOs)
+
+### What are SLOs?
+SLOs define the target performance level for a service, measured over a time window.
+
+### SLO Types in Dynatrace
+| Type | Definition | Example |
+|------|-----------|---------|
+| **Availability** | Percentage of successful requests | 99.9% of requests return non-5xx |
+| **Performance** | Percentage of fast requests | 95% of requests complete in < 2 seconds |
+
+### Creating an SLO
+1. **Service-level objectives → Add new SLO**
+2. Choose metric:
+   - `builtin:service.errors.server.successCount` / total for availability
+   - `builtin:service.response.time` for performance
+3. Define target (e.g., 99.9%)
+4. Define warning (e.g., 99.95%)
+5. Set evaluation window (e.g., rolling 30 days)
+6. Filter by entity, tag, or management zone
+
+### SLO Dashboard Tile
+- Shows current SLO status (met/at risk/breached)
+- Error budget remaining (e.g., "0.1% error budget = 43 minutes of downtime left this month")
+- Burn rate (how fast the error budget is being consumed)
+
+### Error Budget
+```
+Error Budget = 1 - SLO Target
+Example: SLO = 99.9% → Error Budget = 0.1%
+For 30-day window: 0.1% × 30 days × 24 hours × 60 minutes = 43.2 minutes of allowed downtime
+```
+
+---
+
+## 15. Dynatrace API
+
+### API Types
+| API | Purpose |
+|-----|---------|
+| **Environment API v2** | Metrics, entities, problems, events, SLOs (recommended) |
+| **Environment API v1** | Legacy; topology, timeseries, PurePaths |
+| **Configuration API v1** | Manage Dynatrace settings programmatically |
+| **Account Management API** | User/group management (SaaS only) |
+| **Cluster API v2** | Dynatrace Managed cluster administration |
+
+### Authentication
+Dynatrace uses **API Tokens** for authentication.
+
+**Creating an API Token:**
+1. **Settings → Integration → Dynatrace API → Generate new token**
+2. Select required scopes (permissions):
+   - `metrics.read` — Read metrics
+   - `metrics.write` — Ingest metrics
+   - `entities.read` — Read entities
+   - `problems.read` — Read problems
+   - `events.ingest` — Send events
+   - `logs.read` — Read logs
+   - `DataExport` — Export data
+   - `ReadConfig` / `WriteConfig` — Configuration API
+
+### Common API Calls
+
+**Get all hosts:**
+```bash
+curl -X GET "https://<env>.live.dynatrace.com/api/v2/entities?entitySelector=type(HOST)" \
+  -H "Authorization: Api-Token <TOKEN>"
+```
+
+**Get problems:**
+```bash
+curl -X GET "https://<env>.live.dynatrace.com/api/v2/problems?from=-2h" \
+  -H "Authorization: Api-Token <TOKEN>"
+```
+
+**Query metrics:**
+```bash
+curl -X GET "https://<env>.live.dynatrace.com/api/v2/metrics/query?metricSelector=builtin:host.cpu.usage&from=-1h&resolution=5m" \
+  -H "Authorization: Api-Token <TOKEN>"
+```
+
+**Ingest custom metric:**
+```bash
+curl -X POST "https://<env>.live.dynatrace.com/api/v2/metrics/ingest" \
+  -H "Authorization: Api-Token <TOKEN>" \
+  -H "Content-Type: text/plain" \
+  -d "custom.orders.count,region=us-east count,delta=150"
+```
+
+**Send deployment event:**
+```bash
+curl -X POST "https://<env>.live.dynatrace.com/api/v2/events/ingest" \
+  -H "Authorization: Api-Token <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "eventType": "CUSTOM_DEPLOYMENT",
+    "title": "v2.5.0 deployed",
+    "entitySelector": "type(SERVICE),tag(app:myservice)",
+    "properties": {
+      "dt.event.deployment.name": "myservice",
+      "dt.event.deployment.version": "2.5.0",
+      "dt.event.deployment.ci_back_link": "https://jenkins.example.com/job/123"
+    }
+  }'
+```
+
+**Entity Selector Syntax:**
+```
+type(HOST)                                  # all hosts
+type(SERVICE),tag(env:production)          # services tagged env:production
+type(HOST),entityName.startsWith("web")    # hosts starting with "web"
+type(PROCESS_GROUP),mzName("Production")   # process groups in Production MZ
+type(SERVICE),entityId("SERVICE-ABC123")   # specific service by ID
+```
+
+---
+
+## 16. Dynatrace Configuration as Code (Monaco)
+
+### What is Monaco?
+Monaco (Monitoring as Code) is Dynatrace's open-source tool for managing Dynatrace configuration as code (GitOps approach).
+
+### Why Monaco?
+- Version control Dynatrace configurations in Git.
+- Promote configurations across environments (dev → staging → prod).
+- Automate Dynatrace setup in CI/CD pipelines.
+- Ensure consistency across environments.
+
+### How It Works
+1. Define configurations as JSON/YAML files.
+2. Run Monaco to push configurations to Dynatrace via API.
+3. Configurations include: dashboards, alerting profiles, auto-tags, management zones, request attributes, SLOs, etc.
+
+### Project Structure
+```
+project/
+├── environments.yaml
+├── alerting-profile/
+│   ├── config.yaml
+│   └── production-alerting.json
+├── auto-tag/
+│   ├── config.yaml
+│   └── environment-tag.json
+├── dashboard/
+│   ├── config.yaml
+│   └── overview-dashboard.json
+└── management-zone/
+    ├── config.yaml
+    └── production-zone.json
+```
+
+### environments.yaml
+```yaml
+production:
+  - name: "production"
+    env-url: "PROD_DT_URL"      # Environment variable
+    env-token-name: "PROD_DT_TOKEN"  # Environment variable
+staging:
+  - name: "staging"
+    env-url: "STAGING_DT_URL"
+    env-token-name: "STAGING_DT_TOKEN"
+```
+
+### Commands
+```bash
+# Deploy configurations
+monaco deploy manifest.yaml
+
+# Download existing configurations
+monaco download --environment <env-url> --token <token>
+
+# Dry run (preview changes)
+monaco deploy manifest.yaml --dry-run
+```
+
+---
+
+## 17. Extensions & Integrations
+
+### Extension Framework 2.0
+Dynatrace Extensions 2.0 is the framework for extending monitoring capabilities.
+
+**Extension Types:**
+| Type | Purpose |
+|------|---------|
+| **JMX** | Monitor Java applications via JMX MBeans |
+| **SNMP** | Monitor network devices |
+| **WMI** | Monitor Windows systems |
+| **SQL** | Monitor databases via SQL queries |
+| **Python** | Custom logic in Python |
+| **Prometheus** | Scrape Prometheus endpoints |
+| **StatsD** | Receive StatsD metrics |
+| **OpenTelemetry** | Ingest OTLP traces and metrics |
+
+### OpenTelemetry Integration
+Dynatrace natively supports OpenTelemetry:
+
+- **Traces**: Ingest OTLP traces → appear as PurePaths
+- **Metrics**: Ingest OTLP metrics → available in Data Explorer
+- **Logs**: Ingest OTLP logs → available in Log Viewer
+
+```bash
+# Send OTLP traces to Dynatrace
+export OTEL_EXPORTER_OTLP_ENDPOINT="https://<env>.live.dynatrace.com/api/v2/otlp"
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Api-Token <TOKEN>"
+```
+
+### CI/CD Integration
+| Tool | Integration |
+|------|-------------|
+| **Jenkins** | Dynatrace plugin; send deployment events, quality gates |
+| **Azure DevOps** | Dynatrace extension; push events, pull metrics |
+| **GitHub Actions** | API calls to send events and query SLOs |
+| **Keptn** | Cloud-native lifecycle orchestration with Dynatrace quality gates |
+| **Ansible** | Dynatrace collection for OneAgent deployment and config |
+| **Terraform** | Dynatrace provider for configuration management |
+
+### Site Reliability Guardian
+Evaluates the quality of a deployment/release by comparing metrics against SLOs automatically. Used in CI/CD pipelines to gate releases.
+
+---
+
+## 18. Security in Dynatrace
+
+### 18.1 Runtime Application Self-Protection (RASP)
+Dynatrace can detect runtime vulnerabilities:
+- SQL injection attempts
+- Command injection
+- SSRF (Server-Side Request Forgery)
+- Path traversal
+- Detected in real-time from PurePath / trace data.
+
+### 18.2 Runtime Vulnerability Analytics
+- Scans libraries/dependencies used by monitored processes.
+- Identifies known CVEs (Common Vulnerabilities and Exposures).
+- Shows which services are affected.
+- Provides CVSS scores and remediation advice.
+- Continuously updated — new vulnerabilities detected as CVE databases update.
+
+**Security overview**: Shows all vulnerabilities by severity (Critical, High, Medium, Low), affected entities, and exposure status.
+
+### 18.3 Data Privacy
+Dynatrace provides configureable data privacy controls:
+
+- **Session Replay masking**: Mask user inputs, text content, images.
+- **Do Not Track**: Respect browser DNT headers.
+- **Data retention**: Configure how long data is kept.
+- **Personal data masking**: Mask IP addresses, user IDs in RUM data.
+- **Request attribute exclusion**: Exclude sensitive headers/parameters.
+- **Log masking**: Apply masking rules to log content before storage.
+
+---
+
+## 19. Dynatrace for Kubernetes — Deep Dive
+
+### Full Monitoring Stack
+```
+┌─────────────────────────────────────────────────┐
+│                 Dynatrace SaaS                    │
+│                                                   │
+│  Kubernetes Overview  │  Workloads  │  Pods       │
+│  Cluster Metrics      │  Namespaces │  Events     │
+└──────────────────────┬────────────────────────────┘
+                       │ HTTPS (443)
+┌──────────────────────┴────────────────────────────┐
+│              Kubernetes Cluster                     │
+│                                                     │
+│  ┌─── Dynatrace Namespace ────────────────────┐    │
+│  │  Dynatrace Operator (manages agents)        │   │
+│  │  ActiveGate (routing, K8s API monitoring)    │   │
+│  │  OneAgent DaemonSet (one per node)           │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  ┌─── App Namespace ─────────────────────────┐     │
+│  │  Pod (app container + OneAgent code module) │    │
+│  │  Pod (app container + OneAgent code module) │    │
+│  └─────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────┘
+```
+
+### What Dynatrace Monitors in K8s
+| Layer | Metrics |
+|-------|---------|
+| **Cluster** | Node count, pod count, events, resource capacity |
+| **Node** | CPU, memory, disk, network, pod capacity |
+| **Namespace** | Resource usage, limits, pod count |
+| **Workload** | Desired vs ready replicas, update status |
+| **Pod** | Phase, restart count, container resource usage |
+| **Container** | CPU/memory requests/limits vs actual, throttling |
+| **Application** | PurePaths, service metrics, distributed traces (via OneAgent) |
+
+### Kubernetes Events
+Dynatrace captures K8s events:
+- Pod scheduling failures
+- CrashLoopBackOff
+- Image pull errors
+- OOMKilled
+- Node NotReady
+- Failed liveness/readiness probes
+
+These events are correlated with Davis AI problems.
+
+---
+
+## 20. Troubleshooting Dynatrace
+
+### Common Issues
+
+| Issue | Resolution |
+|-------|-----------|
+| OneAgent not connecting | Check network (port 443 to SaaS), verify `oneagentctl --get-server` |
+| No data for a process | Check process group detection rules, verify OneAgent is injected |
+| Missing RUM data | Verify JavaScript agent injection, check CSP headers, check application detection rules |
+| High OneAgent CPU | Check OneAgent version, review enabled features, contact support |
+| Missing K8s data | Verify Dynatrace Operator status, check RBAC permissions |
+| Problems not triggering | Check anomaly detection settings, alerting profiles, management zone filters |
+| API token errors | Verify token scopes match the API being called |
+| ActiveGate offline | Check `dynatracegateway` service, verify connectivity to Dynatrace server |
+
+### Diagnostic Commands
+
+**OneAgent:**
+```bash
+# Check OneAgent status
+sudo systemctl status oneagent
+
+# Check OneAgent connectivity
+/opt/dynatrace/oneagent/agent/tools/oneagentctl --get-server
+/opt/dynatrace/oneagent/agent/tools/oneagentctl --get-host-id
+/opt/dynatrace/oneagent/agent/tools/oneagentctl --get-host-group
+
+# Check OneAgent logs
+tail -100 /var/log/dynatrace/oneagent/oneagent.log
+
+# Verify OneAgent injection (Java example)
+ps aux | grep "agentpath.*liboneagentloader"
+```
+
+**ActiveGate:**
+```bash
+sudo systemctl status dynatracegateway
+tail -100 /var/lib/dynatrace/gateway/log/gateway.log
+```
+
+**Kubernetes Operator:**
+```bash
+kubectl get dynakube -n dynatrace
+kubectl get pods -n dynatrace
+kubectl describe pod <oneagent-pod> -n dynatrace
+kubectl logs <operator-pod> -n dynatrace
+```
+
+---
+
+## 21. Key Points to Remember
+
+### Architecture
+- **OneAgent = single agent for everything** — no need to configure per app/technology.
+- OneAgent **auto-discovers** processes, services, and dependencies.
+- **Smartscape** = real-time topology map (4 layers: host → process → service → application).
+- **Davis AI** = deterministic causal AI (not statistical correlation).
+- **ActiveGate** = optional gateway for routing traffic, remote monitoring, synthetic execution.
+
+### Monitoring
+- Dynatrace captures **100% of transactions** (not sampled) — detailed PurePaths are adaptively captured.
+- **PurePath** = full distributed trace, code-level, across all tiers.
+- **RUM** captures every real user session — no sampling.
+- **Apdex** = user satisfaction score: Satisfied + (Tolerating × 0.5) / Total.
+- **Core Web Vitals** (LCP, FID/INP, CLS) are captured automatically.
+
+### Configuration
+- **Tags** organize entities. Use **auto-tag rules** for consistency.
+- **Management Zones** control visibility and access.
+- **Request Attributes** capture custom data from transactions.
+- **Monaco** = configuration as code tool.
+- Config precedence: Management Zone > Host Group > Global settings.
+
+### Alerting
+- Davis auto-detects problems — **no threshold configuration needed** (uses learned baselines).
+- **Alerting profiles** filter which problems generate notifications.
+- **Problem notifications** send alerts to external systems.
+- **Custom events for alerting** define specific threshold-based alerts.
+- **SLOs** define and track service level targets with error budget.
+
+### Performance
+- **Davis AI** reduces alert noise by grouping related anomalies into single problems.
+- Use **Data Explorer** for ad-hoc metric analysis.
+- Use **USQL** for user session analysis.
+- Use **DQL** (Dynatrace Query Language) for advanced querying across all data.
+- **Deployment events** help Davis correlate problems with changes.
+
+### Kubernetes
+- **Dynatrace Operator** is the recommended deployment method.
+- **Cloud-Native Full Stack** mode = infrastructure + application + code-level monitoring.
+- K8s labels are automatically imported as tags.
+- Pod events (CrashLoopBackOff, OOMKilled) are captured and correlated.
+
+---
+
+## 22. Dynatrace Interview Questions & Answers
+
+### Basic Level
+
+**Q1: What is Dynatrace and what problems does it solve?**
+**A:** Dynatrace is an AI-powered full-stack observability platform that provides:
+- **APM (Application Performance Management)**: Monitors application performance with code-level visibility.
+- **Infrastructure monitoring**: Tracks host, process, container, and cloud resource metrics.
+- **Digital experience monitoring**: Captures real user sessions (RUM) and synthetic tests.
+- **AIOps**: Davis AI automatically detects problems, finds root causes, and assesses business impact.
+
+It solves the challenges of monitoring complex distributed systems (microservices, cloud, Kubernetes) by providing a single platform with automatic discovery and AI-powered analysis — eliminating manual configuration and alert fatigue.
+
+---
+
+**Q2: What is OneAgent and how does it work?**
+**A:** OneAgent is Dynatrace's single deployment agent installed on each host. It:
+1. **Auto-discovers** all running processes, services, and their dependencies.
+2. **Injects into application runtimes** (JVM, .NET CLR, Node.js, etc.) to capture code-level metrics — method calls, SQL queries, exceptions, HTTP calls.
+3. **Monitors infrastructure** — CPU, memory, disk, network at the host level.
+4. **Captures distributed traces** (PurePaths) across all services in a transaction.
+5. **Injects the RUM JavaScript agent** into web pages for real user monitoring.
+6. **Auto-updates** — new versions are deployed centrally without manual intervention.
+
+OneAgent communicates with the Dynatrace server (SaaS or Managed) via HTTPS on port 443. It can route through an ActiveGate if direct internet access isn't available.
+
+---
+
+**Q3: What is Smartscape?**
+**A:** Smartscape is Dynatrace's real-time topology map that visualizes your entire environment across four layers:
+1. **Hosts Layer** — Physical/virtual machines, K8s nodes
+2. **Process Groups Layer** — Running processes (JVMs, containers, etc.)
+3. **Services Layer** — Detected services and APIs
+4. **Applications Layer** — Web/mobile applications (from RUM)
+
+Vertical connections show which host runs which process, which process exposes which service, etc. Horizontal connections show service-to-service calls. Smartscape is built automatically by OneAgent — no manual configuration needed. It's the foundation for Davis AI's root cause analysis, as Davis uses the topology to trace the causal chain of problems.
+
+---
+
+**Q4: What is the difference between Dynatrace SaaS and Managed?**
+**A:**
+| Feature | SaaS | Managed |
+|---------|------|---------|
+| **Hosting** | Dynatrace cloud | Your own infrastructure |
+| **Maintenance** | Dynatrace handles updates, scaling | You manage updates, hardware, scaling |
+| **Data residency** | Dynatrace data centers | Your data centers (full control) |
+| **Setup** | Instant — just deploy OneAgent | Deploy Dynatrace cluster nodes first |
+| **Cost model** | Subscription per host/GiB | License + your infrastructure costs |
+| **Best for** | Most organizations | Strict data sovereignty, air-gapped environments |
+
+---
+
+**Q5: What is Davis AI?**
+**A:** Davis is Dynatrace's built-in AI engine that provides automatic problem detection and root cause analysis. Unlike rule-based alerting:
+
+1. **It learns baselines automatically** — no manual threshold configuration needed. Adapts to daily/weekly patterns.
+2. **It uses topology (Smartscape)** — understands dependencies to trace the causal chain.
+3. **It's deterministic** — gives precise root cause, not probabilistic guesses.
+4. **It correlates across the stack** — groups related anomalies (e.g., 50 slow services caused by one overloaded database) into a single problem.
+5. **It assesses business impact** — calculates how many users/applications/revenue are affected.
+
+Davis creates **Problem Cards** with root cause, impacted entities, timeline, and suggested resolution.
+
+---
+
+**Q6: What is a PurePath?**
+**A:** A PurePath is Dynatrace's term for a **distributed trace**. It captures the full end-to-end journey of a transaction across all services, processes, and hosts involved — from the initial user action to the final database call.
+
+A PurePath includes:
+- Every service call with timing
+- Every method invocation (code-level)
+- Database queries with SQL and execution time
+- External HTTP calls
+- Queue/messaging operations
+- Exceptions with stack traces
+- CPU time breakdown (hotspots)
+
+Dynatrace captures 100% of transactions for metric analysis. Detailed code-level PurePaths are captured using adaptive sampling — slow, error, and rare transactions are always fully captured.
+
+---
+
+**Q7: What is the difference between Real User Monitoring (RUM) and Synthetic Monitoring?**
+**A:**
+| Feature | RUM | Synthetic |
+|---------|-----|-----------|
+| **What** | Captures data from actual users | Simulates user interactions |
+| **When** | Only when real users are active | 24/7 on a schedule |
+| **Coverage** | Depends on traffic patterns | You define the test scripts |
+| **Data** | Real geographic distribution, devices, browsers | Runs from specific locations |
+| **Use case** | Understand actual user experience | Proactive availability/performance checks |
+| **Zero traffic** | No data when no users | Still monitors (catches outages at 3 AM) |
+
+Both are important: RUM tells you what real users experience; Synthetic ensures availability even when no users are active.
+
+---
+
+**Q8: What are Management Zones?**
+**A:** Management Zones are a way to logically segment your Dynatrace environment based on rules. They control:
+- **Visibility**: Users assigned to a Management Zone only see entities within it.
+- **Access control**: RBAC integration — different teams see different parts of the environment.
+- **Alerting**: Problems and alerts are filtered by Management Zone.
+- **Dashboards**: Can be scoped to a Management Zone.
+
+Rules are defined based on entity properties (tags, host group, cloud metadata, name patterns). A single entity can belong to multiple Management Zones.
+
+Example: A "Production" Management Zone that includes all entities tagged `env:production`, and a "Team-Payments" zone that includes all services tagged `team:payments`.
+
+---
+
+**Q9: What is an ActiveGate and when do you need one?**
+**A:** An ActiveGate is an optional component that acts as a proxy/gateway between OneAgents and the Dynatrace server. You need it when:
+
+1. **Network routing**: OneAgents can't reach Dynatrace SaaS directly (restricted internet access).
+2. **Remote monitoring**: Monitoring technologies that don't have OneAgent — VMware vCenter, cloud APIs (AWS/Azure/GCP), databases without OneAgent.
+3. **Synthetic monitoring**: Running synthetic tests from private locations (internal applications).
+4. **Dynatrace Managed**: Required as cluster nodes for self-hosted deployments.
+
+ActiveGate can also perform data processing (aggregation, compression) to reduce bandwidth usage.
+
+---
+
+**Q10: What is the difference between tags, host groups, and management zones?**
+**A:**
+| Concept | Scope | Purpose |
+|---------|-------|---------|
+| **Tags** | Any entity | Key-value labels for flexible filtering and organization. Can be manual, rule-based, or from K8s/cloud metadata. |
+| **Host Groups** | Hosts only | Logical grouping of hosts. Defined at OneAgent installation. Used for host-level config (e.g., different OneAgent features per group). |
+| **Management Zones** | Cross-entity | Visibility and access control boundaries. Filter problems, dashboards, APIs by zone. Based on rules using tags, names, host groups. |
+
+Tags are for organization, host groups are for OneAgent configuration, management zones are for access control.
+
+---
+
+### Intermediate Level
+
+**Q11: Explain how Davis AI detects and analyzes a problem.**
+**A:** Davis follows this process:
+
+1. **Baseline Learning**: Davis continuously learns the normal behavior of every metric (response time, failure rate, throughput, CPU, etc.) accounting for time-of-day and day-of-week patterns.
+
+2. **Anomaly Detection**: When a metric deviates significantly from its learned baseline, Davis flags it as an anomaly. It uses adaptive thresholds — not static rules.
+
+3. **Topology Correlation**: Davis consults Smartscape to understand which entities are related. If multiple anomalies occur simultaneously, Davis checks the dependency graph.
+
+4. **Root Cause Identification**: Davis traces the causal chain through the topology. Example: If 20 services slow down and all call the same database that has high CPU, Davis identifies the database as the root cause.
+
+5. **Impact Assessment**: Davis calculates which applications and users are affected. It determines the business impact (e.g., "2,500 users on the checkout page are affected").
+
+6. **Problem Creation**: A single Problem Card is created that consolidates all related anomalies, shows root cause, lists affected entities, and provides a timeline.
+
+**Key differentiator**: Davis uses **causation**, not just correlation. It knows that Service A calls Service B calls Database C, so if C breaks, A and B are symptoms, not root causes.
+
+---
+
+**Q12: How would you set up monitoring for a new microservice deployed on Kubernetes?**
+**A:**
+
+1. **Ensure Dynatrace Operator is installed** on the K8s cluster with Cloud-Native Full Stack mode.
+
+2. **OneAgent auto-discovers the new service** — no additional configuration needed. When pods start, OneAgent injects into the process and begins capturing:
+   - Service metrics (response time, failure rate, throughput)
+   - PurePaths (distributed traces)
+   - Infrastructure metrics (pod CPU/memory)
+
+3. **Apply tags** for organization:
+   - K8s labels are auto-imported
+   - Add custom tags via `DT_TAGS` environment variable in the deployment manifest
+
+4. **Create/assign Management Zone** to control who sees the service.
+
+5. **Set up Alerting**:
+   - Davis auto-detects anomalies by default
+   - Optionally create custom events for alerting (e.g., error rate > 5%)
+   - Configure alerting profile to route notifications
+
+6. **Create SLOs**: Define availability and performance targets.
+
+7. **Create a dashboard** with service health, response time trends, error breakdown, and dependency map.
+
+8. **Set up deployment events** in CI/CD pipeline:
+   ```bash
+   curl -X POST "https://<env>/api/v2/events/ingest" \
+     -H "Authorization: Api-Token <TOKEN>" \
+     -d '{"eventType":"CUSTOM_DEPLOYMENT","title":"v1.0 deployed","entitySelector":"type(SERVICE),tag(app:my-service)"}'
+   ```
+
+---
+
+**Q13: What is the difference between process group and process group instance?**
+**A:**
+- **Process Group (PG)**: A logical grouping of identical processes across multiple hosts or containers. For example, if you run the same Java application on 10 servers, all 10 JVM processes belong to one Process Group.
+- **Process Group Instance (PGI)**: An individual running process within a Process Group. Each of the 10 JVMs above is a separate PGI.
+
+Process Groups aggregate metrics (total throughput, average response time). Process Group Instances provide per-instance details (specific host CPU, specific JVM heap).
+
+Detection rules determine how Dynatrace groups processes. Override via **Settings → Processes and containers → Process group detection**.
+
+---
+
+**Q14: How does Dynatrace handle distributed tracing across services?**
+**A:** Dynatrace uses **PurePath technology** for distributed tracing:
+
+1. OneAgent injects a **trace context** (correlation headers) into every outgoing request. The header contains: trace ID, span ID, and path information.
+2. The receiving service's OneAgent reads the header and links the incoming request to the existing trace.
+3. This continues across all service hops — HTTP, gRPC, messaging (Kafka, RabbitMQ), database calls.
+4. Each service adds its spans (method calls, I/O operations) to the trace.
+5. The complete trace (PurePath) is assembled server-side and visualized as a waterfall/timeline.
+
+**Headers used**: Dynatrace uses its proprietary `x-dynatrace` header plus supports W3C Trace Context (`traceparent`/`tracestate`) for interoperability with OpenTelemetry.
+
+**Key advantage**: OneAgent does this **automatically** — no code changes needed. Unlike OpenTelemetry, you don't manually instrument each service.
+
+---
+
+**Q15: What are Request Attributes and how are they useful?**
+**A:** Request Attributes capture custom data from transactions — values that are specific to your business logic but not automatically captured by Dynatrace.
+
+**Sources of Request Attribute values:**
+- HTTP request headers (e.g., `X-Correlation-ID`)
+- HTTP request parameters (e.g., `?orderId=12345`)
+- Java/Kotlin/C# method arguments
+- Method return values
+- Session attributes / cookies
+
+**How they're useful:**
+1. **Filter PurePaths**: "Show me all PurePaths where orderId = 12345"
+2. **Multidimensional analysis**: Response time broken down by customer tier, region, or order type
+3. **Custom metrics**: Create metrics based on request attribute values
+4. **Alerting**: Alert when a specific type of request fails
+5. **Business context**: Enrich technical data with business-relevant information
+
+Example: Capture the `X-Customer-Tier` header as a request attribute → analyze response time by customer tier → discover that Premium customers get 2x slower responses.
+
+---
+
+**Q16: Explain USQL and give examples of when you'd use it.**
+**A:** USQL (User Session Query Language) is a SQL-like query language for analyzing Real User Monitoring data (sessions, actions, events).
+
+**When to use:**
+1. **Conversion funnel analysis**: Track user journey through key steps.
+2. **Error analysis by user segment**: Which browsers/geographies have the most errors.
+3. **Revenue correlation**: Correlate performance with business revenue.
+4. **Session Replay targeting**: Find sessions of frustrated users for replay.
+5. **Custom user experience reports**: Apdex by page, bounce rate, engagement.
+
+**Examples:**
+```sql
+-- Find users affected by JavaScript errors
+SELECT userId, browserFamily, COUNT(*) AS errorCount
+FROM useraction
+WHERE type = "Error"
+GROUP BY userId, browserFamily
+HAVING errorCount > 5
+
+-- Conversion funnel
+SELECT FUNNEL(
+  useraction.name = "/home" AS "Home",
+  useraction.name = "/products" AS "Products",  
+  useraction.name LIKE "*add-to-cart*" AS "Add to Cart",
+  useraction.name LIKE "*checkout*" AS "Checkout"
+) FROM usersession
+
+-- Median page load by country
+SELECT country, MEDIAN(duration) AS median_load_time
+FROM useraction
+WHERE type = "Load"
+GROUP BY country
+ORDER BY median_load_time DESC
+```
+
+---
+
+**Q17: What are SLOs in Dynatrace and how do they relate to error budgets?**
+**A:**
+SLOs (Service Level Objectives) define a target for service reliability measured over a time window.
+
+**Example SLO**: "99.9% of requests to the payment service should succeed in any rolling 30-day window."
+
+**Error Budget** = `1 - SLO target`. For 99.9%, the error budget is 0.1%.
+- In 30 days: `0.1% × 30 × 24 × 60 = 43.2 minutes` of allowed downtime/errors.
+- If the budget is consumed, the team should freeze deployments and focus on reliability.
+
+Dynatrace shows:
+- Current SLO status (met / at risk / breached)
+- Error budget remaining (visually and as a percentage)
+- Burn rate (how fast the error budget is being consumed)
+
+SLOs can be used as quality gates in CI/CD — block deployments if the SLO error budget is exhausted.
+
+---
+
+**Q18: How does Dynatrace monitor Kubernetes differently from traditional infrastructure?**
+**A:** Traditional infra monitoring focuses on hosts. Kubernetes monitoring adds several layers:
+
+1. **Cluster level**: Node count, pod capacity, resource allocation, K8s events
+2. **Namespace level**: Resource usage per namespace, pod count, limits
+3. **Workload level**: Deployment replicas (desired vs available), rollout status
+4. **Pod level**: Phase (Running/Pending/Failed), restart count, OOMKilled events
+5. **Container level**: CPU/memory requests vs limits vs actual usage, throttling
+
+**Dynatrace-specific advantages:**
+- **Automatic correlation**: Pod → container → process → service → trace. Click from a K8s workload directly to its distributed traces.
+- **Resource optimization**: See where requests/limits are misconfigured (over-provisioned or under-provisioned).
+- **K8s events as problems**: CrashLoopBackOff, ImagePullBackOff, OOMKilled automatically trigger Davis problems.
+- **Label-based organization**: K8s labels auto-imported as tags for filtering.
+
+---
+
+### Advanced Level
+
+**Q19: A deployment caused a production issue. How would you use Dynatrace to identify and analyze it?**
+**A:**
+
+1. **Check the Problem Card**: Davis likely already detected the issue. Go to **Problems** and look for the latest open problem.
+
+2. **Verify deployment correlation**: If deployment events are configured, Davis correlates the problem with the deployment automatically. The Problem Card shows "Deployment detected" with version info.
+
+3. **Analyze the root cause**:
+   - Open the Problem Card → see the root cause entity identified by Davis.
+   - Click through to the service → check response time, failure rate, throughput.
+   - View PurePaths filtered by: `time after deployment AND (error OR slow)`.
+
+4. **Code-level analysis**: Open a problematic PurePath:
+   - Waterfall view shows exactly which method/call is slow or failing.
+   - Check for new exceptions, slow database queries, or external call timeouts.
+   - Compare with PurePaths from before the deployment.
+
+5. **Compare versions**: Use multidimensional analysis:
+   ```
+   Service → Multidimensional analysis → Split by "Service version"
+   ```
+   Compare response time and error rate between old and new version.
+
+6. **Impact assessment**:
+   - Check affected applications (RUM) → how many users impacted.
+   - Check SLO status → is the error budget being burned.
+
+7. **Remediation**: Based on findings — rollback, hotfix, or configuration change. Send deployment event for the fix to close the loop.
+
+---
+
+**Q20: How would you design a Dynatrace monitoring strategy for a large enterprise with 500+ microservices?**
+**A:**
+
+**1. Organization structure:**
+- **Management Zones** per team/domain (e.g., payments, orders, inventory, user management).
+- **Auto-tag rules** for: environment (prod/staging/dev), team, cost center, application tier.
+- **Host groups** per environment and deployment type.
+
+**2. Deployment:**
+- **Dynatrace Operator** on all K8s clusters with Cloud-Native Full Stack mode.
+- **OneAgent** on all VMs/bare metal via Deployment Server.
+- **ActiveGates** per data center/region for routing and remote monitoring.
+- **Monaco** for configuration as code — version-controlled in Git.
+
+**3. Observability:**
+- **SLOs** for every critical service (availability + performance).
+- **Request attributes** to capture business context (customer ID, order ID, transaction type).
+- **Custom metrics** for business KPIs (orders/minute, revenue, cart abandonment).
+- **Deployment events** from CI/CD pipelines.
+
+**4. Alerting:**
+- **Alerting profiles** per team — only get notified for your services.
+- **Problem notifications** to team-specific Slack channels and PagerDuty services.
+- **SLO-based alerts** when error budget is at 50% and 80% consumed.
+- **Suppress noise**: Use alerting profiles to filter severity and time.
+
+**5. Dashboards:**
+- **Executive dashboard**: Overall SLO status, top problems, business KPIs.
+- **Team dashboards**: Per-team service health, dependency maps, recent deployments.
+- **Operations dashboard**: Infrastructure health, K8s cluster status, capacity.
+
+**6. Governance:**
+- Use Monaco to ensure consistent configuration across environments.
+- Regular review of auto-tag rules and management zone accuracy.
+- Quarterly SLO review with service owners.
+
+---
+
+**Q21: Explain the differences between Dynatrace's monitoring modes for Kubernetes.**
+**A:**
+
+| Mode | Infrastructure | Code-Level | Use Case |
+|------|---------------|------------|----------|
+| **Cloud-Native Full Stack** | Yes (node, pod, container) | Yes (auto-inject into pods) | Full monitoring — recommended |
+| **Classic Full Stack** | Yes | Yes (DaemonSet mounts into pods) | Older approach; some container runtimes |
+| **Application-Only** | No | Yes (init container injects code modules) | PaaS/serverless where you don't control nodes |
+| **Host Monitoring** | Yes | No | Infrastructure-only; no code injection |
+
+**Cloud-Native Full Stack** is the recommended mode. It uses:
+- A **DaemonSet** for host-level monitoring.
+- **CSI driver** or **init containers** to inject OneAgent code modules into application pods.
+- Automatic injection based on namespace labels or pod annotations.
+
+**Application-Only** is used when:
+- You don't have access to the underlying nodes (e.g., AWS Fargate, Google Cloud Run).
+- You only need APM data, not infrastructure metrics.
+
+---
+
+**Q22: How does Dynatrace compare with other observability tools (Datadog, New Relic, Prometheus+Grafana)?**
+**A:**
+
+| Feature | Dynatrace | Datadog | New Relic | Prometheus+Grafana |
+|---------|-----------|---------|-----------|-------------------|
+| **Auto-discovery** | OneAgent auto-discovers everything | Requires agent config per integration | Requires agent config | Manual config, exporters |
+| **AI/Root Cause** | Davis AI (deterministic, topology-based) | Watchdog (statistical anomaly detection) | Applied Intelligence | None (manual alerting rules) |
+| **Distributed Tracing** | PurePath (automatic, 100% capture) | APM traces (sampling) | Distributed tracing (sampling) | Jaeger/Tempo (manual instrumentation) |
+| **Code-Level** | Automatic (method-level) | Requires profiler setup | Automatic (some languages) | Not available |
+| **RUM** | Automatic injection, session replay | Requires setup | Requires setup | Not built-in |
+| **K8s** | Operator, full cluster visibility | Cluster agent + DaemonSet | K8s integration | kube-state-metrics + exporters |
+| **Pricing** | Host-based / GiB-based | Per host + per feature | Per GiB ingested | Free (self-managed infrastructure cost) |
+| **Setup Complexity** | Low (OneAgent handles all) | Medium (many integrations to configure) | Medium | High (many components to deploy/manage) |
+
+Dynatrace's main advantage is **automation** — OneAgent + Davis AI means minimal manual setup and automatic root cause analysis. The trade-off is higher per-unit cost compared to open-source alternatives.
+
+---
+
+**Q23: What is Grail and DQL in the context of Dynatrace's evolution?**
+**A:** **Grail** is Dynatrace's next-generation data lakehouse architecture. It's a unified storage layer that stores all observability data — metrics, traces, logs, events, business data, security data — in a single queryable platform.
+
+**Before Grail**: Different data types were stored in separate backends with different query mechanisms (USQL for sessions, metric API for metrics, log viewer for logs).
+
+**With Grail**: All data is accessible through **DQL (Dynatrace Query Language)** — a unified, powerful query language.
+
+**DQL advantages over earlier query methods:**
+- Single language for all data types
+- Supports complex joins, parsing, and aggregations
+- Used in Notebooks, new Dashboard experience, and automations
+- Enables custom data ingest (BizEvents) for business-level analytics
+
+**Grail key features:**
+- Massively scalable — handles petabytes
+- Automatic data tiering (hot/warm/cold)
+- Context-aware retention policies
+- No schema required — schema-on-read
+
+---
+
+**Q24: A web application has intermittent slowness reported by users. Walk through your troubleshooting process using Dynatrace.**
+**A:**
+
+**Step 1: Check applications (RUM)**
+- Go to the Application → performance analysis.
+- Look at the Apdex score trend — is there a degradation?
+- Check user action response time — which actions are slow?
+- Filter by geography, browser, or ISP to isolate the pattern.
+
+**Step 2: Drill into the slow user action**
+- Click the slow user action → view the waterfall breakdown.
+- See: DNS, TCP connect, SSL, server time, content download.
+- If **server time** is the bottleneck → issue is backend (proceed to services).
+- If **content download** → check CDN, payload size, network issues.
+
+**Step 3: Follow the PurePath to the backend**
+- From the slow user action → click through to the server-side service call.
+- Open the service → check response time distribution.
+- Look at the PurePath — which downstream call is the bottleneck?
+
+**Step 4: Analyze the bottleneck**
+- If it's a **database**: Check the SQL statement, execution plan, connection pool.
+- If it's an **external service**: Check the third-party call response time.
+- If it's **CPU/code**: Check the hotspot analysis (method-level CPU time).
+- If it's **infrastructure**: Check host CPU, memory, disk I/O, GC activity.
+
+**Step 5: Check for correlations**
+- Check deployment events — did a deployment coincide with the slowness?
+- Check infrastructure events — was there a host/container issue?
+- Look at the Davis problem timeline — did Davis already detect this?
+
+**Step 6: Verify with Synthetic**
+- If you have synthetic monitors, check if they also show degradation (rules out user-specific issues).
+
+---
+
+**Q25: How would you implement custom business metrics in Dynatrace?**
+**A:** Multiple approaches:
+
+**1. Request Attributes → Calculated Service Metrics:**
+- Capture business data (order value, customer tier) via request attributes.
+- Create calculated service metrics splitting by these attributes.
+- Example: Average order processing time split by customer tier.
+
+**2. Custom Metric Ingest (API):**
+```bash
+curl -X POST "https://<env>/api/v2/metrics/ingest" \
+  -H "Authorization: Api-Token <TOKEN>" \
+  -d "business.orders.total,region=us count,delta=150
+business.revenue.usd,region=us gauge,45230.50"
+```
+
+**3. RUM Session Properties:**
+- Inject business data into the JavaScript agent via `dtrum.sendSessionProperties()`.
+- Query via USQL: `SELECT SUM(doubleProperties.orderValue) FROM usersession`
+
+**4. BizEvents (Grail):**
+- Ingest business events representing meaningful business transactions.
+- Query with DQL for full business analytics.
+
+**5. Log Metrics:**
+- Extract metrics from log lines (e.g., count of "order_completed" log entries).
+
+---
+
+### Scenario-Based Questions
+
+**Q26: You're on-call and receive a Dynatrace alert: "Failure rate increase on PaymentService." Walk through your response.**
+**A:**
+
+1. **Open the Problem Card** — Check root cause, impact, and timeline.
+2. **Assess impact**: How many users affected? Is checkout completely down or partially degraded?
+3. **Check the root cause entity**: Click through to PaymentService → "Failure analysis."
+4. **View failed PurePaths**: Filter by error status → examine exceptions and stack traces.
+5. **Check dependencies**: Is the failure caused by:
+   - A downstream service (payment gateway, database)?
+   - A deployment (check deployment events)?
+   - Infrastructure (host/container issue)?
+6. **Check if it's a known pattern**: Is this a recurring issue? Check problem history.
+7. **Mitigate**: Based on findings:
+   - If deployment issue → rollback
+   - If downstream service → check circuit breaker / failover
+   - If infrastructure → scale up or restart
+8. **Communicate**: Update incident channel with findings.
+9. **Verify resolution**: Watch the Problem Card close, check SLO status, confirm with Synthetic monitors.
+10. **Post-mortem**: Document root cause, impact duration, and prevention measures.
+
+---
+
+**Q27: How would you reduce alert noise in a large Dynatrace environment?**
+**A:**
+
+1. **Leverage Davis AI**: Davis already groups related anomalies into single problems. Ensure you're not creating redundant custom alerts.
+
+2. **Tune anomaly detection**:
+   - Increase minimum anomaly duration before alerting.
+   - Adjust sensitivity for non-critical services to "low."
+   - Use auto-adaptive baselines instead of static thresholds.
+
+3. **Alerting profiles**:
+   - Create profiles per team/service tier.
+   - Filter: Only `AVAILABILITY` and `ERROR` for critical services; exclude `RESOURCE` for non-prod.
+   - Set delay: "Alert only if problem persists for 10 minutes."
+
+4. **Management Zones**: Ensure notifications only go to the owning team.
+
+5. **Maintenance windows**: Schedule suppression during planned maintenance.
+
+6. **Review custom events**: Remove duplicates or overly sensitive custom alerting rules.
+
+7. **Problem correlation**: Ensure Smartscape topology is accurate so Davis can correlate properly — unlinked entities cause duplicate problems.
+
+---
+
+**Q28: How do you monitor a canary/blue-green deployment using Dynatrace?**
+**A:**
+
+1. **Send deployment events** for both the old and new version.
+
+2. **Use service versioning**:
+   - Dynatrace auto-detects service versions from environment variables or manifest metadata.
+   - Set `DT_RELEASE_VERSION`, `DT_RELEASE_PRODUCT`, `DT_RELEASE_STAGE` env vars.
+
+3. **Multidimensional analysis**:
+   - Split service metrics by version: compare response time, error rate, throughput between canary and baseline.
+
+4. **SLO comparison**: Create separate SLOs for the canary and baseline.
+
+5. **Automated quality gates** (with Keptn or Site Reliability Guardian):
+   - After canary deployment, query Dynatrace API for service metrics.
+   - Compare against baseline automatically.
+   - Promote or rollback based on results.
+
+6. **Dashboard**: Create a canary analysis dashboard showing side-by-side metrics for both versions.
+
+---
+
+## 23. Formulas & Calculations
+
+### Apdex Score
+```
+Apdex = (Satisfied + 0.5 × Tolerating) / Total
+Range: 0.0 (worst) to 1.0 (perfect)
+
+Satisfied: response_time ≤ T
+Tolerating: T < response_time ≤ 4T
+Frustrated: response_time > 4T OR error
+```
+
+### Error Budget
+```
+Error Budget = 1 - SLO Target
+Allowed downtime (minutes) = Error Budget × Days × 24 × 60
+
+Example:
+SLO = 99.95%
+Error Budget = 0.05%
+Monthly downtime allowed = 0.0005 × 30 × 24 × 60 = 21.6 minutes
+```
+
+### Service Availability
+```
+Availability % = (Successful Requests / Total Requests) × 100
+```
+
+### Error Rate
+```
+Error Rate % = (Failed Requests / Total Requests) × 100
+```
+
+### DDU (Davis Data Units) Estimation
+```
+DDUs = Custom metrics data points + Log lines (compressed) + Event count
+1 DDU ≈ 1,000 custom metric data points
+1 DDU ≈ ~300 KB of log data
+```
+
+---
+
+## 24. Mnemonics & Memory Aids
+
+### Smartscape Layers: "HPSA" = "Hosts Power Services & Applications"
+- **H**osts → **P**rocesses → **S**ervices → **A**pplications
+
+### OneAgent Capabilities: "DTML" = "Discover, Trace, Monitor, Log"
+- **D**iscover (auto-discovery)
+- **T**race (PurePaths/distributed tracing)
+- **M**onitor (metrics — host, process, service)
+- **L**og (capture and correlate logs)
+
+### Davis AI Process: "BLCRI" = "Baseline, Learn, Correlate, Root-cause, Impact"
+- **B**aseline learning
+- **L**earn topology (Smartscape)
+- **C**orrelate anomalies
+- **R**oot cause identification
+- **I**mpact assessment
+
+### Bucket Lifecycle (same as Splunk!): "H-W-C-F-T"
+- **H**ot → **W**arm → **C**old → **F**rozen → **T**hawed
+(Used for Grail data tiering and Splunk indexes)
+
+### K8s Deployment Modes: "CCAH" = "Cloud-native, Classic, App-only, Host-monitoring"
+- **C**loud-Native Full Stack (recommended)
+- **C**lassic Full Stack
+- **A**pplication-Only
+- **H**ost Monitoring
+
+---
+
+*End of Dynatrace Complete Notes*
