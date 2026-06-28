@@ -1,0 +1,1345 @@
+# Complete SQL Notes
+### Covers: Concepts | Key Points | Examples | Interview Q&A
+
+---
+
+## TABLE OF CONTENTS
+1. What is SQL?
+2. SQL Command Categories (DDL / DML / DQL / DCL / TCL)
+3. Database and Table Basics
+4. SQL Data Types
+5. Constraints
+6. Keys
+7. CRUD Operations
+8. Filtering and Sorting
+9. Aggregate Functions
+10. GROUP BY and HAVING
+11. Joins
+12. Subqueries (Correlated and Non-Correlated)
+13. Set Operators
+14. CASE Expression
+15. Views
+16. Indexes (Clustered, Non-Clustered, Composite, Covering)
+17. Normalization (1NF → BCNF)
+18. Denormalization
+19. Transactions and ACID
+20. Savepoint
+21. Stored Procedures
+22. Functions (Scalar, Table-valued)
+23. Triggers (BEFORE / AFTER)
+24. Window Functions (ROW_NUMBER, RANK, LAG, LEAD...)
+25. CTEs - Common Table Expressions
+26. Date Functions
+27. String Functions
+28. Math and Numeric Functions
+29. NULL Handling
+30. SQL Execution Order
+31. Isolation Levels
+32. Locking and Deadlocks
+33. ER Diagram Concepts
+34. SQL vs NoSQL
+35. Security Basics
+36. Backup and Restore
+37. Performance Optimization
+38. DELETE vs TRUNCATE vs DROP
+39. SQL Learning Roadmap
+40. Mini Practice Dataset
+41. INTERVIEW QUESTIONS AND ANSWERS (60+ Q&A)
+
+---
+
+## 1) What is SQL?
+SQL (Structured Query Language) is used to store, manage, and query data in relational databases.
+
+Common databases:
+- MySQL
+- PostgreSQL
+- SQL Server
+- Oracle
+- SQLite
+
+A relational database stores data in tables (rows and columns).
+
+> **KEY POINTS**
+> - SQL is a standard language; each database adds its own extensions.
+> - SQL is *declarative* — you say *what* data you want, not *how* to get it.
+> - A row = record; a column = field/attribute.
+> - All data in one table must share the same schema (column structure).
+> - Relations (tables) are linked via keys, not physical pointers.
+
+## 2) SQL Command Categories
+
+### DDL (Data Definition Language)
+Used to define or modify database structure.
+- CREATE
+- ALTER
+- DROP
+- TRUNCATE
+- RENAME
+
+### DML (Data Manipulation Language)
+Used to work with data inside tables.
+- INSERT
+- UPDATE
+- DELETE
+
+### DQL (Data Query Language)
+Used to retrieve data.
+- SELECT
+
+### DCL (Data Control Language)
+Used for permissions and access.
+- GRANT
+- REVOKE
+
+### TCL (Transaction Control Language)
+Used to manage transactions.
+- COMMIT
+- ROLLBACK
+- SAVEPOINT
+
+> **KEY POINTS**
+> - DDL changes are auto-committed in most databases (cannot be rolled back easily).
+> - DML changes are part of a transaction and can be rolled back.
+> - TRUNCATE is DDL in most databases even though it removes rows.
+> - REVOKE removes privileges previously given by GRANT.
+> - TCL only applies to DML statements — not DDL.
+
+## 3) Database and Table Basics
+
+### Create database
+```sql
+CREATE DATABASE inventory_db;
+```
+
+### Use database
+```sql
+USE inventory_db;
+```
+
+### Create table
+```sql
+CREATE TABLE products (
+  product_id INT PRIMARY KEY AUTO_INCREMENT,
+  name VARCHAR(100) NOT NULL,
+  category VARCHAR(50),
+  price DECIMAL(10,2) CHECK (price >= 0),
+  stock INT DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### Show table structure
+```sql
+DESCRIBE products;
+```
+
+### Alter table
+```sql
+-- Add a column
+ALTER TABLE products ADD COLUMN description TEXT;
+
+-- Modify a column type
+ALTER TABLE products MODIFY COLUMN category VARCHAR(100);
+
+-- Rename a column (MySQL 8+)
+ALTER TABLE products RENAME COLUMN category TO product_category;
+
+-- Drop a column
+ALTER TABLE products DROP COLUMN description;
+```
+
+### Drop and rename table
+```sql
+DROP TABLE products;           -- deletes table permanently
+RENAME TABLE products TO items; -- renames table
+```
+
+> **KEY POINTS**
+> - `CREATE DATABASE` followed by `USE` is the standard MySQL workflow.
+> - `AUTO_INCREMENT` (MySQL) / `SERIAL` (PostgreSQL) generates unique IDs automatically.
+> - `DESCRIBE` (or `SHOW COLUMNS FROM`) reveals column names, types, and constraints.
+> - `ALTER TABLE` lets you add/modify/drop columns without recreating the table.
+> - Schema changes with `ALTER TABLE` on large tables can lock rows — plan accordingly.
+
+## 4) SQL Data Types
+
+### Numeric types
+- INT
+- BIGINT
+- DECIMAL(p,s)
+- FLOAT
+- DOUBLE
+
+### String types
+- CHAR(n)
+- VARCHAR(n)
+- TEXT
+
+### Date and time types
+- DATE
+- TIME
+- DATETIME
+- TIMESTAMP
+
+### Boolean
+- BOOLEAN (often stored as 0 or 1)
+
+### Numeric types with size
+| Type | Range / Precision |
+|------|-------------------|
+| TINYINT | -128 to 127 |
+| SMALLINT | -32,768 to 32,767 |
+| INT | -2.1B to 2.1B |
+| BIGINT | ±9.2 × 10^18 |
+| DECIMAL(10,2) | 10 total digits, 2 after decimal |
+| FLOAT | ~7 decimal digits |
+| DOUBLE | ~15 decimal digits |
+
+### String types with notes
+| Type | Notes |
+|------|-------|
+| CHAR(n) | Fixed length, pads with spaces |
+| VARCHAR(n) | Variable length, efficient |
+| TEXT | Up to 65,535 characters |
+| MEDIUMTEXT | Up to 16 MB |
+| LONGTEXT | Up to 4 GB |
+| ENUM | One value from a fixed list |
+| SET | Multiple values from a fixed list |
+
+> **KEY POINTS**
+> - Use `DECIMAL` for money (never FLOAT — floating-point imprecision!).
+> - Use `VARCHAR` over `CHAR` unless the field is always the same length (e.g., country code CHAR(2)).
+> - `TIMESTAMP` stores in UTC and converts based on server timezone; `DATETIME` stores as-is.
+> - `TEXT` cannot have a default value and is stored outside the row in most engines.
+> - `ENUM` saves storage but makes schema changes harder.
+
+## 5) Constraints
+Constraints enforce rules for data quality.
+
+- NOT NULL: value is required
+- UNIQUE: all values must be different
+- PRIMARY KEY: unique row identifier
+- FOREIGN KEY: links to primary key in another table
+- CHECK: custom condition
+- DEFAULT: fallback value
+
+Example:
+```sql
+CREATE TABLE sales (
+  sale_id INT PRIMARY KEY AUTO_INCREMENT,
+  product_id INT NOT NULL,
+  qty INT NOT NULL CHECK (qty > 0),
+  total_amount DECIMAL(10,2) NOT NULL,
+  sale_date DATE NOT NULL,
+  FOREIGN KEY (product_id) REFERENCES products(product_id)
+);
+```
+
+### Adding constraints after table creation
+```sql
+-- Add NOT NULL constraint
+ALTER TABLE products MODIFY name VARCHAR(100) NOT NULL;
+
+-- Add UNIQUE constraint
+ALTER TABLE products ADD CONSTRAINT uq_product_name UNIQUE (name);
+
+-- Add CHECK constraint
+ALTER TABLE products ADD CONSTRAINT chk_price CHECK (price >= 0);
+
+-- Drop a constraint
+ALTER TABLE products DROP INDEX uq_product_name;
+```
+
+> **KEY POINTS**
+> - A table can have only ONE Primary Key but multiple UNIQUE constraints.
+> - `NOT NULL` + `UNIQUE` together behave similarly to a Primary Key.
+> - `FOREIGN KEY` creates a parent-child relationship; deleting the parent without `ON DELETE CASCADE` will fail.
+> - `ON DELETE CASCADE` auto-deletes child rows when parent row is deleted.
+> - `ON DELETE SET NULL` sets foreign key column to NULL when parent is deleted.
+> - `CHECK` constraint is ignored in older MySQL versions (< 8.0.16).
+
+## 6) Keys
+- Primary Key: uniquely identifies each row
+- Candidate Key: any column(s) that can uniquely identify rows
+- Alternate Key: candidate key not chosen as primary key
+- Composite Key: key made from multiple columns
+- Foreign Key: column that references another table
+
+Example composite key:
+```sql
+CREATE TABLE order_items (
+  order_id INT,
+  product_id INT,
+  quantity INT,
+  PRIMARY KEY (order_id, product_id)
+);
+```
+
+> **KEY POINTS**
+> - **Super Key**: any set of columns that can uniquely identify a row.
+> - **Candidate Key**: minimal super key (no extra columns).
+> - **Primary Key**: the chosen candidate key — NOT NULL + UNIQUE.
+> - **Alternate Key**: a candidate key that was not chosen as the primary key.
+> - **Foreign Key**: creates a referential integrity link between tables.
+> - **Composite Key**: two or more columns together form the key.
+> - A table can have only ONE Primary Key but multiple candidate/alternate keys.
+
+## 7) CRUD Operations
+
+### INSERT
+```sql
+INSERT INTO products (name, category, price, stock)
+VALUES ('Keyboard', 'Accessories', 999.00, 25);
+```
+
+### SELECT
+```sql
+SELECT * FROM products;
+```
+
+### UPDATE
+```sql
+UPDATE products
+SET stock = stock + 10
+WHERE product_id = 1;
+```
+
+### DELETE
+```sql
+DELETE FROM products
+WHERE product_id = 1;
+```
+
+### INSERT multiple rows
+```sql
+INSERT INTO products (name, category, price, stock) VALUES
+('Mouse', 'Accessories', 499.00, 50),
+('Monitor', 'Electronics', 7999.00, 10),
+('USB Hub', 'Accessories', 299.00, 100);
+```
+
+### UPDATE multiple columns
+```sql
+UPDATE products
+SET price = 1099.00, stock = 30
+WHERE name = 'Keyboard';
+```
+
+> **KEY POINTS**
+> - Always use `WHERE` in UPDATE and DELETE — without it, ALL rows are affected.
+> - `INSERT INTO ... SELECT ...` copies data from one table to another.
+> - `ON DUPLICATE KEY UPDATE` (MySQL) inserts or updates in one statement (upsert).
+> - `RETURNING` (PostgreSQL) returns the inserted/updated row after the operation.
+> - Deleting from a table with foreign key child rows will fail unless `ON DELETE CASCADE` is set.
+
+## 8) Filtering and Sorting
+
+### WHERE
+```sql
+SELECT *
+FROM products
+WHERE category = 'Accessories';
+```
+
+### Comparison operators
+- =, !=, <>, >, <, >=, <=
+
+### Logical operators
+- AND, OR, NOT
+
+### BETWEEN
+```sql
+SELECT *
+FROM products
+WHERE price BETWEEN 500 AND 2000;
+```
+
+### IN
+```sql
+SELECT *
+FROM products
+WHERE category IN ('Accessories', 'Electronics');
+```
+
+### LIKE
+```sql
+SELECT *
+FROM products
+WHERE name LIKE 'Key%';
+```
+
+### ORDER BY
+```sql
+SELECT *
+FROM products
+ORDER BY price DESC;
+```
+
+### LIMIT
+```sql
+SELECT *
+FROM products
+ORDER BY created_at DESC
+LIMIT 5;
+```
+
+### LIKE wildcard patterns
+| Pattern | Meaning |
+|---------|----------|
+| `'Key%'` | Starts with Key |
+| `'%board'` | Ends with board |
+| `'%key%'` | Contains key anywhere |
+| `'K_y'` | K, any one char, y |
+
+### OFFSET for pagination
+```sql
+SELECT * FROM products
+ORDER BY product_id
+LIMIT 10 OFFSET 20;  -- page 3 (rows 21-30)
+```
+
+### IS NULL / IS NOT NULL
+```sql
+SELECT * FROM products WHERE category IS NULL;
+SELECT * FROM products WHERE category IS NOT NULL;
+```
+
+> **KEY POINTS**
+> - `LIKE` is case-insensitive in MySQL by default; use `BINARY LIKE` for case-sensitive.
+> - `%` matches zero or more characters; `_` matches exactly one character.
+> - `BETWEEN` is inclusive on both ends.
+> - `NOT IN (NULL, ...)` can produce unexpected results — avoid NULL in IN lists.
+> - `ORDER BY` can take multiple columns: `ORDER BY category ASC, price DESC`.
+> - `DISTINCT` removes duplicate rows: `SELECT DISTINCT category FROM products;`
+
+## 9) Aggregate Functions
+- COUNT()
+- SUM()
+- AVG()
+- MIN()
+- MAX()
+
+Examples:
+```sql
+SELECT COUNT(*) AS total_products FROM products;
+
+SELECT AVG(price) AS avg_price FROM products;
+
+SELECT SUM(stock) AS total_stock FROM products;
+
+SELECT MIN(price) AS cheapest, MAX(price) AS most_expensive FROM products;
+
+-- COUNT with condition
+SELECT COUNT(CASE WHEN stock = 0 THEN 1 END) AS out_of_stock FROM products;
+
+-- COUNT ignores NULLs; COUNT(*) counts all rows
+SELECT COUNT(category) FROM products;  -- skips NULL categories
+SELECT COUNT(*) FROM products;          -- counts every row
+```
+
+> **KEY POINTS**
+> - `COUNT(*)` counts all rows including NULLs; `COUNT(column)` skips NULLs.
+> - `AVG`, `SUM`, `MIN`, `MAX` all ignore NULL values.
+> - Aggregate functions cannot be used in `WHERE`; use `HAVING` instead.
+> - `COUNT(DISTINCT column)` counts unique non-null values.
+> - Combining aggregate with non-aggregate columns requires `GROUP BY`.
+
+## 10) GROUP BY and HAVING
+Use GROUP BY for aggregation per group.
+Use HAVING to filter grouped results.
+
+```sql
+SELECT category, COUNT(*) AS product_count, AVG(price) AS avg_price
+FROM products
+GROUP BY category
+HAVING AVG(price) > 500;
+```
+
+### Multiple grouping columns
+```sql
+SELECT category, stock, COUNT(*) AS cnt
+FROM products
+GROUP BY category, stock;
+```
+
+### HAVING vs WHERE
+```sql
+-- WHERE filters BEFORE aggregation (filters individual rows)
+SELECT category, COUNT(*)
+FROM products
+WHERE price > 100          -- filters rows first
+GROUP BY category
+HAVING COUNT(*) > 2;       -- filters groups after aggregation
+```
+
+> **KEY POINTS**
+> - `WHERE` filters rows BEFORE grouping; `HAVING` filters groups AFTER grouping.
+> - Every column in SELECT that is not inside an aggregate must appear in `GROUP BY`.
+> - `HAVING` can use aggregate functions; `WHERE` cannot.
+> - `GROUP BY` + `COUNT(*)` is the most common pattern in reports.
+> - `ROLLUP` extension adds subtotals: `GROUP BY category WITH ROLLUP;`
+
+## 11) Joins
+
+### INNER JOIN
+Returns matching rows from both tables.
+```sql
+SELECT s.sale_id, p.name, s.qty, s.total_amount
+FROM sales s
+INNER JOIN products p ON s.product_id = p.product_id;
+```
+
+### LEFT JOIN
+Returns all rows from left table + matches from right table.
+```sql
+SELECT p.product_id, p.name, s.sale_id
+FROM products p
+LEFT JOIN sales s ON p.product_id = s.product_id;
+```
+
+### RIGHT JOIN
+Returns all rows from right table + matches from left table.
+
+### FULL OUTER JOIN
+Returns all matched and unmatched rows from both sides.
+(Note: not directly supported in some databases like MySQL without UNION.)
+
+### SELF JOIN
+A table joined with itself.
+
+```sql
+-- Example: find employees and their managers from same table
+SELECT e.name AS employee, m.name AS manager
+FROM employees e
+INNER JOIN employees m ON e.manager_id = m.employee_id;
+```
+
+### CROSS JOIN
+Returns the Cartesian product: every row in A combined with every row in B.
+
+```sql
+SELECT a.name AS color, b.name AS size
+FROM colors a
+CROSS JOIN sizes b;
+-- 4 colors x 3 sizes = 12 result rows
+```
+
+### FULL OUTER JOIN (MySQL workaround)
+```sql
+SELECT p.name, s.sale_id
+FROM products p
+LEFT JOIN sales s ON p.product_id = s.product_id
+UNION
+SELECT p.name, s.sale_id
+FROM products p
+RIGHT JOIN sales s ON p.product_id = s.product_id;
+```
+
+> **KEY POINTS**
+> - `INNER JOIN` = only matched rows on both sides.
+> - `LEFT JOIN` = all rows from left + matched rows from right (NULL for unmatched right).
+> - `RIGHT JOIN` = all rows from right + matched rows from left (NULL for unmatched left).
+> - `FULL OUTER JOIN` = all rows from both sides (NULLs for unmatched).
+> - `CROSS JOIN` produces m x n rows (use carefully on large tables).
+> - `SELF JOIN` is used for hierarchical/parent-child relationships in the same table.
+> - Always alias tables in joins for readability: `FROM sales s`.
+> - JOINs on unindexed columns are slow on large tables.
+
+## 12) Subqueries
+
+### Scalar subquery
+```sql
+SELECT name, price
+FROM products
+WHERE price > (SELECT AVG(price) FROM products);
+```
+
+### IN subquery
+```sql
+SELECT name
+FROM products
+WHERE product_id IN (
+  SELECT product_id
+  FROM sales
+  WHERE qty >= 5
+);
+```
+
+### EXISTS
+```sql
+SELECT p.name
+FROM products p
+WHERE EXISTS (
+  SELECT 1
+  FROM sales s
+  WHERE s.product_id = p.product_id
+);
+```
+
+### Correlated subquery
+Runs once per row of the outer query. References outer query columns.
+
+```sql
+-- Products priced higher than their category average
+SELECT p1.name, p1.price, p1.category
+FROM products p1
+WHERE p1.price > (
+  SELECT AVG(p2.price)
+  FROM products p2
+  WHERE p2.category = p1.category  -- references outer query
+);
+```
+
+### Subquery in FROM (Derived Table / Inline View)
+```sql
+SELECT cat_summary.category, cat_summary.avg_price
+FROM (
+  SELECT category, AVG(price) AS avg_price
+  FROM products
+  GROUP BY category
+) AS cat_summary
+WHERE cat_summary.avg_price > 1000;
+```
+
+> **KEY POINTS**
+> - A **non-correlated subquery** runs once and its result is reused (efficient).
+> - A **correlated subquery** runs once per row of the outer query (can be slow on large data).
+> - Prefer `EXISTS` over `IN` when checking large subquery result sets — it stops at first match.
+> - `NOT EXISTS` is useful to find rows with no related child records.
+> - A subquery in `FROM` must be aliased.
+> - Subqueries can often be replaced with JOINs for better performance.
+
+## 13) Set Operators
+- UNION: combine unique rows
+- UNION ALL: combine all rows including duplicates
+- INTERSECT: common rows (supported in some databases)
+- EXCEPT/MINUS: rows in first query not in second
+
+```sql
+SELECT name FROM products_2025
+UNION
+SELECT name FROM products_2026;
+```
+
+### UNION ALL (keeps duplicates)
+```sql
+SELECT category FROM products_2025
+UNION ALL
+SELECT category FROM products_2026;
+```
+
+### INTERSECT (common rows)
+```sql
+SELECT name FROM old_products
+INTERSECT
+SELECT name FROM new_products;
+```
+
+### EXCEPT / MINUS (rows in first not in second)
+```sql
+SELECT name FROM old_products
+EXCEPT
+SELECT name FROM new_products;
+```
+
+> **KEY POINTS**
+> - All `UNION` queries must have the same number of columns with compatible types.
+> - `UNION` removes duplicates (slower); `UNION ALL` keeps all rows (faster).
+> - `INTERSECT` and `EXCEPT` are not supported in older MySQL — simulate with `JOIN` / `NOT IN`.
+> - Column names in the final result come from the FIRST SELECT statement.
+> - `ORDER BY` at the end applies to the final combined result.
+
+## 14) CASE Expression
+Useful for conditional labels in queries.
+
+```sql
+SELECT name, price,
+  CASE
+    WHEN price < 500 THEN 'Budget'
+    WHEN price BETWEEN 500 AND 2000 THEN 'Mid-range'
+    ELSE 'Premium'
+  END AS price_band
+FROM products;
+```
+
+### Simple CASE
+```sql
+SELECT name,
+  CASE category
+    WHEN 'Electronics' THEN 'E'
+    WHEN 'Accessories' THEN 'A'
+    ELSE 'Other'
+  END AS category_code
+FROM products;
+```
+
+### CASE inside aggregate
+```sql
+SELECT
+  SUM(CASE WHEN category = 'Electronics' THEN 1 ELSE 0 END) AS electronics_count,
+  SUM(CASE WHEN category = 'Accessories'  THEN 1 ELSE 0 END) AS accessories_count
+FROM products;
+```
+
+> **KEY POINTS**
+> - `CASE` can be used inside `SELECT`, `WHERE`, `ORDER BY`, and aggregate functions.
+> - `ELSE` is optional; if omitted and no condition matches, result is NULL.
+> - Searched CASE evaluates conditions top-to-bottom; first TRUE condition wins.
+> - Combining `CASE` with `SUM` is a common pivot / crosstab pattern.
+
+## 15) Views
+A view is a virtual table based on a query.
+
+```sql
+CREATE VIEW sales_summary AS
+SELECT p.name, SUM(s.qty) AS total_qty, SUM(s.total_amount) AS revenue
+FROM sales s
+JOIN products p ON s.product_id = p.product_id
+GROUP BY p.name;
+
+SELECT * FROM sales_summary;
+```
+
+### Updatable view
+A view is updatable if it is based on a single table and does not use GROUP BY, DISTINCT, aggregates, or subqueries.
+
+```sql
+CREATE VIEW active_products AS
+SELECT product_id, name, price, stock
+FROM products
+WHERE stock > 0;
+
+-- This UPDATE is valid because the view is simple:
+UPDATE active_products SET price = 1299.00 WHERE product_id = 2;
+```
+
+### Replace or drop a view
+```sql
+CREATE OR REPLACE VIEW sales_summary AS
+SELECT p.name, SUM(s.qty) AS qty FROM sales s JOIN products p ON s.product_id = p.product_id GROUP BY p.name;
+
+DROP VIEW IF EXISTS sales_summary;
+```
+
+> **KEY POINTS**
+> - A view does NOT store data — it runs the underlying query each time it is accessed.
+> - Views simplify complex queries and can restrict columns for security.
+> - A **Materialized View** (PostgreSQL / Oracle) stores the result physically and must be refreshed.
+> - MySQL does not support materialized views natively.
+> - Updatable views have restrictions: no GROUP BY, DISTINCT, aggregates, UNION, or subquery in FROM.
+
+## 16) Indexes
+Indexes speed up read operations but add overhead to writes.
+
+```sql
+CREATE INDEX idx_products_category ON products(category);
+CREATE INDEX idx_sales_date ON sales(sale_date);
+```
+
+### Types of indexes
+
+**Clustered Index** — Determines physical row order in the table. Only ONE per table. In MySQL InnoDB, the PRIMARY KEY is automatically the clustered index.
+
+**Non-Clustered Index** — Separate structure pointing back to actual rows. Multiple allowed per table.
+
+**Unique Index** — Ensures all values in the indexed column are distinct.
+```sql
+CREATE UNIQUE INDEX uq_email ON users(email);
+```
+
+**Composite (Multi-column) Index** — Index on multiple columns.
+```sql
+CREATE INDEX idx_cat_price ON products(category, price);
+-- Useful for: WHERE category = ? AND price < ?
+-- NOT useful for: WHERE price < ? (only price, not the leftmost column)
+```
+
+**Covering Index** — An index that contains ALL columns needed by a query, so no row lookup needed.
+```sql
+CREATE INDEX idx_cover ON products(category, price, name);
+SELECT name, price FROM products WHERE category = 'Electronics';
+-- All required columns are in the index itself
+```
+
+### Show and drop index
+```sql
+SHOW INDEX FROM products;
+DROP INDEX idx_products_category ON products;
+```
+
+### EXPLAIN to check index usage
+```sql
+EXPLAIN SELECT * FROM products WHERE category = 'Electronics';
+-- Look for 'key' column: should show the index name, not NULL
+```
+
+When to index:
+- Frequently used WHERE columns
+- JOIN columns
+- ORDER BY columns
+
+Avoid too many indexes on write-heavy tables.
+
+> **KEY POINTS**
+> - Each table can have only ONE clustered index but many non-clustered indexes.
+> - Indexes speed up SELECTs but slow down INSERT / UPDATE / DELETE.
+> - Composite index column order matters — queries must use the leftmost column(s).
+> - `EXPLAIN` / `EXPLAIN ANALYZE` is the tool to verify index usage.
+> - High-cardinality columns (many distinct values) benefit most from indexing.
+> - Avoid indexing columns that are frequently updated.
+
+## 17) Normalization
+
+### 1NF
+Atomic values, no repeating groups.
+
+**Violates 1NF** (multiple phone numbers in one cell):
+| student_id | name | phones |
+|---|---|---|
+| 1 | Alice | 9999, 8888 |
+
+**Satisfies 1NF** (one value per cell):
+| student_id | name | phone |
+|---|---|---|
+| 1 | Alice | 9999 |
+| 1 | Alice | 8888 |
+
+### 2NF
+In 1NF + no partial dependency on composite key.
+
+**Violates 2NF** (student_name depends only on student_id, not on the full composite key):
+| student_id | course_id | student_name | grade |
+
+**Satisfies 2NF** (split into separate tables):
+- students(student_id, student_name)
+- enrollments(student_id, course_id, grade)
+
+### 3NF
+In 2NF + no transitive dependency (non-key column depends on another non-key column).
+
+**Violates 3NF** (zip_code → city is transitive through a non-key):
+| order_id | zip_code | city |
+
+**Satisfies 3NF**:
+- orders(order_id, zip_code)
+- zip_codes(zip_code, city)
+
+### BCNF (Boyce-Codd Normal Form)
+Every determinant is a candidate key. Stricter than 3NF.
+
+Goal: reduce redundancy and anomalies.
+
+> **KEY POINTS**
+> - **Insertion anomaly**: cannot add data without unrelated data.
+> - **Deletion anomaly**: deleting one fact accidentally deletes another.
+> - **Update anomaly**: same fact stored in multiple places leads to inconsistency.
+> - 1NF → 2NF → 3NF → BCNF → 4NF → 5NF (each level is stricter).
+> - Most production databases target 3NF.
+> - Over-normalizing can hurt read performance (more JOINs needed).
+
+## 18) Denormalization
+Sometimes intentional duplication is used for performance in reporting/analytics workloads.
+
+Example: adding `category_name` directly to the `products` table even though it exists in a `categories` table avoids a JOIN on every report query.
+
+> **KEY POINTS**
+> - Used in Data Warehouses (OLAP) where reads are far more frequent than writes.
+> - Increases read speed but risks data inconsistency.
+> - Common denormalization patterns: adding summary columns, storing pre-computed aggregates, duplicating foreign key labels.
+> - Always document WHY a table is intentionally denormalized.
+
+## 19) Transactions and ACID
+A transaction is a sequence of operations treated as one unit.
+
+ACID:
+- **Atomicity**: all operations in a transaction succeed or all are rolled back (all or nothing).
+- **Consistency**: DB moves from one valid state to another; all constraints must hold.
+- **Isolation**: concurrent transactions behave as if they were run serially.
+- **Durability**: once committed, data persists even through server crash (written to disk).
+
+Example:
+```sql
+START TRANSACTION;
+
+UPDATE products SET stock = stock - 2 WHERE product_id = 10;
+INSERT INTO sales(product_id, qty, total_amount, sale_date)
+VALUES (10, 2, 1998.00, CURRENT_DATE);
+
+COMMIT;
+```
+
+Rollback example:
+```sql
+START TRANSACTION;
+UPDATE products SET stock = stock - 999 WHERE product_id = 10;
+ROLLBACK;
+```
+
+> **KEY POINTS**
+> - `BEGIN` / `START TRANSACTION` marks the start of a transaction.
+> - `COMMIT` makes all changes permanent.
+> - `ROLLBACK` undoes all changes back to the last COMMIT or start.
+> - In MySQL, DDL statements (CREATE, ALTER, DROP) cause an implicit COMMIT.
+> - `AUTOCOMMIT = 1` (default in MySQL) makes every statement its own transaction.
+> - Always keep transactions as short as possible to avoid long-held locks.
+
+## 20) Savepoint
+```sql
+START TRANSACTION;
+UPDATE products SET stock = stock - 1 WHERE product_id = 3;
+SAVEPOINT after_first_update;
+UPDATE products SET stock = stock - 2 WHERE product_id = 4;
+ROLLBACK TO after_first_update;
+COMMIT;
+```
+
+> **KEY POINTS**
+> - `SAVEPOINT name` marks an intermediate point inside a transaction.
+> - `ROLLBACK TO name` reverts only to the savepoint, not the full transaction start.
+> - `RELEASE SAVEPOINT name` removes the savepoint without rolling back.
+> - Useful in complex batch operations where partial failures are recoverable.
+
+## 21) Stored Procedures
+Reusable SQL blocks stored in database.
+
+MySQL example:
+```sql
+DELIMITER //
+CREATE PROCEDURE GetProductsByCategory(IN p_category VARCHAR(50))
+BEGIN
+  SELECT * FROM products WHERE category = p_category;
+END //
+DELIMITER ;
+
+CALL GetProductsByCategory('Accessories');
+```
+
+### Procedure with OUT parameter
+```sql
+DELIMITER //
+CREATE PROCEDURE GetProductCount(IN p_category VARCHAR(50), OUT p_count INT)
+BEGIN
+  SELECT COUNT(*) INTO p_count FROM products WHERE category = p_category;
+END //
+DELIMITER ;
+
+CALL GetProductCount('Electronics', @cnt);
+SELECT @cnt;
+```
+
+> **KEY POINTS**
+> - Procedures can have IN, OUT, and INOUT parameters.
+> - Stored procedures reduce network round-trips by running logic inside the database.
+> - Use `DELIMITER` in MySQL to avoid conflicts with the `;` statement terminator.
+> - Procedures can contain variables (`DECLARE`), loops, IF/ELSE, cursors.
+> - Procedures do NOT return a value directly; use OUT parameters or result sets.
+
+## 22) Functions
+Return a value and can be used inside SQL expressions.
+
+MySQL example:
+```sql
+DELIMITER //
+CREATE FUNCTION FinalPrice(base_price DECIMAL(10,2), tax_percent DECIMAL(5,2))
+RETURNS DECIMAL(10,2)
+DETERMINISTIC
+BEGIN
+  RETURN base_price + (base_price * tax_percent / 100);
+END //
+DELIMITER ;
+
+SELECT name, FinalPrice(price, 18) AS price_with_tax
+FROM products;
+```
+
+> **KEY POINTS**
+> - A **Function** must return exactly one value via `RETURN`.
+> - A **Procedure** does not need to return a value (uses OUT params or result sets).
+> - `DETERMINISTIC` means same input always produces same output — required for replication safety.
+> - Functions can be used inline in SELECT, WHERE, ORDER BY — procedures cannot.
+> - MySQL built-in functions: `NOW()`, `CONCAT()`, `LENGTH()`, `ROUND()`, `IFNULL()`, etc.
+
+## 23) Triggers
+Automatically execute logic on INSERT, UPDATE, DELETE.
+
+### Trigger timing
+| Timing | When |
+|--------|------|
+| BEFORE INSERT | Before a row is inserted |
+| AFTER INSERT | After a row is inserted |
+| BEFORE UPDATE | Before a row is updated |
+| AFTER UPDATE | After a row is updated |
+| BEFORE DELETE | Before a row is deleted |
+| AFTER DELETE | After a row is deleted |
+
+```sql
+CREATE TABLE audit_log (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  message VARCHAR(255),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+MySQL trigger example:
+```sql
+DELIMITER //
+CREATE TRIGGER trg_product_insert
+AFTER INSERT ON products
+FOR EACH ROW
+BEGIN
+  INSERT INTO audit_log(message)
+  VALUES (CONCAT('New product added: ', NEW.name));
+END //
+DELIMITER ;
+```
+
+### BEFORE UPDATE trigger (validation)
+```sql
+DELIMITER //
+CREATE TRIGGER trg_prevent_negative_stock
+BEFORE UPDATE ON products
+FOR EACH ROW
+BEGIN
+  IF NEW.stock < 0 THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'Stock cannot be negative';
+  END IF;
+END //
+DELIMITER ;
+```
+
+> **KEY POINTS**
+> - `NEW` refers to the new row value (INSERT / UPDATE); `OLD` refers to old value (UPDATE / DELETE).
+> - `BEFORE` triggers can modify `NEW` values before they are written.
+> - `AFTER` triggers cannot modify row data but are used for auditing or cascading.
+> - Triggers fire automatically — invisible side effects can make debugging hard.
+> - Triggers run per row (`FOR EACH ROW`) in MySQL.
+> - Use `SIGNAL SQLSTATE` inside a trigger to raise a custom error and abort the operation.
+```
+
+## 24) Common Date Functions
+
+MySQL examples:
+```sql
+SELECT NOW();                                        -- current date and time
+SELECT CURDATE();                                    -- current date
+SELECT CURTIME();                                    -- current time
+SELECT DATE_ADD(CURDATE(), INTERVAL 7 DAY);          -- 7 days from today
+SELECT DATE_SUB(CURDATE(), INTERVAL 1 MONTH);        -- 1 month ago
+SELECT DATEDIFF('2026-12-31', CURDATE());            -- days between two dates
+SELECT YEAR(sale_date), MONTH(sale_date), DAY(sale_date) FROM sales;
+SELECT DATE_FORMAT(sale_date, '%d-%m-%Y') FROM sales; -- custom format
+SELECT LAST_DAY('2026-02-01');                        -- last day of that month
+```
+
+> **KEY POINTS**
+> - `NOW()` returns date + time; `CURDATE()` returns date only.
+> - `DATEDIFF(d1, d2)` = d1 minus d2 in days.
+> - `DATE_FORMAT` is MySQL-specific; PostgreSQL uses `TO_CHAR`.
+> - Always store dates in `DATE` or `DATETIME` columns, not as VARCHAR.
+> - `TIMESTAMP` is stored in UTC — ideal for distributed systems.
+
+## 25) String Functions
+```sql
+SELECT UPPER(name), LOWER(name), LENGTH(name)
+FROM products;
+
+SELECT CONCAT(name, ' - ', category) AS label
+FROM products;
+
+SELECT TRIM('  hello  ');                   -- 'hello'
+SELECT LTRIM('  hello');                    -- 'hello'
+SELECT RTRIM('hello  ');                    -- 'hello'
+SELECT SUBSTRING('Keyboard', 1, 3);         -- 'Key'
+SELECT REPLACE('Keyboard', 'Key', 'Key-');  -- 'Key-board'
+SELECT INSTR('Keyboard', 'board');          -- 4 (position)
+SELECT LPAD('5', 3, '0');                   -- '005'
+SELECT RPAD('Hi', 5, '!');                  -- 'Hi!!!'
+SELECT REVERSE('SQL');                      -- 'LQS'
+SELECT CHAR_LENGTH('hello');                -- 5 (characters)
+```
+
+> **KEY POINTS**
+> - `LENGTH()` returns byte count; `CHAR_LENGTH()` returns character count (differ for multi-byte UTF-8).
+> - `CONCAT()` returns NULL if any argument is NULL — use `CONCAT_WS(sep, ...)` for safe concat.
+> - `SUBSTRING(str, pos, len)` is 1-indexed (not 0-indexed).
+> - String functions can be slow in `WHERE` on large tables — avoid when indexed column is wrapped.
+
+## 26) NULL Handling
+- IS NULL
+- IS NOT NULL
+- COALESCE()
+- IFNULL() (MySQL)
+- NULLIF()
+
+```sql
+SELECT name, COALESCE(category, 'Uncategorized') AS category
+FROM products;
+
+-- IFNULL: returns second argument if first is NULL
+SELECT IFNULL(category, 'N/A') FROM products;
+
+-- NULLIF: returns NULL if both arguments are equal
+SELECT NULLIF(stock, 0) FROM products;  -- NULL when stock = 0 (useful to avoid divide-by-zero)
+
+-- Avoid divide by zero
+SELECT total_amount / NULLIF(qty, 0) AS unit_price FROM sales;
+```
+
+> **KEY POINTS**
+> - NULL is NOT zero and NOT empty string. It means 'unknown' or 'missing'.
+> - `NULL = NULL` is NOT TRUE; use `IS NULL` to compare.
+> - Any arithmetic with NULL returns NULL: `NULL + 5 = NULL`.
+> - `COALESCE(a, b, c)` returns the first non-NULL value from the list.
+> - `NULLIF(a, b)` returns NULL when a = b, else returns a.
+> - Aggregate functions (SUM, AVG, COUNT) skip NULLs except `COUNT(*)`.
+
+## 27) Security Basics
+
+### Create user and grant privileges (MySQL style)
+```sql
+CREATE USER 'app_user'@'localhost' IDENTIFIED BY 'StrongPassword';
+GRANT SELECT, INSERT, UPDATE, DELETE ON inventory_db.* TO 'app_user'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+Principle: least privilege (grant only what is required).
+
+### Revoke privileges
+```sql
+REVOKE DELETE ON inventory_db.* FROM 'app_user'@'localhost';
+```
+
+### SQL Injection prevention
+Never concatenate user input into queries. Use parameterized queries / prepared statements in your application layer.
+
+Vulnerable (DON'T DO THIS):
+```
+SELECT * FROM users WHERE username = '" + input + "'
+```
+
+Safe approach:
+```sql
+-- Prepared statement (JDBC / backend handles parameterization)
+SELECT * FROM users WHERE username = ?  -- parameter bound separately
+```
+
+> **KEY POINTS**
+> - Principle of Least Privilege: grant only what is needed.
+> - Create separate DB users for read-only, read-write, and admin access.
+> - Never use the root DB user in application connection strings.
+> - Prepared statements / parameterized queries are the primary defense against SQL injection.
+> - `FLUSH PRIVILEGES` reloads the grant tables after manual changes.
+
+## 28) Backup and Restore (Concept)
+- Backup creates recoverable copy of database
+- Full backup, incremental backup, differential backup
+- Restore verifies disaster recovery readiness
+
+Example commands vary by database tools:
+- MySQL: mysqldump
+- PostgreSQL: pg_dump
+- SQL Server: BACKUP DATABASE
+
+```bash
+# MySQL backup
+mysqldump -u root -p inventory_db > backup.sql
+
+# MySQL restore
+mysql -u root -p inventory_db < backup.sql
+```
+
+> **KEY POINTS**
+> - **Full backup**: entire database at a point in time.
+> - **Incremental backup**: only changes since last backup (faster, needs full restore chain).
+> - **Differential backup**: changes since last full backup.
+> - Always test restores — an untested backup is not a backup.
+> - Use scheduled automated backups in production (cron jobs, cloud-native tools).
+
+## 29) Performance Optimization Checklist
+- Select only needed columns (avoid SELECT * in large queries)
+- Use proper indexes
+- Avoid functions on indexed columns inside WHERE when possible
+- Keep transactions short
+- Use pagination for large results
+- Analyze query plan (EXPLAIN)
+
+Example:
+```sql
+EXPLAIN SELECT *
+FROM sales
+WHERE sale_date >= '2026-01-01';
+```
+
+### Common EXPLAIN columns to check
+| Column | Meaning |
+|--------|---------|
+| type | ALL = full scan (bad); ref/range/const = good |
+| key | Which index is being used (NULL = no index) |
+| rows | Estimated rows scanned |
+| Extra | 'Using filesort' or 'Using temporary' = slow |
+
+> **KEY POINTS**
+> - `SELECT *` fetches unnecessary columns and prevents covering index use.
+> - `EXPLAIN` shows the query execution plan without running the query.
+> - `EXPLAIN ANALYZE` (PostgreSQL / MySQL 8+) actually runs the query and shows real stats.
+> - Avoid `SELECT *` in subqueries — use `SELECT 1` or specific columns.
+> - Avoid `LIKE '%value'` (leading wildcard) as it cannot use an index.
+> - `LIMIT` early and paginate to avoid scanning millions of rows.
+
+## 30) SQL Interview Practice Queries
+
+### Second highest salary
+```sql
+SELECT MAX(salary) AS second_highest
+FROM employees
+WHERE salary < (SELECT MAX(salary) FROM employees);
+
+-- Alternative using LIMIT OFFSET:
+SELECT DISTINCT salary FROM employees ORDER BY salary DESC LIMIT 1 OFFSET 1;
+```
+
+### Nth highest salary (generic)
+```sql
+SELECT DISTINCT salary
+FROM employees
+ORDER BY salary DESC
+LIMIT 1 OFFSET (N-1);  -- Replace N with desired rank
+```
+
+### Remove duplicate rows (keep smallest id)
+```sql
+DELETE e1
+FROM employees e1
+JOIN employees e2
+  ON e1.email = e2.email
+ AND e1.id > e2.id;
+```
+
+### Top 3 products by revenue
+```sql
+SELECT p.name, SUM(s.total_amount) AS revenue
+FROM sales s
+JOIN products p ON p.product_id = s.product_id
+GROUP BY p.name
+ORDER BY revenue DESC
+LIMIT 3;
+```
+
+### Employees with salary above department average
+```sql
+SELECT e.name, e.salary, e.department
+FROM employees e
+WHERE e.salary > (
+  SELECT AVG(e2.salary)
+  FROM employees e2
+  WHERE e2.department = e.department
+);
+```
+
+### Find customers who never placed an order
+```sql
+SELECT c.name
+FROM customers c
+LEFT JOIN orders o ON c.customer_id = o.customer_id
+WHERE o.order_id IS NULL;
+
+-- Alternative with NOT EXISTS:
+SELECT c.name
+FROM customers c
+WHERE NOT EXISTS (
+  SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id
+);
+```
+
+### Count employees per department with department totals
+```sql
+SELECT department, COUNT(*) AS headcount
+FROM employees
+GROUP BY department
+ORDER BY headcount DESC;
+```
+
+## 31) Quick Difference: DELETE vs TRUNCATE vs DROP
+
+| Feature | DELETE | TRUNCATE | DROP |
+|---------|--------|----------|------|
+| What it removes | Selected rows | All rows | Entire table |
+| WHERE clause | Yes | No | No |
+| Transaction rollback | Yes | No (usually) | No |
+| Auto-increment reset | No | Yes | Yes |
+| DDL or DML | DML | DDL | DDL |
+| Speed | Slower (row-by-row log) | Faster | Instant |
+| Triggers fired | Yes | No | No |
+
+```sql
+DELETE FROM products WHERE stock = 0;  -- removes specific rows
+TRUNCATE TABLE audit_log;              -- removes all rows, resets AI
+DROP TABLE temp_data;                  -- removes table entirely
+```
+
+> **KEY POINTS**
+> - Use `DELETE` when you need `WHERE` conditions or triggers.
+> - Use `TRUNCATE` for fast full-table clears (logs/temp tables).
+> - Use `DROP` when the table is no longer needed at all.
+> - `TRUNCATE` and `DROP` cannot be rolled back in MySQL.
+> - `DELETE` is row-by-row and generates one log entry per row.
+
+## 32) SQL Learning Roadmap
+1. Learn table creation, datatypes, constraints.
+2. Master SELECT, WHERE, ORDER BY, GROUP BY, HAVING.
+3. Learn joins and subqueries deeply.
+4. Practice indexing and EXPLAIN plans.
+5. Understand transactions and isolation.
+6. Learn procedures, triggers, and security.
+7. Build mini projects and optimize queries.
+
+## 33) Mini Practice Dataset
+
+```sql
+CREATE TABLE users (
+  user_id INT PRIMARY KEY AUTO_INCREMENT,
+  username VARCHAR(50) UNIQUE NOT NULL,
+  email VARCHAR(100) UNIQUE NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE orders (
+  order_id INT PRIMARY KEY AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
+  status VARCHAR(20) DEFAULT 'PENDING',
+  order_date DATE,
+  FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+
+INSERT INTO users (username, email) VALUES
+('alice', 'alice@mail.com'),
+('bob', 'bob@mail.com');
+
+INSERT INTO orders (user_id, amount, status, order_date) VALUES
+(1, 1500.00, 'PAID', '2026-06-20'),
+(1, 700.00, 'PENDING', '2026-06-21'),
+(2, 3000.00, 'PAID', '2026-06-22');
+```
+
+Practice:
+```sql
+SELECT u.username, COUNT(o.order_id) AS total_orders, SUM(o.amount) AS total_spent
+FROM users u
+LEFT JOIN orders o ON o.user_id = u.user_id
+GROUP BY u.username;
+```
+
+## 34) Final Revision Points
+- SQL is declarative: you define what to fetch, not step-by-step how.
+- Good schema design is as important as writing good queries.
+- Indexes improve reads, but too many indexes hurt writes.
+- Joins and aggregations are core for real-world tasks.
+- Transactions protect consistency in multi-step updates.
+- Always test with realistic data volume.
+
+---
+
+These notes are database-agnostic with MySQL-friendly examples. For PostgreSQL or SQL Server, syntax differs slightly for auto-increment, procedures, and some functions.
