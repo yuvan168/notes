@@ -1,0 +1,161 @@
+# Full-Stack Inventory Management System — Interview Summary
+
+## 1. Project Overview
+A full-stack **Inventory/Product Management System** with a **monolithic Spring Boot REST API backend** and a **React (Vite) single-page frontend**. The system supports JWT-based authentication/authorization, role-based access, user management, product CRUD, and reporting/dashboard features.
+
+---
+
+## 2. Tech Stack
+
+### Backend
+- **Java 17**, **Spring Boot 3.3.0**
+- **Spring Web** — REST controllers
+- **Spring Data JPA (Hibernate)** — ORM/persistence
+- **Spring Security 6** — stateless, filter-chain based auth
+- **MySQL** (via `mysql-connector-j`) — relational database
+- **JJWT 0.12.5** (`io.jsonwebtoken`) — JWT creation/validation
+- **Bean Validation** (`spring-boot-starter-validation`)
+- Maven build (`pom.xml`)
+
+### Frontend
+- **React 19** with **Vite 7** (dev server + build tool, HMR)
+- **React Router DOM v7** — client-side routing, protected routes
+- **Axios** — HTTP client with interceptors
+- **MUI (Material UI) v7** + **Emotion** — component library/styling
+- **Formik + Yup** — form state management & schema validation
+- **Recharts** — dashboard charts/reports
+- **React Toastify** — notifications
+- **Framer Motion** — animations
+- **ESLint** — linting
+
+---
+
+## 3. Architecture
+
+```mermaid
+flowchart LR
+    A[React SPA :3000] -- Axios + JWT Bearer --> B[Spring Boot API :8088]
+    B --> C[(MySQL Database)]
+    A -->|localStorage| D[JWT Token + User Info]
+```
+
+- **Monolithic backend**: single Spring Boot application exposing REST endpoints under `/api/**`.
+- **SPA frontend**: builds independently, talks to backend only via REST/JSON over HTTP, deployed separately (ports 3000 ↔ 8088).
+- **Stateless auth**: no server-side sessions; every request carries a JWT in the `Authorization: Bearer <token>` header.
+
+---
+
+## 4. Backend Design Details
+
+### 4.1 Security (`SecurityConfig`)
+- Uses the modern **lambda-based `SecurityFilterChain`** bean (Spring Security 6 style, replacing `WebSecurityConfigurerAdapter`).
+- **CSRF disabled** — appropriate for stateless token-based REST APIs (no cookies involved).
+- **Custom CORS configuration** (`CorsConfigurationSource`):
+  - Allowed origin: `http://localhost:3000` (React dev server)
+  - Allowed methods: GET, POST, PUT, DELETE, OPTIONS, PATCH
+  - Allows credentials and exposes the `Authorization` header so the frontend can read tokens.
+- **Authorization rules**:
+  - Public: `/api/auth/login`, `/api/auth/register`, `/error`
+  - Authenticated: `/api/auth/users/**`, `/api/auth/profile/**`, `/api/products/**`, `/api/sales/**`, and a catch-all `anyRequest().authenticated()`.
+- **Session policy**: `SessionCreationPolicy.STATELESS` — no `HttpSession` is created; auth state is derived fresh from the JWT on every request.
+- **Custom filter**: `JwtAuthenticationFilter` is inserted **before** `UsernamePasswordAuthenticationFilter` in the chain.
+- **Password hashing**: `BCryptPasswordEncoder` bean.
+
+### 4.2 JWT Flow (`JwtAuthenticationFilter`, `JwtUtil`)
+- Extends `OncePerRequestFilter` so it runs exactly once per request.
+- Explicitly bypasses JWT checks for `/api/auth/login` and `/api/auth/register` (defense-in-depth, since `SecurityConfig` already permits them).
+- Reads `Authorization` header, strips the `Bearer ` prefix, extracts username via `jwtUtil.extractUsername(token)`.
+- If a username is found and no `Authentication` currently exists in `SecurityContextHolder`:
+  - Loads `UserDetails` via `CustomUserDetailsService`.
+  - Validates the token (`jwtUtil.validateToken`) — checks signature/expiry.
+  - Builds a `UsernamePasswordAuthenticationToken` (principal = `UserDetails`, no credentials, authorities from user roles) and sets it in the `SecurityContext`.
+- Exceptions during extraction/validation are caught and logged, not thrown — request proceeds unauthenticated and Spring Security's authorization rules reject it with 401/403 downstream.
+
+### 4.3 Controllers
+- **`AuthController`** (`/api/auth`):
+  - `POST /login` — looks up user by email, verifies password with `PasswordEncoder.matches`, issues JWT via `JwtUtil.generateToken`, returns token + basic user info.
+  - `POST /register` — checks for duplicate email, encodes password, assigns default `ROLE_USER` (created on first use via `findByName(...).orElseGet(...)`), saves user.
+  - `GET/POST/PUT/DELETE /users` and `/users/{id}` — admin-style user management, returns DTO-like maps (passwords stripped out manually using `HashMap`, not a formal DTO).
+  - `GET/PUT /profile` — reads the authenticated principal's email from `SecurityContextHolder`, fetches/updates that user's own profile.
+  - Consistent pattern: try/catch around everything, returning `ResponseEntity` with appropriate status codes (401, 404, 400, 500) and a `message` key in the body.
+- **`ProductController`** (`/api/products`):
+  - Standard CRUD: `GET` (list/find by id), `POST` (create, returns `201 CREATED`), `PUT` (update fields manually field-by-field), `DELETE` (returns `204 No Content`).
+  - Delegates persistence logic to `ProductService`.
+
+### 4.4 Data Layer
+- **Entities**: `User` (email, password, first/last name, `roles` as a `Set<Role>` — many-to-many), `Role` (name, e.g. `ROLE_USER`), `Product` (name, description, manufacturer, price, quantity) — JPA entities using `jakarta.persistence` annotations, `@GeneratedValue(strategy = IDENTITY)`.
+- **Repositories**: Spring Data JPA interfaces (`UserRepository`, `RoleRepository`) with derived query methods like `findByEmail`, `findByName`.
+- **DTOs**: `LoginRequest`, `JwtResponse` (token/type/email), `ProfileDTO` — used selectively; several endpoints hand-roll response maps instead of DTOs (worth mentioning as a possible improvement in interviews).
+
+### 4.5 Notable Design Points (good interview talking points)
+- Stateless JWT auth instead of session cookies → horizontally scalable, no server-side session storage.
+- Role bootstrapping pattern (`orElseGet` to create role if missing) avoids needing a separate data seeding step.
+- Manual password stripping from responses (rather than `@JsonIgnore` on the entity field) — a known gap; `@JsonIgnore` or a proper DTO layer would be a stronger/safer design.
+- CORS and security are centralized in one `SecurityConfig` rather than scattered `@CrossOrigin` annotations (though some controllers also use `@CrossOrigin` redundantly).
+
+---
+
+## 5. Frontend Design Details
+
+### 5.1 Structure
+```
+src/
+  api/axios.js          — centralized Axios instance
+  Context/AuthContext.jsx — global auth state (React Context)
+  components/           — Header, Navbar, Sidebar, ProtectedRoute
+  Pages/                — Auth, Dashboard, Product, Reports, Settings, Users
+  Routes/AppRoutes.jsx   — route definitions
+  services/              — AuthService.js, ProductService.js (API call wrappers)
+```
+
+### 5.2 API Layer (`api/axios.js`)
+- Single Axios instance with `baseURL: http://localhost:8088/api` and 10s timeout.
+- **Request interceptor**: automatically attaches `Authorization: Bearer <token>` from `localStorage` to every outgoing request.
+- **Response interceptor**: detects network errors (backend not reachable) and rewrites the error message for a clearer UX/debugging signal.
+
+### 5.3 Auth State (`AuthContext.jsx`)
+- React Context + `useState` holding `token` and `user`, hydrated from `localStorage` on mount.
+- `login(token, user)` — persists to `localStorage` and updates state.
+- `logout()` — clears `localStorage` and resets state.
+- Consumed by `ProtectedRoute` to guard authenticated routes and redirect unauthenticated users to login.
+
+### 5.4 Routing
+- `react-router-dom` v7 defines routes in `AppRoutes.jsx`; `ProtectedRoute` wraps private pages (Dashboard, Product, Reports, Settings, Users) so unauthenticated access redirects to `/login`.
+
+### 5.5 UI/UX
+- MUI component library for consistent design system (tables, forms, dialogs, navigation).
+- Formik + Yup for login/register/product forms — declarative validation schemas, less boilerplate than manual `useState` form handling.
+- Recharts for dashboard analytics/reports visualizations.
+- React Toastify for success/error toast notifications instead of blocking `alert()`.
+
+---
+
+## 6. Request Lifecycle Example (Login)
+1. User submits login form (Formik-validated) → `AuthService.login(email, password)`.
+2. Axios POSTs to `http://localhost:8088/api/auth/login`.
+3. `JwtAuthenticationFilter` lets this request pass through untouched (public path).
+4. `AuthController.login` verifies credentials via `PasswordEncoder.matches`, generates JWT with `JwtUtil`.
+5. Frontend receives `{ token, email, firstName, lastName }`, calls `AuthContext.login(token, user)` → persisted to `localStorage`.
+6. Subsequent requests (e.g., `GET /api/products`) automatically include `Authorization: Bearer <token>` via the Axios request interceptor.
+7. Backend's `JwtAuthenticationFilter` validates the token, sets `SecurityContext`, and Spring Security's `authorizeHttpRequests` rule allows access to `/api/products/**`.
+
+---
+
+## 7. Likely Interview Questions & Talking Points
+- **Why JWT over sessions?** Stateless, scalable, works well with SPA + separate backend (no CORS cookie complications).
+- **Where is CORS configured and why both `SecurityConfig` and `@CrossOrigin`?** Centralized `CorsConfigurationSource` is the source of truth; redundant `@CrossOrigin` annotations on controllers are effectively duplicate/no-op if the security filter already allows the origin — worth noting as cleanup opportunity.
+- **How is password security handled?** BCrypt hashing at registration/update; plaintext never stored or logged (though `System.out.println` logging of other data is a minor concern to flag).
+- **What would you improve?**
+  - Replace raw `HashMap`-based responses with proper DTOs/records.
+  - Remove `System.out.println`/`e.printStackTrace()` in favor of a logging framework (SLF4J/Logback) with proper log levels.
+  - Add role-based method security (`@PreAuthorize`) instead of just path-based rules, e.g., restrict `/api/auth/users` management to `ROLE_ADMIN`.
+  - Add global exception handling (`@ControllerAdvice`) instead of repeating try/catch in every controller method.
+  - Add refresh tokens / token expiry handling on the frontend (auto-logout on 401).
+- **How does the frontend know to redirect unauthenticated users?** `ProtectedRoute` checks `AuthContext` token presence; Axios response interceptor could be extended to catch 401s and trigger logout.
+
+---
+
+## 8. Ports & Local Setup
+- Frontend dev server: `http://localhost:3000` (Vite)
+- Backend API: `http://localhost:8088/api`
+- Database: MySQL (see `DATABASE_SETUP.sql`, `BACKEND_SETUP.md` for schema/config)
