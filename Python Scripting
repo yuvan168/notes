@@ -1,0 +1,1470 @@
+# Python Scripting Interview Notes
+### Covers: Fundamentals | Standard Library | Automation Scenarios | Script Examples | Interview Q&A
+
+---
+
+## TABLE OF CONTENTS
+1. Python scripting mindset
+2. Script structure and execution
+3. Variables, data types, and operators
+4. Collections and comprehensions
+5. Control flow and functions
+6. Exceptions and defensive scripting
+7. Files and directories
+8. CSV and JSON processing
+9. Regular expressions and text parsing
+10. Dates, time, and scheduling
+11. Command-line arguments
+12. Logging and configuration
+13. HTTP/API scripting
+14. Subprocess and system automation
+15. Database scripting
+16. Testing and code quality
+17. Performance and reliability
+18. Security checklist
+19. Scenario-based script examples
+20. Interview questions and answers
+21. Quick revision checklist
+22. Detailed topic-by-topic explanations
+
+---
+
+## 1) Python Scripting Mindset
+
+Python scripting means writing small, focused programs that automate a repeatable task: moving files, transforming data, calling an API, checking system health, generating reports, or connecting systems.
+
+### What makes a good script?
+- It has one clear responsibility.
+- It accepts input instead of relying on values hidden in the code.
+- It validates assumptions and fails with a useful message.
+- It logs important actions and errors.
+- It is safe to run repeatedly when possible (idempotent).
+- It does not expose passwords, tokens, or personal data.
+- It returns a meaningful exit code for automation tools.
+- It is easy to test without changing production data.
+
+### Script vs application
+| Script | Application |
+|---|---|
+| Usually focused on one operational task | Usually provides a long-running service or user interface |
+| Often run manually, by a scheduler, or in CI/CD | Usually has defined deployment and lifecycle management |
+| Commonly uses the standard library | May use frameworks and several external services |
+| Still needs validation, logging, tests, and security | Needs those concerns at a larger scale |
+
+---
+
+## 2) Script Structure and Execution
+
+A maintainable script separates reusable logic from the command-line entry point.
+
+```python
+#!/usr/bin/env python3
+"""Count non-empty lines in a text file."""
+
+from pathlib import Path
+
+
+def count_non_empty_lines(file_path: Path) -> int:
+    with file_path.open(encoding="utf-8") as file:
+        return sum(1 for line in file if line.strip())
+
+
+def main() -> int:
+    input_file = Path("notes.txt")
+    print(count_non_empty_lines(input_file))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+```
+
+### Important execution facts
+- `if __name__ == "__main__"` runs code only when the file is executed directly, not when imported.
+- `python script.py` runs a script with the current Python interpreter.
+- `python -m module_name` runs a module using Python's module resolution rules.
+- `python -m venv .venv` creates an isolated environment.
+- Use `python -m pip install package_name` to ensure pip belongs to the selected interpreter.
+- `raise SystemExit(main())` converts the return value from `main` into a process exit code.
+
+---
+
+## 3) Variables, Data Types, and Operators
+
+Python is dynamically typed: a name refers to an object, and the object has a type.
+
+```python
+name = "Asha"             # str
+retry_count = 3            # int
+success_rate = 0.98        # float
+is_enabled = True          # bool
+missing_value = None       # NoneType
+```
+
+### Common types
+- `str`: immutable text
+- `int`, `float`: numbers
+- `bool`: `True` or `False`
+- `list`: ordered, mutable collection
+- `tuple`: ordered, immutable collection
+- `set`: unique, unordered values
+- `dict`: key-value mapping
+
+### `==` vs `is`
+- `==` compares values.
+- `is` compares object identity.
+- Use `is None`, not `== None`.
+
+```python
+value = None
+if value is None:
+    print("No value supplied")
+```
+
+### Truthiness
+Empty strings, empty collections, `0`, `False`, and `None` are falsey. Most other values are truthy.
+
+```python
+username = user_input.strip()
+if not username:
+    raise ValueError("Username is required")
+```
+
+---
+
+## 4) Collections and Comprehensions
+
+```python
+numbers = [2, 5, 8, 11]
+even_numbers = [number for number in numbers if number % 2 == 0]
+
+prices = {"pen": 10, "book": 80}
+prices_with_tax = {name: price * 1.18 for name, price in prices.items()}
+
+unique_words = {word.lower() for word in ["Python", "python", "SQL"]}
+```
+
+### Selection guide
+- Use a `list` when order and duplicates matter.
+- Use a `tuple` for a fixed record or immutable sequence.
+- Use a `set` for membership checks and uniqueness.
+- Use a `dict` when values are looked up by a key.
+
+### Complexity interview point
+- List membership: generally $O(n)$.
+- Set and dictionary membership: average $O(1)$.
+- Sorting: generally $O(n \log n)$.
+- A comprehension is concise, but do not make it so complex that a loop becomes clearer.
+
+### Safe dictionary access
+```python
+count = counts.get("warning", 0)
+for key, value in settings.items():
+    print(f"{key}={value}")
+```
+
+---
+
+## 5) Control Flow and Functions
+
+```python
+def classify_score(score: int) -> str:
+    if not 0 <= score <= 100:
+        raise ValueError("Score must be between 0 and 100")
+    if score >= 90:
+        return "excellent"
+    if score >= 60:
+        return "pass"
+    return "fail"
+```
+
+### Function best practices
+- Keep functions small and single-purpose.
+- Give arguments and return values clear names.
+- Use type hints for maintainability.
+- Avoid mutable default arguments.
+
+Incorrect:
+```python
+def add_item(item, items=[]):
+    items.append(item)
+    return items
+```
+
+Correct:
+```python
+def add_item(item, items=None):
+    if items is None:
+        items = []
+    items.append(item)
+    return items
+```
+
+### `*args` and `**kwargs`
+```python
+def log_event(event_name, *tags, **metadata):
+    print(event_name, tags, metadata)
+
+log_event("login", "security", user_id=42, success=True)
+```
+
+---
+
+## 6) Exceptions and Defensive Scripting
+
+Catch only exceptions you can handle. Avoid hiding failures with a broad `except Exception` unless you log, clean up, or re-raise deliberately.
+
+```python
+from pathlib import Path
+
+try:
+    text = Path("input.txt").read_text(encoding="utf-8")
+except FileNotFoundError:
+    print("Input file does not exist")
+except PermissionError:
+    print("Permission denied while reading input")
+```
+
+### Exception rules
+- Use `try` for the smallest risky operation.
+- Do not use exceptions as ordinary control flow when a simple check is clearer.
+- Add context when re-raising: `raise RuntimeError("Import failed") from error`.
+- Use `finally` for cleanup; prefer `with` for files and locks.
+- Create a custom exception when callers need to distinguish a domain failure.
+
+```python
+class InvalidRecordError(ValueError):
+    """Raised when an input record violates the expected schema."""
+```
+
+---
+
+## 7) Files and Directories
+
+Use `pathlib` instead of manually joining path strings.
+
+```python
+from pathlib import Path
+
+input_dir = Path("input")
+output_dir = Path("output")
+output_dir.mkdir(parents=True, exist_ok=True)
+
+for file_path in input_dir.glob("*.txt"):
+    output_path = output_dir / f"processed_{file_path.name}"
+    content = file_path.read_text(encoding="utf-8")
+    output_path.write_text(content.upper(), encoding="utf-8")
+```
+
+### File handling rules
+- Use `with` or `Path.read_text` so files close reliably.
+- Specify `encoding="utf-8"` for text files.
+- Stream large files line by line instead of loading everything into memory.
+- Write to a temporary file and replace the destination when partial output would be dangerous.
+- Do not trust file names supplied by users; prevent path traversal.
+
+```python
+with Path("application.log").open(encoding="utf-8") as log_file:
+    for line in log_file:
+        if "ERROR" in line:
+            print(line.rstrip())
+```
+
+---
+
+## 8) CSV and JSON Processing
+
+### CSV transformation
+```python
+import csv
+from pathlib import Path
+
+source = Path("employees.csv")
+target = Path("active_employees.csv")
+
+with source.open(newline="", encoding="utf-8") as input_file, target.open(
+    "w", newline="", encoding="utf-8"
+) as output_file:
+    reader = csv.DictReader(input_file)
+    writer = csv.DictWriter(output_file, fieldnames=["id", "name", "email"])
+    writer.writeheader()
+    for row in reader:
+        if row.get("status", "").lower() == "active":
+            writer.writerow({key: row.get(key, "") for key in writer.fieldnames})
+```
+
+### JSON configuration
+```python
+import json
+from pathlib import Path
+
+config = json.loads(Path("config.json").read_text(encoding="utf-8"))
+timeout = config.get("timeout_seconds", 10)
+
+Path("summary.json").write_text(
+    json.dumps({"timeout": timeout}, indent=2), encoding="utf-8"
+)
+```
+
+Use CSV for tabular exchange and JSON for nested records or configuration. Validate required fields before processing.
+
+---
+
+## 9) Regular Expressions and Text Parsing
+
+```python
+import re
+
+log_pattern = re.compile(
+    r"^(?P<timestamp>\S+\s+\S+)\s+(?P<level>INFO|WARN|ERROR)\s+(?P<message>.*)$"
+)
+
+match = log_pattern.match(line)
+if match and match.group("level") == "ERROR":
+    print(match.group("message"))
+```
+
+### Regex guidance
+- Compile patterns reused in a loop.
+- Use named groups for readable parsing.
+- Prefer simple string methods when regex is unnecessary.
+- Be careful with greedy patterns and catastrophic backtracking.
+- Never use regex alone as a complete security validator for complex formats such as URLs or email addresses.
+
+---
+
+## 10) Dates, Time, and Scheduling
+
+```python
+from datetime import datetime, timezone
+
+created_at = datetime.now(timezone.utc)
+print(created_at.isoformat())
+```
+
+- Store and exchange timestamps in UTC.
+- Use timezone-aware datetimes for distributed systems.
+- Parse known formats explicitly with `datetime.strptime`.
+- A scheduler should make retries, overlap, and failed runs observable.
+
+```python
+from datetime import datetime
+
+run_date = datetime.strptime("2026-10-07", "%Y-%m-%d").date()
+```
+
+---
+
+## 11) Command-Line Arguments
+
+`argparse` provides help text, validation, defaults, and typed arguments.
+
+```python
+import argparse
+from pathlib import Path
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Count files by extension")
+    parser.add_argument("directory", type=Path)
+    parser.add_argument("--extension", default=".log")
+    return parser.parse_args()
+```
+
+A production script should make input and output locations configurable rather than hard-coded.
+
+---
+
+## 12) Logging and Configuration
+
+Use `logging` instead of scattered `print` statements for operational scripts.
+
+```python
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+logger = logging.getLogger(__name__)
+logger.info("Starting import")
+logger.warning("Skipped %d invalid rows", invalid_count)
+```
+
+Configuration priority commonly follows: command-line argument, environment variable, configuration file, safe default.
+
+```python
+import os
+
+api_url = os.environ.get("API_URL", "https://example.invalid/api")
+api_token = os.environ["API_TOKEN"]
+```
+
+Never commit secrets or print authorization headers.
+
+---
+
+## 13) HTTP/API Scripting
+
+The Python standard library includes `urllib`, while many projects use `requests` or `httpx`. The important interview points are timeout, status validation, retries, and safe handling of responses.
+
+```python
+import json
+from urllib.request import Request, urlopen
+
+request = Request(
+    "https://api.example.com/health",
+    headers={"Accept": "application/json"},
+)
+with urlopen(request, timeout=10) as response:
+    if response.status != 200:
+        raise RuntimeError(f"Health check failed: {response.status}")
+    payload = json.load(response)
+print(payload)
+```
+
+### API checklist
+- Always configure a connect/read timeout.
+- Check HTTP status before trusting the body.
+- Handle pagination and rate limits.
+- Retry only transient failures, preferably with exponential backoff.
+- Make retries idempotent or use an idempotency key.
+- Validate response shape before accessing nested fields.
+- Redact tokens and personal data from logs.
+
+---
+
+## 14) Subprocess and System Automation
+
+```python
+import subprocess
+
+result = subprocess.run(
+    ["python", "--version"],
+    capture_output=True,
+    text=True,
+    check=True,
+)
+print(result.stdout or result.stderr)
+```
+
+- Pass a list of arguments instead of `shell=True` for untrusted input.
+- Use `check=True` when a non-zero exit code should fail the script.
+- Capture output only when needed; large output may consume memory.
+- Set a timeout for commands that can hang.
+- Avoid constructing shell commands through string concatenation.
+
+---
+
+## 15) Database Scripting
+
+Use parameterized queries. Never concatenate user input into SQL.
+
+```python
+import sqlite3
+
+with sqlite3.connect("inventory.db") as connection:
+    connection.execute(
+        "UPDATE products SET quantity = ? WHERE product_id = ?",
+        (new_quantity, product_id),
+    )
+    connection.commit()
+```
+
+For a batch import:
+- Validate rows before the transaction.
+- Use `executemany` where appropriate.
+- Commit in controlled batches for very large datasets.
+- Record rejected rows and reasons.
+- Make reruns safe by using stable identifiers or upserts.
+
+---
+
+## 16) Testing and Code Quality
+
+A script is easier to test when core functions accept data and return results instead of reading global state.
+
+```python
+def normalize_email(value: str) -> str:
+    email = value.strip().lower()
+    if "@" not in email:
+        raise ValueError("Invalid email")
+    return email
+
+
+def test_normalize_email():
+    assert normalize_email(" User@Example.COM ") == "user@example.com"
+```
+
+### Quality tools
+- `python -m unittest` or `pytest` for tests.
+- `ruff` or `flake8` for linting.
+- `black` for formatting.
+- `mypy` or another type checker for type analysis.
+- `python -m compileall .` for a quick syntax check.
+
+### Test cases to discuss
+- Valid input.
+- Empty input.
+- Missing files or fields.
+- Duplicate records.
+- Invalid encoding.
+- Permission failures.
+- Network timeout and retry exhaustion.
+- Partial failure during a batch.
+- Re-running the script after a previous successful run.
+
+---
+
+## 17) Performance and Reliability
+
+### Practical optimization order
+1. Measure the slow operation.
+2. Improve the algorithm or avoid repeated work.
+3. Stream data rather than loading it all.
+4. Use sets/dictionaries for repeated membership or lookup.
+5. Batch I/O and database operations.
+6. Add concurrency only when the workload benefits from it.
+
+### Concurrency choices
+- Use normal code for simple sequential tasks.
+- Use `threading` or `concurrent.futures.ThreadPoolExecutor` for I/O-bound work.
+- Use `multiprocessing` or `ProcessPoolExecutor` for CPU-bound Python work.
+- Use `asyncio` when many asynchronous I/O operations must be coordinated.
+
+Do not claim that threads always make Python code faster. The GIL limits parallel execution of Python bytecode in many CPU-bound workloads, while I/O-bound tasks can still benefit from threads.
+
+---
+
+## 18) Security Checklist
+
+- Keep secrets in environment variables or a secret manager.
+- Validate and normalize user input.
+- Use allowlists for file extensions and commands.
+- Prevent path traversal with resolved paths and an allowed root directory.
+- Avoid `eval`, `exec`, and unsafe deserialization of untrusted data.
+- Use parameterized SQL queries.
+- Use HTTPS and certificate validation for network calls.
+- Apply least-privilege permissions.
+- Avoid logging passwords, tokens, and sensitive payloads.
+- Set timeouts on network and subprocess operations.
+- Review dependencies and pin versions where appropriate.
+
+---
+
+## 19) Scenario-Based Script Examples
+
+### Scenario A: Organize files by extension
+**Requirement:** Move files from an incoming directory into extension-based folders.
+
+```python
+from pathlib import Path
+import shutil
+
+
+def organize_files(source: Path, destination: Path) -> int:
+    moved = 0
+    for file_path in source.iterdir():
+        if not file_path.is_file():
+            continue
+        extension = file_path.suffix.lower().lstrip(".") or "no_extension"
+        target_dir = destination / extension
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_path = target_dir / file_path.name
+        if target_path.exists():
+            raise FileExistsError(f"Refusing to overwrite {target_path}")
+        shutil.move(str(file_path), target_path)
+        moved += 1
+    return moved
+```
+
+**Interview discussion:** What happens with duplicate names, hidden files, permissions, and a failure halfway through? Explain a dry-run mode and an audit log.
+
+### Scenario B: Find error lines in a large log
+**Requirement:** Count errors without loading a multi-gigabyte file into memory.
+
+```python
+from collections import Counter
+from pathlib import Path
+
+
+def error_summary(log_path: Path) -> Counter[str]:
+    counts = Counter()
+    with log_path.open(encoding="utf-8", errors="replace") as log_file:
+        for line in log_file:
+            if "ERROR" in line:
+                service = line.split("service=", 1)[-1].split()[0]
+                counts[service] += 1
+    return counts
+```
+
+**Interview discussion:** Explain streaming, malformed lines, rotation, and why a proper parser may be safer than `split`.
+
+### Scenario C: Validate and convert a CSV batch
+**Requirement:** Accept employee rows, reject invalid records, and create a clean output file.
+
+```python
+import csv
+from pathlib import Path
+
+
+def valid_employee(row: dict[str, str]) -> bool:
+    return bool(row.get("id", "").strip() and "@" in row.get("email", ""))
+
+
+def convert_employees(source: Path, target: Path, rejects: Path) -> tuple[int, int]:
+    accepted = rejected = 0
+    with source.open(newline="", encoding="utf-8") as input_file, \
+            target.open("w", newline="", encoding="utf-8") as output_file, \
+            rejects.open("w", newline="", encoding="utf-8") as reject_file:
+        reader = csv.DictReader(input_file)
+        writer = csv.DictWriter(output_file, fieldnames=["id", "email"])
+        reject_writer = csv.DictWriter(reject_file, fieldnames=reader.fieldnames or [])
+        writer.writeheader()
+        reject_writer.writeheader()
+        for row in reader:
+            if valid_employee(row):
+                writer.writerow({"id": row["id"].strip(), "email": row["email"].strip().lower()})
+                accepted += 1
+            else:
+                reject_writer.writerow(row)
+                rejected += 1
+    return accepted, rejected
+```
+
+**Interview discussion:** Explain schema validation, rejection reporting, encoding, duplicate IDs, atomic output, and rerun behavior.
+
+### Scenario D: Create a JSON backup
+**Requirement:** Back up a JSON file with a timestamp while retaining only the newest five copies.
+
+```python
+from datetime import datetime, timezone
+from pathlib import Path
+import shutil
+
+
+def backup_json(source: Path, backup_dir: Path, keep: int = 5) -> Path:
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    target = backup_dir / f"{source.stem}_{timestamp}{source.suffix}"
+    shutil.copy2(source, target)
+    backups = sorted(backup_dir.glob(f"{source.stem}_*{source.suffix}"), reverse=True)
+    for old_backup in backups[keep:]:
+        old_backup.unlink()
+    return target
+```
+
+**Interview discussion:** Explain timestamp collisions, atomic copying, retention policy, disk-full errors, and permissions.
+
+### Scenario E: Call an API with retries
+**Requirement:** Fetch data from a service that sometimes returns temporary failures.
+
+```python
+import time
+from urllib.error import HTTPError, URLError
+from urllib.request import urlopen
+
+
+def fetch_with_retry(url: str, attempts: int = 3) -> bytes:
+    for attempt in range(attempts):
+        try:
+            with urlopen(url, timeout=10) as response:
+                if response.status == 200:
+                    return response.read()
+                if response.status < 500:
+                    raise RuntimeError(f"Permanent HTTP error: {response.status}")
+        except (HTTPError, URLError) as error:
+            if attempt == attempts - 1:
+                raise RuntimeError("API request failed after retries") from error
+        time.sleep(2 ** attempt)
+    raise RuntimeError("Unreachable")
+```
+
+**Interview discussion:** Retry only transient failures, honor `Retry-After`, add jitter in distributed systems, and avoid retrying non-idempotent operations blindly.
+
+### Scenario F: Compare two directories
+**Requirement:** Report files missing from either directory and files whose contents differ.
+
+```python
+import hashlib
+from pathlib import Path
+
+
+def digest(path: Path) -> str:
+    hasher = hashlib.sha256()
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def compare(left: Path, right: Path) -> dict[str, list[str]]:
+    left_files = {p.relative_to(left) for p in left.rglob("*") if p.is_file()}
+    right_files = {p.relative_to(right) for p in right.rglob("*") if p.is_file()}
+    common = left_files & right_files
+    return {
+        "only_left": [str(path) for path in sorted(left_files - right_files)],
+        "only_right": [str(path) for path in sorted(right_files - left_files)],
+        "different": [str(path) for path in sorted(common) if digest(left / path) != digest(right / path)],
+    }
+```
+
+### Scenario G: Build a command-line report
+**Requirement:** Count files by extension and write a JSON summary.
+
+```python
+from collections import Counter
+from pathlib import Path
+import json
+
+
+def extension_report(directory: Path) -> dict[str, int]:
+    counts = Counter(
+        path.suffix.lower() or "[no extension]"
+        for path in directory.rglob("*")
+        if path.is_file()
+    )
+    return dict(sorted(counts.items()))
+
+
+report = extension_report(Path("."))
+Path("report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+```
+
+---
+
+## 20) Interview Questions and Answers
+
+### Fundamentals
+
+**1. Why is Python popular for scripting?**
+It has readable syntax, fast development, a large standard library, strong file/network/data tooling, and runs on major operating systems.
+
+**2. Is Python compiled or interpreted?**
+Python source is compiled to bytecode and then executed by an interpreter such as CPython. Calling it only interpreted is an incomplete simplification.
+
+**3. What is PEP 8?**
+It is the main style guide for Python code. It covers naming, layout, indentation, imports, and readability.
+
+**4. What is the difference between a module and a package?**
+A module is generally one Python file. A package is a directory that groups related modules; modern Python packages may work without `__init__.py`, although the file remains useful for package initialization and compatibility.
+
+**5. What is mutability?**
+A mutable object can change after creation, such as a list or dictionary. Immutable objects include strings, integers, and tuples. Mutability matters when objects are shared or used as dictionary keys.
+
+**6. Why are strings and tuples usable as dictionary keys but lists are not?**
+Dictionary keys must be hashable and stable. Lists are mutable and therefore not hashable; a tuple is hashable only when all its elements are hashable.
+
+**7. What is the difference between shallow and deep copy?**
+A shallow copy copies the outer container but keeps references to nested objects. A deep copy recursively copies nested objects. Use `copy.copy` and `copy.deepcopy` deliberately because deep copies can be expensive.
+
+**8. What does `with` do?**
+It uses a context manager to guarantee setup and cleanup, such as closing a file or releasing a lock, even when an exception occurs.
+
+**9. What is a generator?**
+A generator produces values lazily, usually with `yield`, so it can process large data without storing every value in memory.
+
+**10. List comprehension or generator expression?**
+Use a list comprehension when you need all results immediately. Use a generator expression for one-pass or large data processing.
+
+### Functions and errors
+
+**11. Why should mutable default arguments be avoided?**
+Default arguments are evaluated once when the function is defined, so a mutable default can retain data between calls. Use `None` and create the object inside the function.
+
+**12. What are `*args` and `**kwargs`?**
+`*args` collects extra positional arguments into a tuple. `**kwargs` collects extra keyword arguments into a dictionary.
+
+**13. What is the difference between `return`, `break`, and `continue`?**
+`return` exits a function, `break` exits the current loop, and `continue` skips to the next loop iteration.
+
+**14. How should exceptions be handled in a script?**
+Catch specific exceptions at the layer that can handle them, log useful context, clean up resources, and return a non-zero exit code when the operation failed.
+
+**15. When would you create a custom exception?**
+When callers need to distinguish a meaningful domain failure, such as an invalid import record or an unavailable dependency, from other errors.
+
+**16. What is the purpose of `finally`?**
+It contains cleanup that should run whether the operation succeeds or fails. Context managers are often a clearer alternative for standard resources.
+
+### Files, data, and APIs
+
+**17. How do you process a very large file?**
+Open it with a context manager and iterate over it line by line or in fixed-size chunks. Avoid `read()` unless the file is known to be small.
+
+**18. Why use `pathlib`?**
+It provides readable, platform-independent path operations and avoids error-prone string concatenation.
+
+**19. How do you prevent CSV injection?**
+Treat fields beginning with spreadsheet formula characters such as `=`, `+`, `-`, or `@` carefully when the output will be opened in a spreadsheet. Apply a documented escaping policy and do not assume CSV is harmless.
+
+**20. How do you make an API script reliable?**
+Set timeouts, validate status codes and response structure, retry only transient failures with backoff, handle pagination and rate limits, log correlation information, and avoid leaking secrets.
+
+**21. Why are timeouts necessary?**
+Without a timeout, a network or subprocess operation can hang indefinitely and block the scheduler or deployment pipeline.
+
+**22. What is idempotency?**
+An operation is idempotent when repeating it produces the same intended result as running it once. Stable IDs, upserts, existence checks, and checkpoints help make scripts rerunnable.
+
+**23. How do you handle partial failure in a batch?**
+Validate before mutation where possible, process in transactions or checkpoints, record successful and failed items, make reruns safe, and return a status that automation can interpret.
+
+**24. How do you safely run a system command?**
+Pass arguments as a list, avoid `shell=True` for untrusted values, set a timeout, use `check=True` when failure should stop the script, and capture output carefully.
+
+**25. How do you safely execute a database query?**
+Use a parameterized query, restrict database permissions, validate inputs, use transactions, and avoid logging sensitive values.
+
+### Python internals and design
+
+**26. What is the GIL?**
+In standard CPython, the Global Interpreter Lock allows one thread at a time to execute Python bytecode. Threads can still help with I/O-bound work; processes are commonly used for CPU-bound parallelism.
+
+**27. What is a virtual environment?**
+It is an isolated Python installation context that keeps project dependencies separate from system and other project dependencies.
+
+**28. What is the difference between `requirements.txt` and `pyproject.toml`?**
+`requirements.txt` commonly lists installable dependencies, while `pyproject.toml` is a broader project configuration standard for build systems, tools, and dependency metadata.
+
+**29. What is monkey patching?**
+Changing a module or class at runtime. It can be useful in controlled tests but can make behavior surprising and should be minimized in production code.
+
+**30. What is serialization?**
+Converting an object into a storable or transferable representation such as JSON. Never unpickle untrusted data because pickle can execute arbitrary code during deserialization.
+
+**31. How do you improve a slow script?**
+Measure first, identify the bottleneck, reduce repeated work, choose suitable data structures, batch I/O, stream large data, and only then consider concurrency or native libraries.
+
+**32. How would you test a script that changes files?**
+Put file logic behind functions, use a temporary directory, test normal and failure cases, verify content and permissions where relevant, and provide a dry-run mode.
+
+**33. How do you make a script portable between Windows and Linux?**
+Use `pathlib`, avoid shell-specific commands, use `sys.executable` when invoking Python, handle line endings and encoding explicitly, and test in both environments.
+
+**34. How do you handle secrets in a script?**
+Read them from environment variables or a secret manager, never commit them, avoid printing them, and rotate them if exposure is suspected.
+
+**35. What should a script's exit code communicate?**
+Zero should indicate success. Non-zero codes should represent failure or a meaningful non-success state so schedulers and CI systems can react.
+
+### Scenario questions
+
+**36. A script works manually but fails in Task Scheduler. What do you check?**
+Use absolute paths or set the working directory, confirm the interpreter path and environment variables, verify account permissions, capture stdout/stderr to a log, and inspect the scheduler's exit code.
+
+**37. An API import stops after 10,000 records. What do you investigate?**
+Pagination limits, rate limiting, token expiration, response errors, timeouts, memory growth, and whether the script has a checkpoint so it can resume safely.
+
+**38. A file-processing script sometimes duplicates records. How do you fix it?**
+Identify the stable record key, use an idempotent upsert or deduplication set, write checkpoints only after successful output, and make retries distinguishable from new work.
+
+**39. A log parser has incorrect counts. What is your approach?**
+Capture representative input lines, define the log grammar, test edge cases, compile a precise regex or parser, and compare results against a trusted sample rather than patching random string splits.
+
+**40. A backup script deletes the wrong file. What safeguards do you add?**
+Resolve and validate the backup directory, use a strict filename pattern, sort by parsed timestamps, add a dry-run mode, log every deletion, and require an explicit retention policy.
+
+**41. How would you design a health-check script?**
+Use short timeouts, check each dependency independently, report latency and status, return a non-zero exit code for unhealthy states, and avoid exposing internal credentials or sensitive response bodies.
+
+**42. How would you process millions of records?**
+Stream input, validate incrementally, batch writes, avoid repeated linear searches, checkpoint progress, monitor memory and throughput, and plan restart behavior before running the job.
+
+**43. What would you log for an automation script?**
+Start/end time, operation name, input identifiers, counts, durations, retry attempts, failures with safe context, and a correlation or run ID. Never log secrets.
+
+**44. How do you decide whether to use a library?**
+Prefer the standard library for simple tasks. Choose a maintained library when it reduces security or correctness risk, such as robust HTTP, spreadsheet, database, or timezone support. Check licensing, maintenance, and dependency risk.
+
+**45. How would you review a candidate's Python script?**
+Check correctness, input validation, failure handling, idempotency, security, portability, observability, testability, performance on realistic data, and clarity of the public interface.
+
+---
+
+## 21) Quick Revision Checklist
+
+Before an interview, be able to explain and demonstrate:
+
+- `pathlib`, context managers, and UTF-8 file handling.
+- Lists, sets, dictionaries, comprehensions, and generators.
+- Specific exceptions, custom exceptions, and exit codes.
+- `argparse`, environment variables, and logging.
+- CSV/JSON transformation with validation and rejected-row handling.
+- API timeouts, status checks, pagination, retries, and backoff.
+- Safe subprocess execution and parameterized SQL.
+- Idempotency, checkpoints, dry-run mode, and partial failure recovery.
+- Streaming and complexity tradeoffs.
+- Virtual environments, testing, linting, and formatting.
+- Secret management and protection against path traversal, injection, and unsafe deserialization.
+
+### A strong interview answer pattern
+1. Clarify the input, expected output, and failure policy.
+2. Describe the simplest correct approach.
+3. Mention validation and edge cases.
+4. Explain logging, retries, and safe reruns.
+5. Discuss complexity and how you would test it.
+
+---
+
+## 22) Detailed Topic-by-Topic Explanations
+
+This section expands the earlier summaries. For each topic, learn the idea, the reason it matters in a script, the important edge cases, and the example pattern.
+
+### 22.1 Scripting mindset: design before coding
+
+Before writing code, define four things:
+
+1. **Input:** files, arguments, environment variables, database rows, or API responses.
+2. **Output:** files, records, a report, a message, or an exit status.
+3. **Failure policy:** stop immediately, skip bad records, retry, or continue and report.
+4. **Rerun policy:** what happens if the same command runs twice?
+
+For example, an employee import should answer whether duplicate employee IDs update an existing employee, are rejected, or create duplicates. This decision is part of the design, not a detail to discover after deployment.
+
+```python
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class ImportResult:
+    accepted: int
+    rejected: int
+    skipped: int
+
+
+def describe_result(result: ImportResult) -> str:
+    return (
+        f"accepted={result.accepted}, "
+        f"rejected={result.rejected}, skipped={result.skipped}"
+    )
+```
+
+The `dataclass` makes the result explicit and easier to test than returning an unexplained tuple.
+
+### 22.2 Script structure and execution
+
+Keep the following layers separate:
+
+- **Parsing:** convert command-line text into typed values.
+- **Validation:** reject invalid paths, options, and data.
+- **Business logic:** perform the transformation.
+- **I/O:** read and write files, databases, and services.
+- **Presentation:** print a report and choose an exit code.
+
+This separation lets an interviewer test one function without starting the whole script.
+
+```python
+import sys
+from pathlib import Path
+
+
+def count_lines(path: Path) -> int:
+    with path.open(encoding="utf-8") as file:
+        return sum(1 for _ in file)
+
+
+def main(arguments: list[str]) -> int:
+    if len(arguments) != 2:
+        print("Usage: python count.py FILE", file=sys.stderr)
+        return 2
+    path = Path(arguments[1])
+    if not path.is_file():
+        print(f"Not a file: {path}", file=sys.stderr)
+        return 1
+    print(count_lines(path))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))
+```
+
+Exit code `2` represents invalid usage, while `1` represents an operational failure. Distinguishing them helps shell scripts and schedulers respond correctly.
+
+### 22.3 Variables, types, and operators
+
+A variable is a name bound to an object; assigning a new value changes the binding. Type hints document the expected contract but do not enforce it at runtime.
+
+```python
+def total_price(price: float, quantity: int, discount: float = 0.0) -> float:
+    if price < 0 or quantity < 0 or not 0 <= discount <= 1:
+        raise ValueError("Invalid price, quantity, or discount")
+    return price * quantity * (1 - discount)
+```
+
+Key points:
+- Use `Decimal` instead of binary `float` for financial calculations.
+- Use `str.strip()` before comparing user-entered text.
+- Use `is None` for the singleton `None` value.
+- Use parentheses to make mixed arithmetic and boolean expressions unambiguous.
+- Avoid relying on implicit conversion when input comes from a file or command line; parse it explicitly.
+
+```python
+from decimal import Decimal
+
+amount = Decimal("10.10")
+tax = Decimal("0.18")
+print(amount + amount * tax)
+```
+
+### 22.4 Collections and comprehensions
+
+Choose a collection based on the operation, not habit. A set is ideal for membership; a dictionary is ideal for lookup; a list is ideal for ordered results.
+
+```python
+records = [
+    {"id": "A1", "status": "active"},
+    {"id": "A2", "status": "inactive"},
+]
+
+active_by_id = {
+    record["id"]: record
+    for record in records
+    if record["status"] == "active"
+}
+```
+
+The lookup above is usually clearer and faster than repeatedly scanning the list for a matching ID. Use `collections.Counter` for frequencies and `defaultdict` when missing keys need a default container.
+
+```python
+from collections import Counter
+
+words = "red blue red green blue red".split()
+print(Counter(words).most_common(2))
+```
+
+Do not mutate a list while iterating over it. Build a new list or iterate over a copy.
+
+```python
+values = [1, 2, 3, 4]
+values = [value for value in values if value % 2 == 0]
+```
+
+### 22.5 Control flow and functions
+
+Functions should make a contract visible: required inputs, accepted ranges, returned values, and exceptions.
+
+```python
+def retry_delay(attempt: int, base_seconds: float = 1.0) -> float:
+    if attempt < 0:
+        raise ValueError("Attempt cannot be negative")
+    return min(base_seconds * (2 ** attempt), 60.0)
+```
+
+Key points:
+- Prefer early validation and early returns over deeply nested branches.
+- Keep side effects at the boundary of a function.
+- Do not use global mutable state for configuration or counters.
+- Use keyword-only arguments when positional misuse would be dangerous.
+
+```python
+def create_report(rows: list[dict], *, include_rejected: bool = False) -> dict:
+    accepted = [row for row in rows if row.get("valid")]
+    result = {"accepted": accepted}
+    if include_rejected:
+        result["rejected"] = [row for row in rows if not row.get("valid")]
+    return result
+```
+
+### 22.6 Exceptions and defensive scripting
+
+An exception should answer: what failed, where did it fail, and what can the caller do next?
+
+```python
+class ConfigurationError(Exception):
+    pass
+
+
+def require_setting(settings: dict[str, str], name: str) -> str:
+    value = settings.get(name, "").strip()
+    if not value:
+        raise ConfigurationError(f"Missing required setting: {name}")
+    return value
+```
+
+Good handling pattern:
+
+```python
+try:
+    timeout = int(raw_timeout)
+except (TypeError, ValueError) as error:
+    raise ConfigurationError("TIMEOUT must be an integer") from error
+```
+
+Do not write `except: pass`. It hides `KeyboardInterrupt`, programming errors, and operational failures. If a record can be skipped, catch the expected validation error, record the reason, and continue deliberately.
+
+### 22.7 Files and directories
+
+Text mode converts bytes to characters using an encoding. Binary mode returns bytes and is required for images, archives, hashes, and exact file copies.
+
+```python
+from pathlib import Path
+
+
+def copy_text(source: Path, target: Path) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    text = source.read_text(encoding="utf-8")
+    target.write_text(text, encoding="utf-8")
+```
+
+For large files, stream in chunks:
+
+```python
+def copy_binary(source: Path, target: Path) -> None:
+    with source.open("rb") as input_file, target.open("wb") as output_file:
+        while (chunk := input_file.read(1024 * 1024)):
+            output_file.write(chunk)
+```
+
+For safe output, write to a temporary file in the same directory and then replace the destination. The same filesystem makes the final replacement atomic on common platforms.
+
+```python
+import os
+import tempfile
+
+
+def atomic_write(path: Path, content: str) -> None:
+    with tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", dir=path.parent, delete=False
+    ) as temporary:
+        temporary.write(content)
+        temporary_path = Path(temporary.name)
+    os.replace(temporary_path, path)
+```
+
+### 22.8 CSV and JSON processing
+
+CSV values are strings, even when they look like numbers or dates. Convert and validate them at the boundary.
+
+```python
+def parse_quantity(value: str) -> int:
+    try:
+        quantity = int(value.strip())
+    except ValueError as error:
+        raise ValueError(f"Invalid quantity: {value!r}") from error
+    if quantity < 0:
+        raise ValueError("Quantity cannot be negative")
+    return quantity
+```
+
+JSON supports objects, arrays, strings, numbers, booleans, and null. It does not preserve Python tuples, sets, dates, or custom objects automatically. Convert those values before serializing.
+
+```python
+import json
+from datetime import date
+
+payload = {"created": date.today().isoformat(), "tags": ["python", "script"]}
+encoded = json.dumps(payload, ensure_ascii=False)
+decoded = json.loads(encoded)
+```
+
+For untrusted JSON, catch `json.JSONDecodeError`, impose reasonable size limits, and validate the expected schema before using nested fields.
+
+### 22.9 Regular expressions and text parsing
+
+Use the least powerful parser that correctly represents the input. `startswith`, `endswith`, `split`, and `partition` are often easier to understand than a regex.
+
+```python
+header, separator, value = "name: Asha".partition(":")
+if separator:
+    print(header.strip(), value.strip())
+```
+
+Use a compiled regex for repeated structured matches:
+
+```python
+import re
+
+email_pattern = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+if not email_pattern.fullmatch(candidate):
+    raise ValueError("Invalid email format")
+```
+
+`match` checks from the beginning, `search` finds a match anywhere, and `fullmatch` requires the entire string to match. Regex validation should still be followed by business validation.
+
+### 22.10 Dates, time, and scheduling
+
+Naive datetimes do not identify a timezone. They are easy to compare incorrectly when a script runs on machines in different regions.
+
+```python
+from datetime import datetime, timezone
+
+started = datetime.now(timezone.utc)
+finished = datetime.now(timezone.utc)
+duration_seconds = (finished - started).total_seconds()
+```
+
+Use `time.monotonic()` for measuring elapsed time because wall-clock time can move backward or forward.
+
+```python
+import time
+
+begin = time.monotonic()
+run_job()
+elapsed = time.monotonic() - begin
+```
+
+A scheduled script should prevent overlapping runs using a lock, a scheduler setting, or a distributed coordination mechanism. It should also record start time, finish time, input range, and outcome.
+
+### 22.11 Command-line arguments
+
+`argparse` should expose safe defaults and reject invalid values early.
+
+```python
+import argparse
+
+
+def positive_integer(value: str) -> int:
+    number = int(value)
+    if number <= 0:
+        raise argparse.ArgumentTypeError("must be greater than zero")
+    return number
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--workers", type=positive_integer, default=1)
+parser.add_argument("--dry-run", action="store_true")
+args = parser.parse_args()
+```
+
+Important choices:
+- Positional arguments are suitable for required input files.
+- Optional flags are suitable for behavior switches.
+- `action="store_true"` is appropriate for a boolean switch.
+- `choices` limits a value to a known set.
+- Help text is part of the user interface and should include examples for risky operations.
+
+### 22.12 Logging and configuration
+
+Logging levels communicate urgency:
+
+- `DEBUG`: detailed diagnostics for developers.
+- `INFO`: normal progress and counts.
+- `WARNING`: unexpected but recoverable condition.
+- `ERROR`: an operation failed.
+- `CRITICAL`: the process cannot continue safely.
+
+```python
+import logging
+
+logger = logging.getLogger("importer")
+
+
+def process_batch(rows: list[dict]) -> int:
+    accepted = 0
+    for row in rows:
+        if not row.get("id"):
+            logger.warning("Skipping row without an ID")
+            continue
+        accepted += 1
+    logger.info("Accepted %d rows", accepted)
+    return accepted
+```
+
+Use logging placeholders rather than f-strings so formatting is deferred and values remain structured for logging handlers. Configuration should be injected into functions where possible instead of read from environment variables everywhere.
+
+### 22.13 HTTP and API scripting
+
+An API integration has two separate contracts: transport behavior and payload behavior. A successful HTTP response can still contain invalid or incomplete data.
+
+```python
+def require_keys(payload: dict, required: set[str]) -> None:
+    missing = required - payload.keys()
+    if missing:
+        raise ValueError(f"Response is missing keys: {sorted(missing)}")
+```
+
+For pagination, keep requesting pages until the API signals completion. Do not assume page size equals the number of records returned.
+
+```python
+def collect_pages(fetch_page):
+    page = 1
+    while True:
+        response = fetch_page(page)
+        yield from response["items"]
+        if not response.get("next_page"):
+            break
+        page = response["next_page"]
+```
+
+Retry `408`, `429`, and suitable `5xx` responses according to the service contract. Do not retry authentication failures or malformed requests without changing the request.
+
+### 22.14 Subprocess and system automation
+
+The safest subprocess interface is an argument list:
+
+```python
+import subprocess
+import sys
+
+
+def run_python_module(module: str) -> str:
+    result = subprocess.run(
+        [sys.executable, "-m", module],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+    return result.stdout
+```
+
+Why this is safer:
+- `sys.executable` selects the current environment.
+- A list prevents shell tokenization surprises.
+- `check=True` turns a failed command into a visible exception.
+- `timeout` prevents an indefinite hang.
+
+If `shell=True` is unavoidable for a platform-specific command, never insert raw user input and document the reason.
+
+### 22.15 Database scripting
+
+A transaction groups changes into one unit. Either all changes commit or the database can roll them back.
+
+```python
+import sqlite3
+
+
+def insert_products(connection: sqlite3.Connection, products: list[tuple[str, int]]) -> None:
+    connection.executemany(
+        "INSERT INTO products(name, quantity) VALUES (?, ?)",
+        products,
+    )
+    connection.commit()
+```
+
+If validation or insertion fails, call `rollback()` when the context manager does not already provide the desired behavior. Use parameter placeholders for values, and use an allowlist for dynamic identifiers such as a selected column name.
+
+### 22.16 Testing and code quality
+
+Test behavior, not implementation details. A file transformation test should arrange temporary input, call the function, and assert output content and counters.
+
+```python
+from pathlib import Path
+
+
+def test_uppercase_file(tmp_path: Path):
+    source = tmp_path / "input.txt"
+    target = tmp_path / "output.txt"
+    source.write_text("hello\n", encoding="utf-8")
+
+    transform_to_uppercase(source, target)
+
+    assert target.read_text(encoding="utf-8") == "HELLO\n"
+```
+
+Use dependency injection for APIs, clocks, and subprocesses so tests can use fakes. Test both success and failure paths. A passing happy-path test alone does not prove that a script is safe to run.
+
+### 22.17 Performance and reliability
+
+Measure before optimizing. `time.perf_counter()` is suitable for short duration measurements.
+
+```python
+import time
+
+start = time.perf_counter()
+result = expensive_operation()
+print(f"Elapsed: {time.perf_counter() - start:.3f}s")
+```
+
+Reliability patterns:
+- **Checkpoint:** save the last completed item or page.
+- **Idempotency key:** identify a logical operation so retries do not duplicate it.
+- **Backoff:** wait progressively longer between transient failures.
+- **Dead-letter output:** save records that need manual investigation.
+- **Dry run:** show intended changes without applying them.
+- **Atomic output:** prevent consumers from seeing half-written files.
+
+### 22.18 Security and safe scripting
+
+Path traversal occurs when an input such as `../../secret.txt` escapes the intended directory. Resolve both paths and verify the candidate remains under the allowed root.
+
+```python
+from pathlib import Path
+
+
+def safe_path(root: Path, requested_name: str) -> Path:
+    root = root.resolve()
+    candidate = (root / requested_name).resolve()
+    if candidate != root and root not in candidate.parents:
+        raise ValueError("Path is outside the allowed directory")
+    return candidate
+```
+
+Other high-value security explanations:
+- `eval` and `exec` execute code and should not process untrusted input.
+- `pickle` is not a safe interchange format for untrusted data.
+- SQL parameters protect values, but dynamic table or column names still require an allowlist.
+- Secrets should not be passed in command-line arguments when other users can inspect process lists.
+- Log redaction should happen before the message is emitted, not only in a later dashboard.
+
+---
+
+## Practical Interview Project: Production-Ready CSV Importer
+
+When asked to build a script in an interview, explain the design first and then implement a small vertical slice.
+
+### Requirements
+- Read a CSV file.
+- Validate required fields.
+- Write accepted records to JSON.
+- Write rejected records with a reason.
+- Support `--dry-run`.
+- Return a non-zero code if any records fail.
+
+```python
+import argparse
+import csv
+import json
+from pathlib import Path
+
+
+def parse_row(row: dict[str, str]) -> dict[str, str]:
+    employee_id = row.get("id", "").strip()
+    email = row.get("email", "").strip().lower()
+    if not employee_id:
+        raise ValueError("id is required")
+    if "@" not in email:
+        raise ValueError("email is invalid")
+    return {"id": employee_id, "email": email}
+
+
+def import_csv(source: Path) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    accepted = []
+    rejected = []
+    with source.open(newline="", encoding="utf-8") as file:
+        for line_number, row in enumerate(csv.DictReader(file), start=2):
+            try:
+                accepted.append(parse_row(row))
+            except ValueError as error:
+                rejected.append({"line": str(line_number), "reason": str(error)})
+    return accepted, rejected
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("source", type=Path)
+    parser.add_argument("--output", type=Path, default=Path("accepted.json"))
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args()
+
+    accepted, rejected = import_csv(args.source)
+    if not args.dry_run:
+        args.output.write_text(json.dumps(accepted, indent=2), encoding="utf-8")
+    print(f"accepted={len(accepted)} rejected={len(rejected)}")
+    return 1 if rejected else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+```
+
+### How to improve this answer in a real system
+- Write output atomically.
+- Add an explicit rejected-record output file.
+- Detect duplicate IDs within the input and against the destination.
+- Add structured logging and a run ID.
+- Add tests for empty files, missing columns, duplicate rows, invalid encodings, and output failures.
+- Add a checkpoint strategy for very large files.
+- Decide whether any rejected row should fail the whole job or only produce a warning.
